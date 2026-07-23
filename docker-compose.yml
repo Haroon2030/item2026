@@ -1,0 +1,13 @@
+# Persistent SQLite for barcode index (mount in Dokploy)
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - item-data:/app/data
+    env_file:
+      - .env
+
+volumes:
+  item-data:

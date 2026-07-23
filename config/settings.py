@@ -69,6 +69,12 @@ if DEBUG and '*' not in ALLOWED_HOSTS:
         if host not in ALLOWED_HOSTS:
             ALLOWED_HOSTS.append(host)
 
+# خلف وكيل عكسي (Dokploy / Nginx)
+USE_X_FORWARDED_HOST = _env_bool('USE_X_FORWARDED_HOST', default=not DEBUG)
+SECURE_PROXY_SSL_HEADER = None
+if _env_bool('USE_SECURE_PROXY_SSL_HEADER', default=False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -81,6 +87,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'search.middleware.SecurityHeadersMiddleware',
     'search.middleware.RateLimitMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -113,7 +120,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': Path(_env('DATABASE_PATH', str(BASE_DIR / 'db.sqlite3'))),
     }
 }
 
@@ -129,8 +136,18 @@ TIME_ZONE = 'Asia/Riyadh'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = Path(_env('STATIC_ROOT', str(BASE_DIR / 'staticfiles')))
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
