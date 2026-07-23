@@ -1,0 +1,20 @@
+# البيئة
+.env
+.secret_key
+
+# بايثون
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Django
+db.sqlite3
+*.log
+staticfiles/
+
+# نظام
+.DS_Store
+Thumbs.db
+*.swp
