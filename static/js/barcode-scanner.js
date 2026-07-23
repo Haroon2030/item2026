@@ -82,7 +82,10 @@
 
   function openScanner() {
     if (!window.isSecureContext) {
-      setStatus("المسح يتطلب HTTPS أو localhost.", "error");
+      setStatus(
+        "الكاميرا تحتاج HTTPS. افتح: https://72.61.107.230:8443 ثم اقبل التحذير مرة واحدة.",
+        "error"
+      );
       overlay.hidden = false;
       return;
     }
