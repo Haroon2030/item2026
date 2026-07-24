@@ -539,13 +539,28 @@ body {
   margin-inline-start: auto;
 }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.table-wrap::after {
+  content: "مرّر الجدول أفقياً لرؤية كل الأعمدة ←";
+  display: block;
+  padding: 0.45rem 1rem 0.7rem;
+  color: #5b7394;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: #f8fbff;
+  border-top: 1px solid #e4ecf5;
+}
 
 .data-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 720px;
+  min-width: 920px;
 }
 
 .data-table th,
