@@ -122,13 +122,13 @@
   var canvas = document.createElement("canvas");
   var ctx = canvas.getContext("2d", { willReadFrequently: true, alpha: false });
 
-  // مناطق مسح متعددة (وسط / أعلى / أسفل) + تكبير للباركود الصغير
+  // مربع كبير مطابق لدليل الواجهة (~80% من الإطار) + شريط وسط + تكبير
   var SCAN_PASSES = [
-    { y: 0.5, h: 0.26, scale: 1.0, contrast: 1.45 },
-    { y: 0.5, h: 0.2, scale: 1.85, contrast: 1.7 },
-    { y: 0.42, h: 0.22, scale: 1.35, contrast: 1.55 },
-    { y: 0.58, h: 0.22, scale: 1.35, contrast: 1.55 },
-    { y: 0.5, h: 0.36, scale: 1.15, contrast: 1.35 },
+    { y: 0.5, h: 0.78, scale: 1.0, contrast: 1.15, xPad: 0.04 },
+    { y: 0.5, h: 0.55, scale: 1.25, contrast: 1.25, xPad: 0.03 },
+    { y: 0.5, h: 0.32, scale: 1.6, contrast: 1.35, xPad: 0.02 },
+    { y: 0.38, h: 0.4, scale: 1.2, contrast: 1.2, xPad: 0.03 },
+    { y: 0.62, h: 0.4, scale: 1.2, contrast: 1.2, xPad: 0.03 },
   ];
 
   function setStatus(text, kind) {
@@ -268,24 +268,29 @@
     if (!video.videoWidth || !video.videoHeight || !ctx) return null;
     var vw = video.videoWidth;
     var vh = video.videoHeight;
-    var bandH = Math.max(56, Math.floor(vh * pass.h));
+    var bandH = Math.max(96, Math.floor(vh * pass.h));
     var y = Math.floor(vh * pass.y - bandH / 2);
     if (y < 0) y = 0;
     if (y + bandH > vh) y = vh - bandH;
 
-    var outW = Math.max(320, Math.floor(vw * pass.scale));
-    var outH = Math.max(48, Math.floor(bandH * pass.scale));
+    var xPad = typeof pass.xPad === "number" ? pass.xPad : 0.03;
+    var x = Math.floor(vw * xPad);
+    var bandW = Math.max(240, Math.floor(vw * (1 - xPad * 2)));
+    if (x + bandW > vw) bandW = vw - x;
+
+    var outW = Math.max(320, Math.floor(bandW * pass.scale));
+    var outH = Math.max(64, Math.floor(bandH * pass.scale));
     // حدّ أقصى حتى لا يتجمّد الهاتف
-    if (outW > 1600) {
-      var ratio = 1600 / outW;
-      outW = 1600;
-      outH = Math.max(48, Math.floor(outH * ratio));
+    if (outW > 1400) {
+      var ratio = 1400 / outW;
+      outW = 1400;
+      outH = Math.max(64, Math.floor(outH * ratio));
     }
 
     canvas.width = outW;
     canvas.height = outH;
-    ctx.imageSmoothingEnabled = pass.scale > 1.2;
-    ctx.drawImage(video, 0, y, vw, bandH, 0, 0, outW, outH);
+    ctx.imageSmoothingEnabled = pass.scale > 1.15;
+    ctx.drawImage(video, x, y, bandW, bandH, 0, 0, outW, outH);
 
     try {
       var img = ctx.getImageData(0, 0, outW, outH);
