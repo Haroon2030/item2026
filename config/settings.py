@@ -44,7 +44,24 @@ def _env_list(key: str, default: list[str] | None = None) -> list[str]:
     raw = os.environ.get(key)
     if not raw:
         return list(default or [])
-    return [part.strip() for part in raw.split(',') if part.strip()]
+    # بعض لوحات النشر تلف القيمة بعلامات اقتباس
+    raw = raw.strip().strip('"').strip("'")
+    return [
+        part.strip().strip('"').strip("'")
+        for part in raw.replace(';', ',').split(',')
+        if part.strip()
+    ]
+
+
+def _hosts_from_origins(origins: list[str]) -> list[str]:
+    from urllib.parse import urlparse
+
+    hosts: list[str] = []
+    for origin in origins:
+        host = urlparse(origin).hostname
+        if host and host not in hosts:
+            hosts.append(host)
+    return hosts
 
 
 # مفتاح سري: من البيئة أو ملف محلي غير مضمّن في المستودع
@@ -61,8 +78,26 @@ DEBUG = _env_bool('DJANGO_DEBUG', default=True)
 
 ALLOWED_HOSTS = _env_list(
     'DJANGO_ALLOWED_HOSTS',
-    default=['127.0.0.1', 'localhost'],
+    default=['127.0.0.1', 'localhost', 'item.alrsheed.net', '72.61.107.230'],
 )
+CSRF_TRUSTED_ORIGINS = _env_list(
+    'CSRF_TRUSTED_ORIGINS',
+    default=[
+        'http://item.alrsheed.net',
+        'https://item.alrsheed.net',
+        'http://72.61.107.230:8084',
+        'https://72.61.107.230:8443',
+    ],
+)
+# ادمج مضيفات CSRF تلقائياً حتى لا يظهر 400 عند نسيان ALLOWED_HOSTS
+for host in _hosts_from_origins(CSRF_TRUSTED_ORIGINS):
+    if host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+# ضمان وجود الدومين الإنتاجي
+for host in ('item.alrsheed.net', '72.61.107.230'):
+    if host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+
 if DEBUG and '*' not in ALLOWED_HOSTS:
     # للتطوير المحلي فقط
     for host in ('127.0.0.1', 'localhost', '[::1]'):
@@ -160,7 +195,6 @@ SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', default=not DEBUG)
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=not DEBUG)
-CSRF_TRUSTED_ORIGINS = _env_list('CSRF_TRUSTED_ORIGINS', default=[])
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
