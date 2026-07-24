@@ -89,17 +89,19 @@ CSRF_TRUSTED_ORIGINS = _env_list(
         'https://72.61.107.230:8443',
     ],
 )
-# ادمج مضيفات CSRF تلقائياً حتى لا يظهر 400 عند نسيان ALLOWED_HOSTS
+# ادمج مضيفات CSRF تلقائياً
 for host in _hosts_from_origins(CSRF_TRUSTED_ORIGINS):
     if host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(host)
-# ضمان وجود الدومين الإنتاجي
-for host in ('item.alrsheed.net', '72.61.107.230'):
+for host in ('item.alrsheed.net', '72.61.107.230', 'www.item.alrsheed.net'):
     if host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(host)
 
+# في الإنتاج اسمح بكل المضيفات لتفادي 400 خلف Dokploy/Proxy
+if not DEBUG or '*' in ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ['*']
+
 if DEBUG and '*' not in ALLOWED_HOSTS:
-    # للتطوير المحلي فقط
     for host in ('127.0.0.1', 'localhost', '[::1]'):
         if host not in ALLOWED_HOSTS:
             ALLOWED_HOSTS.append(host)
