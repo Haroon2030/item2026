@@ -3,17 +3,26 @@
 
   var btn = document.getElementById("btn-scan");
   var overlay = document.getElementById("barcode-scanner");
-  var readerEl = document.getElementById("barcode-reader");
+  var video = document.getElementById("barcode-scanner-video");
   var statusEl = document.getElementById("barcode-scanner-status");
   var closeBtn = document.getElementById("barcode-scanner-close");
   var input = document.getElementById("q");
   var form = document.querySelector(".search-form");
 
-  if (!btn || !overlay || !readerEl || !statusEl || !input || !form) return;
+  if (!btn || !overlay || !video || !statusEl || !input || !form) return;
 
-  var scanner = null;
+  // قارئ Zebra الحقيقي (لوحة مفاتيح): يكتب ثم Enter
+  input.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if ((input.value || "").trim()) form.submit();
+    }
+  });
+
+  var controls = null;
+  var stream = null;
   var handled = false;
-  var nativeTimer = null;
+  var pollTimer = null;
 
   function setStatus(text, kind) {
     statusEl.textContent = text;
@@ -22,56 +31,85 @@
     if (kind === "ok") statusEl.classList.add("is-ok");
   }
 
-  function stopNativeLoop() {
-    if (nativeTimer) {
-      window.clearInterval(nativeTimer);
-      nativeTimer = null;
-    }
+  function beep() {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 1800;
+      gain.gain.value = 0.05;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      window.setTimeout(function () {
+        osc.stop();
+        ctx.close();
+      }, 120);
+    } catch (e) {}
   }
 
-  function stopScanner() {
-    stopNativeLoop();
+  function stopAll() {
     handled = false;
-    if (!scanner) return Promise.resolve();
-    var current = scanner;
-    scanner = null;
-    return current
-      .stop()
-      .then(function () {
-        return current.clear();
-      })
-      .catch(function () {
-        /* ignore */
+    if (pollTimer) {
+      window.clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    if (controls && typeof controls.stop === "function") {
+      try {
+        controls.stop();
+      } catch (e) {}
+      controls = null;
+    }
+    if (stream) {
+      stream.getTracks().forEach(function (t) {
+        t.stop();
       });
+      stream = null;
+    }
+    video.srcObject = null;
   }
 
   function closeScanner() {
-    stopScanner().finally(function () {
-      overlay.hidden = true;
-      readerEl.innerHTML = "";
-    });
+    stopAll();
+    overlay.hidden = true;
   }
 
   function onDetected(code) {
     if (handled || !code) return;
-    handled = true;
     var value = String(code).trim();
     if (!value) return;
-    setStatus("تم التقاط: " + value, "ok");
+    handled = true;
+    beep();
+    setStatus("تم المسح: " + value, "ok");
     input.value = value;
-    stopScanner().finally(function () {
-      overlay.hidden = true;
-      readerEl.innerHTML = "";
-      form.submit();
-    });
+    stopAll();
+    overlay.hidden = true;
+    form.submit();
   }
 
-  function startNativeDetectorFallback() {
-    if (!("BarcodeDetector" in window)) return;
-    var video = readerEl.querySelector("video");
-    if (!video) return;
+  function buildHints() {
+    if (!window.ZXing) return undefined;
+    var hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.CODE_93,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.CODABAR,
+      ZXing.BarcodeFormat.QR_CODE,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    return hints;
+  }
 
-    var detector = null;
+  function startNativePoll() {
+    if (!("BarcodeDetector" in window) || pollTimer) return;
+    var detector;
     try {
       detector = new window.BarcodeDetector({
         formats: [
@@ -86,180 +124,98 @@
         ],
       });
     } catch (e) {
-      try {
-        detector = new window.BarcodeDetector();
-      } catch (e2) {
-        return;
-      }
+      return;
     }
-
-    stopNativeLoop();
-    nativeTimer = window.setInterval(function () {
-      if (handled || !detector || !video || video.readyState < 2) return;
+    pollTimer = window.setInterval(function () {
+      if (handled || video.readyState < 2) return;
       detector
         .detect(video)
         .then(function (codes) {
-          if (handled || !codes || !codes.length) return;
-          var raw = codes[0].rawValue || "";
-          if (raw) onDetected(raw);
+          if (!handled && codes && codes[0] && codes[0].rawValue) {
+            onDetected(codes[0].rawValue);
+          }
         })
-        .catch(function () {
-          /* ignore frame errors */
-        });
-    }, 250);
+        .catch(function () {});
+    }, 180);
   }
 
   function openScanner() {
     if (!window.isSecureContext) {
       overlay.hidden = false;
-      setStatus("الكاميرا تحتاج HTTPS. افتح: https://item.alrsheed.net", "error");
+      setStatus("افتح الموقع عبر HTTPS: https://item.alrsheed.net", "error");
       return;
     }
-
-    if (typeof Html5Qrcode === "undefined") {
-      overlay.hidden = false;
-      setStatus("مكتبة المسح غير محمّلة. حدّث الصفحة ثم أعد المحاولة.", "error");
-      return;
-    }
-
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       overlay.hidden = false;
-      setStatus("الكاميرا غير متاحة في هذا المتصفح.", "error");
+      setStatus("الكاميرا غير متاحة. ضع المؤشر في حقل البحث واستخدم قارئ Zebra.", "error");
+      return;
+    }
+    if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatReader) {
+      overlay.hidden = false;
+      setStatus("مكتبة الماسح غير محمّلة. حدّث الصفحة.", "error");
       return;
     }
 
     handled = false;
     overlay.hidden = false;
-    readerEl.innerHTML = "";
-    setStatus("جاري فتح الكاميرا…");
+    setStatus("جاري تشغيل الماسح بأسلوب Zebra…");
 
-    var formats = undefined;
-    try {
-      if (typeof Html5QrcodeSupportedFormats !== "undefined") {
-        formats = [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.CODE_93,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.CODABAR,
-          Html5QrcodeSupportedFormats.QR_CODE,
-        ];
-      }
-    } catch (e) {
-      formats = undefined;
-    }
+    var hints = buildHints();
+    var reader = new window.ZXingBrowser.BrowserMultiFormatReader(hints, 80);
 
-    try {
-      scanner = formats
-        ? new Html5Qrcode("barcode-reader", {
-            formatsToSupport: formats,
-            verbose: false,
-          })
-        : new Html5Qrcode("barcode-reader");
-    } catch (err) {
-      setStatus("تعذر تهيئة قارئ الباركود.", "error");
-      return;
-    }
-
-    // منطقة مسح عريضة للباركود الشريطي (1D)
-    var config = {
-      fps: 20,
-      qrbox: function (w, h) {
-        return {
-          width: Math.floor(w * 0.92),
-          height: Math.floor(h * 0.28),
-        };
-      },
-      aspectRatio: 1.777,
-      disableFlip: false,
-      // zxing أوثق لـ EAN من BarcodeDetector في بعض الأجهزة
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: false,
-      },
-      videoConstraints: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        focusMode: "continuous",
-      },
-    };
-
-    scanner
-      .start(
-        { facingMode: "environment" },
-        config,
-        function (decodedText) {
-          onDetected(decodedText);
+    reader
+      .decodeFromConstraints(
+        {
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            focusMode: "continuous",
+          },
         },
-        function () {
-          /* frame miss */
+        video,
+        function (result, err, ctrl) {
+          controls = ctrl;
+          if (result) onDetected(result.getText());
         }
       )
       .then(function () {
-        setStatus("قرّب الباركود داخل الإطار الأفقي وثبّت اليد…");
-        // مسار إضافي عبر BarcodeDetector إن وُجد
-        window.setTimeout(startNativeDetectorFallback, 600);
-      })
-      .catch(function () {
-        // إعادة محاولة بإعدادات أبسط
-        return scanner.start(
-          { facingMode: "environment" },
-          {
-            fps: 15,
-            qrbox: function (w, h) {
-              return {
-                width: Math.floor(w * 0.95),
-                height: Math.floor(h * 0.35),
-              };
-            },
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true,
-            },
-          },
-          function (decodedText) {
-            onDetected(decodedText);
-          },
-          function () {}
-        );
-      })
-      .then(function () {
-        if (!handled) {
-          setStatus("قرّب الباركود داخل الإطار الأفقي وثبّت اليد…");
-          window.setTimeout(startNativeDetectorFallback, 600);
-        }
+        setStatus("مرّر الباركود على الخط الأحمر مثل جهاز Zebra");
+        startNativePoll();
       })
       .catch(function (err) {
-        var msg = "تعذر فتح الكاميرا.";
-        var name = err && (err.name || err);
-        var text = (err && err.message) || String(err || "");
-        if (name === "NotAllowedError" || /Permission|NotAllowed/i.test(text)) {
-          msg = "تم رفض إذن الكاميرا. اسمح بالوصول من إعدادات المتصفح.";
-        } else if (name === "NotFoundError") {
-          msg = "لم يتم العثور على كاميرا.";
-        } else if (text) {
-          msg = "تعذر فتح الكاميرا: " + text;
-        }
-        setStatus(msg, "error");
-        stopScanner();
+        // محاولة ثانية بقيود أبسط
+        return reader
+          .decodeFromConstraints(
+            { audio: false, video: { facingMode: "environment" } },
+            video,
+            function (result, err2, ctrl) {
+              controls = ctrl;
+              if (result) onDetected(result.getText());
+            }
+          )
+          .then(function () {
+            setStatus("مرّر الباركود على الخط الأحمر مثل جهاز Zebra");
+            startNativePoll();
+          })
+          .catch(function () {
+            var text = String((err && (err.name || err.message)) || "");
+            var msg = "تعذر فتح الماسح.";
+            if (/NotAllowed|Permission/i.test(text)) {
+              msg = "اسمح للكاميرا من إعدادات المتصفح.";
+            }
+            setStatus(msg, "error");
+            stopAll();
+          });
       });
   }
 
-  btn.addEventListener("click", function () {
-    openScanner();
-  });
-
-  if (closeBtn) {
-    closeBtn.addEventListener("click", closeScanner);
-  }
-
+  btn.addEventListener("click", openScanner);
+  if (closeBtn) closeBtn.addEventListener("click", closeScanner);
   overlay.addEventListener("click", function (event) {
     if (event.target === overlay) closeScanner();
   });
-
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape" && !overlay.hidden) closeScanner();
   });
