@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 from .api_client import (
     ApiClientError,
     get_item_group,
+    index_meta_incomplete,
     lookup_by_barcode,
     lookup_by_item_code,
     search_item_details,
@@ -55,6 +56,7 @@ def item_search(request):
     match_type = ''
     group_info = {'g_code': '', 'g_name': ''}
     cache_count = ItemBarcode.objects.count()
+    meta_incomplete = index_meta_incomplete()
     warehouses = _warehouses()
     default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
 
@@ -81,6 +83,7 @@ def item_search(request):
                 'searched': searched,
                 'match_type': match_type,
                 'cache_count': cache_count,
+                'meta_incomplete': False,
                 'warehouses': warehouses,
                 'warehouse': warehouse,
                 'g_code': '',
@@ -134,6 +137,7 @@ def item_search(request):
             'searched': searched,
             'match_type': match_type,
             'cache_count': cache_count,
+            'meta_incomplete': meta_incomplete,
             'warehouses': warehouses,
             'warehouse': warehouse,
             'g_code': group_info.get('g_code', ''),

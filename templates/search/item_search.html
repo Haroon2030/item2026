@@ -111,10 +111,10 @@
   {% endfor %}
 {% endif %}
 
-{% if error %}
-  <div class="alert alert-error" role="alert">
-    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
-    <span>{{ error }}</span>
+{% if meta_incomplete %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+    <span>الفهرس ناقص (العبوة/المجموعة فارغة). اضغط «مزامنة» مرة أخرى لتحديث البيانات.</span>
   </div>
 {% endif %}
 

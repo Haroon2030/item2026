@@ -189,17 +189,33 @@ def fetch_qty_by_code(item_code: str, w_code: str | None = None) -> list[dict]:
             continue
         if raw.get('errorDisc'):
             continue
-        code = str(raw.get('Item_code') or '').strip()
+        code = str(
+            raw.get('Item_code')
+            or raw.get('I_CODE')
+            or raw.get('item_code')
+            or ''
+        ).strip()
         if not code:
             continue
+        qty_val = raw.get('Avl_Qty')
+        if qty_val is None:
+            qty_val = raw.get('AVL_QTY')
+        if qty_val is None:
+            qty_val = raw.get('avl_qty')
+        unit = str(
+            raw.get('itm_unt')
+            or raw.get('ITM_UNT')
+            or raw.get('Itm_Unt')
+            or ''
+        ).strip()
         rows.append(
             {
                 'code': code,
-                'name': str(raw.get('Item_ar_name') or '').strip(),
-                'unit': str(raw.get('itm_unt') or '').strip(),
-                'quantity': str(raw.get('Avl_Qty') if raw.get('Avl_Qty') is not None else '').strip(),
+                'name': str(raw.get('Item_ar_name') or raw.get('I_NAME') or '').strip(),
+                'unit': unit,
+                'quantity': str(qty_val).strip() if qty_val is not None else '',
                 'cost': str(raw.get('I_cost') if raw.get('I_cost') is not None else '').strip(),
-                'barcode': str(raw.get('Barcode') or '').strip(),
+                'barcode': str(raw.get('Barcode') or raw.get('BARCODE') or '').strip(),
             }
         )
     return rows
@@ -408,6 +424,7 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
     prices: list[dict] = []
     qtys: list[dict] = []
     price_error: Exception | None = None
+    qty_error: Exception | None = None
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         price_future = pool.submit(search_prices_by_code, item_code, warehouse)
@@ -421,7 +438,17 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
         try:
             qtys = qty_future.result()
         except Exception as exc:
+            qty_error = exc
             logger.warning('Quantity fetch failed, showing prices only: %s', exc)
+            qtys = []
+
+    # إعادة محاولة الكمية تسلسلياً إن فشلت أو رجعت فارغة
+    if not qtys:
+        try:
+            qtys = fetch_qty_by_code(item_code, warehouse)
+        except Exception as exc:  # noqa: BLE001
+            qty_error = qty_error or exc
+            logger.warning('Quantity retry failed: %s', exc)
             qtys = []
 
     # إن فشل السعر لكن نجحت الكمية نعرض الكمية
@@ -434,7 +461,11 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
             raise ApiClientError(str(price_error)) from price_error
 
     unit_meta = get_unit_meta(item_code)
-    return merge_prices_with_qty(prices, qtys, unit_meta=unit_meta)
+    merged = merge_prices_with_qty(prices, qtys, unit_meta=unit_meta)
+    if qty_error and not any(str(r.get('quantity') or '').strip() for r in merged):
+        for row in merged:
+            row['_qty_warning'] = str(qty_error)
+    return merged
 
 
 def fetch_all_items() -> list[dict]:
@@ -499,19 +530,31 @@ def sync_barcode_index() -> int:
             continue
         seen.add(key)
         # Item_category في GetAllItems = G_CODE
-        g_code = str(
+        g_raw = (
             row.get('Item_category')
-            or row.get('G_CODE')
-            or row.get('g_code')
-            or ''
-        ).strip()
+            if row.get('Item_category') is not None
+            else row.get('G_CODE')
+            if row.get('G_CODE') is not None
+            else row.get('g_code')
+        )
+        g_code = '' if g_raw is None else str(g_raw).strip()
+
+        pack_raw = (
+            row.get('p_size')
+            if row.get('p_size') is not None
+            else row.get('P_SIZE')
+            if row.get('P_SIZE') is not None
+            else row.get('Pack_Size')
+        )
+        pack_size = '' if pack_raw is None else str(pack_raw).strip()
+
         mapped.append(
             ItemBarcode(
                 barcode=barcode,
                 item_code=item_code,
                 name=str(row.get('Item_ar_name') or '').strip(),
                 unit=unit,
-                pack_size=str(row.get('p_size') or '').strip(),
+                pack_size=pack_size,
                 g_code=g_code,
             )
         )
@@ -544,7 +587,22 @@ def sync_barcode_index() -> int:
             ItemGroup.objects.bulk_create(groups, batch_size=500)
 
     logger.info('Synced %s barcode/unit rows and %s groups', len(mapped), len(groups))
+    with_pack = sum(1 for m in mapped if m.pack_size)
+    with_g = sum(1 for m in mapped if m.g_code)
+    logger.info('Meta filled: pack=%s g_code=%s groups=%s', with_pack, with_g, len(groups))
     return len(mapped)
+
+
+def index_meta_incomplete() -> bool:
+    """هل الفهرس موجود لكن بدون عبوات/مجموعات؟ يحتاج إعادة مزامنة."""
+    from .models import ItemBarcode
+
+    total = ItemBarcode.objects.count()
+    if total == 0:
+        return False
+    with_pack = ItemBarcode.objects.exclude(pack_size='').count()
+    with_g = ItemBarcode.objects.exclude(g_code='').count()
+    return with_pack < max(1, total // 20) or with_g < max(1, total // 20)
 
 
 def get_item_group(item_code: str) -> dict:
