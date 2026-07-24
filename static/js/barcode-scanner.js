@@ -6,12 +6,13 @@
   var video = document.getElementById("barcode-scanner-video");
   var statusEl = document.getElementById("barcode-scanner-status");
   var closeBtn = document.getElementById("barcode-scanner-close");
+  var torchBtn = document.getElementById("barcode-scanner-torch");
   var input = document.getElementById("q");
   var form = document.querySelector(".search-form");
 
   if (!btn || !overlay || !video || !statusEl || !input || !form) return;
 
-  // قارئ Zebra الحقيقي (لوحة مفاتيح): يكتب ثم Enter
+  // قارئ Zebra الحقيقي (لوحة مفاتيح)
   input.addEventListener("keydown", function (event) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -19,10 +20,20 @@
     }
   });
 
-  var controls = null;
   var stream = null;
   var handled = false;
-  var pollTimer = null;
+  var running = false;
+  var rafId = 0;
+  var zxingTimer = 0;
+  var nativeDetector = null;
+  var zxingReader = null;
+  var track = null;
+  var torchOn = false;
+  var lastCandidate = "";
+  var lastCandidateCount = 0;
+  var zxingBusy = false;
+  var canvas = document.createElement("canvas");
+  var ctx = canvas.getContext("2d", { willReadFrequently: true });
 
   function setStatus(text, kind) {
     statusEl.textContent = text;
@@ -33,33 +44,53 @@
 
   function beep() {
     try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
+      var ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctxAudio.createOscillator();
+      var gain = ctxAudio.createGain();
       osc.type = "square";
-      osc.frequency.value = 1800;
-      gain.gain.value = 0.05;
+      osc.frequency.value = 2100;
+      gain.gain.value = 0.06;
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(ctxAudio.destination);
       osc.start();
       window.setTimeout(function () {
         osc.stop();
-        ctx.close();
-      }, 120);
+        ctxAudio.close();
+      }, 90);
+    } catch (e) {}
+  }
+
+  function vibrate() {
+    try {
+      if (navigator.vibrate) navigator.vibrate(40);
     } catch (e) {}
   }
 
   function stopAll() {
+    running = false;
     handled = false;
-    if (pollTimer) {
-      window.clearInterval(pollTimer);
-      pollTimer = null;
+    lastCandidate = "";
+    lastCandidateCount = 0;
+    zxingBusy = false;
+    if (rafId) {
+      window.cancelAnimationFrame(rafId);
+      rafId = 0;
     }
-    if (controls && typeof controls.stop === "function") {
+    if (zxingTimer) {
+      window.clearInterval(zxingTimer);
+      zxingTimer = 0;
+    }
+    if (track) {
       try {
-        controls.stop();
+        track.applyConstraints({ advanced: [{ torch: false }] });
       } catch (e) {}
-      controls = null;
+      track = null;
+    }
+    torchOn = false;
+    if (torchBtn) {
+      torchBtn.hidden = true;
+      torchBtn.classList.remove("is-on");
+      torchBtn.textContent = "ضوء";
     }
     if (stream) {
       stream.getTracks().forEach(function (t) {
@@ -75,12 +106,25 @@
     overlay.hidden = true;
   }
 
-  function onDetected(code) {
-    if (handled || !code) return;
-    var value = String(code).trim();
-    if (!value) return;
+  function acceptCode(code) {
+    if (handled || !running) return;
+    var value = String(code || "").trim();
+    if (!value || value.length < 3) return;
+
+    // باركود طويل (EAN/UPC…) يُقبل فوراً؛ القصير يحتاج تأكيداً مزدوجاً
+    var needConfirm = value.length < 8 ? 2 : 1;
+    if (value === lastCandidate) {
+      lastCandidateCount += 1;
+    } else {
+      lastCandidate = value;
+      lastCandidateCount = 1;
+    }
+    if (lastCandidateCount < needConfirm) return;
+
     handled = true;
+    running = false;
     beep();
+    vibrate();
     setStatus("تم المسح: " + value, "ok");
     input.value = value;
     stopAll();
@@ -88,8 +132,23 @@
     form.submit();
   }
 
-  function buildHints() {
-    if (!window.ZXing) return undefined;
+  function drawScanBand() {
+    if (!video.videoWidth || !video.videoHeight || !ctx) return null;
+    var vw = video.videoWidth;
+    var vh = video.videoHeight;
+    // شريط أفقي وسط الصورة = منطقة اللقط الأسرع للباركود الشريطي
+    var bandH = Math.max(48, Math.floor(vh * 0.32));
+    var y = Math.floor((vh - bandH) / 2);
+    canvas.width = vw;
+    canvas.height = bandH;
+    ctx.drawImage(video, 0, y, vw, bandH, 0, 0, vw, bandH);
+    return canvas;
+  }
+
+  function buildZxingReader(tryHarder) {
+    if (!window.ZXingBrowser || !window.ZXing || !window.ZXingBrowser.BrowserMultiFormatReader) {
+      return null;
+    }
     var hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       ZXing.BarcodeFormat.EAN_13,
@@ -103,40 +162,73 @@
       ZXing.BarcodeFormat.CODABAR,
       ZXing.BarcodeFormat.QR_CODE,
     ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    return hints;
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, !!tryHarder);
+    // فاصل قصير جداً بين المحاولات
+    return new window.ZXingBrowser.BrowserMultiFormatReader(hints, 50);
   }
 
-  function startNativePoll() {
-    if (!("BarcodeDetector" in window) || pollTimer) return;
-    var detector;
-    try {
-      detector = new window.BarcodeDetector({
-        formats: [
-          "ean_13",
-          "ean_8",
-          "code_128",
-          "code_39",
-          "upc_a",
-          "upc_e",
-          "itf",
-          "qr_code",
-        ],
+  function tickNative() {
+    if (!running || handled) return;
+    rafId = window.requestAnimationFrame(tickNative);
+    if (!nativeDetector || video.readyState < 2) return;
+
+    nativeDetector
+      .detect(video)
+      .then(function (codes) {
+        if (!running || handled || !codes || !codes.length) return;
+        // فضّل أطول قيمة صالحة (باركود كامل)
+        var best = "";
+        for (var i = 0; i < codes.length; i++) {
+          var raw = (codes[i].rawValue || "").trim();
+          if (raw.length > best.length) best = raw;
+        }
+        if (best) acceptCode(best);
+      })
+      .catch(function () {});
+  }
+
+  function tickZxing() {
+    if (!running || handled || zxingBusy || !zxingReader || video.readyState < 2) return;
+    var band = drawScanBand();
+    if (!band) return;
+    zxingBusy = true;
+    zxingReader
+      .decodeFromCanvas(band)
+      .then(function (result) {
+        if (result && result.getText) acceptCode(result.getText());
+      })
+      .catch(function () {})
+      .then(function () {
+        zxingBusy = false;
       });
+  }
+
+  function setupTorchButton() {
+    if (!torchBtn || !track) return;
+    var caps = {};
+    try {
+      caps = track.getCapabilities ? track.getCapabilities() : {};
     } catch (e) {
+      caps = {};
+    }
+    if (!caps.torch) {
+      torchBtn.hidden = true;
       return;
     }
-    pollTimer = window.setInterval(function () {
-      if (handled || video.readyState < 2) return;
-      detector
-        .detect(video)
-        .then(function (codes) {
-          if (!handled && codes && codes[0] && codes[0].rawValue) {
-            onDetected(codes[0].rawValue);
-          }
+    torchBtn.hidden = false;
+    torchBtn.onclick = function () {
+      torchOn = !torchOn;
+      track
+        .applyConstraints({ advanced: [{ torch: torchOn }] })
+        .then(function () {
+          torchBtn.classList.toggle("is-on", torchOn);
+          torchBtn.textContent = torchOn ? "إيقاف" : "ضوء";
         })
-        .catch(function () {});
-    }, 180);
+        .catch(function () {
+          torchOn = false;
+          setStatus("الإضاءة غير متاحة على هذا الجهاز.", "error");
+        });
+    };
   }
 
   function openScanner() {
@@ -147,67 +239,99 @@
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       overlay.hidden = false;
-      setStatus("الكاميرا غير متاحة. ضع المؤشر في حقل البحث واستخدم قارئ Zebra.", "error");
-      return;
-    }
-    if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatReader) {
-      overlay.hidden = false;
-      setStatus("مكتبة الماسح غير محمّلة. حدّث الصفحة.", "error");
+      setStatus("الكاميرا غير متاحة. استخدم قارئ Zebra على حقل البحث.", "error");
       return;
     }
 
+    stopAll();
     handled = false;
+    running = true;
     overlay.hidden = false;
-    setStatus("جاري تشغيل الماسح بأسلوب Zebra…");
+    setStatus("جاري فتح الماسح السريع…");
 
-    var hints = buildHints();
-    var reader = new window.ZXingBrowser.BrowserMultiFormatReader(hints, 80);
-
-    reader
-      .decodeFromConstraints(
-        {
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            focusMode: "continuous",
-          },
-        },
-        video,
-        function (result, err, ctrl) {
-          controls = ctrl;
-          if (result) onDetected(result.getText());
+    // BarcodeDetector أسرع على Chrome/Android إن وُجد
+    nativeDetector = null;
+    if ("BarcodeDetector" in window) {
+      try {
+        nativeDetector = new window.BarcodeDetector({
+          formats: [
+            "ean_13",
+            "ean_8",
+            "code_128",
+            "code_39",
+            "upc_a",
+            "upc_e",
+            "itf",
+            "qr_code",
+          ],
+        });
+      } catch (e) {
+        try {
+          nativeDetector = new window.BarcodeDetector();
+        } catch (e2) {
+          nativeDetector = null;
         }
-      )
+      }
+    }
+
+    // قارئ سريع أولاً، وإن لزم نبدّل لوضع أدق
+    zxingReader = buildZxingReader(false) || buildZxingReader(true);
+
+    var constraints = {
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        focusMode: "continuous",
+        advanced: [{ focusMode: "continuous" }],
+      },
+    };
+
+    navigator.mediaDevices
+      .getUserMedia(constraints)
+      .catch(function () {
+        return navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: "environment" },
+        });
+      })
+      .then(function (mediaStream) {
+        stream = mediaStream;
+        track = mediaStream.getVideoTracks()[0] || null;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", "true");
+        video.muted = true;
+        return video.play();
+      })
       .then(function () {
-        setStatus("مرّر الباركود على الخط الأحمر مثل جهاز Zebra");
-        startNativePoll();
+        setupTorchButton();
+        setStatus("ثبّت الباركود على الخط الأحمر — المسح سريع ومستمر");
+        // مسار أصلي كل إطار
+        rafId = window.requestAnimationFrame(tickNative);
+        // مسار ZXing على شريط الوسط بسرعة عالية
+        if (zxingReader) {
+          zxingTimer = window.setInterval(tickZxing, 45);
+          // بعد ثانية إن لم يلتقط، فعّل TRY_HARDER (أدق وأبطأ قليلاً)
+          window.setTimeout(function () {
+            if (!running || handled) return;
+            var harder = buildZxingReader(true);
+            if (harder) zxingReader = harder;
+          }, 900);
+        } else if (!nativeDetector) {
+          setStatus("مكتبة الماسح غير محمّلة. حدّث الصفحة.", "error");
+        }
       })
       .catch(function (err) {
-        // محاولة ثانية بقيود أبسط
-        return reader
-          .decodeFromConstraints(
-            { audio: false, video: { facingMode: "environment" } },
-            video,
-            function (result, err2, ctrl) {
-              controls = ctrl;
-              if (result) onDetected(result.getText());
-            }
-          )
-          .then(function () {
-            setStatus("مرّر الباركود على الخط الأحمر مثل جهاز Zebra");
-            startNativePoll();
-          })
-          .catch(function () {
-            var text = String((err && (err.name || err.message)) || "");
-            var msg = "تعذر فتح الماسح.";
-            if (/NotAllowed|Permission/i.test(text)) {
-              msg = "اسمح للكاميرا من إعدادات المتصفح.";
-            }
-            setStatus(msg, "error");
-            stopAll();
-          });
+        var text = String((err && (err.name || err.message)) || "");
+        var msg = "تعذر فتح الكاميرا.";
+        if (/NotAllowed|Permission/i.test(text)) {
+          msg = "اسمح للكاميرا من إعدادات المتصفح.";
+        } else if (/NotFound/i.test(text)) {
+          msg = "لم يتم العثور على كاميرا.";
+        }
+        setStatus(msg, "error");
+        stopAll();
       });
   }
 

@@ -86,7 +86,10 @@
   <div class="barcode-scanner-card">
     <div class="barcode-scanner-head">
       <h3 id="barcode-scanner-title">ماسح الباركود</h3>
-      <button type="button" class="btn-ghost" id="barcode-scanner-close" aria-label="إغلاق">إغلاق</button>
+      <div class="barcode-scanner-actions">
+        <button type="button" class="barcode-scanner-torch" id="barcode-scanner-torch" hidden aria-label="الإضاءة" title="الإضاءة">ضوء</button>
+        <button type="button" class="btn-ghost" id="barcode-scanner-close" aria-label="إغلاق">إغلاق</button>
+      </div>
     </div>
     <p id="barcode-scanner-status" class="barcode-scanner-status">وجّه الباركود نحو الخط الأحمر…</p>
     <div class="barcode-scanner-viewport zebra-viewport">
@@ -94,7 +97,7 @@
       <div class="zebra-laser" aria-hidden="true"></div>
       <div class="zebra-guide" aria-hidden="true"></div>
     </div>
-    <p class="zebra-hint">امسح مثل جهاز Zebra: ثبّت الباركود أمام الخط الأحمر</p>
+    <p class="zebra-hint">قرّب الباركود وغطِّ الخط الأحمر بالكامل — أسرع عند ثبات اليد</p>
   </div>
 </div>
 
