@@ -2,7 +2,8 @@ from django.conf import settings
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 
 from .api_client import (
     ApiClientError,
@@ -13,6 +14,7 @@ from .api_client import (
     search_item_details,
     sync_barcode_index,
 )
+from .debug_agent import agent_log, agent_logs_dump
 from .models import ItemBarcode
 from .validators import ValidationError, resolve_warehouse, sanitize_search_query
 
@@ -96,6 +98,20 @@ def item_search(request):
         searched = True
         try:
             barcode_hits = lookup_by_barcode(query)
+            # #region agent log
+            agent_log(
+                'A',
+                'views.py:item_search',
+                'lookup_start',
+                {
+                    'query_len': len(query),
+                    'warehouse': warehouse,
+                    'cache_count': cache_count,
+                    'barcode_hits': len(barcode_hits),
+                    'meta_incomplete': meta_incomplete,
+                },
+            )
+            # #endregion
             if barcode_hits:
                 match_type = 'barcode'
                 item_code = barcode_hits[0]['code']
@@ -123,8 +139,41 @@ def item_search(request):
                     error = (
                         'فهرس الباركود فارغ. اضغط «مزامنة الفهرس» مرة واحدة ثم أعد البحث.'
                     )
+            # #region agent log
+            agent_log(
+                'A',
+                'views.py:item_search',
+                'lookup_result',
+                {
+                    'match_type': match_type,
+                    'items_n': len(items),
+                    'prices_n': len(prices),
+                    'sample_item': {
+                        'pack': (items[0].get('pack_size') if items else ''),
+                        'g_code': (items[0].get('g_code') if items else ''),
+                        'barcode': (items[0].get('barcode') if items else ''),
+                        'unit': (items[0].get('unit') if items else ''),
+                    }
+                    if items
+                    else {},
+                    'sample_price': {
+                        'pack': (prices[0].get('pack_size') if prices else ''),
+                        'qty': (prices[0].get('quantity') if prices else ''),
+                        'unit': (prices[0].get('unit') if prices else ''),
+                        'barcode': (prices[0].get('barcode') if prices else ''),
+                    }
+                    if prices
+                    else {},
+                    'qty_filled': sum(1 for p in prices if str(p.get('quantity') or '').strip()),
+                    'pack_filled': sum(1 for p in prices if str(p.get('pack_size') or '').strip()),
+                },
+            )
+            # #endregion
         except ApiClientError as exc:
             error = str(exc)
+            # #region agent log
+            agent_log('C', 'views.py:item_search', 'api_error', {'error': str(exc)[:200]})
+            # #endregion
 
     return render(
         request,
@@ -178,6 +227,43 @@ def sync_barcodes(request):
 
     try:
         count = sync_barcode_index()
+        # #region agent log
+        with_pack = ItemBarcode.objects.exclude(pack_size='').count()
+        with_g = ItemBarcode.objects.exclude(g_code='').count()
+        agent_log(
+            'A',
+            'views.py:sync_barcodes',
+            'sync_done',
+            {'count': count, 'with_pack': with_pack, 'with_g': with_g},
+        )
+        # #endregion
         return respond_ok(count)
     except ApiClientError as exc:
+        # #region agent log
+        agent_log('A', 'views.py:sync_barcodes', 'sync_error', {'error': str(exc)[:200]})
+        # #endregion
         return respond_error(str(exc), status=502)
+
+
+@csrf_exempt
+@require_POST
+def agent_debug_ingest(request):
+    """Same-origin ingest for browser debug logs (CSP connect-src self)."""
+    import json
+
+    try:
+        body = json.loads(request.body.decode('utf-8') or '{}')
+    except (ValueError, UnicodeDecodeError):
+        body = {}
+    agent_log(
+        str(body.get('hypothesisId') or 'D'),
+        str(body.get('location') or 'browser'),
+        str(body.get('message') or 'event'),
+        body.get('data') if isinstance(body.get('data'), dict) else {},
+    )
+    return JsonResponse({'ok': True})
+
+
+@require_GET
+def agent_debug_dump(request):
+    return JsonResponse({'ok': True, 'logs': agent_logs_dump()})

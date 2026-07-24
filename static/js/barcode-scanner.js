@@ -12,6 +12,48 @@
 
   if (!btn || !overlay || !video || !statusEl || !input || !form) return;
 
+  // #region agent log
+  function dbg(hypothesisId, location, message, data) {
+    try {
+      fetch("/__agent_dbg/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "5b001b",
+          hypothesisId: hypothesisId,
+          location: location,
+          message: message,
+          data: data || {},
+          timestamp: Date.now(),
+        }),
+      }).catch(function () {});
+    } catch (e) {}
+    try {
+      fetch("http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "5b001b",
+        },
+        body: JSON.stringify({
+          sessionId: "5b001b",
+          hypothesisId: hypothesisId,
+          location: location,
+          message: message,
+          data: data || {},
+          timestamp: Date.now(),
+        }),
+      }).catch(function () {});
+    } catch (e2) {}
+  }
+  dbg("D", "barcode-scanner.js:init", "script_loaded", {
+    hasZXing: !!window.ZXing,
+    hasZXingBrowser: !!window.ZXingBrowser,
+    hasBarcodeDetector: "BarcodeDetector" in window,
+    secure: !!window.isSecureContext,
+  });
+  // #endregion
+
   /* =========================================================
    * 1) أجهزة Honeywell / Zebra الحقيقية (Keyboard Wedge)
    * ========================================================= */
@@ -173,7 +215,12 @@
     var value = normalizeCode(code);
     if (!value || value.length < 3) return;
     // تجاهل قراءات غير منطقية قصيرة جداً من الضوضاء
-    if (!/^[0-9A-Za-z\-_./]+$/.test(value)) return;
+    if (!/^[0-9A-Za-z\-_./]+$/.test(value)) {
+      // #region agent log
+      dbg("E", "barcode-scanner.js:acceptCode", "rejected_regex", { len: value.length });
+      // #endregion
+      return;
+    }
 
     // EAN/UPC/Code128 الطويل: قبول فوري. القصير: تأكيد مزدوج
     var needConfirm = value.length < 8 ? 2 : 1;
@@ -183,6 +230,13 @@
       lastCandidate = value;
       lastCandidateCount = 1;
     }
+    // #region agent log
+    dbg("E", "barcode-scanner.js:acceptCode", "candidate", {
+      len: value.length,
+      count: lastCandidateCount,
+      need: needConfirm,
+    });
+    // #endregion
     if (lastCandidateCount < needConfirm) return;
 
     handled = true;
@@ -482,6 +536,15 @@
       .then(function () {
         setupTorchButton();
         setStatus("مرّر الباركود على الخط الأحمر — مثل جهاز Zebra");
+        // #region agent log
+        dbg("D", "barcode-scanner.js:openScanner", "camera_ready", {
+          vw: video.videoWidth,
+          vh: video.videoHeight,
+          hasNative: !!nativeDetector,
+          hasZxing: !!zxingReader,
+          trackLabel: track ? track.label : "",
+        });
+        // #endregion
         rafId = window.requestAnimationFrame(tickNative);
         if (zxingReader) {
           zxingTimer = window.setInterval(tickZxing, 35);
@@ -490,9 +553,18 @@
             var harder = buildZxingReader(true);
             if (harder) zxingReader = harder;
             setStatus("وضع دقة أعلى — قرّب الباركود وثبّت اليد");
+            // #region agent log
+            dbg("D", "barcode-scanner.js:openScanner", "try_harder_on", {
+              passIndex: passIndex,
+              lastCandidate: lastCandidate ? lastCandidate.length : 0,
+            });
+            // #endregion
           }, 1200);
         } else if (!nativeDetector) {
           setStatus("مكتبة الماسح غير محمّلة. حدّث الصفحة.", "error");
+          // #region agent log
+          dbg("D", "barcode-scanner.js:openScanner", "no_decoder", {});
+          // #endregion
         }
       })
       .catch(function (err) {
@@ -503,6 +575,9 @@
         } else if (/NotFound/i.test(text)) {
           msg = "لم يتم العثور على كاميرا.";
         }
+        // #region agent log
+        dbg("D", "barcode-scanner.js:openScanner", "camera_error", { err: text.slice(0, 120) });
+        // #endregion
         setStatus(msg, "error");
         stopAll();
       });
