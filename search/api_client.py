@@ -449,10 +449,11 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
     qtys: list[dict] = []
     price_error: Exception | None = None
     qty_error: Exception | None = None
+    queried = str(item_code or '').strip()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        price_future = pool.submit(search_prices_by_code, item_code, warehouse)
-        qty_future = pool.submit(fetch_qty_by_code, item_code, warehouse)
+        price_future = pool.submit(search_prices_by_code, queried, warehouse)
+        qty_future = pool.submit(fetch_qty_by_code, queried, warehouse)
 
         try:
             prices = price_future.result()
@@ -466,10 +467,26 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
             logger.warning('Quantity fetch failed, showing prices only: %s', exc)
             qtys = []
 
+    # إن كان البحث باركود: GetAllPrice يعيد I_CODE الحقيقي بينما GetItemQtyCost يحتاج رقم الصنف
+    resolved = ''
+    if prices:
+        resolved = str(prices[0].get('code') or '').strip()
+    effective_code = resolved or queried
+
+    if resolved and resolved != queried:
+        try:
+            qtys_resolved = fetch_qty_by_code(resolved, warehouse)
+            if qtys_resolved:
+                qtys = qtys_resolved
+                qty_error = None
+        except Exception as exc:  # noqa: BLE001
+            qty_error = qty_error or exc
+            logger.warning('Quantity refetch by resolved code failed: %s', exc)
+
     # إعادة محاولة الكمية تسلسلياً إن فشلت أو رجعت فارغة
     if not qtys:
         try:
-            qtys = fetch_qty_by_code(item_code, warehouse)
+            qtys = fetch_qty_by_code(effective_code, warehouse)
         except Exception as exc:  # noqa: BLE001
             qty_error = qty_error or exc
             logger.warning('Quantity retry failed: %s', exc)
@@ -484,7 +501,7 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
                 raise price_error
             raise ApiClientError(str(price_error)) from price_error
 
-    unit_meta = get_unit_meta(item_code)
+    unit_meta = get_unit_meta(effective_code)
     merged = merge_prices_with_qty(prices, qtys, unit_meta=unit_meta)
     # #region agent log
     try:
@@ -495,7 +512,9 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
             'api_client.py:search_item_details',
             'merge_summary',
             {
-                'item_code': item_code,
+                'item_code': queried,
+                'resolved_code': resolved,
+                'effective_code': effective_code,
                 'warehouse': warehouse,
                 'prices_n': len(prices),
                 'qtys_n': len(qtys),

@@ -129,15 +129,15 @@ def item_search(request):
             else:
                 prices = search_item_details(query, warehouse=warehouse)
                 if prices:
-                    match_type = 'code'
-                    item_code = prices[0]['code']
+                    item_code = str(prices[0].get('code') or '').strip() or query
+                    match_type = 'barcode' if item_code != query else 'code'
                     group_info = get_item_group(item_code)
                     items = lookup_by_item_code(item_code)
                     if not items:
                         items = _items_from_prices(prices, group_info)
                 elif cache_count == 0:
                     error = (
-                        'فهرس الباركود فارغ. اضغط «مزامنة الفهرس» مرة واحدة ثم أعد البحث.'
+                        'فهرس الباركود فارغ. اضغط «مزامنة» أو انتظر المزامنة التلقائية بعد النشر ثم أعد البحث.'
                     )
             # #region agent log
             agent_log(
