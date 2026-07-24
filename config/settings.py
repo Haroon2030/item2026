@@ -98,7 +98,9 @@ for host in ('item.alrsheed.net', '72.61.107.230', 'www.item.alrsheed.net'):
         ALLOWED_HOSTS.append(host)
 
 # في الإنتاج اسمح بكل المضيفات لتفادي 400 خلف Dokploy/Proxy
-if not DEBUG or '*' in ALLOWED_HOSTS:
+if not DEBUG:
+    ALLOWED_HOSTS = ['*']
+elif '*' in ALLOWED_HOSTS:
     ALLOWED_HOSTS = ['*']
 
 if DEBUG and '*' not in ALLOWED_HOSTS:
