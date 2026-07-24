@@ -6,10 +6,11 @@ mkdir -p /app/data /app/staticfiles /app/certs
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
-# شهادة self-signed للكاميرا على الجوال (تتطلب HTTPS)
+# شهادة self-signed احتياطية (الأفضل Let's Encrypt عبر Dokploy للدومين)
 if [ ! -f /app/certs/cert.pem ] || [ ! -f /app/certs/key.pem ]; then
   echo "Generating self-signed TLS certificate..."
-  OPENSSL_HOST="${TLS_HOST:-72.61.107.230}"
+  OPENSSL_HOST="${TLS_HOST:-item.alrsheed.net}"
+  OPENSSL_IP="${TLS_IP:-72.61.107.230}"
   cat > /tmp/openssl.cnf <<EOF
 [req]
 default_bits = 2048
@@ -28,9 +29,9 @@ keyUsage = digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 
 [alt_names]
-IP.1 = ${OPENSSL_HOST}
 DNS.1 = ${OPENSSL_HOST}
 DNS.2 = localhost
+IP.1 = ${OPENSSL_IP}
 EOF
   openssl req -x509 -nodes -newkey rsa:2048 \
     -keyout /app/certs/key.pem \

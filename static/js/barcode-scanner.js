@@ -83,7 +83,7 @@
   function openScanner() {
     if (!window.isSecureContext) {
       setStatus(
-        "الكاميرا تحتاج HTTPS. افتح: https://72.61.107.230:8443 ثم اقبل التحذير مرة واحدة.",
+        "الكاميرا تحتاج HTTPS. افتح: https://item.alrsheed.net",
         "error"
       );
       overlay.hidden = false;
