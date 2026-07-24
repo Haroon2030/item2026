@@ -31,8 +31,8 @@
         الباركود / رقم الصنف
       </label>
       <div class="query-row">
-        <input id="q" type="search" name="q" value="{{ query }}" placeholder="امسح الباركود أو اكتب الرقم…" autocomplete="off" autofocus>
-        <button type="button" class="btn-scan" id="btn-scan" title="مسح بالكاميرا" aria-label="مسح الباركود بالكاميرا">
+        <input id="q" type="search" name="q" value="{{ query }}" placeholder="امسح بـ Honeywell/Zebra أو اكتب الرقم…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
+        <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا احترافي" aria-label="مسح الباركود بالكاميرا">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
       </div>
@@ -91,13 +91,13 @@
         <button type="button" class="btn-ghost" id="barcode-scanner-close" aria-label="إغلاق">إغلاق</button>
       </div>
     </div>
-    <p id="barcode-scanner-status" class="barcode-scanner-status">وجّه الباركود نحو الخط الأحمر…</p>
+    <p id="barcode-scanner-status" class="barcode-scanner-status">مرّر الباركود على الخط الأحمر…</p>
     <div class="barcode-scanner-viewport zebra-viewport">
       <video id="barcode-scanner-video" class="zebra-video" playsinline muted autoplay></video>
       <div class="zebra-laser" aria-hidden="true"></div>
       <div class="zebra-guide" aria-hidden="true"></div>
     </div>
-    <p class="zebra-hint">قرّب الباركود وغطِّ الخط الأحمر بالكامل — أسرع عند ثبات اليد</p>
+    <p class="zebra-hint">أفضل نتيجة: قرّب الباركود أفقياً حتى يغطي الخط الأحمر — أو استخدم جهاز Honeywell/Zebra على حقل البحث مباشرة</p>
   </div>
 </div>
 

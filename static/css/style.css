@@ -940,10 +940,10 @@ body {
 
 .zebra-guide {
   position: absolute;
-  inset: 42% 3%;
-  border: 2px solid rgba(255, 255, 255, 0.85);
-  border-radius: 8px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.42);
+  inset: 44% 2%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.48);
   pointer-events: none;
   z-index: 1;
 }
