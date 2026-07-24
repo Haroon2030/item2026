@@ -13,6 +13,7 @@
 
   var scanner = null;
   var handled = false;
+  var nativeTimer = null;
 
   function setStatus(text, kind) {
     statusEl.textContent = text;
@@ -21,7 +22,15 @@
     if (kind === "ok") statusEl.classList.add("is-ok");
   }
 
+  function stopNativeLoop() {
+    if (nativeTimer) {
+      window.clearInterval(nativeTimer);
+      nativeTimer = null;
+    }
+  }
+
   function stopScanner() {
+    stopNativeLoop();
     handled = false;
     if (!scanner) return Promise.resolve();
     var current = scanner;
@@ -32,7 +41,7 @@
         return current.clear();
       })
       .catch(function () {
-        /* ignore stop errors */
+        /* ignore */
       });
   }
 
@@ -47,6 +56,7 @@
     if (handled || !code) return;
     handled = true;
     var value = String(code).trim();
+    if (!value) return;
     setStatus("تم التقاط: " + value, "ok");
     input.value = value;
     stopScanner().finally(function () {
@@ -54,6 +64,49 @@
       readerEl.innerHTML = "";
       form.submit();
     });
+  }
+
+  function startNativeDetectorFallback() {
+    if (!("BarcodeDetector" in window)) return;
+    var video = readerEl.querySelector("video");
+    if (!video) return;
+
+    var detector = null;
+    try {
+      detector = new window.BarcodeDetector({
+        formats: [
+          "ean_13",
+          "ean_8",
+          "code_128",
+          "code_39",
+          "upc_a",
+          "upc_e",
+          "itf",
+          "qr_code",
+        ],
+      });
+    } catch (e) {
+      try {
+        detector = new window.BarcodeDetector();
+      } catch (e2) {
+        return;
+      }
+    }
+
+    stopNativeLoop();
+    nativeTimer = window.setInterval(function () {
+      if (handled || !detector || !video || video.readyState < 2) return;
+      detector
+        .detect(video)
+        .then(function (codes) {
+          if (handled || !codes || !codes.length) return;
+          var raw = codes[0].rawValue || "";
+          if (raw) onDetected(raw);
+        })
+        .catch(function () {
+          /* ignore frame errors */
+        });
+    }, 250);
   }
 
   function openScanner() {
@@ -78,7 +131,7 @@
     handled = false;
     overlay.hidden = false;
     readerEl.innerHTML = "";
-    setStatus("جاري فتح الكاميرا… اسمح بالإذن إن طُلب منك.");
+    setStatus("جاري فتح الكاميرا…");
 
     var formats = undefined;
     try {
@@ -88,10 +141,12 @@
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
           Html5QrcodeSupportedFormats.UPC_A,
           Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.QR_CODE,
         ];
       }
     } catch (e) {
@@ -100,22 +155,36 @@
 
     try {
       scanner = formats
-        ? new Html5Qrcode("barcode-reader", { formatsToSupport: formats })
+        ? new Html5Qrcode("barcode-reader", {
+            formatsToSupport: formats,
+            verbose: false,
+          })
         : new Html5Qrcode("barcode-reader");
     } catch (err) {
       setStatus("تعذر تهيئة قارئ الباركود.", "error");
       return;
     }
 
+    // منطقة مسح عريضة للباركود الشريطي (1D)
     var config = {
-      fps: 10,
-      qrbox: function (viewfinderWidth, viewfinderHeight) {
-        var side = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
-        return { width: side, height: Math.floor(side * 0.55) };
+      fps: 20,
+      qrbox: function (w, h) {
+        return {
+          width: Math.floor(w * 0.92),
+          height: Math.floor(h * 0.28),
+        };
       },
-      aspectRatio: 1.333,
+      aspectRatio: 1.777,
+      disableFlip: false,
+      // zxing أوثق لـ EAN من BarcodeDetector في بعض الأجهزة
       experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true,
+        useBarCodeDetectorIfSupported: false,
+      },
+      videoConstraints: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        focusMode: "continuous",
       },
     };
 
@@ -127,22 +196,50 @@
           onDetected(decodedText);
         },
         function () {
-          /* ignore frame miss */
+          /* frame miss */
         }
       )
       .then(function () {
-        setStatus("وجّه الكاميرا نحو الباركود…");
+        setStatus("قرّب الباركود داخل الإطار الأفقي وثبّت اليد…");
+        // مسار إضافي عبر BarcodeDetector إن وُجد
+        window.setTimeout(startNativeDetectorFallback, 600);
+      })
+      .catch(function () {
+        // إعادة محاولة بإعدادات أبسط
+        return scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 15,
+            qrbox: function (w, h) {
+              return {
+                width: Math.floor(w * 0.95),
+                height: Math.floor(h * 0.35),
+              };
+            },
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true,
+            },
+          },
+          function (decodedText) {
+            onDetected(decodedText);
+          },
+          function () {}
+        );
+      })
+      .then(function () {
+        if (!handled) {
+          setStatus("قرّب الباركود داخل الإطار الأفقي وثبّت اليد…");
+          window.setTimeout(startNativeDetectorFallback, 600);
+        }
       })
       .catch(function (err) {
         var msg = "تعذر فتح الكاميرا.";
         var name = err && (err.name || err);
         var text = (err && err.message) || String(err || "");
         if (name === "NotAllowedError" || /Permission|NotAllowed/i.test(text)) {
-          msg = "تم رفض إذن الكاميرا. من إعدادات المتصفح اسمح بالكاميرا لهذا الموقع.";
-        } else if (name === "NotFoundError" || /Requested device not found/i.test(text)) {
+          msg = "تم رفض إذن الكاميرا. اسمح بالوصول من إعدادات المتصفح.";
+        } else if (name === "NotFoundError") {
           msg = "لم يتم العثور على كاميرا.";
-        } else if (name === "NotReadableError" || /Could not start video/i.test(text)) {
-          msg = "الكاميرا مستخدمة من تطبيق آخر. أغلقه ثم أعد المحاولة.";
         } else if (text) {
           msg = "تعذر فتح الكاميرا: " + text;
         }
