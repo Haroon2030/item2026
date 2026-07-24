@@ -102,6 +102,9 @@ def _dig(data: Any, path: str) -> Any:
 
 
 def _normalize_item(raw: dict, field_map: dict) -> dict:
+    pack = raw.get(field_map.get('pack_size', 'P_SIZE'), '')
+    if pack in (None, '', 0, '0'):
+        pack = raw.get('p_size', '') or ''
     return {
         'code': raw.get(field_map.get('code', 'I_CODE'), '') or '',
         'name': raw.get(field_map.get('name', 'I_NAME'), '') or '',
@@ -109,6 +112,7 @@ def _normalize_item(raw: dict, field_map: dict) -> dict:
         'price': raw.get(field_map.get('price', 'I_PRICE'), '') or '',
         'unit': raw.get(field_map.get('unit', 'ITM_UNT'), '') or '',
         'quantity': raw.get(field_map.get('quantity', 'AVL_QTY'), '') or '',
+        'pack_size': '' if pack in (None, '', 0, '0') else str(pack).strip(),
         'raw': raw,
     }
 
@@ -392,6 +396,26 @@ def merge_prices_with_qty(
         if not pack_display and pack:
             pack_display = str(int(pack)) if float(pack).is_integer() else str(pack)
 
+        # احتياطي من استجابة الأسعار إن الفهرس المحلي ناقص
+        if not pack_display:
+            raw = price_row.get('raw') or {}
+            raw_pack = raw.get('P_SIZE')
+            if raw_pack in (None, '', 0, '0'):
+                raw_pack = raw.get('p_size')
+            if raw_pack not in (None, '', 0, '0'):
+                pack_display = str(raw_pack).strip()
+                try:
+                    pack = float(str(raw_pack).replace(',', '').strip())
+                except ValueError:
+                    pack = None
+                if pack and pack > 0 and unit not in unit_meta:
+                    unit_meta[unit] = {
+                        'pack_size': pack,
+                        'pack_size_display': pack_display,
+                        'barcode': (price_row.get('barcode') or '').strip(),
+                        'name': price_row.get('name') or '',
+                    }
+
         quantity = ''
         if unit in qty_by_unit and _to_float(qty_row.get('quantity')) is not None:
             # وحدة الـ API كما هي — بدون إعادة حساب
@@ -410,7 +434,7 @@ def merge_prices_with_qty(
                 or qty_row.get('barcode')
                 or '',
                 'unit': unit,
-                'pack_size': pack_display,
+                'pack_size': pack_display or (price_row.get('pack_size') or ''),
                 'price': price_row.get('price', ''),
                 'quantity': quantity,
                 'raw': price_row.get('raw') or qty_row,

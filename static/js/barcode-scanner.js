@@ -113,6 +113,7 @@
   var zxingTimer = 0;
   var nativeDetector = null;
   var zxingReader = null;
+  var zxingControls = null;
   var track = null;
   var torchOn = false;
   var lastCandidate = "";
@@ -122,13 +123,11 @@
   var canvas = document.createElement("canvas");
   var ctx = canvas.getContext("2d", { willReadFrequently: true, alpha: false });
 
-  // مربع كبير مطابق لدليل الواجهة (~80% من الإطار) + شريط وسط + تكبير
+  // مربع كبير: إطار كامل تقريباً ثم شريط وسط (بدون تباين عنيف)
   var SCAN_PASSES = [
-    { y: 0.5, h: 0.78, scale: 1.0, contrast: 1.15, xPad: 0.04 },
-    { y: 0.5, h: 0.55, scale: 1.25, contrast: 1.25, xPad: 0.03 },
-    { y: 0.5, h: 0.32, scale: 1.6, contrast: 1.35, xPad: 0.02 },
-    { y: 0.38, h: 0.4, scale: 1.2, contrast: 1.2, xPad: 0.03 },
-    { y: 0.62, h: 0.4, scale: 1.2, contrast: 1.2, xPad: 0.03 },
+    { y: 0.5, h: 0.82, scale: 1.0, contrast: 1.0, xPad: 0.04 },
+    { y: 0.5, h: 0.45, scale: 1.35, contrast: 1.1, xPad: 0.02 },
+    { y: 0.5, h: 0.28, scale: 1.7, contrast: 1.15, xPad: 0.02 },
   ];
 
   function setStatus(text, kind) {
@@ -177,6 +176,18 @@
       window.clearInterval(zxingTimer);
       zxingTimer = 0;
     }
+    if (zxingControls && typeof zxingControls.stop === "function") {
+      try {
+        zxingControls.stop();
+      } catch (e) {}
+      zxingControls = null;
+    }
+    if (zxingReader && typeof zxingReader.reset === "function") {
+      try {
+        zxingReader.reset();
+      } catch (e2) {}
+    }
+    zxingReader = null;
     if (track) {
       try {
         track.applyConstraints({ advanced: [{ torch: false }] });
@@ -293,8 +304,10 @@
     ctx.drawImage(video, x, y, bandW, bandH, 0, 0, outW, outH);
 
     try {
-      var img = ctx.getImageData(0, 0, outW, outH);
-      ctx.putImageData(boostContrast(img, pass.contrast), 0, 0);
+      if (pass.contrast && pass.contrast > 1.05) {
+        var img = ctx.getImageData(0, 0, outW, outH);
+        ctx.putImageData(boostContrast(img, pass.contrast), 0, 0);
+      }
     } catch (e) {
       // بعض المتصفحات تمنع getImageData في حالات نادرة
     }
@@ -410,13 +423,7 @@
     if (caps.whiteBalanceMode && caps.whiteBalanceMode.indexOf("continuous") !== -1) {
       advanced.push({ whiteBalanceMode: "continuous" });
     }
-    // تقريب خفيف يملأ الشريط مثل ماسح Zebra
-    if (caps.zoom) {
-      var zMin = caps.zoom.min || 1;
-      var zMax = caps.zoom.max || 1;
-      var z = zMin + (zMax - zMin) * 0.18;
-      advanced.push({ zoom: z });
-    }
+    // تقريب خفيف قد يشوّش الباركود على بعض الأجهزة — نترك التركيز فقط
     if (!advanced.length) return;
     track.applyConstraints({ advanced: advanced }).catch(function () {});
   }
@@ -442,43 +449,82 @@
         .sort(function (a, b) {
           return b.score - a.score;
         });
-      return scored[0] && scored[0].score >= 0 ? scored[0].id : scored[0].id;
+      return scored[0] && scored[0].score > 0 ? scored[0].id : null;
     });
   }
 
   function openCameraStream() {
     return pickBackCameraId().then(function (deviceId) {
-      var baseVideo = {
-        width: { ideal: 1920, min: 640 },
-        height: { ideal: 1080, min: 480 },
-        frameRate: { ideal: 30, min: 15 },
-        focusMode: "continuous",
-      };
+      var attempts = [];
       if (deviceId) {
-        baseVideo.deviceId = { exact: deviceId };
-      } else {
-        baseVideo.facingMode = { ideal: "environment" };
-      }
-
-      return navigator.mediaDevices
-        .getUserMedia({ audio: false, video: baseVideo })
-        .catch(function () {
-          return navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          });
-        })
-        .catch(function () {
-          return navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { facingMode: "environment" },
-          });
+        attempts.push({
+          audio: false,
+          video: {
+            deviceId: { ideal: deviceId },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: { ideal: "environment" },
+          },
         });
+      }
+      attempts.push({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      attempts.push({ audio: false, video: { facingMode: "environment" } });
+      attempts.push({ audio: false, video: true });
+
+      function next(i) {
+        if (i >= attempts.length) {
+          return Promise.reject(new Error("NoCamera"));
+        }
+        return navigator.mediaDevices.getUserMedia(attempts[i]).catch(function () {
+          return next(i + 1);
+        });
+      }
+      return next(0);
     });
+  }
+
+  function startZxingContinuous() {
+    zxingReader = buildZxingReader(true) || buildZxingReader(false);
+    if (!zxingReader || !stream) {
+      // #region agent log
+      dbg("D", "barcode-scanner.js:startZxing", "reader_missing", {
+        hasReader: !!zxingReader,
+        hasStream: !!stream,
+      });
+      // #endregion
+      return Promise.resolve(null);
+    }
+    // المسار الرسمي المستمر — أدق من قصّ canvas يدوياً
+    return zxingReader
+      .decodeFromStream(stream, video, function (result) {
+        if (result && result.getText) acceptCode(result.getText());
+      })
+      .then(function (controls) {
+        zxingControls = controls || null;
+        // #region agent log
+        dbg("D", "barcode-scanner.js:startZxing", "stream_decode_on", {
+          hasControls: !!zxingControls,
+        });
+        // #endregion
+        return controls;
+      })
+      .catch(function (err) {
+        // #region agent log
+        dbg("D", "barcode-scanner.js:startZxing", "stream_decode_fail", {
+          err: String((err && err.message) || err).slice(0, 120),
+        });
+        // #endregion
+        // احتياطي: فك من canvas كل 50ms
+        zxingTimer = window.setInterval(tickZxing, 50);
+        return null;
+      });
   }
 
   function openScanner() {
@@ -525,7 +571,7 @@
       }
     }
 
-    zxingReader = buildZxingReader(false) || buildZxingReader(true);
+    zxingReader = null;
 
     openCameraStream()
       .then(function (mediaStream) {
@@ -540,32 +586,20 @@
       })
       .then(function () {
         setupTorchButton();
-        setStatus("مرّر الباركود على الخط الأحمر — مثل جهاز Zebra");
+        setStatus("ضع الباركود داخل المربع الكبير — جاري القراءة…");
         // #region agent log
         dbg("D", "barcode-scanner.js:openScanner", "camera_ready", {
           vw: video.videoWidth,
           vh: video.videoHeight,
           hasNative: !!nativeDetector,
-          hasZxing: !!zxingReader,
           trackLabel: track ? track.label : "",
         });
         // #endregion
         rafId = window.requestAnimationFrame(tickNative);
-        if (zxingReader) {
-          zxingTimer = window.setInterval(tickZxing, 35);
-          window.setTimeout(function () {
-            if (!running || handled) return;
-            var harder = buildZxingReader(true);
-            if (harder) zxingReader = harder;
-            setStatus("وضع دقة أعلى — قرّب الباركود وثبّت اليد");
-            // #region agent log
-            dbg("D", "barcode-scanner.js:openScanner", "try_harder_on", {
-              passIndex: passIndex,
-              lastCandidate: lastCandidate ? lastCandidate.length : 0,
-            });
-            // #endregion
-          }, 1200);
-        } else if (!nativeDetector) {
+        return startZxingContinuous();
+      })
+      .then(function () {
+        if (!zxingReader && !nativeDetector && !zxingTimer) {
           setStatus("مكتبة الماسح غير محمّلة. حدّث الصفحة.", "error");
           // #region agent log
           dbg("D", "barcode-scanner.js:openScanner", "no_decoder", {});
@@ -577,7 +611,7 @@
         var msg = "تعذر فتح الكاميرا.";
         if (/NotAllowed|Permission/i.test(text)) {
           msg = "اسمح للكاميرا من إعدادات المتصفح.";
-        } else if (/NotFound/i.test(text)) {
+        } else if (/NotFound|NoCamera/i.test(text)) {
           msg = "لم يتم العثور على كاميرا.";
         }
         // #region agent log
