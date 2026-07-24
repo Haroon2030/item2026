@@ -3,18 +3,15 @@
 
   var btn = document.getElementById("btn-scan");
   var overlay = document.getElementById("barcode-scanner");
-  var video = document.getElementById("barcode-scanner-video");
+  var readerEl = document.getElementById("barcode-reader");
   var statusEl = document.getElementById("barcode-scanner-status");
   var closeBtn = document.getElementById("barcode-scanner-close");
   var input = document.getElementById("q");
   var form = document.querySelector(".search-form");
 
-  if (!btn || !overlay || !video || !statusEl || !input || !form) return;
+  if (!btn || !overlay || !readerEl || !statusEl || !input || !form) return;
 
-  var stream = null;
-  var detector = null;
-  var rafId = 0;
-  var scanning = false;
+  var scanner = null;
   var handled = false;
 
   function setStatus(text, kind) {
@@ -24,78 +21,51 @@
     if (kind === "ok") statusEl.classList.add("is-ok");
   }
 
-  function stopCamera() {
-    scanning = false;
+  function stopScanner() {
     handled = false;
-    if (rafId) {
-      window.cancelAnimationFrame(rafId);
-      rafId = 0;
-    }
-    if (stream) {
-      stream.getTracks().forEach(function (t) {
-        t.stop();
+    if (!scanner) return Promise.resolve();
+    var current = scanner;
+    scanner = null;
+    return current
+      .stop()
+      .then(function () {
+        return current.clear();
+      })
+      .catch(function () {
+        /* ignore stop errors */
       });
-      stream = null;
-    }
-    video.srcObject = null;
   }
 
   function closeScanner() {
-    stopCamera();
-    overlay.hidden = true;
+    stopScanner().finally(function () {
+      overlay.hidden = true;
+      readerEl.innerHTML = "";
+    });
   }
 
   function onDetected(code) {
     if (handled || !code) return;
     handled = true;
-    scanning = false;
-    setStatus("تم التقاط: " + code, "ok");
-    input.value = code;
-    stopCamera();
-    overlay.hidden = true;
-    form.submit();
-  }
-
-  function detectLoop() {
-    if (!scanning || !detector || video.readyState < 2) {
-      if (scanning) rafId = window.requestAnimationFrame(detectLoop);
-      return;
-    }
-
-    detector
-      .detect(video)
-      .then(function (barcodes) {
-        if (!scanning || handled) return;
-        if (barcodes && barcodes.length) {
-          var raw = barcodes[0].rawValue || "";
-          if (raw) {
-            onDetected(String(raw).trim());
-            return;
-          }
-        }
-        rafId = window.requestAnimationFrame(detectLoop);
-      })
-      .catch(function () {
-        if (scanning) rafId = window.requestAnimationFrame(detectLoop);
-      });
+    var value = String(code).trim();
+    setStatus("تم التقاط: " + value, "ok");
+    input.value = value;
+    stopScanner().finally(function () {
+      overlay.hidden = true;
+      readerEl.innerHTML = "";
+      form.submit();
+    });
   }
 
   function openScanner() {
     if (!window.isSecureContext) {
-      setStatus(
-        "الكاميرا تحتاج HTTPS. افتح: https://item.alrsheed.net",
-        "error"
-      );
       overlay.hidden = false;
+      setStatus("الكاميرا تحتاج HTTPS. افتح: https://item.alrsheed.net", "error");
       return;
     }
 
-    if (!("BarcodeDetector" in window)) {
+    if (typeof Html5Qrcode === "undefined") {
       overlay.hidden = false;
-      setStatus(
-        "هذا المتصفح لا يدعم مسح الباركود. استخدم Chrome أو Edge على الجوال.",
-        "error"
-      );
+      setStatus("مكتبة المسح غير محمّلة. حدّث الصفحة ثم أعد المحاولة.", "error");
       return;
     }
 
@@ -107,61 +77,77 @@
 
     handled = false;
     overlay.hidden = false;
-    setStatus("جاري فتح الكاميرا…");
+    readerEl.innerHTML = "";
+    setStatus("جاري فتح الكاميرا… اسمح بالإذن إن طُلب منك.");
 
-    var formats = [
-      "ean_13",
-      "ean_8",
-      "code_128",
-      "code_39",
-      "upc_a",
-      "upc_e",
-      "qr_code",
-      "itf",
-    ];
-
-    var detectorReady = Promise.resolve();
+    var formats = undefined;
     try {
-      detector = new window.BarcodeDetector({ formats: formats });
-    } catch (err) {
-      try {
-        detector = new window.BarcodeDetector();
-      } catch (err2) {
-        setStatus("تعذر تهيئة قارئ الباركود.", "error");
-        return;
+      if (typeof Html5QrcodeSupportedFormats !== "undefined") {
+        formats = [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.ITF,
+        ];
       }
+    } catch (e) {
+      formats = undefined;
     }
 
-    detectorReady
+    try {
+      scanner = formats
+        ? new Html5Qrcode("barcode-reader", { formatsToSupport: formats })
+        : new Html5Qrcode("barcode-reader");
+    } catch (err) {
+      setStatus("تعذر تهيئة قارئ الباركود.", "error");
+      return;
+    }
+
+    var config = {
+      fps: 10,
+      qrbox: function (viewfinderWidth, viewfinderHeight) {
+        var side = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.72);
+        return { width: side, height: Math.floor(side * 0.55) };
+      },
+      aspectRatio: 1.333,
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true,
+      },
+    };
+
+    scanner
+      .start(
+        { facingMode: "environment" },
+        config,
+        function (decodedText) {
+          onDetected(decodedText);
+        },
+        function () {
+          /* ignore frame miss */
+        }
+      )
       .then(function () {
-        return navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        });
-      })
-      .then(function (mediaStream) {
-        stream = mediaStream;
-        video.srcObject = stream;
-        return video.play();
-      })
-      .then(function () {
-        scanning = true;
         setStatus("وجّه الكاميرا نحو الباركود…");
-        rafId = window.requestAnimationFrame(detectLoop);
       })
       .catch(function (err) {
         var msg = "تعذر فتح الكاميرا.";
-        if (err && err.name === "NotAllowedError") {
-          msg = "تم رفض إذن الكاميرا. اسمح بالوصول ثم أعد المحاولة.";
-        } else if (err && err.name === "NotFoundError") {
+        var name = err && (err.name || err);
+        var text = (err && err.message) || String(err || "");
+        if (name === "NotAllowedError" || /Permission|NotAllowed/i.test(text)) {
+          msg = "تم رفض إذن الكاميرا. من إعدادات المتصفح اسمح بالكاميرا لهذا الموقع.";
+        } else if (name === "NotFoundError" || /Requested device not found/i.test(text)) {
           msg = "لم يتم العثور على كاميرا.";
+        } else if (name === "NotReadableError" || /Could not start video/i.test(text)) {
+          msg = "الكاميرا مستخدمة من تطبيق آخر. أغلقه ثم أعد المحاولة.";
+        } else if (text) {
+          msg = "تعذر فتح الكاميرا: " + text;
         }
         setStatus(msg, "error");
-        stopCamera();
+        stopScanner();
       });
   }
 

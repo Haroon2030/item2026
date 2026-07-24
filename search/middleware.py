@@ -24,16 +24,18 @@ class SecurityHeadersMiddleware:
             'Permissions-Policy',
             'geolocation=(), microphone=(), camera=(self), payment=()',
         )
-        # CSP محافظة: السماح بخطوط Google فقط مع منع السكربتات المضمّنة
+        # السماح بـ media من نفس المصدر للكاميرا
         response.headers.setdefault(
             'Content-Security-Policy',
             (
                 "default-src 'self'; "
-                "img-src 'self' data:; "
-                "style-src 'self' https://fonts.googleapis.com; "
+                "img-src 'self' data: blob:; "
+                "media-src 'self' blob:; "
+                "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "script-src 'self'; "
                 "connect-src 'self'; "
+                "worker-src 'self' blob:; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'"
