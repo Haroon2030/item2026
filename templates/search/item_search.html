@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% block page_class %}{% if searched and not error %}{% if items or prices or selected_price %}results-focus{% endif %}{% endif %}{% endblock %}
+
 {% block content %}
 <section class="search-box" aria-label="بحث الأصناف">
   <div class="search-head">
@@ -18,11 +20,16 @@
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
         المخزن
       </label>
-      <select id="warehouse" name="warehouse">
-        {% for wh in warehouses %}
-          <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
-        {% endfor %}
-      </select>
+      <div class="select-shell">
+        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+          {% for wh in warehouses %}
+            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+          {% endfor %}
+        </select>
+        <span class="select-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
     </div>
 
     <div class="field query-field">
@@ -131,182 +138,64 @@
 
 {% if searched and not error %}
   <section class="results">
-    {% if items %}
-      {% if match_type == 'barcode' %}
-        <div class="match-card">
-          <div class="match-head">
-            <span class="match-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM7 7V5h10v2M8 12h1M11 12h2M15 12h1"/><path d="M12 17v3M9 20h6"/></svg>
-            </span>
-            <div class="match-copy">
-              <p class="match-label">الباركود مربوط برقم الصنف</p>
-              <p class="match-code">{{ items.0.code }}</p>
-              <p class="match-name">{{ items.0.name }}</p>
-            </div>
-          </div>
-          <div class="match-meta">
-            <span class="meta-pill">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM7 7V5h10v2M8 12h1M11 12h2M15 12h1"/></svg>
-              كود الصنف: <strong class="mono">{{ query }}</strong>
-            </span>
-            <span class="meta-pill">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
-              مخزن: <strong>{{ warehouse }}</strong>
-            </span>
-            {% if g_code %}
-              <span class="meta-pill">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
-                مجموعة: <strong class="mono">{{ g_code }}</strong>{% if g_name %} — {{ g_name }}{% endif %}
-              </span>
-            {% endif %}
-          </div>
-        </div>
-      {% else %}
-        <div class="match-card">
-          <div class="match-head">
-            <span class="match-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/></svg>
-            </span>
-            <div class="match-copy">
-              <p class="match-label">نتيجة رقم الصنف</p>
-              <p class="match-code">{{ items.0.code }}</p>
-              <p class="match-name">{{ items.0.name }}</p>
-            </div>
-          </div>
-          <div class="match-meta">
-            <span class="meta-pill">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
-              مخزن: <strong>{{ warehouse }}</strong>
-            </span>
-            {% if g_code %}
-              <span class="meta-pill">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
-                مجموعة: <strong class="mono">{{ g_code }}</strong>{% if g_name %} — {{ g_name }}{% endif %}
-              </span>
-            {% endif %}
-          </div>
-        </div>
-      {% endif %}
-
-      <div class="panel panel-blue">
-        <div class="panel-head">
-          <span class="panel-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          </span>
-          <h3>بيانات الربط</h3>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM8 12h8"/></svg></span>
-                  رقم الصنف
-                </th>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
-                  اسم الصنف
-                </th>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg></span>
-                  G_CODE
-                </th>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-                  المجموعة
-                </th>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM7 7V5h10v2M8 12h1M11 12h2M15 12h1"/></svg></span>
-                  الباركود
-                </th>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
-                  الوحدة
-                </th>
-                <th>
-                  <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M8 7h8M7 12h10M8 17h8"/></svg></span>
-                  العبوة
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in items %}
-                <tr>
-                  <td class="mono highlight-code">{{ item.code }}</td>
-                  <td class="name-cell">{{ item.name }}</td>
-                  <td class="mono gcode-cell">{{ item.g_code }}</td>
-                  <td>{% if item.g_name %}<span class="chip chip-group">{{ item.g_name }}</span>{% endif %}</td>
-                  <td class="mono">{{ item.barcode }}</td>
-                  <td><span class="chip">{{ item.unit }}</span></td>
-                  <td class="mono">{{ item.pack_size }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+    {% if items or prices %}
+      <div class="results-topbar">
+        <span class="results-topbar-title">نتيجة البحث</span>
+        <a class="btn-new-search" href="{% url 'item_search' %}?warehouse={{ warehouse }}">بحث جديد</a>
       </div>
-
-      {% if prices %}
-        <div class="panel panel-blue">
-          <div class="panel-head">
+      {% if selected_price %}
+        <div class="panel panel-blue result-prices">
+          <div class="panel-head result-combined-head">
             <span class="panel-ico" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </span>
-            <h3>الأسعار والكميات</h3>
-            <p>مخزن {{ warehouse }}</p>
+            <div class="result-combined-copy">
+              <span class="result-combined-label">سعر الوحدة المطلوبة</span>
+              {% if items %}
+                <strong class="result-combined-code mono">{{ items.0.code }}</strong>
+                <span class="result-combined-name">{{ items.0.name }}</span>
+              {% else %}
+                <strong class="result-combined-code mono">{{ prices.0.code }}</strong>
+                <span class="result-combined-name">{{ prices.0.name }}</span>
+              {% endif %}
+            </div>
+            <div class="result-hero-side">
+              <span class="result-pill">مخزن {{ warehouse }}</span>
+              {% if query %}<span class="result-pill mono">{{ query }}</span>{% endif %}
+            </div>
           </div>
           <div class="table-wrap">
-            <table class="data-table">
+            <table class="data-table price-table">
               <thead>
                 <tr>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM8 12h8"/></svg></span>
-                    رقم الصنف
-                  </th>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
-                    اسم الصنف
-                  </th>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM7 7V5h10v2M8 12h1M11 12h2M15 12h1"/></svg></span>
-                    الباركود
-                  </th>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
-                    الوحدة
-                  </th>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M8 7h8M7 12h10M8 17h8"/></svg></span>
-                    العبوة
-                  </th>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-                    السعر
-                  </th>
-                  <th>
-                    <span class="th-ico"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l3-3 3 2 5-6"/></svg></span>
-                    الرصيد
-                  </th>
+                  <th>الوحدة</th>
+                  <th>الباركود</th>
+                  <th>العبوة</th>
+                  <th>سعر الوحدة</th>
+                  <th>الرصيد</th>
                 </tr>
               </thead>
               <tbody>
-                {% for item in prices %}
-                  <tr>
-                    <td class="mono highlight-code">{{ item.code }}</td>
-                    <td class="name-cell">{{ item.name }}</td>
-                    <td class="mono">{{ item.barcode }}</td>
-                    <td><span class="chip">{{ item.unit }}</span></td>
-                    <td class="mono">{{ item.pack_size }}</td>
-                    <td class="mono price-cell">{{ item.price }}</td>
-                    <td class="mono qty-cell">{{ item.quantity }}</td>
-                  </tr>
-                {% endfor %}
+                <tr class="is-matched-row">
+                  <td>
+                    <span class="chip chip-matched">{{ selected_price.unit }}</span>
+                    <span class="row-tag">المطلوب</span>
+                  </td>
+                  <td class="mono">{{ selected_price.barcode|default:query }}</td>
+                  <td class="mono">{{ selected_price.pack_size|default:"—" }}</td>
+                  <td class="mono price-cell">{{ selected_price.price|default:"—" }}</td>
+                  <td class="mono qty-cell">{{ selected_price.quantity|default:"—" }}</td>
+                </tr>
               </tbody>
             </table>
           </div>
         </div>
       {% endif %}
     {% else %}
+      <div class="results-topbar">
+        <span class="results-topbar-title">لا نتائج</span>
+        <a class="btn-new-search" href="{% url 'item_search' %}?warehouse={{ warehouse }}">بحث جديد</a>
+      </div>
       <div class="empty-state">
         <svg class="ico lg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/></svg>
         <p class="empty-title">لا نتائج</p>

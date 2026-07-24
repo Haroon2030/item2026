@@ -23,6 +23,47 @@ def _warehouses() -> list[dict]:
     return list(settings.EXTERNAL_API.get('WAREHOUSES') or [])
 
 
+def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str) -> tuple[list[dict], dict | None]:
+    """يربط باركود الوحدات من الفهرس ويضع الصف المطابق للبحث أولاً."""
+    q = (query or '').strip()
+    barcode_by_unit = {}
+    unit_by_barcode = {}
+    for row in items or []:
+        unit = str(row.get('unit') or '').strip()
+        barcode = str(row.get('barcode') or '').strip()
+        if unit and barcode:
+            barcode_by_unit.setdefault(unit, barcode)
+            unit_by_barcode.setdefault(barcode, unit)
+
+    matched_unit = unit_by_barcode.get(q, '')
+    enriched = []
+    for row in prices or []:
+        item = dict(row)
+        unit = str(item.get('unit') or '').strip()
+        # فضّل باركود الفهرس المحلي لكل وحدة (أدق من GetAllPrice)
+        barcode = barcode_by_unit.get(unit, '') or str(item.get('barcode') or '').strip()
+        item['barcode'] = barcode
+        if matched_unit:
+            item['is_matched'] = unit == matched_unit
+        else:
+            item['is_matched'] = bool(q) and barcode == q
+        enriched.append(item)
+
+    # إن تطابقت عدة صفوف بنفس الباركود من الـ API، أبقِ الأول فقط كمطلوب
+    if not matched_unit:
+        seen_match = False
+        for item in enriched:
+            if item.get('is_matched'):
+                if seen_match:
+                    item['is_matched'] = False
+                else:
+                    seen_match = True
+
+    enriched.sort(key=lambda r: (0 if r.get('is_matched') else 1, str(r.get('unit') or '')))
+    matched = next((r for r in enriched if r.get('is_matched')), None)
+    return enriched, matched
+
+
 def _items_from_prices(prices: list[dict], group_info: dict) -> list[dict]:
     """احتياطي: بناء صفوف الربط من نتائج الأسعار إن الفهرس المحلي ناقص."""
     seen = set()
@@ -175,6 +216,11 @@ def item_search(request):
             agent_log('C', 'views.py:item_search', 'api_error', {'error': str(exc)[:200]})
             # #endregion
 
+    matched_price = None
+    if prices:
+        prices, matched_price = _enrich_prices_with_match(prices, items, query)
+    selected_price = matched_price or (prices[0] if prices else None)
+
     return render(
         request,
         'search/item_search.html',
@@ -182,6 +228,8 @@ def item_search(request):
             'query': query,
             'items': items,
             'prices': prices,
+            'matched_price': matched_price,
+            'selected_price': selected_price,
             'error': error,
             'searched': searched,
             'match_type': match_type,
