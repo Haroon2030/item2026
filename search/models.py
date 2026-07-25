@@ -25,7 +25,7 @@ class UserProfile(models.Model):
 class ItemBarcode(models.Model):
     """ربط الباركود برقم الصنف من GetAllItems."""
 
-    barcode = models.CharField('الباركود', max_length=64, db_index=True)
+    barcode = models.CharField('الباركود', max_length=128, db_index=True)
     item_code = models.CharField('رقم الصنف', max_length=64, db_index=True)
     name = models.CharField('اسم الصنف', max_length=255, blank=True, default='')
     unit = models.CharField('الوحدة', max_length=64, blank=True, default='')

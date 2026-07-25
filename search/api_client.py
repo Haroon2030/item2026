@@ -662,6 +662,26 @@ def sync_barcode_index() -> int:
     except ApiClientError as exc:
         logger.warning('Group sync skipped: %s', exc)
 
+    # region agent log
+    from .debug_auth import auth_log
+
+    auth_log(
+        'BARCODE_LEN',
+        'search/api_client.py:sync_barcode_index',
+        'sync_field_lengths',
+        {
+            'runId': 'post-fix',
+            'rows': len(mapped),
+            'maxBarcodeLength': max((len(m.barcode) for m in mapped), default=0),
+            'barcodesOver64': sum(1 for m in mapped if len(m.barcode) > 64),
+            'barcodesOver128': sum(1 for m in mapped if len(m.barcode) > 128),
+            'maxItemCodeLength': max((len(m.item_code) for m in mapped), default=0),
+            'maxNameLength': max((len(m.name) for m in mapped), default=0),
+            'maxUnitLength': max((len(m.unit) for m in mapped), default=0),
+        },
+    )
+    # endregion
+
     with transaction.atomic():
         ItemBarcode.objects.all().delete()
         ItemBarcode.objects.bulk_create(mapped, batch_size=2000)
