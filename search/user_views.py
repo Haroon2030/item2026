@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
@@ -17,13 +17,8 @@ def _is_staff(user) -> bool:
     return bool(user.is_authenticated and user.is_staff)
 
 
-@login_required
-@user_passes_test(_is_staff)
-def user_list(request):
-    users = (
-        User.objects.select_related('profile')
-        .order_by('first_name', 'username')
-    )
+def _user_rows(request):
+    users = User.objects.select_related('profile').order_by('first_name', 'username')
     rows = []
     for user in users:
         profile = getattr(user, 'profile', None)
@@ -38,11 +33,17 @@ def user_list(request):
                 'is_staff': user.is_staff,
             }
         )
+    return rows
+
+
+@login_required
+@user_passes_test(_is_staff)
+def user_list(request):
     return render(
         request,
         'search/users.html',
         {
-            'users': rows,
+            'users': _user_rows(request),
             'form': AppUserForm(),
             'editing': None,
         },
@@ -60,23 +61,10 @@ def user_create(request):
         form.save()
         messages.success(request, 'تمت إضافة المستخدم بنجاح.')
         return redirect('user_list')
-    users = User.objects.select_related('profile').order_by('first_name', 'username')
-    rows = [
-        {
-            'id': u.pk,
-            'name': getattr(getattr(u, 'profile', None), 'display_name', '')
-            or u.first_name
-            or u.username,
-            'phone': getattr(getattr(u, 'profile', None), 'phone', '') or u.username,
-            'is_self': u.pk == request.user.pk,
-            'is_staff': u.is_staff,
-        }
-        for u in users
-    ]
     return render(
         request,
         'search/users.html',
-        {'users': rows, 'form': form, 'editing': None},
+        {'users': _user_rows(request), 'form': form, 'editing': None},
     )
 
 
@@ -87,26 +75,20 @@ def user_edit(request, user_id: int):
     target = get_object_or_404(User.objects.select_related('profile'), pk=user_id)
     form = AppUserForm(request.POST or None, instance=target)
     if request.method == 'POST' and form.is_valid():
-        form.save()
-        messages.success(request, 'تم تحديث المستخدم بنجاح.')
+        password_changed = bool(form.cleaned_data.get('password'))
+        user = form.save()
+        # إن غيّرت كلمة سر حسابك الحالي أبقِ الجلسة فعّالة
+        if password_changed and user.pk == request.user.pk:
+            update_session_auth_hash(request, user)
+        messages.success(
+            request,
+            'تم حفظ التعديل. يمكن الدخول بالاسم أو الرقم مع كلمة السر.',
+        )
         return redirect('user_list')
-    users = User.objects.select_related('profile').order_by('first_name', 'username')
-    rows = [
-        {
-            'id': u.pk,
-            'name': getattr(getattr(u, 'profile', None), 'display_name', '')
-            or u.first_name
-            or u.username,
-            'phone': getattr(getattr(u, 'profile', None), 'phone', '') or u.username,
-            'is_self': u.pk == request.user.pk,
-            'is_staff': u.is_staff,
-        }
-        for u in users
-    ]
     return render(
         request,
         'search/users.html',
-        {'users': rows, 'form': form, 'editing': target},
+        {'users': _user_rows(request), 'form': form, 'editing': target},
     )
 
 

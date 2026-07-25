@@ -97,6 +97,53 @@ class AuthenticationTests(TestCase):
         ok = self.client.login(username='0509999999', password='PhoneLogin123!')
         self.assertTrue(ok)
 
+    def test_login_accepts_display_name(self):
+        user = get_user_model().objects.create_user(
+            username='0508888888',
+            password='NameLogin123!',
+            first_name='سارة',
+        )
+        UserProfile.objects.create(user=user, display_name='سارة', phone='0508888888')
+
+        ok = self.client.login(username='سارة', password='NameLogin123!')
+        self.assertTrue(ok)
+
+    @patch.dict(
+        'os.environ',
+        {'APP_LOGIN_USERNAME': 'admin', 'APP_LOGIN_PASSWORD': '256400'},
+    )
+    def test_editing_bootstrap_user_keeps_admin_username(self):
+        call_command('ensure_app_user')
+        admin = get_user_model().objects.get(username='admin')
+        self.client.force_login(admin)
+
+        response = self.client.post(
+            reverse('user_edit', args=[admin.pk]),
+            {
+                'name': 'هارون',
+                'phone': '0551234567',
+                'password': '256400',
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse('user_list'),
+            fetch_redirect_response=False,
+        )
+
+        admin.refresh_from_db()
+        self.assertEqual(admin.username, 'admin')
+        self.assertEqual(admin.first_name, 'هارون')
+        self.assertEqual(admin.profile.phone, '0551234567')
+        self.assertTrue(admin.check_password('256400'))
+
+        self.client.logout()
+        self.assertTrue(self.client.login(username='admin', password='256400'))
+        self.client.logout()
+        self.assertTrue(self.client.login(username='هارون', password='256400'))
+        self.client.logout()
+        self.assertTrue(self.client.login(username='0551234567', password='256400'))
+
 
 class UserManagementTests(TestCase):
     def setUp(self):

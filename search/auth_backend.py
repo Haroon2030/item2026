@@ -1,15 +1,16 @@
-"""مصادقة بالاسم المستخدم أو رقم الجوال."""
+"""مصادقة بالاسم أو الرقم أو اسم الدخول."""
 
 import os
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
+from django.db.models import Q
 
 from .debug_auth import auth_log, fingerprint
 
 
 class UsernameOrPhoneBackend(ModelBackend):
-    """يقبل الدخول باسم المستخدم أو رقم الهاتف المخزّن في الملف الشخصي."""
+    """يقبل الدخول بالرقم أو الاسم أو اسم المستخدم."""
 
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username is None:
@@ -21,8 +22,12 @@ class UsernameOrPhoneBackend(ModelBackend):
         login_id = str(username).strip()
         submitted = str(password)
         cleaned = submitted.strip()
+        matched_by = ''
+
         user = user_model.objects.filter(username=login_id).first()
-        matched_by = 'username' if user is not None else ''
+        if user is not None:
+            matched_by = 'username'
+
         if user is None:
             user = (
                 user_model.objects.filter(profile__phone=login_id)
@@ -31,15 +36,28 @@ class UsernameOrPhoneBackend(ModelBackend):
             )
             if user is not None:
                 matched_by = 'phone'
+
         if user is None:
-            # تشغيل hasher حتى لو المستخدم غير موجود (ضد توقيت التخمين)
+            name_qs = (
+                user_model.objects.filter(
+                    Q(first_name=login_id) | Q(profile__display_name=login_id)
+                )
+                .select_related('profile')
+                .distinct()
+            )
+            if name_qs.count() == 1:
+                user = name_qs.first()
+                matched_by = 'name'
+
+        if user is None:
             user_model().set_password(cleaned)
             # region agent log
             auth_log(
-                'A,C',
+                'LOGIN',
                 'search/auth_backend.py:authenticate',
                 'login_user_not_found',
                 {
+                    'runId': 'post-fix',
                     'loginFingerprint': fingerprint(login_id),
                     'loginLength': len(login_id),
                     'usersCount': user_model.objects.count(),
@@ -49,6 +67,7 @@ class UsernameOrPhoneBackend(ModelBackend):
             )
             # endregion
             return None
+
         password_ok = user.check_password(cleaned)
         env_password = os.environ.get('APP_LOGIN_PASSWORD', '')
         env_fingerprint = fingerprint(env_password) if env_password else ''
@@ -56,22 +75,17 @@ class UsernameOrPhoneBackend(ModelBackend):
         active_ok = self.user_can_authenticate(user)
         # region agent log
         auth_log(
-            'B,C,D,E',
+            'LOGIN',
             'search/auth_backend.py:authenticate',
             'login_user_evaluated',
             {
+                'runId': 'post-fix',
                 'loginFingerprint': fingerprint(login_id),
                 'userFingerprint': fingerprint(user.username),
                 'matchedBy': matched_by,
                 'passwordOk': password_ok,
                 'activeOk': active_ok,
                 'isStaff': user.is_staff,
-                'requestSecure': bool(request and request.is_secure()),
-                'forwardedProto': (
-                    (request.META.get('HTTP_X_FORWARDED_PROTO') or '')[:12]
-                    if request
-                    else ''
-                ),
                 'submittedPasswordLength': len(submitted),
                 'cleanedPasswordLength': len(cleaned),
                 'hadSurroundingWhitespace': submitted != cleaned,

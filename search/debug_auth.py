@@ -19,13 +19,15 @@ def fingerprint(value: str) -> str:
 
 
 def auth_log(hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    payload_data = dict(data or {})
+    run_id = payload_data.pop('runId', 'post-fix')
     payload = {
         'sessionId': SESSION_ID,
-        'runId': 'pre-fix',
+        'runId': run_id,
         'hypothesisId': hypothesis_id,
         'location': location,
         'message': message,
-        'data': data,
+        'data': payload_data,
         'timestamp': int(time.time() * 1000),
     }
     try:

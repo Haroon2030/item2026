@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import os
 import re
 
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Q
 
+from .debug_auth import auth_log, fingerprint
 from .models import UserProfile
 
 User = get_user_model()
 _PHONE_RE = re.compile(r'^[0-9+\-\s]{7,20}$')
+
+
+def _bootstrap_username() -> str:
+    return (os.environ.get('APP_LOGIN_USERNAME') or '').strip()
 
 
 class AppUserForm(forms.Form):
@@ -20,8 +27,8 @@ class AppUserForm(forms.Form):
         max_length=150,
         widget=forms.TextInput(
             attrs={
-                'placeholder': 'اسم المستخدم',
-                'autocomplete': 'name',
+                'placeholder': 'الاسم للدخول أيضاً',
+                'autocomplete': 'off',
             }
         ),
     )
@@ -31,7 +38,7 @@ class AppUserForm(forms.Form):
         widget=forms.TextInput(
             attrs={
                 'placeholder': '05xxxxxxxx',
-                'autocomplete': 'tel',
+                'autocomplete': 'off',
                 'inputmode': 'tel',
                 'dir': 'ltr',
             }
@@ -45,7 +52,8 @@ class AppUserForm(forms.Form):
                 'placeholder': '••••••••',
                 'autocomplete': 'new-password',
                 'dir': 'ltr',
-            }
+            },
+            render_value=False,
         ),
     )
 
@@ -54,32 +62,56 @@ class AppUserForm(forms.Form):
         super().__init__(*args, **kwargs)
         if instance is None:
             self.fields['password'].required = True
-            self.fields['password'].widget.attrs['placeholder'] = 'كلمة سر قوية'
+            self.fields['password'].widget.attrs['placeholder'] = 'كلمة سر (6 أحرف على الأقل)'
         else:
             self.fields['password'].help_text = 'اتركها فارغة إن لم ترد تغييرها'
-            self.fields['name'].initial = (instance.first_name or instance.username or '').strip()
             profile = getattr(instance, 'profile', None)
-            self.fields['phone'].initial = (profile.phone if profile else instance.username) or ''
+            self.fields['name'].initial = (
+                (profile.display_name if profile else '')
+                or instance.first_name
+                or instance.username
+                or ''
+            ).strip()
+            self.fields['phone'].initial = (
+                (profile.phone if profile else '') or ''
+            ).strip()
 
     def clean_name(self) -> str:
         name = (self.cleaned_data.get('name') or '').strip()
         if len(name) < 2:
             raise forms.ValidationError('الاسم قصير جداً.')
+        # الاسم يُستخدم للدخول — امنع التكرار
+        qs = User.objects.filter(
+            Q(first_name=name) | Q(profile__display_name=name)
+        ).distinct()
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError('هذا الاسم مستخدم مسبقاً.')
         return name
 
     def clean_phone(self) -> str:
         phone = re.sub(r'\s+', '', (self.cleaned_data.get('phone') or '').strip())
         if not _PHONE_RE.match(phone):
             raise forms.ValidationError('الرقم غير صالح.')
-        qs = User.objects.filter(username=phone)
+        qs = UserProfile.objects.filter(phone=phone)
         if self.instance is not None:
-            qs = qs.exclude(pk=self.instance.pk)
+            qs = qs.exclude(user_id=self.instance.pk)
         if qs.exists():
             raise forms.ValidationError('هذا الرقم مستخدم مسبقاً.')
+        # لا تتعارض مع username لحساب آخر (غير حساب الإقلاع)
+        bootstrap = _bootstrap_username()
+        other = User.objects.filter(username=phone)
+        if self.instance is not None:
+            other = other.exclude(pk=self.instance.pk)
+        if bootstrap:
+            other = other.exclude(username=bootstrap)
+        if other.exists():
+            raise forms.ValidationError('هذا الرقم مستخدم كمُعرّف دخول مسبقاً.')
         return phone
 
     def clean_password(self) -> str:
-        password = self.cleaned_data.get('password') or ''
+        password = (self.cleaned_data.get('password') or '').strip()
         if not password:
             if self.instance is None:
                 raise forms.ValidationError('كلمة السر مطلوبة.')
@@ -93,6 +125,8 @@ class AppUserForm(forms.Form):
         name = self.cleaned_data['name']
         phone = self.cleaned_data['phone']
         password = self.cleaned_data.get('password') or ''
+        bootstrap = _bootstrap_username()
+        preserved_username = False
 
         if self.instance is None:
             user = User.objects.create_user(
@@ -101,17 +135,42 @@ class AppUserForm(forms.Form):
                 first_name=name,
                 is_active=True,
             )
+            action = 'created'
         else:
             user = self.instance
-            user.username = phone
+            # حساب الإقلاع (admin) يحتفظ باسم الدخول حتى لا ينكسر APP_LOGIN_*
+            if bootstrap and user.username == bootstrap:
+                preserved_username = True
+            else:
+                user.username = phone
             user.first_name = name
             user.is_active = True
             if password:
                 user.set_password(password)
             user.save()
+            action = 'updated'
 
-        UserProfile.objects.update_or_create(
+        profile, _ = UserProfile.objects.update_or_create(
             user=user,
             defaults={'phone': phone, 'display_name': name},
         )
+
+        # region agent log
+        auth_log(
+            'EDIT',
+            'search/forms.py:AppUserForm.save',
+            'user_saved',
+            {
+                'action': action,
+                'runId': 'post-fix',
+                'preservedBootstrapUsername': preserved_username,
+                'passwordChanged': bool(password),
+                'nameLength': len(name),
+                'phoneLength': len(phone),
+                'usernameFingerprint': fingerprint(user.username),
+                'phoneFingerprint': fingerprint(profile.phone),
+                'nameFingerprint': fingerprint(name),
+            },
+        )
+        # endregion
         return user
