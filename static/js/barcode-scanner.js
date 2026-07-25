@@ -12,48 +12,6 @@
 
   if (!btn || !overlay || !video || !statusEl || !input || !form) return;
 
-  // #region agent log
-  function dbg(hypothesisId, location, message, data) {
-    try {
-      fetch("/__agent_dbg/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "5b001b",
-          hypothesisId: hypothesisId,
-          location: location,
-          message: message,
-          data: data || {},
-          timestamp: Date.now(),
-        }),
-      }).catch(function () {});
-    } catch (e) {}
-    try {
-      fetch("http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "5b001b",
-        },
-        body: JSON.stringify({
-          sessionId: "5b001b",
-          hypothesisId: hypothesisId,
-          location: location,
-          message: message,
-          data: data || {},
-          timestamp: Date.now(),
-        }),
-      }).catch(function () {});
-    } catch (e2) {}
-  }
-  dbg("D", "barcode-scanner.js:init", "script_loaded", {
-    hasZXing: !!window.ZXing,
-    hasZXingBrowser: !!window.ZXingBrowser,
-    hasBarcodeDetector: "BarcodeDetector" in window,
-    secure: !!window.isSecureContext,
-  });
-  // #endregion
-
   /* =========================================================
    * 1) أجهزة Honeywell / Zebra الحقيقية (Keyboard Wedge)
    * ========================================================= */
@@ -226,12 +184,7 @@
     var value = normalizeCode(code);
     if (!value || value.length < 3) return;
     // تجاهل قراءات غير منطقية قصيرة جداً من الضوضاء
-    if (!/^[0-9A-Za-z\-_./]+$/.test(value)) {
-      // #region agent log
-      dbg("E", "barcode-scanner.js:acceptCode", "rejected_regex", { len: value.length });
-      // #endregion
-      return;
-    }
+    if (!/^[0-9A-Za-z\-_./]+$/.test(value)) return;
 
     // EAN/UPC/Code128 الطويل: قبول فوري. القصير: تأكيد مزدوج
     var needConfirm = value.length < 8 ? 2 : 1;
@@ -241,13 +194,6 @@
       lastCandidate = value;
       lastCandidateCount = 1;
     }
-    // #region agent log
-    dbg("E", "barcode-scanner.js:acceptCode", "candidate", {
-      len: value.length,
-      count: lastCandidateCount,
-      need: needConfirm,
-    });
-    // #endregion
     if (lastCandidateCount < needConfirm) return;
 
     handled = true;
@@ -492,15 +438,7 @@
 
   function startZxingContinuous() {
     zxingReader = buildZxingReader(true) || buildZxingReader(false);
-    if (!zxingReader || !stream) {
-      // #region agent log
-      dbg("D", "barcode-scanner.js:startZxing", "reader_missing", {
-        hasReader: !!zxingReader,
-        hasStream: !!stream,
-      });
-      // #endregion
-      return Promise.resolve(null);
-    }
+    if (!zxingReader || !stream) return Promise.resolve(null);
     // المسار الرسمي المستمر — أدق من قصّ canvas يدوياً
     return zxingReader
       .decodeFromStream(stream, video, function (result) {
@@ -508,19 +446,9 @@
       })
       .then(function (controls) {
         zxingControls = controls || null;
-        // #region agent log
-        dbg("D", "barcode-scanner.js:startZxing", "stream_decode_on", {
-          hasControls: !!zxingControls,
-        });
-        // #endregion
         return controls;
       })
-      .catch(function (err) {
-        // #region agent log
-        dbg("D", "barcode-scanner.js:startZxing", "stream_decode_fail", {
-          err: String((err && err.message) || err).slice(0, 120),
-        });
-        // #endregion
+      .catch(function () {
         // احتياطي: فك من canvas كل 50ms
         zxingTimer = window.setInterval(tickZxing, 50);
         return null;
@@ -587,23 +515,12 @@
       .then(function () {
         setupTorchButton();
         setStatus("ضع الباركود داخل المربع الكبير — جاري القراءة…");
-        // #region agent log
-        dbg("D", "barcode-scanner.js:openScanner", "camera_ready", {
-          vw: video.videoWidth,
-          vh: video.videoHeight,
-          hasNative: !!nativeDetector,
-          trackLabel: track ? track.label : "",
-        });
-        // #endregion
         rafId = window.requestAnimationFrame(tickNative);
         return startZxingContinuous();
       })
       .then(function () {
         if (!zxingReader && !nativeDetector && !zxingTimer) {
           setStatus("مكتبة الماسح غير محمّلة. حدّث الصفحة.", "error");
-          // #region agent log
-          dbg("D", "barcode-scanner.js:openScanner", "no_decoder", {});
-          // #endregion
         }
       })
       .catch(function (err) {
@@ -614,9 +531,6 @@
         } else if (/NotFound|NoCamera/i.test(text)) {
           msg = "لم يتم العثور على كاميرا.";
         }
-        // #region agent log
-        dbg("D", "barcode-scanner.js:openScanner", "camera_error", { err: text.slice(0, 120) });
-        // #endregion
         setStatus(msg, "error");
         stopAll();
       });

@@ -14,7 +14,6 @@ from .api_client import (
     search_item_details,
     sync_barcode_index,
 )
-from .debug_agent import agent_log, agent_logs_dump
 from .models import ItemBarcode
 from .validators import ValidationError, resolve_warehouse, sanitize_search_query
 
@@ -91,50 +90,6 @@ def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str)
 
     enriched.sort(key=lambda r: (0 if r.get('is_matched') else 1, str(r.get('unit') or '')))
     matched = next((r for r in enriched if r.get('is_matched')), matched)
-
-    # #region agent log
-    try:
-        def _pack_num(row):
-            try:
-                return float(str(row.get('pack_size') or '').replace(',', '') or '0')
-            except ValueError:
-                return 0.0
-
-        units_info = [
-            {
-                'unit': r.get('unit'),
-                'pack': r.get('pack_size'),
-                'pack_n': _pack_num(r),
-                'qty': r.get('quantity'),
-                'cost': r.get('avg_cost'),
-                'stock': bool(r.get('is_stock_unit')),
-                'barcode': r.get('barcode'),
-                'matched': bool(r.get('is_matched')),
-            }
-            for r in enriched
-        ]
-        has_kilo = any('كيلو' in str(u.get('unit') or '') for u in units_info)
-        positive_packs = [u for u in units_info if (u.get('pack_n') or 0) > 0]
-        smallest = min(positive_packs, key=lambda u: u['pack_n']) if positive_packs else None
-        agent_log(
-            'K',
-            'views.py:_enrich_prices_with_match',
-            'unit_select_decision',
-            {
-                'query': q,
-                'matched_unit_from_barcode': matched_unit,
-                'selected_unit': (matched or {}).get('unit') if matched else '',
-                'selected_pack': (matched or {}).get('pack_size') if matched else '',
-                'selected_cost': (matched or {}).get('avg_cost') if matched else '',
-                'has_kilo': has_kilo,
-                'smallest_unit': (smallest or {}).get('unit'),
-                'smallest_pack': (smallest or {}).get('pack'),
-                'units': units_info[:12],
-            },
-        )
-    except Exception:
-        pass
-    # #endregion
 
     return enriched, matched
 
@@ -214,20 +169,6 @@ def item_search(request):
         searched = True
         try:
             barcode_hits = lookup_by_barcode(query)
-            # #region agent log
-            agent_log(
-                'A',
-                'views.py:item_search',
-                'lookup_start',
-                {
-                    'query_len': len(query),
-                    'warehouse': warehouse,
-                    'cache_count': cache_count,
-                    'barcode_hits': len(barcode_hits),
-                    'meta_incomplete': meta_incomplete,
-                },
-            )
-            # #endregion
             if barcode_hits:
                 match_type = 'barcode'
                 item_code = barcode_hits[0]['code']
@@ -255,63 +196,13 @@ def item_search(request):
                     error = (
                         'فهرس الباركود فارغ. اضغط «مزامنة» أو انتظر المزامنة التلقائية بعد النشر ثم أعد البحث.'
                     )
-            # #region agent log
-            agent_log(
-                'A',
-                'views.py:item_search',
-                'lookup_result',
-                {
-                    'match_type': match_type,
-                    'items_n': len(items),
-                    'prices_n': len(prices),
-                    'sample_item': {
-                        'pack': (items[0].get('pack_size') if items else ''),
-                        'g_code': (items[0].get('g_code') if items else ''),
-                        'barcode': (items[0].get('barcode') if items else ''),
-                        'unit': (items[0].get('unit') if items else ''),
-                    }
-                    if items
-                    else {},
-                    'sample_price': {
-                        'pack': (prices[0].get('pack_size') if prices else ''),
-                        'qty': (prices[0].get('quantity') if prices else ''),
-                        'unit': (prices[0].get('unit') if prices else ''),
-                        'barcode': (prices[0].get('barcode') if prices else ''),
-                    }
-                    if prices
-                    else {},
-                    'qty_filled': sum(1 for p in prices if str(p.get('quantity') or '').strip()),
-                    'pack_filled': sum(1 for p in prices if str(p.get('pack_size') or '').strip()),
-                },
-            )
-            # #endregion
         except ApiClientError as exc:
             error = str(exc)
-            # #region agent log
-            agent_log('C', 'views.py:item_search', 'api_error', {'error': str(exc)[:200]})
-            # #endregion
 
     matched_price = None
     if prices:
         prices, matched_price = _enrich_prices_with_match(prices, items, query)
     selected_price = matched_price or (prices[0] if prices else None)
-    # #region agent log
-    agent_log(
-        'K',
-        'views.py:item_search',
-        'selected_price_final',
-        {
-            'query': query,
-            'match_type': match_type,
-            'warehouse': warehouse,
-            'selected_unit': (selected_price or {}).get('unit'),
-            'selected_pack': (selected_price or {}).get('pack_size'),
-            'selected_cost': (selected_price or {}).get('avg_cost'),
-            'selected_price_val': (selected_price or {}).get('price'),
-            'selected_qty': (selected_price or {}).get('quantity'),
-        },
-    )
-    # #endregion
 
     return render(
         request,
@@ -367,43 +258,6 @@ def sync_barcodes(request):
 
     try:
         count = sync_barcode_index()
-        # #region agent log
-        with_pack = ItemBarcode.objects.exclude(pack_size='').count()
-        with_g = ItemBarcode.objects.exclude(g_code='').count()
-        agent_log(
-            'A',
-            'views.py:sync_barcodes',
-            'sync_done',
-            {'count': count, 'with_pack': with_pack, 'with_g': with_g},
-        )
-        # #endregion
         return respond_ok(count)
     except ApiClientError as exc:
-        # #region agent log
-        agent_log('A', 'views.py:sync_barcodes', 'sync_error', {'error': str(exc)[:200]})
-        # #endregion
         return respond_error(str(exc), status=502)
-
-
-@csrf_exempt
-@require_POST
-def agent_debug_ingest(request):
-    """Same-origin ingest for browser debug logs (CSP connect-src self)."""
-    import json
-
-    try:
-        body = json.loads(request.body.decode('utf-8') or '{}')
-    except (ValueError, UnicodeDecodeError):
-        body = {}
-    agent_log(
-        str(body.get('hypothesisId') or 'D'),
-        str(body.get('location') or 'browser'),
-        str(body.get('message') or 'event'),
-        body.get('data') if isinstance(body.get('data'), dict) else {},
-    )
-    return JsonResponse({'ok': True})
-
-
-@require_GET
-def agent_debug_dump(request):
-    return JsonResponse({'ok': True, 'logs': agent_logs_dump()})

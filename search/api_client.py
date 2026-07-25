@@ -546,34 +546,6 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
 
     unit_meta = get_unit_meta(effective_code)
     merged = merge_prices_with_qty(prices, qtys, unit_meta=unit_meta)
-    # #region agent log
-    try:
-        from .debug_agent import agent_log
-
-        agent_log(
-            'C',
-            'api_client.py:search_item_details',
-            'merge_summary',
-            {
-                'item_code': queried,
-                'resolved_code': resolved,
-                'effective_code': effective_code,
-                'warehouse': warehouse,
-                'prices_n': len(prices),
-                'qtys_n': len(qtys),
-                'qty_units': [q.get('unit') for q in qtys],
-                'qty_vals': [q.get('quantity') for q in qtys],
-                'unit_meta_n': len(unit_meta),
-                'unit_meta_units': list(unit_meta.keys()),
-                'merged_pack': [m.get('pack_size') for m in merged],
-                'merged_qty': [m.get('quantity') for m in merged],
-                'price_error': str(price_error)[:160] if price_error else '',
-                'qty_error': str(qty_error)[:160] if qty_error else '',
-            },
-        )
-    except Exception:
-        pass
-    # #endregion
     if qty_error and not any(str(r.get('quantity') or '').strip() for r in merged):
         for row in merged:
             row['_qty_warning'] = str(qty_error)
