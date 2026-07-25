@@ -61,16 +61,23 @@ def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str)
 
     matched = next((r for r in enriched if r.get('is_matched')), None)
 
-    # بحث برقم الصنف (بدون باركود وحدة): فضّل وحدة الرصيد/التكلفة من GetItemQtyCost
-    # حتى لا يظهر «باكت» بدل «كيلو» عندما يكون أول صف في الأسعار باكت
+    # بحث برقم الصنف (بدون باركود وحدة): فضّل الوحدة المخزنية الحقيقية من GetItemQtyCost
+    # (هي التي يرجع بها النظام الرصيد/التكلفة مباشرة = كيلو للأصناف الوزنية)
+    # الرصيد محوّل على كل الوحدات، لذا لا نعتمد على وجود الرصيد بل على is_stock_unit
     if not matched and enriched:
         preferred = None
+        # 1) الوحدة المخزنية الحقيقية (رصيد + تكلفة من الـ API مباشرة)
         for row in enriched:
-            has_qty = str(row.get('quantity') or '').strip()
-            has_cost = str(row.get('avg_cost') or '').strip()
-            if has_qty or has_cost:
+            if row.get('is_stock_unit'):
                 preferred = row
                 break
+        # 2) وحدة عليها تكلفة فعلية (تكلفة تظهر فقط للوحدة المخزنية)
+        if not preferred:
+            for row in enriched:
+                if str(row.get('avg_cost') or '').strip():
+                    preferred = row
+                    break
+        # 3) وحدة كيلو بالاسم
         if not preferred:
             for row in enriched:
                 unit = str(row.get('unit') or '')
@@ -100,6 +107,7 @@ def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str)
                 'pack_n': _pack_num(r),
                 'qty': r.get('quantity'),
                 'cost': r.get('avg_cost'),
+                'stock': bool(r.get('is_stock_unit')),
                 'barcode': r.get('barcode'),
                 'matched': bool(r.get('is_matched')),
             }

@@ -448,8 +448,11 @@ def merge_prices_with_qty(
                         'name': price_row.get('name') or '',
                     }
 
+        # الوحدة المخزنية = الوحدة التي يرجع بها النظام الرصيد/التكلفة مباشرة
+        is_stock_unit = unit in qty_by_unit and _to_float(qty_row.get('quantity')) is not None
+
         quantity = ''
-        if unit in qty_by_unit and _to_float(qty_row.get('quantity')) is not None:
+        if is_stock_unit:
             # وحدة الـ API كما هي — بدون إعادة حساب
             quantity = _fmt_qty(_to_float(qty_row.get('quantity')))
         elif source_qty is not None and source_unit:
@@ -476,6 +479,7 @@ def merge_prices_with_qty(
                 'price': price_row.get('price', ''),
                 'quantity': quantity,
                 'avg_cost': avg_cost,
+                'is_stock_unit': is_stock_unit,
                 'raw': price_row.get('raw') or qty_row,
             }
         )
