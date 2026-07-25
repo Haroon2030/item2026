@@ -107,6 +107,25 @@ class Command(BaseCommand):
             profile.display_name = profile.display_name or user.first_name or username
             profile.save(update_fields=['phone', 'display_name', 'updated_at'])
 
+        # حذف نسخ قديمة مكررة لحساب الإقلاع (بقايا خلل سابق غيّر اسم الدخول)
+        from django.db.models import Q
+
+        stale = (
+            user_model.objects.filter(
+                Q(first_name=username) | Q(profile__display_name=username)
+            )
+            .exclude(pk=user.pk)
+            .distinct()
+        )
+        stale_count = stale.count()
+        if stale_count:
+            stale.delete()
+            self.stdout.write(
+                self.style.WARNING(
+                    f'تم حذف {stale_count} حساب مكرر قديم باسم {username}.'
+                )
+            )
+
         # region agent log
         auth_log(
             'A,B,C',

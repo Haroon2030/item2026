@@ -78,11 +78,14 @@ class AppUserForm(forms.Form):
 
     def clean_name(self) -> str:
         name = (self.cleaned_data.get('name') or '').strip()
-        if len(name) < 2:
-            raise forms.ValidationError('الاسم قصير جداً.')
-        # الاسم يُستخدم للدخول — امنع التكرار
+        if not name:
+            raise forms.ValidationError('الاسم مطلوب.')
+        # الاسم يُستخدم للدخول — امنع التكرار مع أسماء أو أرقام مستخدمين آخرين
         qs = User.objects.filter(
-            Q(first_name=name) | Q(profile__display_name=name)
+            Q(first_name=name)
+            | Q(profile__display_name=name)
+            | Q(username=name)
+            | Q(profile__phone=name)
         ).distinct()
         if self.instance is not None:
             qs = qs.exclude(pk=self.instance.pk)
