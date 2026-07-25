@@ -288,8 +288,7 @@ def _fmt_qty(value: float) -> str:
 
 
 def _fmt_cost(value: float) -> str:
-    text = f'{value:.6f}'.rstrip('0').rstrip('.')
-    return text or '0'
+    return f'{value:.2f}'
 
 
 def _pick_avg_cost(*sources: Any) -> str:
