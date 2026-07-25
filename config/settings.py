@@ -163,6 +163,25 @@ DATABASES = {
     }
 }
 
+# MySQL/MariaDB (Dokploy) — يُفعَّل عند وجود DB_HOST
+_DB_HOST = _env('DB_HOST') or _env('MYSQL_HOST')
+if _DB_HOST:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': _env('DB_NAME') or _env('MYSQL_DATABASE') or 'item',
+            'USER': _env('DB_USER') or _env('MYSQL_USER') or 'item_2026',
+            'PASSWORD': _env('DB_PASSWORD') or _env('MYSQL_PASSWORD') or '',
+            'HOST': _DB_HOST,
+            'PORT': _env('DB_PORT') or _env('MYSQL_PORT') or '3306',
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
+            'CONN_MAX_AGE': int(_env('DB_CONN_MAX_AGE', '60') or '60'),
+        }
+    }
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},

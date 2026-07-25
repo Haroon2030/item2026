@@ -1,4 +1,4 @@
-# Persistent SQLite for barcode index (mount in Dokploy)
+# App + optional MySQL (set DB_* in Dokploy Environment)
 services:
   app:
     build: .
