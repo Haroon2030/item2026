@@ -6,17 +6,11 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = 'إنشاء مستخدم الدخول من متغيرات البيئة (بدون إعادة تعيين كلمة السر في كل تشغيل).'
+    help = 'إنشاء/مزامنة حساب الدخول الأساسي من متغيرات البيئة.'
 
     def handle(self, *args, **options):
         username = os.environ.get('APP_LOGIN_USERNAME', '').strip()
         password = os.environ.get('APP_LOGIN_PASSWORD', '')
-        force_password = os.environ.get('APP_LOGIN_FORCE_PASSWORD', '').strip() in {
-            '1',
-            'true',
-            'yes',
-            'on',
-        }
 
         if not username or not password:
             self.stdout.write(
@@ -34,7 +28,6 @@ class Command(BaseCommand):
 
         user_model = get_user_model()
         user = user_model.objects.filter(username=username).first()
-        created = False
 
         if user is None:
             user = user_model.objects.create_user(
@@ -45,35 +38,38 @@ class Command(BaseCommand):
                 is_staff=True,
                 is_superuser=True,
             )
-            created = True
-            self.stdout.write(self.style.SUCCESS(f'تم إنشاء مستخدم الدخول: {username}'))
+            self.stdout.write(self.style.SUCCESS(f'تم إنشاء حساب الدخول: {username}'))
         else:
-            # لا نعيد كلمة السر في كل Redeploy حتى لا تُلغى تعديلات شاشة المستخدمين
+            # متغيرات البيئة هي المرجع لهذا الحساب فقط،
+            # حتى يمكن استعادة الدخول بتغيير APP_LOGIN_PASSWORD.
+            # الحسابات المُنشأة من شاشة المستخدمين لا تتأثر (أسماؤها أرقام مختلفة).
             changed = []
+            if not user.check_password(password):
+                user.set_password(password)
+                changed.append('كلمة السر')
             if not user.is_active:
                 user.is_active = True
-                changed.append('is_active')
+                changed.append('التفعيل')
             if not user.is_staff:
                 user.is_staff = True
-                changed.append('is_staff')
+                changed.append('صلاحية الإشراف')
             if not user.is_superuser:
                 user.is_superuser = True
-                changed.append('is_superuser')
-            if force_password:
-                user.set_password(password)
-                changed.append('password')
+                changed.append('صلاحية المدير')
+            if not user.first_name:
+                user.first_name = username
+                changed.append('الاسم')
+
             if changed:
                 user.save()
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f'تم تحديث مستخدم الدخول ({", ".join(changed)}): {username}'
+                        f'تمت مزامنة حساب الدخول {username} ({"، ".join(changed)}).'
                     )
                 )
             else:
                 self.stdout.write(
-                    self.style.SUCCESS(
-                        f'مستخدم الدخول موجود مسبقاً: {username} — لم تُغيَّر كلمة السر.'
-                    )
+                    self.style.SUCCESS(f'حساب الدخول {username} مطابق للبيئة.')
                 )
 
         from search.models import UserProfile
@@ -82,16 +78,16 @@ class Command(BaseCommand):
             phone = username
         else:
             existing = getattr(user, 'profile', None)
-            phone = (existing.phone if existing and existing.phone else f'05{user.pk:08d}')
+            phone = existing.phone if existing and existing.phone else f'05{user.pk:08d}'
 
-        profile, profile_created = UserProfile.objects.get_or_create(
+        profile, created_profile = UserProfile.objects.get_or_create(
             user=user,
             defaults={
                 'display_name': user.first_name or username,
                 'phone': phone[:20],
             },
         )
-        if not profile_created and not profile.phone:
+        if not created_profile and not profile.phone:
             profile.phone = phone[:20]
             profile.display_name = profile.display_name or user.first_name or username
             profile.save(update_fields=['phone', 'display_name', 'updated_at'])

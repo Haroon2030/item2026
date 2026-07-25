@@ -50,30 +50,41 @@ class AuthenticationTests(TestCase):
         self.assertTrue(user.is_staff)
         self.assertTrue(UserProfile.objects.filter(user=user).exists())
 
-    @patch.dict(
-        'os.environ',
-        {
-            'APP_LOGIN_USERNAME': 'keep-user',
-            'APP_LOGIN_PASSWORD': 'FirstPassword123!',
-        },
-    )
-    def test_ensure_app_user_does_not_reset_password_on_rerun(self):
-        call_command('ensure_app_user')
-        user = get_user_model().objects.get(username='keep-user')
-        user.set_password('EditedPassword123!')
-        user.save()
-
+    def test_changing_env_password_recovers_bootstrap_login(self):
         with patch.dict(
             'os.environ',
-            {
-                'APP_LOGIN_USERNAME': 'keep-user',
-                'APP_LOGIN_PASSWORD': 'FirstPassword123!',
-            },
+            {'APP_LOGIN_USERNAME': 'admin', 'APP_LOGIN_PASSWORD': 'OldPassword123!'},
         ):
             call_command('ensure_app_user')
 
-        user.refresh_from_db()
-        self.assertTrue(user.check_password('EditedPassword123!'))
+        with patch.dict(
+            'os.environ',
+            {'APP_LOGIN_USERNAME': 'admin', 'APP_LOGIN_PASSWORD': '256400'},
+        ):
+            call_command('ensure_app_user')
+
+        user = get_user_model().objects.get(username='admin')
+        self.assertTrue(user.check_password('256400'))
+        self.assertTrue(self.client.login(username='admin', password='256400'))
+
+    def test_ui_created_user_password_survives_bootstrap(self):
+        staff = get_user_model().objects.create_user(
+            username='0501111111',
+            password='StaffPass123!',
+            is_staff=True,
+        )
+        UserProfile.objects.create(
+            user=staff, display_name='مشرف', phone='0501111111'
+        )
+
+        with patch.dict(
+            'os.environ',
+            {'APP_LOGIN_USERNAME': 'admin', 'APP_LOGIN_PASSWORD': '256400'},
+        ):
+            call_command('ensure_app_user')
+
+        staff.refresh_from_db()
+        self.assertTrue(staff.check_password('StaffPass123!'))
 
     def test_login_accepts_phone_number(self):
         user = get_user_model().objects.create_user(
