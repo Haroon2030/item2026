@@ -128,6 +128,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'search.middleware.SecurityHeadersMiddleware',
+    'search.middleware.SqlInjectionGuardMiddleware',
     'search.middleware.RateLimitMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

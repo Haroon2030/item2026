@@ -6,6 +6,35 @@ from django.test import TestCase
 from django.urls import reverse
 
 from search.models import UserProfile
+from search.validators import contains_sql_injection, sanitize_search_query, ValidationError
+
+
+class SqlInjectionProtectionTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='tester',
+            password='StrongPassword123!',
+        )
+        self.client.force_login(self.user)
+
+    def test_detects_classic_sqli_payloads(self):
+        self.assertTrue(contains_sql_injection("' OR '1'='1"))
+        self.assertTrue(contains_sql_injection('1; DROP TABLE users--'))
+        self.assertTrue(contains_sql_injection('x UNION SELECT password FROM auth_user'))
+        self.assertFalse(contains_sql_injection('06100'))
+        self.assertFalse(contains_sql_injection('202478604'))
+
+    def test_sanitize_search_rejects_sqli(self):
+        with self.assertRaises(ValidationError):
+            sanitize_search_query("' OR 1=1--")
+
+    def test_search_endpoint_blocks_sqli_query(self):
+        response = self.client.get(reverse('item_search'), {'q': "' OR 1=1--"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_normal_barcode_search_still_allowed(self):
+        response = self.client.get(reverse('item_search'), {'q': '06100'})
+        self.assertEqual(response.status_code, 200)
 
 
 class AuthenticationTests(TestCase):

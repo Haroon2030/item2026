@@ -80,6 +80,10 @@ class AppUserForm(forms.Form):
         name = (self.cleaned_data.get('name') or '').strip()
         if not name:
             raise forms.ValidationError('الاسم مطلوب.')
+        from .validators import contains_sql_injection
+
+        if contains_sql_injection(name):
+            raise forms.ValidationError('الاسم يحتوي رموزاً غير مسموحة.')
         # الاسم يُستخدم للدخول — امنع التكرار مع أسماء أو أرقام مستخدمين آخرين
         qs = User.objects.filter(
             Q(first_name=name)

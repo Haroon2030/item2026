@@ -8,6 +8,8 @@ from collections import defaultdict, deque
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 
+from .validators import scan_request_for_sql_injection
+
 
 class SecurityHeadersMiddleware:
     """هيدرز أمان إضافية فوق إعدادات Django الافتراضية."""
@@ -44,6 +46,29 @@ class SecurityHeadersMiddleware:
         if not settings.DEBUG:
             response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         return response
+
+
+class SqlInjectionGuardMiddleware:
+    """يرفض الطلبات التي تحمل أنماط حقن SQL في المدخلات (دفاع إضافي فوق ORM)."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        bad_field = scan_request_for_sql_injection(request)
+        if bad_field:
+            wants_json = (
+                request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                or 'application/json' in (request.headers.get('Accept') or '')
+            )
+            message = 'طلب مرفوض: محتوى غير مسموح.'
+            if wants_json:
+                return JsonResponse({'ok': False, 'error': message}, status=400)
+            return HttpResponseForbidden(
+                message,
+                content_type='text/plain; charset=utf-8',
+            )
+        return self.get_response(request)
 
 
 class RateLimitMiddleware:
