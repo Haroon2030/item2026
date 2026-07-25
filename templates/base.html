@@ -11,6 +11,11 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="{% block body_class %}{% endblock %}">
+  <div class="app-backdrop" aria-hidden="true">
+    <span class="app-orb app-orb-a"></span>
+    <span class="app-orb app-orb-b"></span>
+    <span class="app-grid"></span>
+  </div>
   <div class="page {% block page_class %}{% endblock %}">
     <header class="topbar">
       <div class="brand-wrap">
@@ -21,7 +26,7 @@
             <path d="M12 22V12"/>
           </svg>
         </span>
-        <div>
+        <div class="brand-copy">
           <p class="brand">بيانات الأصناف</p>
           <p class="tagline">بحث وفهرسة الأصناف بالباركود</p>
         </div>
