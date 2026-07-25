@@ -27,6 +27,13 @@
         </div>
         {% if request.user.is_authenticated %}
           <div class="topbar-actions">
+            <button type="button" class="btn-refresh" id="btn-refresh" title="تحديث الصفحة" aria-label="تحديث الصفحة">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.6-6.4"/>
+                <path d="M21 3v6h-6"/>
+              </svg>
+              <span class="btn-refresh-text">تحديث</span>
+            </button>
             {% if request.user.is_staff %}
               <a class="btn-users" href="{% url 'user_list' %}" title="إدارة المستخدمين">المستخدمون</a>
             {% endif %}

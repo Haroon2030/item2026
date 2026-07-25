@@ -85,6 +85,36 @@ body {
 
 .logout-form { margin: 0; }
 
+.btn-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font: 700 0.9rem var(--font);
+  cursor: pointer;
+}
+
+.btn-refresh:hover { background: #dceafb; }
+.btn-refresh:active { transform: scale(0.97); }
+.btn-refresh.is-spinning svg { animation: btn-refresh-spin 0.7s linear infinite; }
+.btn-refresh svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes btn-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
 .btn-users {
   display: inline-flex;
   align-items: center;
@@ -1193,6 +1223,9 @@ body {
   }
   .warehouse-field { flex: 1 1 auto; }
   .btn-primary { width: 100%; }
+  .topbar-actions { gap: 0.4rem; }
+  .btn-refresh { padding: 0.5rem 0.6rem; }
+  .btn-refresh-text { display: none; }
   .match-top,
   .match-head { flex-direction: column; }
   .match-card-simple {
