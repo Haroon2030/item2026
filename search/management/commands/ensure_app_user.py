@@ -20,9 +20,9 @@ class Command(BaseCommand):
             )
             return
 
-        if len(password) < 12:
+        if len(password) < 6:
             self.stderr.write(
-                self.style.ERROR('APP_LOGIN_PASSWORD يجب ألا تقل عن 12 حرفاً.')
+                self.style.ERROR('APP_LOGIN_PASSWORD يجب ألا تقل عن 6 أحرف.')
             )
             return
 

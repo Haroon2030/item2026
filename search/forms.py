@@ -84,8 +84,8 @@ class AppUserForm(forms.Form):
             if self.instance is None:
                 raise forms.ValidationError('كلمة السر مطلوبة.')
             return ''
-        if len(password) < 8:
-            raise forms.ValidationError('كلمة السر يجب ألا تقل عن 8 أحرف.')
+        if len(password) < 6:
+            raise forms.ValidationError('كلمة السر يجب ألا تقل عن 6 أحرف.')
         validate_password(password)
         return password
 
