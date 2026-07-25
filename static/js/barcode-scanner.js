@@ -217,7 +217,8 @@
     var value = normalizeCode(code);
     if (!value || value.length < 3) return;
     // تجاهل قراءات غير منطقية قصيرة جداً من الضوضاء
-    if (!/^[0-9A-Za-z\-_./]+$/.test(value)) return;
+    // يشمل رموز Codabar/GS1 الخاصة: $ + : %
+    if (!/^[0-9A-Za-z\-_./$+:%]+$/.test(value)) return;
 
     // EAN/UPC/Code128 الطويل: قبول فوري. القصير: تأكيد مزدوج
     var needConfirm = value.length < 8 ? 2 : 1;
@@ -302,6 +303,7 @@
     }
     var hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      // 1D
       ZXing.BarcodeFormat.EAN_13,
       ZXing.BarcodeFormat.EAN_8,
       ZXing.BarcodeFormat.CODE_128,
@@ -309,8 +311,12 @@
       ZXing.BarcodeFormat.CODE_93,
       ZXing.BarcodeFormat.UPC_A,
       ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.UPC_EAN_EXTENSION,
+      ZXing.BarcodeFormat.ITF, // Interleaved 2 of 5
       ZXing.BarcodeFormat.CODABAR,
+      ZXing.BarcodeFormat.RSS_14, // GS1 DataBar
+      ZXing.BarcodeFormat.RSS_EXPANDED, // GS1 DataBar Expanded
+      // 2D
       ZXing.BarcodeFormat.QR_CODE,
       ZXing.BarcodeFormat.DATA_MATRIX,
     ]);
@@ -519,10 +525,13 @@
             "ean_8",
             "code_128",
             "code_39",
+            "code_93",
             "upc_a",
             "upc_e",
             "itf",
             "codabar",
+            "databar",
+            "databar_expanded",
             "qr_code",
             "data_matrix",
           ],

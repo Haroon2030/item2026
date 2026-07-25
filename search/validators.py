@@ -9,7 +9,8 @@ from django.conf import settings
 
 
 # أرقام/حروف/شرطة/شرطة سفلية/slash شائع في أكواد أونكس
-_QUERY_RE = re.compile(r'^[\w\-/\\.]+$', re.UNICODE)
+# + رموز Codabar/GS1 الخاصة: $ + : %
+_QUERY_RE = re.compile(r'^[\w\-/\\.$+:%]+$', re.UNICODE)
 _WAREHOUSE_RE = re.compile(r'^[0-9A-Za-z_-]{1,16}$')
 
 # أنماط شائعة لمحاولات SQL Injection (دفاع إضافي فوق ORM)
