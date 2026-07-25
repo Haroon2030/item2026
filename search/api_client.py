@@ -22,7 +22,7 @@ class ApiClientError(Exception):
 
 
 def _normalize_text(value: Any) -> str:
-    """يزيل علامات التشكيل/الاتجاه المخفية التي تسبب تكرار قيد MySQL الفريد."""
+    """يزيل علامات التشكيل/الاتجاه المخفية لتحسين مطابقة البحث."""
     text = unicodedata.normalize('NFKC', str(value or ''))
     cleaned = []
     for ch in text:
@@ -32,12 +32,6 @@ def _normalize_text(value: Any) -> str:
             continue
         cleaned.append(ch)
     return ''.join(cleaned).strip()
-
-
-def _fold_for_unique(value: str) -> str:
-    """مفتاح إزالة تكرار يقارب ترتيب MySQL (يتجاهل التطويل والتشكيل)."""
-    text = _normalize_text(value)
-    return text.replace('\u0640', '')
 
 
 def _base_url() -> str:
@@ -613,34 +607,24 @@ def sync_barcode_index() -> int:
     """
     مزامنة الباركود/العبوات/رمز المجموعة من GetAllItems
     وأسماء المجموعات من GetAllGroupDet.
+
+    الصفوف تُحفظ كما في المصدر (بما فيها التكرار واختلاف شكل الأحرف).
     """
     from .models import ItemBarcode, ItemGroup
 
     rows = fetch_all_items()
     mapped: list[ItemBarcode] = []
-    seen: set[tuple[str, str, str]] = set()
-    skipped_dups = 0
-    normalized_collisions = 0
 
     for row in rows:
         if not isinstance(row, dict):
             continue
-        barcode_raw = str(row.get('Barcode') or '')
-        barcode = _normalize_text(barcode_raw)[:128]
-        item_code = _normalize_text(row.get('Item_code') or '')[:64]
-        # الوحدة تُحفظ كما جاءت من النظام (بدون تعديل شكل الكتابة).
+        # كما المصدر: قص الطول فقط لحدود الأعمدة.
+        barcode = str(row.get('Barcode') or '').strip()[:128]
+        item_code = str(row.get('Item_code') or '').strip()[:64]
         unit = str(row.get('itm_unt') or '').strip()[:64]
         if not item_code or not unit:
             continue
-        # إزالة التكرار بمفتاح يطابق سلوك MySQL دون تغيير نص الوحدة المخزّن.
-        key = (_fold_for_unique(barcode), _fold_for_unique(item_code), _fold_for_unique(unit))
-        if key in seen:
-            skipped_dups += 1
-            if barcode_raw.strip() != barcode or unit != _fold_for_unique(unit):
-                normalized_collisions += 1
-            continue
-        seen.add(key)
-        # Item_category في GetAllItems = G_CODE
+
         g_raw = (
             row.get('Item_category')
             if row.get('Item_category') is not None
@@ -648,7 +632,7 @@ def sync_barcode_index() -> int:
             if row.get('G_CODE') is not None
             else row.get('g_code')
         )
-        g_code = _normalize_text('' if g_raw is None else g_raw)
+        g_code = str('' if g_raw is None else g_raw).strip()[:64]
 
         pack_raw = (
             row.get('p_size')
@@ -666,7 +650,7 @@ def sync_barcode_index() -> int:
                 name=str(row.get('Item_ar_name') or '').strip()[:255],
                 unit=unit,
                 pack_size=pack_size[:32],
-                g_code=g_code[:64],
+                g_code=g_code,
             )
         )
 
@@ -690,35 +674,12 @@ def sync_barcode_index() -> int:
     except ApiClientError as exc:
         logger.warning('Group sync skipped: %s', exc)
 
-    # region agent log
-    from .debug_auth import auth_log
-
-    auth_log(
-        'BARCODE_DUP',
-        'search/api_client.py:sync_barcode_index',
-        'sync_field_lengths',
-        {
-            'runId': 'post-fix',
-            'rows': len(mapped),
-            'skippedDuplicates': skipped_dups,
-            'normalizedCollisions': normalized_collisions,
-            'maxBarcodeLength': max((len(m.barcode) for m in mapped), default=0),
-            'barcodesOver64': sum(1 for m in mapped if len(m.barcode) > 64),
-            'barcodesOver128': sum(1 for m in mapped if len(m.barcode) > 128),
-            'maxItemCodeLength': max((len(m.item_code) for m in mapped), default=0),
-            'maxNameLength': max((len(m.name) for m in mapped), default=0),
-            'maxUnitLength': max((len(m.unit) for m in mapped), default=0),
-        },
-    )
-    # endregion
-
     with transaction.atomic():
         ItemBarcode.objects.all().delete()
-        # ignore_conflicts: حماية إضافية إن بقي اختلاف لا يراه الترتيب الفريد في MySQL
-        ItemBarcode.objects.bulk_create(mapped, batch_size=2000, ignore_conflicts=True)
+        ItemBarcode.objects.bulk_create(mapped, batch_size=2000)
         if groups:
             ItemGroup.objects.all().delete()
-            ItemGroup.objects.bulk_create(groups, batch_size=500, ignore_conflicts=True)
+            ItemGroup.objects.bulk_create(groups, batch_size=500)
 
     logger.info('Synced %s barcode/unit rows and %s groups', len(mapped), len(groups))
     with_pack = sum(1 for m in mapped if m.pack_size)
@@ -789,9 +750,11 @@ def lookup_by_barcode(barcode: str) -> list[dict]:
     """البحث المحلي: باركود → رقم الصنف + المجموعة."""
     from .models import ItemBarcode
 
-    cleaned = _normalize_text(barcode)
+    raw = str(barcode or '').strip()
+    cleaned = _normalize_text(raw)
+    candidates = {v for v in (raw, cleaned) if v}
     rows = (
-        ItemBarcode.objects.filter(barcode=cleaned)
+        ItemBarcode.objects.filter(barcode__in=candidates)
         .exclude(barcode='')
         .order_by('unit')
     )

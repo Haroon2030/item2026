@@ -36,12 +36,7 @@ class ItemBarcode(models.Model):
     class Meta:
         verbose_name = 'باركود صنف'
         verbose_name_plural = 'باركودات الأصناف'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['barcode', 'item_code', 'unit'],
-                name='uniq_barcode_item_unit',
-            ),
-        ]
+        # بدون قيد فريد: نحتفظ بصفوف المصدر كما هي حتى عند تكرار شكل الوحدة.
 
     def __str__(self) -> str:
         return f'{self.barcode} → {self.item_code}'
