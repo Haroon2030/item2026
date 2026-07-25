@@ -34,6 +34,12 @@ def _normalize_text(value: Any) -> str:
     return ''.join(cleaned).strip()
 
 
+def _fold_for_unique(value: str) -> str:
+    """مفتاح إزالة تكرار يقارب ترتيب MySQL (يتجاهل التطويل والتشكيل)."""
+    text = _normalize_text(value)
+    return text.replace('\u0640', '')
+
+
 def _base_url() -> str:
     """يرجع رابط الأساس بعد التحقق من المضيف المسموح (حماية من SSRF)."""
     from urllib.parse import urlparse
@@ -620,15 +626,17 @@ def sync_barcode_index() -> int:
         if not isinstance(row, dict):
             continue
         barcode_raw = str(row.get('Barcode') or '')
-        barcode = _normalize_text(barcode_raw)
-        item_code = _normalize_text(row.get('Item_code') or '')
-        unit = _normalize_text(row.get('itm_unt') or '')
+        barcode = _normalize_text(barcode_raw)[:128]
+        item_code = _normalize_text(row.get('Item_code') or '')[:64]
+        # الوحدة تُحفظ كما جاءت من النظام (بدون تعديل شكل الكتابة).
+        unit = str(row.get('itm_unt') or '').strip()[:64]
         if not item_code or not unit:
             continue
-        key = (barcode, item_code, unit)
+        # إزالة التكرار بمفتاح يطابق سلوك MySQL دون تغيير نص الوحدة المخزّن.
+        key = (_fold_for_unique(barcode), _fold_for_unique(item_code), _fold_for_unique(unit))
         if key in seen:
             skipped_dups += 1
-            if barcode_raw.strip() != barcode:
+            if barcode_raw.strip() != barcode or unit != _fold_for_unique(unit):
                 normalized_collisions += 1
             continue
         seen.add(key)
@@ -653,10 +661,10 @@ def sync_barcode_index() -> int:
 
         mapped.append(
             ItemBarcode(
-                barcode=barcode[:128],
-                item_code=item_code[:64],
-                name=_normalize_text(row.get('Item_ar_name') or '')[:255],
-                unit=unit[:64],
+                barcode=barcode,
+                item_code=item_code,
+                name=str(row.get('Item_ar_name') or '').strip()[:255],
+                unit=unit,
                 pack_size=pack_size[:32],
                 g_code=g_code[:64],
             )
@@ -706,10 +714,11 @@ def sync_barcode_index() -> int:
 
     with transaction.atomic():
         ItemBarcode.objects.all().delete()
-        ItemBarcode.objects.bulk_create(mapped, batch_size=2000)
+        # ignore_conflicts: حماية إضافية إن بقي اختلاف لا يراه الترتيب الفريد في MySQL
+        ItemBarcode.objects.bulk_create(mapped, batch_size=2000, ignore_conflicts=True)
         if groups:
             ItemGroup.objects.all().delete()
-            ItemGroup.objects.bulk_create(groups, batch_size=500)
+            ItemGroup.objects.bulk_create(groups, batch_size=500, ignore_conflicts=True)
 
     logger.info('Synced %s barcode/unit rows and %s groups', len(mapped), len(groups))
     with_pack = sum(1 for m in mapped if m.pack_size)
