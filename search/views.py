@@ -24,7 +24,7 @@ def _warehouses() -> list[dict]:
 
 
 def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str) -> tuple[list[dict], dict | None]:
-    """يربط باركود الوحدات من الفهرس ويضع الصف المطابق للبحث أولاً."""
+    """يربط باركود الوحدات من الفهرس ويختار الصف المطابق (باركود أو وحدة الرصيد/التكلفة)."""
     q = (query or '').strip()
     barcode_by_unit = {}
     unit_by_barcode = {}
@@ -59,8 +59,75 @@ def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str)
                 else:
                     seen_match = True
 
-    enriched.sort(key=lambda r: (0 if r.get('is_matched') else 1, str(r.get('unit') or '')))
     matched = next((r for r in enriched if r.get('is_matched')), None)
+
+    # بحث برقم الصنف (بدون باركود وحدة): فضّل وحدة الرصيد/التكلفة من GetItemQtyCost
+    # حتى لا يظهر «باكت» بدل «كيلو» عندما يكون أول صف في الأسعار باكت
+    if not matched and enriched:
+        preferred = None
+        for row in enriched:
+            has_qty = str(row.get('quantity') or '').strip()
+            has_cost = str(row.get('avg_cost') or '').strip()
+            if has_qty or has_cost:
+                preferred = row
+                break
+        if not preferred:
+            for row in enriched:
+                unit = str(row.get('unit') or '')
+                if 'كيلو' in unit or unit.lower() in {'kg', 'kilo'}:
+                    preferred = row
+                    break
+        if preferred:
+            for row in enriched:
+                row['is_matched'] = row is preferred
+            matched = preferred
+
+    enriched.sort(key=lambda r: (0 if r.get('is_matched') else 1, str(r.get('unit') or '')))
+    matched = next((r for r in enriched if r.get('is_matched')), matched)
+
+    # #region agent log
+    try:
+        def _pack_num(row):
+            try:
+                return float(str(row.get('pack_size') or '').replace(',', '') or '0')
+            except ValueError:
+                return 0.0
+
+        units_info = [
+            {
+                'unit': r.get('unit'),
+                'pack': r.get('pack_size'),
+                'pack_n': _pack_num(r),
+                'qty': r.get('quantity'),
+                'cost': r.get('avg_cost'),
+                'barcode': r.get('barcode'),
+                'matched': bool(r.get('is_matched')),
+            }
+            for r in enriched
+        ]
+        has_kilo = any('كيلو' in str(u.get('unit') or '') for u in units_info)
+        positive_packs = [u for u in units_info if (u.get('pack_n') or 0) > 0]
+        smallest = min(positive_packs, key=lambda u: u['pack_n']) if positive_packs else None
+        agent_log(
+            'K',
+            'views.py:_enrich_prices_with_match',
+            'unit_select_decision',
+            {
+                'query': q,
+                'matched_unit_from_barcode': matched_unit,
+                'selected_unit': (matched or {}).get('unit') if matched else '',
+                'selected_pack': (matched or {}).get('pack_size') if matched else '',
+                'selected_cost': (matched or {}).get('avg_cost') if matched else '',
+                'has_kilo': has_kilo,
+                'smallest_unit': (smallest or {}).get('unit'),
+                'smallest_pack': (smallest or {}).get('pack'),
+                'units': units_info[:12],
+            },
+        )
+    except Exception:
+        pass
+    # #endregion
+
     return enriched, matched
 
 
@@ -220,6 +287,23 @@ def item_search(request):
     if prices:
         prices, matched_price = _enrich_prices_with_match(prices, items, query)
     selected_price = matched_price or (prices[0] if prices else None)
+    # #region agent log
+    agent_log(
+        'K',
+        'views.py:item_search',
+        'selected_price_final',
+        {
+            'query': query,
+            'match_type': match_type,
+            'warehouse': warehouse,
+            'selected_unit': (selected_price or {}).get('unit'),
+            'selected_pack': (selected_price or {}).get('pack_size'),
+            'selected_cost': (selected_price or {}).get('avg_cost'),
+            'selected_price_val': (selected_price or {}).get('price'),
+            'selected_qty': (selected_price or {}).get('quantity'),
+        },
+    )
+    # #endregion
 
     return render(
         request,

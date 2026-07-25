@@ -105,6 +105,11 @@ def _normalize_item(raw: dict, field_map: dict) -> dict:
     pack = raw.get(field_map.get('pack_size', 'P_SIZE'), '')
     if pack in (None, '', 0, '0'):
         pack = raw.get('p_size', '') or ''
+    avg_cost = raw.get(field_map.get('avg_cost', 'I_CWTAVG'))
+    if avg_cost in (None, ''):
+        avg_cost = raw.get('I_CWTAVG')
+    if avg_cost in (None, ''):
+        avg_cost = raw.get('I_cost')
     return {
         'code': raw.get(field_map.get('code', 'I_CODE'), '') or '',
         'name': raw.get(field_map.get('name', 'I_NAME'), '') or '',
@@ -113,6 +118,7 @@ def _normalize_item(raw: dict, field_map: dict) -> dict:
         'unit': raw.get(field_map.get('unit', 'ITM_UNT'), '') or '',
         'quantity': raw.get(field_map.get('quantity', 'AVL_QTY'), '') or '',
         'pack_size': '' if pack in (None, '', 0, '0') else str(pack).strip(),
+        'avg_cost': '' if avg_cost in (None, '') else str(avg_cost).strip(),
         'raw': raw,
     }
 
@@ -212,13 +218,21 @@ def fetch_qty_by_code(item_code: str, w_code: str | None = None) -> list[dict]:
             or raw.get('Itm_Unt')
             or ''
         ).strip()
+        avg_cost = raw.get('I_CWTAVG')
+        if avg_cost in (None, ''):
+            avg_cost = raw.get('i_cwtavg')
+        if avg_cost in (None, ''):
+            avg_cost = raw.get('I_cost')
+        if avg_cost in (None, ''):
+            avg_cost = raw.get('I_COST')
         rows.append(
             {
                 'code': code,
                 'name': str(raw.get('Item_ar_name') or raw.get('I_NAME') or '').strip(),
                 'unit': unit,
                 'quantity': str(qty_val).strip() if qty_val is not None else '',
-                'cost': str(raw.get('I_cost') if raw.get('I_cost') is not None else '').strip(),
+                'avg_cost': str(avg_cost).strip() if avg_cost not in (None, '') else '',
+                'cost': str(avg_cost).strip() if avg_cost not in (None, '') else '',
                 'barcode': str(raw.get('Barcode') or raw.get('BARCODE') or '').strip(),
             }
         )
@@ -271,6 +285,24 @@ def _to_float(value: Any) -> float | None:
 def _fmt_qty(value: float) -> str:
     text = f'{value:.4f}'.rstrip('0').rstrip('.')
     return text or '0'
+
+
+def _fmt_cost(value: float) -> str:
+    text = f'{value:.6f}'.rstrip('0').rstrip('.')
+    return text or '0'
+
+
+def _pick_avg_cost(*sources: Any) -> str:
+    """استخراج متوسط التكلفة I_CWTAVG مع احتياطي I_cost."""
+    keys = ('avg_cost', 'I_CWTAVG', 'i_cwtavg', 'I_cost', 'I_COST', 'cost')
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        for key in keys:
+            val = src.get(key)
+            if val not in (None, ''):
+                return str(val).strip()
+    return ''
 
 
 def _is_weight_unit(unit: str) -> bool:
@@ -425,6 +457,12 @@ def merge_prices_with_qty(
             if converted is not None:
                 quantity = _fmt_qty(converted)
 
+        # متوسط التكلفة فقط لوحدتها من الـ API — لا نحوّله بين الوحدات (يتلف كيلو↔باكت)
+        avg_cost = _pick_avg_cost(qty_row, price_row, price_row.get('raw') or {})
+        if avg_cost:
+            cost_num = _to_float(avg_cost)
+            avg_cost = _fmt_cost(cost_num) if cost_num is not None else avg_cost
+
         merged.append(
             {
                 'code': price_row.get('code') or qty_row.get('code') or sample.get('code') or '',
@@ -437,6 +475,7 @@ def merge_prices_with_qty(
                 'pack_size': pack_display or (price_row.get('pack_size') or ''),
                 'price': price_row.get('price', ''),
                 'quantity': quantity,
+                'avg_cost': avg_cost,
                 'raw': price_row.get('raw') or qty_row,
             }
         )

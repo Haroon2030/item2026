@@ -172,6 +172,7 @@
                   <th>الباركود</th>
                   <th>العبوة</th>
                   <th>سعر الوحدة</th>
+                  <th>متوسط التكلفة</th>
                   <th>الرصيد</th>
                 </tr>
               </thead>
@@ -184,6 +185,7 @@
                   <td class="mono">{{ selected_price.barcode|default:query }}</td>
                   <td class="mono">{{ selected_price.pack_size|default:"—" }}</td>
                   <td class="mono price-cell">{{ selected_price.price|default:"—" }}</td>
+                  <td class="mono cost-cell">{{ selected_price.avg_cost|default:"—" }}</td>
                   <td class="mono qty-cell">{{ selected_price.quantity|default:"—" }}</td>
                 </tr>
               </tbody>

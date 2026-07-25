@@ -970,6 +970,7 @@ body {
 }
 
 .price-cell { font-weight: 700; color: #143a6b; }
+.cost-cell { font-weight: 700; color: #6b4f1f; }
 .qty-cell { font-weight: 700; color: #0d5c38; }
 
 .empty-state {
@@ -1061,11 +1062,12 @@ body {
     font-size: 0.68rem;
     overflow-wrap: anywhere;
   }
-  .result-prices .price-table th:nth-child(1) { width: 19%; }
-  .result-prices .price-table th:nth-child(2) { width: 28%; }
-  .result-prices .price-table th:nth-child(3) { width: 15%; }
-  .result-prices .price-table th:nth-child(4) { width: 20%; }
-  .result-prices .price-table th:nth-child(5) { width: 18%; }
+  .result-prices .price-table th:nth-child(1) { width: 16%; }
+  .result-prices .price-table th:nth-child(2) { width: 22%; }
+  .result-prices .price-table th:nth-child(3) { width: 12%; }
+  .result-prices .price-table th:nth-child(4) { width: 17%; }
+  .result-prices .price-table th:nth-child(5) { width: 17%; }
+  .result-prices .price-table th:nth-child(6) { width: 16%; }
   .result-prices .price-table .mono {
     font-size: 0.66rem;
     word-break: break-all;

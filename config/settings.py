@@ -269,6 +269,7 @@ EXTERNAL_API = {
         'price': 'I_PRICE',
         'unit': 'ITM_UNT',
         'quantity': 'AVL_QTY',
+        'avg_cost': 'I_CWTAVG',
     },
 }
 
