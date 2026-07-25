@@ -6,7 +6,7 @@ import time
 from collections import defaultdict, deque
 
 from django.conf import settings
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 
 
 class SecurityHeadersMiddleware:
@@ -56,7 +56,11 @@ class RateLimitMiddleware:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     def _client_ip(self, request) -> str:
-        # لا نثق بـ X-Forwarded-For إلا خلف بروكسي موثوق (غير مفعّل هنا)
+        # خلف Dokploy/Nginx: أول IP في X-Forwarded-For هو العميل الحقيقي
+        if getattr(settings, 'USE_X_FORWARDED_HOST', False) or settings.SECURE_PROXY_SSL_HEADER:
+            forwarded = (request.META.get('HTTP_X_FORWARDED_FOR') or '').split(',')
+            if forwarded and forwarded[0].strip():
+                return forwarded[0].strip()
         return request.META.get('REMOTE_ADDR') or 'unknown'
 
     def _allow(self, key: str, limit: int, window_sec: int) -> bool:
@@ -69,17 +73,37 @@ class RateLimitMiddleware:
         bucket.append(now)
         return True
 
+    def _login_blocked_response(self, request):
+        wants_json = 'application/json' in (request.headers.get('Accept') or '')
+        message = 'محاولات دخول كثيرة. انتظر دقيقة ثم أعد المحاولة.'
+        if wants_json:
+            return JsonResponse({'error': message}, status=429)
+        html = (
+            '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<title>تم الإيقاف مؤقتاً</title>'
+            '<style>body{font-family:Tahoma,sans-serif;background:#eef3f9;display:grid;'
+            'place-items:center;min-height:100vh;margin:0}'
+            '.card{background:#fff;border:1px solid #c9d8ea;border-radius:14px;'
+            'padding:1.5rem;max-width:420px;text-align:center;box-shadow:0 8px 24px rgba(29,79,145,.08)}'
+            'a{color:#1d4f91;font-weight:700}</style></head><body><div class="card">'
+            '<h1>تم الإيقاف مؤقتاً</h1>'
+            f'<p>{message}</p>'
+            '<p><a href="/login/">العودة لتسجيل الدخول</a></p>'
+            '</div></body></html>'
+        )
+        return HttpResponse(html, status=429, content_type='text/html; charset=utf-8')
+
     def __call__(self, request):
         path = request.path
         ip = self._client_ip(request)
 
         if path.rstrip('/').endswith('login') and request.method == 'POST':
-            limit = int(getattr(settings, 'RATE_LIMIT_LOGIN_PER_10_MINUTES', 5))
-            if not self._allow(f'login:{ip}', limit, 600):
-                return JsonResponse(
-                    {'error': 'محاولات دخول كثيرة. حاول بعد 10 دقائق.'},
-                    status=429,
-                )
+            # حد مرن: 20 محاولة / 2 دقيقة
+            limit = int(getattr(settings, 'RATE_LIMIT_LOGIN_PER_10_MINUTES', 20))
+            window = int(getattr(settings, 'RATE_LIMIT_LOGIN_WINDOW_SECONDS', 120) or 120)
+            if not self._allow(f'login:{ip}', limit, window):
+                return self._login_blocked_response(request)
 
         if path.rstrip('/').endswith('sync-barcodes') and request.method == 'POST':
             limit = int(getattr(settings, 'RATE_LIMIT_SYNC_PER_HOUR', 3))

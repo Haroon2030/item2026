@@ -244,7 +244,8 @@ if not DEBUG:
 # حدود الطلبات
 RATE_LIMIT_SEARCH_PER_MINUTE = int(_env('RATE_LIMIT_SEARCH_PER_MINUTE', '60') or '60')
 RATE_LIMIT_SYNC_PER_HOUR = int(_env('RATE_LIMIT_SYNC_PER_HOUR', '3') or '3')
-RATE_LIMIT_LOGIN_PER_10_MINUTES = int(_env('RATE_LIMIT_LOGIN_PER_10_MINUTES', '5') or '5')
+RATE_LIMIT_LOGIN_PER_10_MINUTES = int(_env('RATE_LIMIT_LOGIN_PER_10_MINUTES', '20') or '20')
+RATE_LIMIT_LOGIN_WINDOW_SECONDS = int(_env('RATE_LIMIT_LOGIN_WINDOW_SECONDS', '120') or '120')
 SEARCH_QUERY_MAX_LEN = int(_env('SEARCH_QUERY_MAX_LEN', '64') or '64')
 
 # رمز حماية عملية المزامنة الثقيلة (اتركه فارغًا فقط للتطوير المحلي)
