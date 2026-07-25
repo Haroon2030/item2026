@@ -971,6 +971,19 @@ body {
 
 .price-cell { font-weight: 700; color: #143a6b; }
 .cost-cell { font-weight: 700; color: #6b4f1f; }
+.money {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+.sar-symbol {
+  width: 0.95em;
+  height: 1.05em;
+  flex: 0 0 auto;
+  color: inherit;
+  vertical-align: -0.12em;
+}
 .qty-cell { font-weight: 700; color: #0d5c38; }
 
 .empty-state {
