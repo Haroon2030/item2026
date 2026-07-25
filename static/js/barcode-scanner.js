@@ -78,6 +78,7 @@
   var lastCandidateCount = 0;
   var zxingBusy = false;
   var passIndex = 0;
+  var audioCtx = null;
   var canvas = document.createElement("canvas");
   var ctx = canvas.getContext("2d", { willReadFrequently: true, alpha: false });
 
@@ -95,27 +96,59 @@
     if (kind === "ok") statusEl.classList.add("is-ok");
   }
 
-  function beep(freq, ms) {
+  function ensureAudio() {
     try {
-      var ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctxAudio.createOscillator();
-      var gain = ctxAudio.createGain();
-      osc.type = "square";
-      osc.frequency.value = freq || 2200;
-      gain.gain.value = 0.07;
-      osc.connect(gain);
-      gain.connect(ctxAudio.destination);
-      osc.start();
-      window.setTimeout(function () {
-        osc.stop();
-        ctxAudio.close();
-      }, ms || 85);
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      if (!audioCtx || audioCtx.state === "closed") {
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(function () {});
+      }
+      return audioCtx;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function tone(ctxAudio, freq, startAt, dur, vol) {
+    var osc = ctxAudio.createOscillator();
+    var gain = ctxAudio.createGain();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(vol, startAt + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+    osc.connect(gain);
+    gain.connect(ctxAudio.destination);
+    osc.start(startAt);
+    osc.stop(startAt + dur + 0.02);
+  }
+
+  function beep(freq, ms) {
+    var ctxAudio = ensureAudio();
+    if (!ctxAudio) return;
+    try {
+      var now = ctxAudio.currentTime;
+      tone(ctxAudio, freq || 1800, now, (ms || 70) / 1000, 0.18);
+    } catch (e) {}
+  }
+
+  function playScanSuccess() {
+    var ctxAudio = ensureAudio();
+    if (!ctxAudio) return;
+    try {
+      // نغمتان قصيرتان بأسلوب قارئات Honeywell/Zebra
+      var now = ctxAudio.currentTime;
+      tone(ctxAudio, 1800, now, 0.08, 0.22);
+      tone(ctxAudio, 2400, now + 0.09, 0.11, 0.22);
     } catch (e) {}
   }
 
   function vibrate() {
     try {
-      if (navigator.vibrate) navigator.vibrate([35, 20, 35]);
+      if (navigator.vibrate) navigator.vibrate([40, 25, 50]);
     } catch (e) {}
   }
 
@@ -198,13 +231,16 @@
 
     handled = true;
     running = false;
-    beep(2300, 90);
+    playScanSuccess();
     vibrate();
     setStatus("تم المسح: " + value, "ok");
     input.value = value;
     stopAll();
     overlay.hidden = true;
-    form.submit();
+    // انتظر قليلاً حتى يكتمل صوت النجاح قبل إرسال النموذج
+    window.setTimeout(function () {
+      form.submit();
+    }, 180);
   }
 
   function boostContrast(imageData, contrast) {
@@ -472,6 +508,7 @@
     running = true;
     overlay.hidden = false;
     setStatus("جاري تشغيل الماسح الاحترافي…");
+    ensureAudio(); // تفعيل الصوت من لمسة المستخدم (مطلوب في الموبايل)
 
     nativeDetector = null;
     if ("BarcodeDetector" in window) {
