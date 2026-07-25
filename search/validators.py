@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from django.conf import settings
 
@@ -15,9 +16,21 @@ class ValidationError(ValueError):
     pass
 
 
+def _normalize_query(value: str) -> str:
+    text = unicodedata.normalize('NFKC', value or '')
+    cleaned = []
+    for ch in text:
+        if unicodedata.category(ch) in {'Mn', 'Me', 'Cf'}:
+            continue
+        if ch in '\u200e\u200f\u202a\u202b\u202c\u202d\u202e':
+            continue
+        cleaned.append(ch)
+    return ''.join(cleaned).strip()
+
+
 def sanitize_search_query(raw: str | None) -> str:
-    query = (raw or '').strip()
-    max_len = int(getattr(settings, 'SEARCH_QUERY_MAX_LEN', 64))
+    query = _normalize_query((raw or '').strip())
+    max_len = int(getattr(settings, 'SEARCH_QUERY_MAX_LEN', 128))
     if not query:
         return ''
     if len(query) > max_len:

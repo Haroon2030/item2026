@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -18,6 +19,19 @@ logger = logging.getLogger(__name__)
 
 class ApiClientError(Exception):
     """خطأ عام عند فشل الاتصال أو قراءة الاستجابة."""
+
+
+def _normalize_text(value: Any) -> str:
+    """يزيل علامات التشكيل/الاتجاه المخفية التي تسبب تكرار قيد MySQL الفريد."""
+    text = unicodedata.normalize('NFKC', str(value or ''))
+    cleaned = []
+    for ch in text:
+        if unicodedata.category(ch) in {'Mn', 'Me', 'Cf'}:
+            continue
+        if ch in '\u200e\u200f\u202a\u202b\u202c\u202d\u202e':
+            continue
+        cleaned.append(ch)
+    return ''.join(cleaned).strip()
 
 
 def _base_url() -> str:
@@ -599,17 +613,23 @@ def sync_barcode_index() -> int:
     rows = fetch_all_items()
     mapped: list[ItemBarcode] = []
     seen: set[tuple[str, str, str]] = set()
+    skipped_dups = 0
+    normalized_collisions = 0
 
     for row in rows:
         if not isinstance(row, dict):
             continue
-        barcode = str(row.get('Barcode') or '').strip()
-        item_code = str(row.get('Item_code') or '').strip()
-        unit = str(row.get('itm_unt') or '').strip()
+        barcode_raw = str(row.get('Barcode') or '')
+        barcode = _normalize_text(barcode_raw)
+        item_code = _normalize_text(row.get('Item_code') or '')
+        unit = _normalize_text(row.get('itm_unt') or '')
         if not item_code or not unit:
             continue
         key = (barcode, item_code, unit)
         if key in seen:
+            skipped_dups += 1
+            if barcode_raw.strip() != barcode:
+                normalized_collisions += 1
             continue
         seen.add(key)
         # Item_category في GetAllItems = G_CODE
@@ -620,7 +640,7 @@ def sync_barcode_index() -> int:
             if row.get('G_CODE') is not None
             else row.get('g_code')
         )
-        g_code = '' if g_raw is None else str(g_raw).strip()
+        g_code = _normalize_text('' if g_raw is None else g_raw)
 
         pack_raw = (
             row.get('p_size')
@@ -633,12 +653,12 @@ def sync_barcode_index() -> int:
 
         mapped.append(
             ItemBarcode(
-                barcode=barcode,
-                item_code=item_code,
-                name=str(row.get('Item_ar_name') or '').strip(),
-                unit=unit,
-                pack_size=pack_size,
-                g_code=g_code,
+                barcode=barcode[:128],
+                item_code=item_code[:64],
+                name=_normalize_text(row.get('Item_ar_name') or '')[:255],
+                unit=unit[:64],
+                pack_size=pack_size[:32],
+                g_code=g_code[:64],
             )
         )
 
@@ -666,12 +686,14 @@ def sync_barcode_index() -> int:
     from .debug_auth import auth_log
 
     auth_log(
-        'BARCODE_LEN',
+        'BARCODE_DUP',
         'search/api_client.py:sync_barcode_index',
         'sync_field_lengths',
         {
             'runId': 'post-fix',
             'rows': len(mapped),
+            'skippedDuplicates': skipped_dups,
+            'normalizedCollisions': normalized_collisions,
             'maxBarcodeLength': max((len(m.barcode) for m in mapped), default=0),
             'barcodesOver64': sum(1 for m in mapped if len(m.barcode) > 64),
             'barcodesOver128': sum(1 for m in mapped if len(m.barcode) > 128),
@@ -758,8 +780,9 @@ def lookup_by_barcode(barcode: str) -> list[dict]:
     """البحث المحلي: باركود → رقم الصنف + المجموعة."""
     from .models import ItemBarcode
 
+    cleaned = _normalize_text(barcode)
     rows = (
-        ItemBarcode.objects.filter(barcode=barcode)
+        ItemBarcode.objects.filter(barcode=cleaned)
         .exclude(barcode='')
         .order_by('unit')
     )
