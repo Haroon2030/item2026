@@ -38,6 +38,7 @@ PY
 fi
 
 python manage.py migrate --noinput
+python manage.py ensure_app_user
 python manage.py collectstatic --noinput
 
 # فهرس العبوة/الباركود: إن كان فارغاً نزامنه قبل فتح الموقع

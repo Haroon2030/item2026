@@ -189,6 +189,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'item_search'
+LOGOUT_REDIRECT_URL = 'login'
+
 LANGUAGE_CODE = 'ar'
 TIME_ZONE = 'Asia/Riyadh'
 USE_I18N = True
@@ -215,6 +219,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', default=not DEBUG)
+SESSION_COOKIE_AGE = int(_env('SESSION_COOKIE_AGE', '28800') or '28800')
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=not DEBUG)
@@ -233,6 +238,7 @@ if not DEBUG:
 # حدود الطلبات
 RATE_LIMIT_SEARCH_PER_MINUTE = int(_env('RATE_LIMIT_SEARCH_PER_MINUTE', '60') or '60')
 RATE_LIMIT_SYNC_PER_HOUR = int(_env('RATE_LIMIT_SYNC_PER_HOUR', '3') or '3')
+RATE_LIMIT_LOGIN_PER_10_MINUTES = int(_env('RATE_LIMIT_LOGIN_PER_10_MINUTES', '5') or '5')
 SEARCH_QUERY_MAX_LEN = int(_env('SEARCH_QUERY_MAX_LEN', '64') or '64')
 
 # رمز حماية عملية المزامنة الثقيلة (اتركه فارغًا فقط للتطوير المحلي)

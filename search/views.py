@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
@@ -120,6 +121,7 @@ def _items_from_prices(prices: list[dict], group_info: dict) -> list[dict]:
     return items
 
 
+@login_required
 def item_search(request):
     raw_query = request.GET.get('q')
     items = []
@@ -227,6 +229,7 @@ def item_search(request):
     )
 
 
+@login_required
 @require_POST
 def sync_barcodes(request):
     wants_json = (

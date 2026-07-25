@@ -73,6 +73,14 @@ class RateLimitMiddleware:
         path = request.path
         ip = self._client_ip(request)
 
+        if path.rstrip('/').endswith('login') and request.method == 'POST':
+            limit = int(getattr(settings, 'RATE_LIMIT_LOGIN_PER_10_MINUTES', 5))
+            if not self._allow(f'login:{ip}', limit, 600):
+                return JsonResponse(
+                    {'error': 'محاولات دخول كثيرة. حاول بعد 10 دقائق.'},
+                    status=429,
+                )
+
         if path.rstrip('/').endswith('sync-barcodes') and request.method == 'POST':
             limit = int(getattr(settings, 'RATE_LIMIT_SYNC_PER_HOUR', 3))
             if not self._allow(f'sync:{ip}', limit, 3600):
