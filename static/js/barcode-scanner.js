@@ -209,6 +209,8 @@
   function normalizeCode(code) {
     return String(code || "")
       .replace(/[\u200e\u200f\u202a-\u202e]/g, "")
+      .replace(/\r\n|\r|\n/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
@@ -216,9 +218,21 @@
     if (handled || !running) return;
     var value = normalizeCode(code);
     if (!value || value.length < 3) return;
-    // تجاهل قراءات غير منطقية قصيرة جداً من الضوضاء
-    // يشمل رموز Codabar/GS1 الخاصة: $ + : %
-    if (!/^[0-9A-Za-z\-_./$+:%]+$/.test(value)) return;
+    // 1D/2D: اسمح برموز شائعة؛ ارفض أحرف التحكم فقط
+    if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) return;
+    if (!/^[0-9A-Za-z\-_./$+:%?=&#@,;|*+\\ ]+$/.test(value)) return;
+    // للبحث المحلي: إن وُجد مسار URL خذ آخر مقطع رقمي/أبجدي مفيد
+    if (/^https?:\/\//i.test(value) || value.indexOf("/") !== -1) {
+      var parts = value.split(/[/?&#=\s]+/).filter(Boolean);
+      var picked = "";
+      for (var i = parts.length - 1; i >= 0; i--) {
+        if (/^[0-9A-Za-z\-_.]{3,}$/.test(parts[i])) {
+          picked = parts[i];
+          break;
+        }
+      }
+      if (picked) value = picked;
+    }
 
     // EAN/UPC/Code128 الطويل: قبول فوري. القصير: تأكيد مزدوج
     var needConfirm = value.length < 8 ? 2 : 1;
@@ -319,6 +333,9 @@
       // 2D
       ZXing.BarcodeFormat.QR_CODE,
       ZXing.BarcodeFormat.DATA_MATRIX,
+      ZXing.BarcodeFormat.PDF_417,
+      ZXing.BarcodeFormat.AZTEC,
+      ZXing.BarcodeFormat.MAXICODE,
     ]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, !!tryHarder);
     if (ZXing.DecodeHintType.ASSUME_GS1 != null) {
@@ -534,6 +551,8 @@
             "databar_expanded",
             "qr_code",
             "data_matrix",
+            "pdf417",
+            "aztec",
           ],
         });
       } catch (e) {
