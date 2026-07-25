@@ -13,17 +13,17 @@
     </svg>
   </div>
   <h1 id="login-title">تسجيل الدخول</h1>
-  <p class="login-subtitle">أدخل اسم المستخدم أو الرقم وكلمة المرور</p>
+    <p class="login-subtitle">أدخل <strong>الرقم</strong> أو اسم المستخدم ثم كلمة المرور</p>
 
   {% if form.errors %}
-    <div class="login-error" role="alert">اسم المستخدم أو كلمة المرور غير صحيحة.</div>
+    <div class="login-error" role="alert">بيانات الدخول غير صحيحة. إن عدّلت المستخدم فالدخول يكون بالرقم الظاهر في جدول المستخدمين.</div>
   {% endif %}
 
   <form method="post" action="{% url 'login' %}" class="login-form">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
 
-    <label for="id_username">اسم المستخدم</label>
+    <label for="id_username">الرقم / اسم المستخدم</label>
     <input
       id="id_username"
       name="username"

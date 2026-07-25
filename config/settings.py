@@ -194,6 +194,11 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'item_search'
 LOGOUT_REDIRECT_URL = 'login'
 
+AUTHENTICATION_BACKENDS = [
+    'search.auth_backend.UsernameOrPhoneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 LANGUAGE_CODE = 'ar'
 TIME_ZONE = 'Asia/Riyadh'
 USE_I18N = True

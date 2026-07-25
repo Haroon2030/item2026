@@ -50,6 +50,42 @@ class AuthenticationTests(TestCase):
         self.assertTrue(user.is_staff)
         self.assertTrue(UserProfile.objects.filter(user=user).exists())
 
+    @patch.dict(
+        'os.environ',
+        {
+            'APP_LOGIN_USERNAME': 'keep-user',
+            'APP_LOGIN_PASSWORD': 'FirstPassword123!',
+        },
+    )
+    def test_ensure_app_user_does_not_reset_password_on_rerun(self):
+        call_command('ensure_app_user')
+        user = get_user_model().objects.get(username='keep-user')
+        user.set_password('EditedPassword123!')
+        user.save()
+
+        with patch.dict(
+            'os.environ',
+            {
+                'APP_LOGIN_USERNAME': 'keep-user',
+                'APP_LOGIN_PASSWORD': 'FirstPassword123!',
+            },
+        ):
+            call_command('ensure_app_user')
+
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('EditedPassword123!'))
+
+    def test_login_accepts_phone_number(self):
+        user = get_user_model().objects.create_user(
+            username='0509999999',
+            password='PhoneLogin123!',
+            first_name='موظف',
+        )
+        UserProfile.objects.create(user=user, display_name='موظف', phone='0509999999')
+
+        ok = self.client.login(username='0509999999', password='PhoneLogin123!')
+        self.assertTrue(ok)
+
 
 class UserManagementTests(TestCase):
     def setUp(self):
