@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}إدارة المستخدمين — بيانات الأصناف{% endblock %}
+
+{% block content %}
+<section class="users-page" aria-label="إدارة المستخدمين">
+  <div class="users-head">
+    <div>
+      <h2>{% if editing %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}</h2>
+      <p>الاسم والرقم وكلمة السر — مع إمكانية التعديل والحذف</p>
+    </div>
+    <a class="btn-ghost" href="{% url 'item_search' %}">العودة للبحث</a>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-ok{% else %}alert-warn{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <form
+    method="post"
+    action="{% if editing %}{% url 'user_edit' editing.id %}{% else %}{% url 'user_create' %}{% endif %}"
+    class="user-form panel panel-blue"
+  >
+    {% csrf_token %}
+    <div class="user-form-grid">
+      <div class="field">
+        <label for="id_name">{{ form.name.label }}</label>
+        {{ form.name }}
+        {% if form.name.errors %}<p class="field-error">{{ form.name.errors.0 }}</p>{% endif %}
+      </div>
+      <div class="field">
+        <label for="id_phone">{{ form.phone.label }}</label>
+        {{ form.phone }}
+        {% if form.phone.errors %}<p class="field-error">{{ form.phone.errors.0 }}</p>{% endif %}
+      </div>
+      <div class="field">
+        <label for="id_password">{{ form.password.label }}</label>
+        {{ form.password }}
+        {% if form.password.help_text %}<p class="field-hint">{{ form.password.help_text }}</p>{% endif %}
+        {% if form.password.errors %}<p class="field-error">{{ form.password.errors.0 }}</p>{% endif %}
+      </div>
+    </div>
+    <div class="user-form-actions">
+      <button type="submit" class="btn-primary">
+        {% if editing %}حفظ التعديل{% else %}إضافة{% endif %}
+      </button>
+      {% if editing %}
+        <a class="btn-ghost" href="{% url 'user_list' %}">إلغاء</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <div class="panel panel-blue users-table-panel">
+    <div class="panel-head">
+      <span class="panel-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
+      <strong>المستخدمون</strong>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table users-table">
+        <thead>
+          <tr>
+            <th>الاسم</th>
+            <th>الرقم</th>
+            <th>الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr {% if editing and editing.id == u.id %}class="is-editing-row"{% endif %}>
+              <td>
+                <strong>{{ u.name }}</strong>
+                {% if u.is_self %}<span class="row-tag">أنت</span>{% endif %}
+                {% if u.is_staff %}<span class="row-tag">مشرف</span>{% endif %}
+              </td>
+              <td class="mono" dir="ltr">{{ u.phone }}</td>
+              <td class="actions-cell">
+                <a class="btn-action btn-edit" href="{% url 'user_edit' u.id %}">تعديل</a>
+                {% if not u.is_self %}
+                  <form method="post" action="{% url 'user_delete' u.id %}" class="inline-form" onsubmit="return confirm('حذف المستخدم؟');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-action btn-delete">حذف</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3" class="empty-cell">لا يوجد مستخدمون بعد.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

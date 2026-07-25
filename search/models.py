@@ -1,4 +1,25 @@
+from django.conf import settings
 from django.db import models
+
+
+class UserProfile(models.Model):
+    """بيانات إضافية لمستخدم التطبيق (الاسم المعروض والرقم)."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile',
+    )
+    display_name = models.CharField('الاسم', max_length=150)
+    phone = models.CharField('الرقم', max_length=20, unique=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'ملف مستخدم'
+        verbose_name_plural = 'ملفات المستخدمين'
+
+    def __str__(self) -> str:
+        return f'{self.display_name} ({self.phone})'
 
 
 class ItemBarcode(models.Model):
