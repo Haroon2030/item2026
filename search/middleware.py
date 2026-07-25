@@ -106,8 +106,17 @@ class RateLimitMiddleware:
                 return self._login_blocked_response(request)
 
         if path.rstrip('/').endswith('sync-barcodes') and request.method == 'POST':
-            limit = int(getattr(settings, 'RATE_LIMIT_SYNC_PER_HOUR', 3))
+            limit = int(getattr(settings, 'RATE_LIMIT_SYNC_PER_HOUR', 10))
             if not self._allow(f'sync:{ip}', limit, 3600):
+                wants_json = (
+                    request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                    or 'application/json' in (request.headers.get('Accept') or '')
+                )
+                if wants_json:
+                    return JsonResponse(
+                        {'ok': False, 'error': 'تم تجاوز حد المزامنة. حاول لاحقاً.'},
+                        status=429,
+                    )
                 return HttpResponseForbidden(
                     'تم تجاوز حد المزامنة. حاول لاحقًا.',
                     content_type='text/plain; charset=utf-8',

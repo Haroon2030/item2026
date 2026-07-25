@@ -264,3 +264,6 @@ def sync_barcodes(request):
         return respond_ok(count)
     except ApiClientError as exc:
         return respond_error(str(exc), status=502)
+    except Exception as exc:
+        # أي فشل قاعدة بيانات/مزامنة يجب أن يعود JSON للواجهة لا صفحة HTML
+        return respond_error(f'فشلت المزامنة: {exc}', status=500)

@@ -44,10 +44,34 @@
     setProgress(1);
     timer = window.setInterval(function () {
       if (value >= 90) return;
-      // يتقدم بسرعة في البداية ثم يبطئ قبل 90%
       var step = value < 40 ? 2.2 : value < 70 ? 1.2 : 0.45;
       setProgress(value + step);
     }, 350);
+  }
+
+  function parseResponse(res) {
+    return res.text().then(function (text) {
+      var data = null;
+      var trimmed = (text || "").trim();
+      if (trimmed) {
+        try {
+          data = JSON.parse(trimmed);
+        } catch (e) {
+          if (res.status === 403 || /login|تسجيل الدخول/i.test(trimmed)) {
+            throw new Error("انتهت الجلسة. أعد تسجيل الدخول ثم حاول المزامنة.");
+          }
+          if (res.status === 429) {
+            throw new Error("تم تجاوز حد المزامنة. حاول لاحقاً.");
+          }
+          throw new Error(
+            "فشلت المزامنة (استجابة غير متوقعة من الخادم، رمز " +
+              res.status +
+              ")."
+          );
+        }
+      }
+      return { okHttp: res.ok, status: res.status, data: data };
+    });
   }
 
   form.addEventListener("submit", function (event) {
@@ -67,11 +91,14 @@
         Accept: "application/json",
       },
       credentials: "same-origin",
+      redirect: "manual",
     })
       .then(function (res) {
-        return res.json().then(function (data) {
-          return { okHttp: res.ok, status: res.status, data: data };
-        });
+        // إعادة توجيه للدخول = الجلسة انتهت
+        if (res.type === "opaqueredirect" || res.status === 0 || (res.status >= 300 && res.status < 400)) {
+          throw new Error("انتهت الجلسة. أعد تسجيل الدخول ثم حاول المزامنة.");
+        }
+        return parseResponse(res);
       })
       .then(function (result) {
         stopTimer();
