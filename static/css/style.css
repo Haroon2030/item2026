@@ -2112,6 +2112,13 @@ body.login-body {
   align-items: flex-end;
 }
 
+.stock-cost-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
 .stock-cost-form .warehouse-field {
   flex: 0 0 200px;
 }
@@ -2167,8 +2174,13 @@ body.login-body {
     flex-direction: column;
     align-items: stretch;
   }
-  .stock-cost-form-row .btn-primary {
+  .stock-cost-form-row .btn-primary,
+  .stock-cost-actions {
     width: 100%;
+  }
+  .stock-cost-actions .btn-primary,
+  .stock-cost-actions .btn-ghost {
+    flex: 1;
   }
   .stock-cost-grand {
     margin-inline-start: 0;

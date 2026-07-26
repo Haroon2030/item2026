@@ -8,11 +8,20 @@
   var fill = document.getElementById("stock-cost-progress-fill");
   var label = document.getElementById("stock-cost-progress-label");
   var statusEl = document.getElementById("stock-cost-progress-status");
+  var titleEl = document.getElementById("stock-cost-progress-title");
   var closeBtn = document.getElementById("stock-cost-progress-close");
-  var button = document.getElementById("stock-cost-btn");
+  var viewBtn = document.getElementById("stock-cost-btn");
+  var refreshBtn = document.getElementById("stock-cost-refresh-btn");
+  var actionInput = document.getElementById("stock-cost-action");
   var results = document.getElementById("stock-cost-results");
   var timer = null;
   var value = 0;
+  var currentAction = "view";
+
+  function setButtonsDisabled(disabled) {
+    if (viewBtn) viewBtn.disabled = disabled;
+    if (refreshBtn) refreshBtn.disabled = disabled;
+  }
 
   function setProgress(n) {
     value = Math.max(1, Math.min(99, Math.round(n)));
@@ -20,21 +29,22 @@
     if (label) label.textContent = value + "%";
   }
 
-  function showOverlay() {
+  function showOverlay(isRefresh) {
     if (!overlay) return;
     overlay.hidden = false;
     overlay.classList.remove("is-done", "is-error");
     if (closeBtn) closeBtn.hidden = true;
-    if (statusEl) {
-      var groupSelect = form.querySelector('#g_code');
-      var groupLabel = "";
-      if (groupSelect && groupSelect.value) {
-        groupLabel = " للمجموعة المحددة";
-      }
-      statusEl.textContent =
-        "جاري جلب التكلفة من النظام" + groupLabel + "… قد يستغرق دقيقة أو أكثر.";
+    if (titleEl) {
+      titleEl.textContent = isRefresh ? "تحديث من النظام" : "عرض من التخزين";
     }
-    setProgress(8);
+    if (statusEl) {
+      var groupSelect = form.querySelector("#g_code");
+      var groupLabel = groupSelect && groupSelect.value ? " للمجموعة المحددة" : "";
+      statusEl.textContent = isRefresh
+        ? "جاري جلب التكلفة من النظام" + groupLabel + "… قد يستغرق دقائق عند كل المجموعات."
+        : "جاري تجميع الإجماليات من التخزين المحلي…";
+    }
+    setProgress(isRefresh ? 8 : 35);
   }
 
   function stopTimer() {
@@ -44,12 +54,12 @@
     }
   }
 
-  function startTimer() {
+  function startTimer(isRefresh) {
     stopTimer();
-    value = 8;
+    value = isRefresh ? 8 : 35;
     timer = window.setInterval(function () {
-      if (value < 92) setProgress(value + Math.max(0.4, (92 - value) * 0.035));
-    }, 400);
+      if (value < 92) setProgress(value + Math.max(0.4, (92 - value) * (isRefresh ? 0.025 : 0.12)));
+    }, isRefresh ? 400 : 120);
   }
 
   function escapeHtml(text) {
@@ -85,6 +95,11 @@
       ? " | مجموعة " + escapeHtml(report.g_code) + (report.g_name ? " — " + escapeHtml(report.g_name) : "")
       : " | كل المجموعات";
 
+    var sourceLabel = report.source === "cache" ? "من التخزين" : "بعد التحديث";
+    var cacheLabel = report.cache_updated_display
+      ? " | لقطة " + escapeHtml(report.cache_updated_display)
+      : "";
+
     results.innerHTML =
       '<div class="panel panel-blue stock-cost-report">' +
       '<div class="panel-head stock-cost-report-head">' +
@@ -93,7 +108,10 @@
       '<p class="panel-sub">' +
       escapeHtml(report.item_total) + " صنف | قُيّم " + escapeHtml(report.items_valued) +
       (report.errors ? " | تعذّر " + escapeHtml(report.errors) : "") +
-      " | خلال " + escapeHtml(report.elapsed_sec) + " ث</p></div>" +
+      " | " + sourceLabel +
+      " | خلال " + escapeHtml(report.elapsed_sec) + " ث" +
+      cacheLabel +
+      "</p></div>" +
       '<div class="stock-cost-grand"><span class="stock-cost-grand-label">الإجمالي</span>' +
       '<strong class="stock-cost-grand-value mono">' + escapeHtml(report.grand_total_display) + "</strong></div>" +
       "</div>" +
@@ -105,13 +123,16 @@
       "</th></tr></tfoot></table></div></div>";
   }
 
-  form.addEventListener("submit", function (event) {
-    event.preventDefault();
-    if (button) button.disabled = true;
-    showOverlay();
-    startTimer();
+  function runAction(action) {
+    currentAction = action === "refresh" ? "refresh" : "view";
+    if (actionInput) actionInput.value = currentAction;
+    setButtonsDisabled(true);
+    showOverlay(currentAction === "refresh");
+    startTimer(currentAction === "refresh");
 
     var body = new FormData(form);
+    body.set("action", currentAction);
+
     fetch(form.action, {
       method: "POST",
       body: body,
@@ -143,12 +164,17 @@
         stopTimer();
         setProgress(100);
         if (overlay) overlay.classList.add("is-done");
-        if (statusEl) statusEl.textContent = "اكتمل الحساب بنجاح.";
+        if (statusEl) {
+          statusEl.textContent =
+            currentAction === "refresh"
+              ? "اكتمل التحديث وحُفظت اللقطة محلياً."
+              : "اكتمل العرض من التخزين.";
+        }
         renderReport(data.report);
         window.setTimeout(function () {
           if (overlay) overlay.hidden = true;
-          if (button) button.disabled = false;
-        }, 500);
+          setButtonsDisabled(false);
+        }, 450);
       })
       .catch(function (err) {
         stopTimer();
@@ -156,14 +182,24 @@
         if (statusEl) statusEl.textContent = err.message || "حدث خطأ أثناء الحساب.";
         if (label) label.textContent = "!";
         if (closeBtn) closeBtn.hidden = false;
-        if (button) button.disabled = false;
+        setButtonsDisabled(false);
       });
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var submitter = event.submitter;
+    var action =
+      (submitter && submitter.getAttribute("data-action")) ||
+      (actionInput && actionInput.value) ||
+      "view";
+    runAction(action);
   });
 
   if (closeBtn) {
     closeBtn.addEventListener("click", function () {
       if (overlay) overlay.hidden = true;
-      if (button) button.disabled = false;
+      setButtonsDisabled(false);
     });
   }
 })();

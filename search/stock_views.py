@@ -11,7 +11,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from .api_client import ApiClientError, aggregate_group_stock_cost
-from .models import ItemBarcode, ItemGroup
+from .models import ItemBarcode, ItemGroup, ItemStockValue
 from .validators import ValidationError, resolve_warehouse
 
 _GROUP_RE = re.compile(r'^[0-9A-Za-z_\-]{1,64}$')
@@ -37,7 +37,24 @@ def _resolve_group(raw: str | None) -> str:
     return selected
 
 
+def _wants_refresh(data) -> bool:
+    action = str(data.get('action') or '').strip().lower()
+    if action in {'refresh', 'live', 'sync'}:
+        return True
+    refresh = str(data.get('refresh') or '').strip().lower()
+    return refresh in {'1', 'true', 'yes', 'on'}
+
+
 def _page_context(*, warehouses, groups, warehouse, g_code, error='', report=None):
+    cache_hint = ''
+    latest = (
+        ItemStockValue.objects.filter(warehouse=warehouse)
+        .order_by('-updated_at')
+        .values_list('updated_at', flat=True)
+        .first()
+    )
+    if latest:
+        cache_hint = latest.strftime('%Y-%m-%d %H:%M')
     return {
         'warehouses': warehouses,
         'groups': groups,
@@ -46,6 +63,7 @@ def _page_context(*, warehouses, groups, warehouse, g_code, error='', report=Non
         'error': error,
         'report': report,
         'index_count': ItemBarcode.objects.count(),
+        'cache_updated_display': cache_hint,
     }
 
 
@@ -90,8 +108,13 @@ def stock_cost_report(request):
     error = ''
 
     if request.method == 'POST':
+        refresh = _wants_refresh(data)
         try:
-            report = aggregate_group_stock_cost(warehouse, g_code=g_code or None)
+            report = aggregate_group_stock_cost(
+                warehouse,
+                g_code=g_code or None,
+                refresh=refresh,
+            )
             if wants_json:
                 return JsonResponse({'ok': True, 'report': report})
         except ApiClientError as exc:

@@ -108,6 +108,47 @@ class StockCostReportTests(TestCase):
             barcode='3', item_code='B1', name='تمر', unit='كيلو', g_code='G2'
         )
 
+    def test_cached_aggregate_is_instant(self):
+        from decimal import Decimal
+
+        from search.api_client import aggregate_group_stock_cost_cached
+        from search.models import ItemStockValue
+
+        ItemStockValue.objects.create(
+            warehouse='60',
+            item_code='A1',
+            g_code='G1',
+            quantity=Decimal('10'),
+            unit_cost=Decimal('5'),
+            total_cost=Decimal('50'),
+        )
+        ItemStockValue.objects.create(
+            warehouse='60',
+            item_code='A2',
+            g_code='G1',
+            quantity=Decimal('2'),
+            unit_cost=Decimal('10'),
+            total_cost=Decimal('20'),
+        )
+        ItemStockValue.objects.create(
+            warehouse='60',
+            item_code='B1',
+            g_code='G2',
+            quantity=Decimal('1'),
+            unit_cost=Decimal('100'),
+            total_cost=Decimal('100'),
+        )
+        report = aggregate_group_stock_cost_cached('60')
+        self.assertEqual(report['source'], 'cache')
+        self.assertEqual(report['grand_total'], 170.0)
+        self.assertEqual(len(report['rows']), 2)
+        g1 = next(r for r in report['rows'] if r['g_code'] == 'G1')
+        self.assertEqual(g1['total_cost'], 70.0)
+
+        filtered = aggregate_group_stock_cost_cached('60', g_code='G1')
+        self.assertEqual(filtered['grand_total'], 70.0)
+        self.assertEqual(filtered['g_code'], 'G1')
+
     def test_stock_cost_page_requires_login(self):
         self.client.logout()
         response = self.client.get(reverse('stock_cost'))
@@ -141,11 +182,13 @@ class StockCostReportTests(TestCase):
             'item_total': 3,
             'items_valued': 2,
             'errors': 0,
-            'elapsed_sec': 1.2,
+            'elapsed_sec': 0.01,
+            'source': 'cache',
+            'cache_updated_display': '2026-07-27 01:00',
         }
         response = self.client.post(
             reverse('stock_cost'),
-            {'warehouse': '60', 'g_code': 'G1'},
+            {'warehouse': '60', 'g_code': 'G1', 'action': 'view'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
             HTTP_ACCEPT='application/json',
         )
@@ -153,12 +196,38 @@ class StockCostReportTests(TestCase):
         payload = response.json()
         self.assertTrue(payload['ok'])
         self.assertEqual(payload['report']['grand_total'], 100.5)
-        mocked.assert_called_once_with('60', g_code='G1')
+        mocked.assert_called_once_with('60', g_code='G1', refresh=False)
+
+    @patch('search.stock_views.aggregate_group_stock_cost')
+    def test_stock_cost_refresh_passes_flag(self, mocked):
+        mocked.return_value = {
+            'warehouse': '60',
+            'g_code': '',
+            'g_name': '',
+            'rows': [],
+            'grand_total': 0,
+            'grand_total_display': '0.00',
+            'item_total': 0,
+            'items_valued': 0,
+            'errors': 0,
+            'elapsed_sec': 2.5,
+            'source': 'live',
+        }
+        response = self.client.post(
+            reverse('stock_cost'),
+            {'warehouse': '60', 'action': 'refresh'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with('60', g_code=None, refresh=True)
 
     def test_stock_cost_page_shows_group_select(self):
         response = self.client.get(reverse('stock_cost'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'كل المجموعات')
+        self.assertContains(response, 'عرض من التخزين')
+        self.assertContains(response, 'تحديث من النظام')
         self.assertContains(response, 'G1')
         self.assertContains(response, 'ألبان')
 

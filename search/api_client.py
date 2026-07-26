@@ -5,16 +5,21 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from typing import Any
 
 import requests
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Count, Max, Q, Sum
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+_thread_local = threading.local()
 
 
 class ApiClientError(Exception):
@@ -75,11 +80,11 @@ def _headers() -> dict[str, str]:
     return headers
 
 
-def _request_get(url: str, params: dict, timeout: int | None = None) -> requests.Response:
+def _request_get(url: str, params: dict, timeout: int | None = None, retries: int | None = None) -> requests.Response:
     """GET مع إعادة محاولة عند البطء أو انقطاع الشبكة."""
     cfg = settings.EXTERNAL_API
     timeout = timeout if timeout is not None else cfg.get('TIMEOUT', 90)
-    retries = int(cfg.get('RETRIES', 2))
+    retries = int(cfg.get('RETRIES', 2) if retries is None else retries)
     last_exc: Exception | None = None
 
     for attempt in range(retries + 1):
@@ -184,7 +189,13 @@ def search_prices_by_code(item_code: str, price_w_code: str | None = None) -> li
     ]
 
 
-def fetch_qty_by_code(item_code: str, w_code: str | None = None, timeout: int | None = None) -> list[dict]:
+def fetch_qty_by_code(
+    item_code: str,
+    w_code: str | None = None,
+    timeout: int | None = None,
+    *,
+    fast: bool = False,
+) -> list[dict]:
     """جلب الكمية المتاحة عبر GetItemQtyCost."""
     cfg = settings.EXTERNAL_API
     url = _safe_url('/GetItemQtyCost')
@@ -195,7 +206,13 @@ def fetch_qty_by_code(item_code: str, w_code: str | None = None, timeout: int | 
         'w_code': w_code or cfg.get('DEFAULT_WAREHOUSE') or '60',
     }
 
-    response = _request_get(url, params, timeout=timeout if timeout is not None else cfg.get('QTY_TIMEOUT', 45))
+    req_timeout = timeout if timeout is not None else cfg.get('QTY_TIMEOUT', 45)
+    if fast:
+        session = _stock_session()
+        response = session.get(url, params=params, headers=_headers(), timeout=req_timeout)
+        response.raise_for_status()
+    else:
+        response = _request_get(url, params, timeout=req_timeout)
 
     try:
         payload = response.json()
@@ -251,6 +268,21 @@ def fetch_qty_by_code(item_code: str, w_code: str | None = None, timeout: int | 
             }
         )
     return rows
+
+
+def _stock_session() -> requests.Session:
+    session = getattr(_thread_local, 'stock_session', None)
+    if session is None:
+        session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=48,
+            pool_maxsize=48,
+            max_retries=0,
+        )
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        _thread_local.stock_session = session
+    return session
 
 
 def get_unit_meta(item_code: str) -> dict[str, dict]:
@@ -871,17 +903,40 @@ def _item_group_map() -> dict[str, dict[str, str]]:
     return mapping
 
 
-def aggregate_group_stock_cost(
+def _group_names_map() -> dict[str, str]:
+    from .models import ItemGroup
+
+    return {
+        g.g_code: g.g_name
+        for g in ItemGroup.objects.all().only('g_code', 'g_name')
+    }
+
+
+def _validate_stock_scope(warehouse: str, selected_group: str, item_map: dict[str, dict[str, str]]) -> None:
+    if not warehouse:
+        raise ApiClientError('المخزن مطلوب لحساب تكلفة المخزون.')
+    if not item_map:
+        raise ApiClientError('الفهرس فارغ. زامِن الأصناف أولاً ثم أعد المحاولة.')
+
+    if not selected_group:
+        return
+
+    group_names = _group_names_map()
+    if selected_group not in group_names:
+        has_items = any(
+            (meta.get('g_code') or '').strip() == selected_group
+            for meta in item_map.values()
+        )
+        if not has_items:
+            raise ApiClientError('المجموعة المحددة غير موجودة في الفهرس.')
+
+
+def aggregate_group_stock_cost_cached(
     warehouse: str,
     g_code: str | None = None,
-    max_workers: int = 16,
 ) -> dict[str, Any]:
-    """
-    إجمالي تكلفة المخزون حسب المجموعة لمخزن محدد.
-    يمكن تصفية مجموعة واحدة عبر g_code.
-    يعتمد الفهرس المحلي للمجموعات + GetItemQtyCost لكل صنف.
-    """
-    from .models import ItemGroup
+    """إجماليات فورية من التخزين المحلي ItemStockValue."""
+    from .models import ItemStockValue
 
     started = time.monotonic()
     warehouse = str(warehouse or '').strip()
@@ -889,22 +944,91 @@ def aggregate_group_stock_cost(
     if not warehouse:
         raise ApiClientError('المخزن مطلوب لحساب تكلفة المخزون.')
 
-    item_map = _item_group_map()
-    if not item_map:
-        raise ApiClientError('الفهرس فارغ. زامِن الأصناف أولاً ثم أعد المحاولة.')
+    qs = ItemStockValue.objects.filter(warehouse=warehouse)
+    if selected_group:
+        qs = qs.filter(g_code=selected_group)
 
-    group_names = {
-        g.g_code: g.g_name
-        for g in ItemGroup.objects.all().only('g_code', 'g_name')
-    }
-    if selected_group and selected_group != '—' and selected_group not in group_names:
-        # اسمح بمجموعات موجودة في الفهرس حتى لو لم تُزامَن أسماؤها
-        has_items = any(
-            (meta.get('g_code') or '').strip() == selected_group
-            for meta in item_map.values()
+    cache_updated = qs.aggregate(m=Max('updated_at'))['m']
+    if cache_updated is None:
+        raise ApiClientError(
+            'لا توجد لقطة تكلفة محفوظة لهذا المخزن/المجموعة. '
+            'اضغط «تحديث من النظام» مرة واحدة ثم استخدم «عرض من التخزين».'
         )
-        if not has_items:
-            raise ApiClientError('المجموعة المحددة غير موجودة في الفهرس.')
+
+    group_names = _group_names_map()
+    grouped = (
+        qs.values('g_code')
+        .annotate(
+            item_count=Count('id'),
+            items_valued=Count('id', filter=Q(total_cost__gt=0) | Q(quantity__gt=0)),
+            total_cost=Sum('total_cost'),
+            total_qty=Sum('quantity'),
+        )
+        .order_by()
+    )
+
+    rows: list[dict[str, Any]] = []
+    for raw in grouped:
+        row_g = (raw.get('g_code') or '').strip() or '—'
+        total_cost = float(raw.get('total_cost') or 0)
+        total_qty = float(raw.get('total_qty') or 0)
+        rows.append(
+            {
+                'g_code': row_g,
+                'g_name': group_names.get(row_g, '') if row_g != '—' else 'بدون مجموعة',
+                'item_count': int(raw.get('item_count') or 0),
+                'items_valued': int(raw.get('items_valued') or 0),
+                'total_cost': round(total_cost, 2),
+                'total_qty': round(total_qty, 4),
+                'total_cost_display': _fmt_cost(total_cost),
+                'total_qty_display': _fmt_qty(total_qty),
+            }
+        )
+    rows.sort(key=lambda r: (-float(r['total_cost']), str(r['g_code'])))
+
+    grand = round(sum(float(r['total_cost']) for r in rows), 2)
+    item_total = sum(int(r['item_count']) for r in rows)
+    valued_items = sum(int(r['items_valued']) for r in rows)
+    selected_name = ''
+    if selected_group:
+        selected_name = group_names.get(selected_group, '') or selected_group
+
+    if timezone.is_naive(cache_updated):
+        cache_updated = timezone.make_aware(cache_updated, timezone.get_current_timezone())
+
+    return {
+        'warehouse': warehouse,
+        'g_code': selected_group,
+        'g_name': selected_name,
+        'rows': rows,
+        'grand_total': grand,
+        'grand_total_display': _fmt_cost(grand),
+        'item_total': item_total,
+        'items_valued': valued_items,
+        'errors': 0,
+        'elapsed_sec': round(time.monotonic() - started, 3),
+        'source': 'cache',
+        'cache_updated_at': cache_updated.isoformat(),
+        'cache_updated_display': timezone.localtime(cache_updated).strftime('%Y-%m-%d %H:%M'),
+    }
+
+
+def refresh_warehouse_stock_values(
+    warehouse: str,
+    g_code: str | None = None,
+    max_workers: int | None = None,
+) -> dict[str, Any]:
+    """
+    جلب GetItemQtyCost لكل صنف (أو مجموعة) وحفظ اللقطة محلياً ثم إرجاع الإجماليات.
+    أبطأ مرة واحدة — بعدها العرض من التخزين فوري.
+    """
+    from .models import ItemStockValue
+
+    started = time.monotonic()
+    warehouse = str(warehouse or '').strip()
+    selected_group = str(g_code or '').strip()
+    item_map = _item_group_map()
+    _validate_stock_scope(warehouse, selected_group, item_map)
 
     if selected_group:
         item_map = {
@@ -915,74 +1039,90 @@ def aggregate_group_stock_cost(
         if not item_map:
             raise ApiClientError('لا توجد أصناف لهذه المجموعة في الفهرس.')
 
-    totals: dict[str, dict[str, Any]] = {}
+    cfg = settings.EXTERNAL_API or {}
+    bulk_timeout = int(cfg.get('STOCK_COST_TIMEOUT', 12) or 12)
+    default_workers = int(cfg.get('STOCK_COST_WORKERS', 40) or 40)
+    workers = max(1, min(int(max_workers or default_workers), 64))
+    codes = list(item_map.keys())
     errors = 0
-    valued_items = 0
-    bulk_timeout = int(
-        getattr(settings, 'EXTERNAL_API', {}).get('STOCK_COST_TIMEOUT', 20) or 20
-    )
-    workers = max(1, min(int(max_workers or 16), 24))
+    now = timezone.now()
+    pending: list = []
 
     def _one(item_code: str) -> tuple[str, float, float, bool]:
         try:
-            rows = fetch_qty_by_code(item_code, w_code=warehouse, timeout=bulk_timeout)
+            rows = fetch_qty_by_code(
+                item_code,
+                w_code=warehouse,
+                timeout=bulk_timeout,
+                fast=True,
+            )
             value, qty = _stock_value_from_qty_rows(rows)
             return item_code, value, qty, True
         except Exception:
             return item_code, 0.0, 0.0, False
 
-    codes = list(item_map.keys())
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for item_code, value, qty, ok in pool.map(_one, codes, chunksize=8):
-            meta = item_map[item_code]
-            row_g = meta.get('g_code') or '—'
-            bucket = totals.get(row_g)
-            if bucket is None:
-                bucket = {
-                    'g_code': row_g,
-                    'g_name': group_names.get(row_g, '') if row_g != '—' else 'بدون مجموعة',
-                    'item_count': 0,
-                    'items_valued': 0,
-                    'total_cost': 0.0,
-                    'total_qty': 0.0,
-                }
-                totals[row_g] = bucket
-            bucket['item_count'] += 1
+        for item_code, value, qty, ok in pool.map(_one, codes, chunksize=16):
             if not ok:
                 errors += 1
                 continue
-            bucket['items_valued'] += 1
-            bucket['total_cost'] += value
-            bucket['total_qty'] += qty
-            if value or qty:
-                valued_items += 1
+            meta = item_map[item_code]
+            unit_cost = (value / qty) if qty else 0.0
+            pending.append(
+                ItemStockValue(
+                    warehouse=warehouse,
+                    item_code=item_code,
+                    g_code=(meta.get('g_code') or '').strip(),
+                    quantity=Decimal(str(round(qty, 4))),
+                    unit_cost=Decimal(str(round(unit_cost, 4))),
+                    total_cost=Decimal(str(round(value, 4))),
+                    updated_at=now,
+                )
+            )
+            if len(pending) >= 500:
+                ItemStockValue.objects.bulk_create(
+                    pending,
+                    update_conflicts=True,
+                    unique_fields=['warehouse', 'item_code'],
+                    update_fields=['g_code', 'quantity', 'unit_cost', 'total_cost', 'updated_at'],
+                )
+                pending.clear()
 
-    rows = sorted(
-        totals.values(),
-        key=lambda r: (-float(r['total_cost']), str(r['g_code'])),
-    )
-    for row in rows:
-        row['total_cost'] = round(float(row['total_cost']), 2)
-        row['total_qty'] = round(float(row['total_qty']), 4)
-        row['total_cost_display'] = _fmt_cost(row['total_cost'])
-        row['total_qty_display'] = _fmt_qty(row['total_qty'])
+    if pending:
+        ItemStockValue.objects.bulk_create(
+            pending,
+            update_conflicts=True,
+            unique_fields=['warehouse', 'item_code'],
+            update_fields=['g_code', 'quantity', 'unit_cost', 'total_cost', 'updated_at'],
+        )
 
-    grand = round(sum(float(r['total_cost']) for r in rows), 2)
-    selected_name = ''
-    if selected_group:
-        selected_name = group_names.get(selected_group, '') or selected_group
-    return {
-        'warehouse': warehouse,
-        'g_code': selected_group,
-        'g_name': selected_name,
-        'rows': rows,
-        'grand_total': grand,
-        'grand_total_display': _fmt_cost(grand),
-        'item_total': len(codes),
-        'items_valued': valued_items,
-        'errors': errors,
-        'elapsed_sec': round(time.monotonic() - started, 1),
-    }
+    report = aggregate_group_stock_cost_cached(warehouse, g_code=selected_group or None)
+    report['source'] = 'live'
+    report['errors'] = errors
+    report['elapsed_sec'] = round(time.monotonic() - started, 1)
+    report['refreshed_items'] = len(codes) - errors
+    return report
+
+
+def aggregate_group_stock_cost(
+    warehouse: str,
+    g_code: str | None = None,
+    *,
+    refresh: bool = False,
+    max_workers: int | None = None,
+) -> dict[str, Any]:
+    """
+    إجمالي تكلفة المخزون حسب المجموعة لمخزن محدد.
+    refresh=False → من التخزين المحلي (فائق السرعة).
+    refresh=True → تحديث من Onyx ثم عرض اللقطة.
+    """
+    if refresh:
+        return refresh_warehouse_stock_values(
+            warehouse,
+            g_code=g_code,
+            max_workers=max_workers,
+        )
+    return aggregate_group_stock_cost_cached(warehouse, g_code=g_code)
 
 
 # توافق مع الاستدعاءات القديمة

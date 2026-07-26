@@ -16,7 +16,11 @@
         {{ report.item_total }} صنف |
         قُيّم {{ report.items_valued }} |
         {% if report.errors %}تعذّر {{ report.errors }} | {% endif %}
+        {% if report.source == 'cache' %}من التخزين{% else %}بعد التحديث{% endif %} |
         خلال {{ report.elapsed_sec }} ث
+        {% if report.cache_updated_display %}
+          | لقطة {{ report.cache_updated_display }}
+        {% endif %}
       </p>
     </div>
     <div class="stock-cost-grand">
