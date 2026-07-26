@@ -37,6 +37,7 @@ _SKIP_FIELDS = frozenset({
     'new_password2',
     'csrfmiddlewaretoken',
     'sync_secret',
+    'stock_token',
 })
 
 

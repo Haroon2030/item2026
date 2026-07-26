@@ -148,17 +148,13 @@ class RateLimitMiddleware:
                 )
 
         if path.rstrip('/').endswith('stock-cost') and request.method == 'POST':
-            action = str(request.POST.get('action') or '').strip().lower()
-            refresh_flag = str(request.POST.get('refresh') or '').strip().lower()
-            is_refresh = action in {'refresh', 'live', 'sync'} or refresh_flag in {
-                '1',
-                'true',
-                'yes',
-                'on',
-            }
+            # لا تعتمد على request.POST هنا؛ الهيدر كافٍ لتمييز التحديث
+            action_hdr = str(request.headers.get('X-Stock-Cost-Action') or '').strip().lower()
+            is_refresh = action_hdr in {'refresh', 'live', 'sync'}
             wants_json = (
                 request.headers.get('X-Requested-With') == 'XMLHttpRequest'
                 or 'application/json' in (request.headers.get('Accept') or '')
+                or True
             )
             if is_refresh:
                 limit = int(getattr(settings, 'RATE_LIMIT_STOCK_COST_PER_HOUR', 8))

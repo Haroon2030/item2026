@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
+from django.core import signing
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
@@ -15,6 +17,7 @@ from .models import ItemBarcode, ItemGroup, ItemStockValue
 from .validators import ValidationError, resolve_warehouse
 
 _GROUP_RE = re.compile(r'^[0-9A-Za-z_\-]{1,64}$')
+_TOKEN_SALT = 'stock-cost-v1'
 
 
 def _warehouses() -> list[dict]:
@@ -46,7 +49,6 @@ def _wants_refresh(data) -> bool:
 
 
 def _wants_json(request) -> bool:
-    """POST من الواجهة يجب أن يبقى JSON حتى لو حُذفت بعض الهيدرز على البروكسي."""
     if request.method == 'POST':
         return True
     return (
@@ -55,7 +57,36 @@ def _wants_json(request) -> bool:
     )
 
 
-def _page_context(*, warehouses, groups, warehouse, g_code, error='', report=None):
+def _make_stock_token(user) -> str:
+    return signing.dumps(
+        {'uid': int(user.pk), 'u': str(user.get_username())},
+        salt=_TOKEN_SALT,
+    )
+
+
+def _user_from_stock_token(raw: str | None):
+    token = (raw or '').strip()
+    if not token:
+        return None
+    max_age = int(getattr(settings, 'SESSION_COOKIE_AGE', 28800) or 28800)
+    try:
+        payload = signing.loads(token, salt=_TOKEN_SALT, max_age=max_age)
+        uid = int(payload.get('uid'))
+    except (signing.BadSignature, signing.SignatureExpired, TypeError, ValueError, AttributeError):
+        return None
+    return get_user_model().objects.filter(pk=uid, is_active=True).first()
+
+
+def _resolve_stock_user(request):
+    """جلسة عادية، أو رمز صفحة موقّع إن لم تُرسل كعكة الجلسة مع fetch."""
+    if request.user.is_authenticated:
+        return request.user
+    if request.method == 'POST':
+        return _user_from_stock_token(request.POST.get('stock_token'))
+    return None
+
+
+def _page_context(*, warehouses, groups, warehouse, g_code, error='', report=None, stock_token=''):
     cache_hint = ''
     try:
         latest = (
@@ -77,20 +108,26 @@ def _page_context(*, warehouses, groups, warehouse, g_code, error='', report=Non
         'report': report,
         'index_count': ItemBarcode.objects.count(),
         'cache_updated_display': cache_hint,
+        'stock_token': stock_token,
     }
 
 
 @require_http_methods(['GET', 'POST'])
 def stock_cost_report(request):
     wants_json = _wants_json(request)
-    if not request.user.is_authenticated:
+    user = _resolve_stock_user(request)
+    if user is None:
         if wants_json:
             return JsonResponse(
-                {'ok': False, 'error': 'انتهت الجلسة. أعد تسجيل الدخول ثم حاول مجدداً.'},
+                {
+                    'ok': False,
+                    'error': 'تعذّر التحقق من الهوية. حدّث الصفحة ثم أعد المحاولة.',
+                },
                 status=401,
             )
         return redirect_to_login(request.get_full_path())
 
+    stock_token = _make_stock_token(user)
     warehouses = _warehouses()
     groups = _groups()
     default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
@@ -118,6 +155,7 @@ def stock_cost_report(request):
                 warehouse=warehouse,
                 g_code='',
                 error=str(exc),
+                stock_token=stock_token,
             ),
         )
 
@@ -156,5 +194,6 @@ def stock_cost_report(request):
             g_code=g_code,
             error=error,
             report=report,
+            stock_token=stock_token,
         ),
     )

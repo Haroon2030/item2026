@@ -15,6 +15,7 @@
   <form method="post" action="{% url 'stock_cost' %}" class="stock-cost-form panel panel-blue" id="stock-cost-form">
     {% csrf_token %}
     <input type="hidden" name="action" id="stock-cost-action" value="view">
+    <input type="hidden" name="stock_token" id="stock-cost-token" value="{{ stock_token }}">
     <div class="stock-cost-form-row">
       <div class="field warehouse-field">
         <label for="warehouse">

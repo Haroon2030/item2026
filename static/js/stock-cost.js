@@ -183,19 +183,25 @@
   function unexpectedMessage(res, text) {
     var preview = String(text || "")
       .replace(/\s+/g, " ")
-      .slice(0, 120);
-    if (res.status === 401 || res.status === 403) {
-      return "انتهت الجلسة أو رُفض الطلب. حدّث الصفحة وسجّل الدخول ثم أعد المحاولة.";
+      .slice(0, 160);
+    if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+      return "تعذّر التحقق من الهوية. حدّث الصفحة ثم أعد المحاولة.";
     }
-    if (res.status === 502 || res.status === 504 || res.status === 500) {
+    if (res.status === 401 || res.status === 403) {
+      return "تعذّر التحقق من الهوية أو رمز الحماية. حدّث الصفحة ثم أعد المحاولة.";
+    }
+    if (res.status === 429) {
+      return "تم تجاوز حد الطلبات. انتظر قليلاً ثم أعد المحاولة.";
+    }
+    if (res.status === 502 || res.status === 504 || res.status === 500 || res.status === 524) {
       return (
         "انتهت مهلة الخادم أو فشل التحديث (رمز " +
         res.status +
         "). اختر مجموعة أصغر أو أعد المحاولة."
       );
     }
-    if (res.redirected || /login|تسجيل الدخول|<html/i.test(preview)) {
-      return "انتهت الجلسة. أعد تسجيل الدخول ثم حاول مجدداً.";
+    if (/login\/|تسجيل الدخول/i.test(preview) && /<form/i.test(preview)) {
+      return "تعذّر التحقق من الهوية. حدّث الصفحة ثم أعد المحاولة.";
     }
     return (
       "استجابة غير متوقعة من الخادم (رمز " +
@@ -234,15 +240,22 @@
     var body = new FormData(form);
     body.set("action", currentAction);
 
+    var headers = {
+      "X-Requested-With": "XMLHttpRequest",
+      Accept: "application/json",
+      "X-Stock-Cost-Action": currentAction,
+    };
+    var csrfInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (csrfInput && csrfInput.value) {
+      headers["X-CSRFToken"] = csrfInput.value;
+    }
+
     var fetchOpts = {
       method: "POST",
       body: body,
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        Accept: "application/json",
-      },
+      headers: headers,
       credentials: "same-origin",
-      redirect: "follow",
+      redirect: "manual",
     };
     if (abortCtrl) fetchOpts.signal = abortCtrl.signal;
 
@@ -256,6 +269,9 @@
 
     fetch(form.action || window.location.href, fetchOpts)
       .then(function (res) {
+        if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+          throw new Error("تعذّر التحقق من الهوية. حدّث الصفحة ثم أعد المحاولة.");
+        }
         return res.text().then(function (text) {
           var data = null;
           try {

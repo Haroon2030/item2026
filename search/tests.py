@@ -240,8 +240,45 @@ class StockCostReportTests(TestCase):
         self.assertContains(response, 'كل المجموعات')
         self.assertContains(response, 'عرض من التخزين')
         self.assertContains(response, 'تحديث من النظام')
+        self.assertContains(response, 'name="stock_token"')
         self.assertContains(response, 'G1')
         self.assertContains(response, 'ألبان')
+
+    @patch('search.stock_views.aggregate_group_stock_cost')
+    def test_stock_cost_accepts_signed_page_token_without_session(self, mocked):
+        from search.stock_views import _make_stock_token
+
+        mocked.return_value = {
+            'warehouse': '60',
+            'g_code': 'G1',
+            'g_name': 'ألبان',
+            'rows': [],
+            'grand_total': 0,
+            'grand_total_display': '0.00',
+            'item_total': 0,
+            'items_valued': 0,
+            'errors': 0,
+            'elapsed_sec': 0.2,
+            'source': 'live',
+        }
+        token = _make_stock_token(self.user)
+        self.client.logout()
+        response = self.client.post(
+            reverse('stock_cost'),
+            {
+                'warehouse': '60',
+                'g_code': 'G1',
+                'action': 'refresh',
+                'stock_token': token,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            HTTP_ACCEPT='application/json',
+            HTTP_X_STOCK_COST_ACTION='refresh',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        mocked.assert_called_once()
+
 
 
 class AuthenticationTests(TestCase):
