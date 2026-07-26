@@ -55,31 +55,3 @@ class ItemGroup(models.Model):
 
     def __str__(self) -> str:
         return f'{self.g_code} — {self.g_name}'
-
-
-class ItemStockValue(models.Model):
-    """لقطة تكلفة/كمية صنف حسب المخزن لتسريع تقارير الإجماليات."""
-
-    warehouse = models.CharField('المخزن', max_length=16, db_index=True)
-    item_code = models.CharField('رقم الصنف', max_length=64, db_index=True)
-    g_code = models.CharField('رمز المجموعة', max_length=64, blank=True, default='', db_index=True)
-    quantity = models.DecimalField('الكمية', max_digits=18, decimal_places=4, default=0)
-    unit_cost = models.DecimalField('تكلفة الوحدة', max_digits=18, decimal_places=4, default=0)
-    total_cost = models.DecimalField('إجمالي التكلفة', max_digits=18, decimal_places=4, default=0)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'رصيد تكلفة صنف'
-        verbose_name_plural = 'أرصدة تكلفة الأصناف'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['warehouse', 'item_code'],
-                name='uniq_warehouse_item_stock',
-            ),
-        ]
-        indexes = [
-            models.Index(fields=['warehouse', 'g_code'], name='idx_stock_wh_group'),
-        ]
-
-    def __str__(self) -> str:
-        return f'{self.warehouse}:{self.item_code}'

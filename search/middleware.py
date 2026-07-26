@@ -147,37 +147,6 @@ class RateLimitMiddleware:
                     content_type='text/plain; charset=utf-8',
                 )
 
-        if path.rstrip('/').endswith('stock-cost') and request.method == 'POST':
-            # لا تعتمد على request.POST هنا؛ الهيدر كافٍ لتمييز التحديث
-            action_hdr = str(request.headers.get('X-Stock-Cost-Action') or '').strip().lower()
-            is_refresh = action_hdr in {'refresh', 'live', 'sync'}
-            wants_json = (
-                request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-                or 'application/json' in (request.headers.get('Accept') or '')
-                or True
-            )
-            if is_refresh:
-                limit = int(getattr(settings, 'RATE_LIMIT_STOCK_COST_PER_HOUR', 8))
-                key, window, message = (
-                    f'stockcost-refresh:{ip}',
-                    3600,
-                    'تم تجاوز حد تحديث تكلفة المخزون من النظام. حاول لاحقاً.',
-                )
-            else:
-                limit = int(getattr(settings, 'RATE_LIMIT_STOCK_COST_VIEW_PER_MINUTE', 60))
-                key, window, message = (
-                    f'stockcost-view:{ip}',
-                    60,
-                    'طلبات عرض كثيرة. انتظر قليلاً ثم أعد المحاولة.',
-                )
-            if not self._allow(key, limit, window):
-                if wants_json:
-                    return JsonResponse({'ok': False, 'error': message}, status=429)
-                return HttpResponseForbidden(
-                    message,
-                    content_type='text/plain; charset=utf-8',
-                )
-
         if request.method == 'GET' and request.GET.get('q'):
             limit = int(getattr(settings, 'RATE_LIMIT_SEARCH_PER_MINUTE', 60))
             if not self._allow(f'search:{ip}', limit, 60):
