@@ -11,11 +11,12 @@ from .api_client import (
     index_meta_incomplete,
     lookup_by_barcode,
     lookup_by_item_code,
+    lookup_by_name,
     search_item_details,
     sync_barcode_index,
 )
 from .models import ItemBarcode
-from .validators import ValidationError, resolve_warehouse, sanitize_search_query
+from .validators import ValidationError, looks_like_item_code, resolve_warehouse, sanitize_search_query
 
 
 def _warehouses() -> list[dict]:
@@ -171,6 +172,7 @@ def item_search(request):
         try:
             barcode_hits = lookup_by_barcode(query)
             code_hits = [] if barcode_hits else lookup_by_item_code(query)
+            name_hits = [] if barcode_hits or code_hits else lookup_by_name(query)
 
             if barcode_hits:
                 match_type = 'barcode'
@@ -201,8 +203,28 @@ def item_search(request):
                     prices = []
                 if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
                     items = _items_from_prices(prices, group_info) or items
-            else:
-                # احتياطي: إرسال النص للنظام كرقم صنف
+            elif len(name_hits) == 1:
+                # اسم واحد مطابق → اعرض تفاصيله كصنف محدد
+                match_type = 'name'
+                item_code = name_hits[0]['code']
+                items = lookup_by_item_code(item_code) or name_hits
+                group_info = {
+                    'g_code': items[0].get('g_code', ''),
+                    'g_name': items[0].get('g_name', ''),
+                }
+                try:
+                    prices = search_item_details(item_code, warehouse=warehouse)
+                except ApiClientError:
+                    prices = []
+                if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                    items = _items_from_prices(prices, group_info) or items
+            elif len(name_hits) > 1:
+                # عدة أسماء → قائمة اختيار
+                match_type = 'name_list'
+                items = name_hits
+                prices = []
+            elif looks_like_item_code(query):
+                # احتياطي: إرسال النص للنظام كرقم صنف فقط
                 prices = search_item_details(query, warehouse=warehouse)
                 if prices:
                     item_code = str(prices[0].get('code') or '').strip() or query
@@ -215,6 +237,10 @@ def item_search(request):
                     error = (
                         'فهرس الباركود فارغ. اضغط «مزامنة» أو انتظر المزامنة التلقائية بعد النشر ثم أعد البحث.'
                     )
+            elif cache_count == 0:
+                error = (
+                    'فهرس الباركود فارغ. اضغط «مزامنة» أولاً ثم ابحث بالاسم أو الباركود.'
+                )
         except ApiClientError as exc:
             error = str(exc)
 

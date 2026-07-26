@@ -28,6 +28,10 @@ class SqlInjectionProtectionTests(TestCase):
         with self.assertRaises(ValidationError):
             sanitize_search_query("' OR 1=1--")
 
+    def test_sanitize_allows_arabic_item_names(self):
+        self.assertEqual(sanitize_search_query('حليب طازج'), 'حليب طازج')
+        self.assertEqual(sanitize_search_query('تمر (سكرة)'), 'تمر (سكرة)')
+
     def test_search_endpoint_blocks_sqli_query(self):
         response = self.client.get(reverse('item_search'), {'q': "' OR 1=1--"})
         self.assertEqual(response.status_code, 403)
@@ -35,6 +39,52 @@ class SqlInjectionProtectionTests(TestCase):
     def test_normal_barcode_search_still_allowed(self):
         response = self.client.get(reverse('item_search'), {'q': '06100'})
         self.assertEqual(response.status_code, 200)
+
+
+class NameSearchTests(TestCase):
+    def setUp(self):
+        from search.models import ItemBarcode
+
+        self.user = get_user_model().objects.create_user(
+            username='namesearcher',
+            password='StrongPassword123!',
+        )
+        self.client.force_login(self.user)
+        ItemBarcode.objects.create(
+            barcode='1001',
+            item_code='A100',
+            name='حليب طازج كامل الدسم',
+            unit='حبة',
+            pack_size='1',
+        )
+        ItemBarcode.objects.create(
+            barcode='1002',
+            item_code='A101',
+            name='حليب قليل الدسم',
+            unit='حبة',
+            pack_size='1',
+        )
+        ItemBarcode.objects.create(
+            barcode='2001',
+            item_code='B200',
+            name='تمر سكرة',
+            unit='كيلو',
+            pack_size='1',
+        )
+
+    def test_name_search_returns_matching_list(self):
+        response = self.client.get(reverse('item_search'), {'q': 'حليب'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['match_type'], 'name_list')
+        codes = {item['code'] for item in response.context['items']}
+        self.assertEqual(codes, {'A100', 'A101'})
+
+    def test_unique_name_resolves_single_item(self):
+        with patch('search.views.search_item_details', return_value=[]):
+            response = self.client.get(reverse('item_search'), {'q': 'تمر سكرة'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['match_type'], 'name')
+        self.assertEqual(response.context['items'][0]['code'], 'B200')
 
 
 class AuthenticationTests(TestCase):

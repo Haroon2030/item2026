@@ -788,6 +788,41 @@ def lookup_by_item_code(item_code: str) -> list[dict]:
     return _rows_to_item_dicts(best[u] for u in ordered_units)
 
 
+def lookup_by_name(name_query: str, limit: int = 50) -> list[dict]:
+    """
+    بحث جزئي باسم الصنف من الفهرس المحلي.
+    يرجع صنفاً واحداً لكل رقم صنف (مع تفضيل صف فيه باركود).
+    """
+    from .models import ItemBarcode
+
+    q = _normalize_text(name_query)
+    if len(q) < 2:
+        return []
+
+    rows = (
+        ItemBarcode.objects.filter(name__icontains=q)
+        .exclude(name='')
+        .order_by('name', 'item_code', '-barcode')[: max(limit * 8, 200)]
+    )
+    best: dict[str, object] = {}
+    ordered: list[str] = []
+    for row in rows:
+        code = (row.item_code or '').strip()
+        if not code:
+            continue
+        if code not in best:
+            best[code] = row
+            ordered.append(code)
+            if len(ordered) >= limit:
+                break
+            continue
+        prev = best[code]
+        if not (prev.barcode or '').strip() and (row.barcode or '').strip():
+            best[code] = row
+
+    return _rows_to_item_dicts(best[c] for c in ordered)
+
+
 # توافق مع الاستدعاءات القديمة
 def search_items(query: str) -> list[dict]:
     return search_prices_by_code(query)

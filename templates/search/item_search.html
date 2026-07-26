@@ -10,7 +10,7 @@
     </span>
     <div>
       <h2>بحث الأصناف</h2>
-      <p>اختر المخزن ثم امسح الباركود أو اكتب رقم الصنف</p>
+      <p>ابحث بالباركود أو رقم الصنف أو اسم الصنف</p>
     </div>
   </div>
 
@@ -35,10 +35,10 @@
     <div class="field query-field">
       <label for="q">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM7 7V5h10v2M8 12h2M12 12h4"/></svg>
-        الباركود / رقم الصنف
+        الباركود / رقم الصنف / الاسم
       </label>
       <div class="query-row">
-        <input id="q" type="search" name="q" value="{{ query }}" placeholder="باركود أو رقم الصنف…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
+        <input id="q" type="search" name="q" value="{{ query }}" placeholder="باركود أو رقم أو اسم الصنف…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
         <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا احترافي" aria-label="مسح الباركود بالكاميرا">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
@@ -140,10 +140,36 @@
   <section class="results">
     {% if items or prices %}
       <div class="results-topbar">
-        <span class="results-topbar-title">نتيجة البحث</span>
+        <span class="results-topbar-title">
+          {% if match_type == 'name_list' %}نتائج الاسم ({{ items|length }}){% else %}نتيجة البحث{% endif %}
+        </span>
         <a class="btn-new-search" href="{% url 'item_search' %}?warehouse={{ warehouse }}">بحث جديد</a>
       </div>
-      {% if selected_price %}
+
+      {% if match_type == 'name_list' %}
+        <div class="panel panel-blue name-results">
+          <div class="panel-head">
+            <span class="panel-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            </span>
+            <div>
+              <h3>اختر الصنف</h3>
+              <p class="panel-sub">تم العثور على أكثر من صنف للاسم «{{ query }}»</p>
+            </div>
+          </div>
+          <ul class="name-result-list">
+            {% for item in items %}
+              <li>
+                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&warehouse={{ warehouse|urlencode }}">
+                  <span class="name-result-code mono">{{ item.code }}</span>
+                  <span class="name-result-name">{{ item.name }}</span>
+                  {% if item.unit %}<span class="name-result-unit">{{ item.unit }}</span>{% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% elif selected_price %}
         <div class="panel panel-blue result-prices">
           <div class="panel-head result-combined-head">
             <span class="panel-ico" aria-hidden="true">
@@ -203,6 +229,29 @@
               </tbody>
             </table>
           </div>
+        </div>
+      {% elif items %}
+        <div class="panel panel-blue name-results">
+          <div class="panel-head">
+            <span class="panel-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            </span>
+            <div>
+              <h3>{{ items.0.name }}</h3>
+              <p class="panel-sub mono">رقم الصنف: {{ items.0.code }}</p>
+            </div>
+          </div>
+          <ul class="name-result-list">
+            {% for item in items %}
+              <li>
+                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&warehouse={{ warehouse|urlencode }}">
+                  <span class="name-result-code mono">{{ item.code }}</span>
+                  <span class="name-result-name">{{ item.name }}{% if item.unit %} — {{ item.unit }}{% endif %}</span>
+                  {% if item.barcode %}<span class="name-result-unit mono">{{ item.barcode }}</span>{% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
         </div>
       {% endif %}
     {% else %}
