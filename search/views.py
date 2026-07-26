@@ -170,6 +170,8 @@ def item_search(request):
         searched = True
         try:
             barcode_hits = lookup_by_barcode(query)
+            code_hits = [] if barcode_hits else lookup_by_item_code(query)
+
             if barcode_hits:
                 match_type = 'barcode'
                 item_code = barcode_hits[0]['code']
@@ -184,7 +186,23 @@ def item_search(request):
                     prices = []
                 if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
                     items = _items_from_prices(prices, group_info) or items
+            elif code_hits:
+                # بحث مباشر برقم الصنف من الفهرس المحلي
+                match_type = 'code'
+                item_code = code_hits[0]['code']
+                items = code_hits
+                group_info = {
+                    'g_code': items[0].get('g_code', ''),
+                    'g_name': items[0].get('g_name', ''),
+                }
+                try:
+                    prices = search_item_details(item_code, warehouse=warehouse)
+                except ApiClientError:
+                    prices = []
+                if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                    items = _items_from_prices(prices, group_info) or items
             else:
+                # احتياطي: إرسال النص للنظام كرقم صنف
                 prices = search_item_details(query, warehouse=warehouse)
                 if prices:
                     item_code = str(prices[0].get('code') or '').strip() or query

@@ -768,7 +768,10 @@ def lookup_by_item_code(item_code: str) -> list[dict]:
     """
     from .models import ItemBarcode
 
-    rows = ItemBarcode.objects.filter(item_code=item_code).order_by('unit', '-barcode')
+    raw = str(item_code or '').strip()
+    cleaned = _normalize_text(raw)
+    candidates = {v for v in (raw, cleaned) if v}
+    rows = ItemBarcode.objects.filter(item_code__in=candidates).order_by('unit', '-barcode')
     best: dict[str, object] = {}
     ordered_units: list[str] = []
     for row in rows:
