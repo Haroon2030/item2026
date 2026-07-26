@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
+import time
+import traceback
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -13,6 +17,29 @@ from django.views.decorators.http import require_http_methods
 from .api_client import ApiClientError, aggregate_group_stock_cost
 from .models import ItemBarcode, ItemGroup, ItemStockValue
 from .validators import ValidationError, resolve_warehouse
+
+# #region agent log
+_DEBUG_LOG = Path(settings.BASE_DIR) / 'debug-5b001b.log'
+
+
+def _dbg(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
+    try:
+        payload = {
+            'sessionId': '5b001b',
+            'runId': 'pre-fix',
+            'hypothesisId': hypothesis_id,
+            'location': location,
+            'message': message,
+            'data': data or {},
+            'timestamp': int(time.time() * 1000),
+        }
+        with _DEBUG_LOG.open('a', encoding='utf-8') as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+
+
+# #endregion
 
 _GROUP_RE = re.compile(r'^[0-9A-Za-z_\-]{1,64}$')
 
@@ -109,25 +136,68 @@ def stock_cost_report(request):
 
     if request.method == 'POST':
         refresh = _wants_refresh(data)
+        # #region agent log
+        _dbg(
+            'C',
+            'stock_views.py:POST',
+            'stock_cost_post_enter',
+            {
+                'warehouse': warehouse,
+                'g_code': g_code,
+                'refresh': refresh,
+                'wants_json': wants_json,
+                'action': str(data.get('action') or ''),
+            },
+        )
+        # #endregion
         try:
             if refresh and not g_code:
                 raise ApiClientError(
                     'لتحديث من النظام اختر مجموعة واحدة أولاً. '
                     'بعدها يمكن عرض كل المجموعات من التخزين بسرعة.'
                 )
+            started = time.monotonic()
             report = aggregate_group_stock_cost(
                 warehouse,
                 g_code=g_code or None,
                 refresh=refresh,
             )
+            # #region agent log
+            _dbg(
+                'D',
+                'stock_views.py:success',
+                'stock_cost_ok',
+                {
+                    'elapsed': round(time.monotonic() - started, 2),
+                    'source': (report or {}).get('source'),
+                    'rows': len((report or {}).get('rows') or []),
+                    'grand_total': (report or {}).get('grand_total'),
+                },
+            )
+            # #endregion
             if wants_json:
                 return JsonResponse({'ok': True, 'report': report})
         except ApiClientError as exc:
             error = str(exc)
+            # #region agent log
+            _dbg('B', 'stock_views.py:ApiClientError', 'api_client_error', {'error': error})
+            # #endregion
             if wants_json:
                 return JsonResponse({'ok': False, 'error': error}, status=502)
         except Exception as exc:
             error = f'فشل حساب التكلفة: {exc}'
+            # #region agent log
+            _dbg(
+                'E',
+                'stock_views.py:Exception',
+                'unhandled_exception',
+                {
+                    'error': str(exc),
+                    'type': type(exc).__name__,
+                    'trace': traceback.format_exc()[-1500:],
+                },
+            )
+            # #endregion
             if wants_json:
                 return JsonResponse({'ok': False, 'error': error}, status=500)
 

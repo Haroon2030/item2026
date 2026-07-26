@@ -198,13 +198,23 @@
       }
     }, currentAction === "refresh" ? 170000 : 30000);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'A-E',location:'stock-cost.js:runAction',message:'fetch_start',data:{action:currentAction,warehouse:(body.get('warehouse')||''),g_code:(body.get('g_code')||''),url:(form.action||window.location.href)},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
+
     fetch(form.action || window.location.href, fetchOpts)
       .then(function (res) {
         return res.text().then(function (text) {
+          // #region agent log
+          fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'A-E',location:'stock-cost.js:response',message:'fetch_response',data:{status:res.status,ok:res.ok,redirected:res.redirected,type:res.type,url:res.url,contentType:(res.headers.get('content-type')||''),bodyLen:(text||'').length,bodyPreview:String(text||'').slice(0,240)},timestamp:Date.now()})}).catch(function(){});
+          // #endregion
           var data = null;
           try {
             data = JSON.parse(text);
           } catch (e) {
+            // #region agent log
+            fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'A',location:'stock-cost.js:parse',message:'json_parse_failed',data:{status:res.status,redirected:res.redirected,contentType:(res.headers.get('content-type')||''),bodyPreview:String(text||'').slice(0,240)},timestamp:Date.now()})}).catch(function(){});
+            // #endregion
             throw new Error(
               res.status === 403
                 ? "تم رفض الطلب. أعد تسجيل الدخول ثم حاول مجدداً."
@@ -214,6 +224,9 @@
             );
           }
           if (!res.ok || !data || !data.ok) {
+            // #region agent log
+            fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'B',location:'stock-cost.js:payload',message:'json_ok_false',data:{status:res.status,error:(data&&data.error)||null,ok:!!(data&&data.ok)},timestamp:Date.now()})}).catch(function(){});
+            // #endregion
             throw new Error((data && data.error) || "فشل حساب التكلفة.");
           }
           return data;
