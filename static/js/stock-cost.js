@@ -82,7 +82,9 @@
     }
     results.innerHTML =
       '<div class="alert alert-error" role="alert">' +
-      '<span>' + escapeHtml(message) + "</span></div>";
+      "<span>" +
+      escapeHtml(message) +
+      "</span></div>";
   }
 
   function renderReport(report) {
@@ -91,12 +93,24 @@
       .map(function (row) {
         return (
           "<tr>" +
-          '<td class="mono">' + escapeHtml(row.g_code) + "</td>" +
-          "<td>" + escapeHtml(row.g_name || "—") + "</td>" +
-          '<td class="mono">' + escapeHtml(row.item_count) + "</td>" +
-          '<td class="mono">' + escapeHtml(row.items_valued) + "</td>" +
-          '<td class="mono">' + escapeHtml(row.total_qty_display) + "</td>" +
-          '<td class="mono stock-cost-cell">' + escapeHtml(row.total_cost_display) + "</td>" +
+          '<td class="mono">' +
+          escapeHtml(row.g_code) +
+          "</td>" +
+          "<td>" +
+          escapeHtml(row.g_name || "—") +
+          "</td>" +
+          '<td class="mono">' +
+          escapeHtml(row.item_count) +
+          "</td>" +
+          '<td class="mono">' +
+          escapeHtml(row.items_valued) +
+          "</td>" +
+          '<td class="mono">' +
+          escapeHtml(row.total_qty_display) +
+          "</td>" +
+          '<td class="mono stock-cost-cell">' +
+          escapeHtml(row.total_cost_display) +
+          "</td>" +
           "</tr>"
         );
       })
@@ -107,32 +121,50 @@
     }
 
     var titleExtra = report.g_code
-      ? " | مجموعة " + escapeHtml(report.g_code) + (report.g_name ? " — " + escapeHtml(report.g_name) : "")
+      ? " | مجموعة " +
+        escapeHtml(report.g_code) +
+        (report.g_name ? " — " + escapeHtml(report.g_name) : "")
       : " | كل المجموعات";
 
     var sourceLabel = report.source === "cache" ? "من التخزين" : "بعد التحديث";
     var cacheLabel = report.cache_updated_display
       ? " | لقطة " + escapeHtml(report.cache_updated_display)
       : "";
+    var partialLabel = report.partial_message
+      ? " | " + escapeHtml(report.partial_message)
+      : "";
 
     results.innerHTML =
       '<div class="panel panel-blue stock-cost-report">' +
       '<div class="panel-head stock-cost-report-head">' +
       '<span class="panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>' +
-      "<div><h3>إجمالي التكلفة — مخزن " + escapeHtml(report.warehouse) + titleExtra + "</h3>" +
+      "<div><h3>إجمالي التكلفة — مخزن " +
+      escapeHtml(report.warehouse) +
+      titleExtra +
+      "</h3>" +
       '<p class="panel-sub">' +
-      escapeHtml(report.item_total) + " صنف | قُيّم " + escapeHtml(report.items_valued) +
+      escapeHtml(report.item_total) +
+      " صنف | قُيّم " +
+      escapeHtml(report.items_valued) +
       (report.errors ? " | تعذّر " + escapeHtml(report.errors) : "") +
-      " | " + sourceLabel +
-      " | خلال " + escapeHtml(report.elapsed_sec) + " ث" +
+      " | " +
+      sourceLabel +
+      " | خلال " +
+      escapeHtml(report.elapsed_sec) +
+      " ث" +
       cacheLabel +
+      partialLabel +
       "</p></div>" +
       '<div class="stock-cost-grand"><span class="stock-cost-grand-label">الإجمالي</span>' +
-      '<strong class="stock-cost-grand-value mono">' + escapeHtml(report.grand_total_display) + "</strong></div>" +
+      '<strong class="stock-cost-grand-value mono">' +
+      escapeHtml(report.grand_total_display) +
+      "</strong></div>" +
       "</div>" +
       '<div class="table-wrap"><table class="data-table stock-cost-table"><thead><tr>' +
       "<th>رقم المجموعة</th><th>اسم المجموعة</th><th>عدد الأصناف</th><th>أصناف قُيّمت</th><th>إجمالي الكمية</th><th>إجمالي التكلفة</th>" +
-      "</tr></thead><tbody>" + rowsHtml + "</tbody><tfoot><tr>" +
+      "</tr></thead><tbody>" +
+      rowsHtml +
+      "</tbody><tfoot><tr>" +
       '<th colspan="5">الإجمالي الكلي</th><th class="mono">' +
       escapeHtml(report.grand_total_display) +
       "</th></tr></tfoot></table></div></div>";
@@ -146,6 +178,30 @@
     if (closeBtn) closeBtn.hidden = false;
     setButtonsDisabled(false);
     showInlineError(message || "حدث خطأ أثناء الحساب.");
+  }
+
+  function unexpectedMessage(res, text) {
+    var preview = String(text || "")
+      .replace(/\s+/g, " ")
+      .slice(0, 120);
+    if (res.status === 401 || res.status === 403) {
+      return "انتهت الجلسة أو رُفض الطلب. حدّث الصفحة وسجّل الدخول ثم أعد المحاولة.";
+    }
+    if (res.status === 502 || res.status === 504 || res.status === 500) {
+      return (
+        "انتهت مهلة الخادم أو فشل التحديث (رمز " +
+        res.status +
+        "). اختر مجموعة أصغر أو أعد المحاولة."
+      );
+    }
+    if (res.redirected || /login|تسجيل الدخول|<html/i.test(preview)) {
+      return "انتهت الجلسة. أعد تسجيل الدخول ثم حاول مجدداً.";
+    }
+    return (
+      "استجابة غير متوقعة من الخادم (رمز " +
+      res.status +
+      "). حدّث الصفحة وأعد المحاولة."
+    );
   }
 
   function runAction(action) {
@@ -186,47 +242,28 @@
         Accept: "application/json",
       },
       credentials: "same-origin",
+      redirect: "follow",
     };
     if (abortCtrl) fetchOpts.signal = abortCtrl.signal;
 
-    // حدّ زمني من المتصفح حتى لا يبقى الطلب معلّقاً صامتاً
     var hangTimer = window.setTimeout(function () {
       if (abortCtrl) {
         try {
           abortCtrl.abort();
         } catch (e) {}
       }
-    }, currentAction === "refresh" ? 170000 : 30000);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'A-E',location:'stock-cost.js:runAction',message:'fetch_start',data:{action:currentAction,warehouse:(body.get('warehouse')||''),g_code:(body.get('g_code')||''),url:(form.action||window.location.href)},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
+    }, currentAction === "refresh" ? 160000 : 30000);
 
     fetch(form.action || window.location.href, fetchOpts)
       .then(function (res) {
         return res.text().then(function (text) {
-          // #region agent log
-          fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'A-E',location:'stock-cost.js:response',message:'fetch_response',data:{status:res.status,ok:res.ok,redirected:res.redirected,type:res.type,url:res.url,contentType:(res.headers.get('content-type')||''),bodyLen:(text||'').length,bodyPreview:String(text||'').slice(0,240)},timestamp:Date.now()})}).catch(function(){});
-          // #endregion
           var data = null;
           try {
             data = JSON.parse(text);
           } catch (e) {
-            // #region agent log
-            fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'A',location:'stock-cost.js:parse',message:'json_parse_failed',data:{status:res.status,redirected:res.redirected,contentType:(res.headers.get('content-type')||''),bodyPreview:String(text||'').slice(0,240)},timestamp:Date.now()})}).catch(function(){});
-            // #endregion
-            throw new Error(
-              res.status === 403
-                ? "تم رفض الطلب. أعد تسجيل الدخول ثم حاول مجدداً."
-                : res.status === 504 || res.status === 502
-                  ? "انتهت مهلة الخادم أثناء التحديث. جرّب مجموعة أصغر أو أعد المحاولة."
-                  : "استجابة غير متوقعة من الخادم."
-            );
+            throw new Error(unexpectedMessage(res, text));
           }
           if (!res.ok || !data || !data.ok) {
-            // #region agent log
-            fetch('http://127.0.0.1:7301/ingest/11673a21-2ad1-4e26-8562-bc214f3fbc25',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b001b'},body:JSON.stringify({sessionId:'5b001b',runId:'pre-fix',hypothesisId:'B',location:'stock-cost.js:payload',message:'json_ok_false',data:{status:res.status,error:(data&&data.error)||null,ok:!!(data&&data.ok)},timestamp:Date.now()})}).catch(function(){});
-            // #endregion
             throw new Error((data && data.error) || "فشل حساب التكلفة.");
           }
           return data;
@@ -240,7 +277,9 @@
         if (statusEl) {
           statusEl.textContent =
             currentAction === "refresh"
-              ? "اكتمل التحديث وحُفظت اللقطة محلياً."
+              ? data.report && data.report.partial
+                ? "اكتمل تحديث جزئي وحُفظت اللقطة."
+                : "اكتمل التحديث وحُفظت اللقطة محلياً."
               : "اكتمل العرض من التخزين.";
         }
         renderReport(data.report);

@@ -1022,6 +1022,8 @@ def refresh_warehouse_stock_values(
     جلب GetItemQtyCost لكل صنف (أو مجموعة) وحفظ اللقطة محلياً ثم إرجاع الإجماليات.
     أبطأ مرة واحدة — بعدها العرض من التخزين فوري.
     """
+    from concurrent.futures import as_completed
+
     from .models import ItemStockValue
 
     started = time.monotonic()
@@ -1043,10 +1045,27 @@ def refresh_warehouse_stock_values(
     bulk_timeout = int(cfg.get('STOCK_COST_TIMEOUT', 12) or 12)
     default_workers = int(cfg.get('STOCK_COST_WORKERS', 40) or 40)
     workers = max(1, min(int(max_workers or default_workers), 64))
+    # أوقف قبل مهلة gunicorn/البروكسي وأرجع JSON بدل صفحة خطأ HTML
+    soft_limit = int(cfg.get('STOCK_COST_SOFT_LIMIT', 140) or 140)
+    deadline = started + max(30, soft_limit)
     codes = list(item_map.keys())
     errors = 0
+    done = 0
+    timed_out = False
     now = timezone.now()
     pending: list = []
+
+    def _flush() -> None:
+        nonlocal pending
+        if not pending:
+            return
+        ItemStockValue.objects.bulk_create(
+            pending,
+            update_conflicts=True,
+            unique_fields=['warehouse', 'item_code'],
+            update_fields=['g_code', 'quantity', 'unit_cost', 'total_cost', 'updated_at'],
+        )
+        pending = []
 
     def _one(item_code: str) -> tuple[str, float, float, bool]:
         try:
@@ -1062,7 +1081,15 @@ def refresh_warehouse_stock_values(
             return item_code, 0.0, 0.0, False
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for item_code, value, qty, ok in pool.map(_one, codes, chunksize=16):
+        futures = {pool.submit(_one, code): code for code in codes}
+        for fut in as_completed(futures):
+            if time.monotonic() >= deadline:
+                timed_out = True
+                for pending_fut in futures:
+                    pending_fut.cancel()
+                break
+            item_code, value, qty, ok = fut.result()
+            done += 1
             if not ok:
                 errors += 1
                 continue
@@ -1080,27 +1107,29 @@ def refresh_warehouse_stock_values(
                 )
             )
             if len(pending) >= 500:
-                ItemStockValue.objects.bulk_create(
-                    pending,
-                    update_conflicts=True,
-                    unique_fields=['warehouse', 'item_code'],
-                    update_fields=['g_code', 'quantity', 'unit_cost', 'total_cost', 'updated_at'],
-                )
-                pending.clear()
+                _flush()
 
-    if pending:
-        ItemStockValue.objects.bulk_create(
-            pending,
-            update_conflicts=True,
-            unique_fields=['warehouse', 'item_code'],
-            update_fields=['g_code', 'quantity', 'unit_cost', 'total_cost', 'updated_at'],
-        )
+    _flush()
 
-    report = aggregate_group_stock_cost_cached(warehouse, g_code=selected_group or None)
+    try:
+        report = aggregate_group_stock_cost_cached(warehouse, g_code=selected_group or None)
+    except ApiClientError:
+        if done == 0:
+            raise ApiClientError(
+                'تعذّر جلب أي تكلفة من النظام. تحقق من الاتصال ثم أعد المحاولة.'
+            )
+        raise
+
     report['source'] = 'live'
     report['errors'] = errors
     report['elapsed_sec'] = round(time.monotonic() - started, 1)
-    report['refreshed_items'] = len(codes) - errors
+    report['refreshed_items'] = max(0, done - errors)
+    report['partial'] = timed_out or done < len(codes)
+    if report['partial']:
+        report['partial_message'] = (
+            f'تحديث جزئي: {done} من {len(codes)} صنفاً خلال المهلة. '
+            'يمكنك إعادة التحديث لإكمال الباقي.'
+        )
     return report
 
 

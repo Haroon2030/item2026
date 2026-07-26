@@ -230,6 +230,7 @@ SESSION_COOKIE_AGE = int(_env('SESSION_COOKIE_AGE', '28800') or '28800')
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=not DEBUG)
+CSRF_FAILURE_VIEW = 'search.csrf.csrf_failure'
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
@@ -271,6 +272,7 @@ EXTERNAL_API = {
     'QTY_TIMEOUT': int(_env('ONYX_QTY_TIMEOUT', '45') or '45'),
     'STOCK_COST_TIMEOUT': int(_env('ONYX_STOCK_COST_TIMEOUT', '12') or '12'),
     'STOCK_COST_WORKERS': int(_env('ONYX_STOCK_COST_WORKERS', '40') or '40'),
+    'STOCK_COST_SOFT_LIMIT': int(_env('ONYX_STOCK_COST_SOFT_LIMIT', '140') or '140'),
     'RETRIES': int(_env('ONYX_RETRIES', '1') or '1'),
     'ITEMS_TIMEOUT': int(_env('ONYX_ITEMS_TIMEOUT', '180') or '180'),
     'ITEMS_PARAMS': {
