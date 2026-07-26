@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}تكلفة المخزون حسب المجموعة{% endblock %}
+
+{% block content %}
+<section class="stock-cost-page" aria-label="تكلفة المخزون">
+  <div class="stock-cost-head">
+    <div>
+      <h2>تكلفة المخزون</h2>
+      <p>اختر المخزن لعرض إجمالي تكلفة كل مجموعة في جدول منفصل</p>
+    </div>
+    <a class="btn-ghost" href="{% url 'item_search' %}">العودة للبحث</a>
+  </div>
+
+  <form method="post" action="{% url 'stock_cost' %}" class="stock-cost-form panel panel-blue" id="stock-cost-form">
+    {% csrf_token %}
+    <div class="stock-cost-form-row">
+      <div class="field warehouse-field">
+        <label for="warehouse">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
+          المخزن
+        </label>
+        <div class="select-shell">
+          <select id="warehouse" name="warehouse" class="warehouse-select" required>
+            {% for wh in warehouses %}
+              <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+            {% endfor %}
+          </select>
+          <span class="select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" id="stock-cost-btn">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        عرض إجمالي التكلفة
+      </button>
+    </div>
+    <p class="stock-cost-hint">
+      {% if index_count %}
+        الفهرس: {{ index_count|floatformat:0 }} سجل — الحساب يجلب التكلفة من النظام لكل صنف حسب المخزن المختار.
+      {% else %}
+        الفهرس فارغ — زامِن الأصناف من شاشة البحث أولاً.
+      {% endif %}
+    </p>
+  </form>
+
+  {% if error %}
+    <div class="alert alert-error" role="alert">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+      <span>{{ error }}</span>
+    </div>
+  {% endif %}
+
+  <div id="stock-cost-results">
+    {% if report %}
+      {% include "search/_stock_cost_table.html" with report=report %}
+    {% endif %}
+  </div>
+</section>
+
+<div id="stock-cost-progress" class="sync-progress" hidden role="dialog" aria-modal="true" aria-labelledby="stock-cost-progress-title">
+  <div class="sync-progress-card">
+    <div class="sync-progress-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    </div>
+    <h3 id="stock-cost-progress-title">حساب تكلفة المخزون</h3>
+    <p id="stock-cost-progress-status" class="sync-progress-status">جاري جلب التكلفة من النظام حسب المجموعات…</p>
+    <div class="sync-progress-track" aria-hidden="true">
+      <div id="stock-cost-progress-fill" class="sync-progress-fill" style="width:8%"></div>
+    </div>
+    <p id="stock-cost-progress-label" class="sync-progress-label">…</p>
+    <button type="button" id="stock-cost-progress-close" class="btn-ghost" hidden>إغلاق</button>
+  </div>
+</div>
+{% endblock %}

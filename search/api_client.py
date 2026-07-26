@@ -184,7 +184,7 @@ def search_prices_by_code(item_code: str, price_w_code: str | None = None) -> li
     ]
 
 
-def fetch_qty_by_code(item_code: str, w_code: str | None = None) -> list[dict]:
+def fetch_qty_by_code(item_code: str, w_code: str | None = None, timeout: int | None = None) -> list[dict]:
     """جلب الكمية المتاحة عبر GetItemQtyCost."""
     cfg = settings.EXTERNAL_API
     url = _safe_url('/GetItemQtyCost')
@@ -195,7 +195,7 @@ def fetch_qty_by_code(item_code: str, w_code: str | None = None) -> list[dict]:
         'w_code': w_code or cfg.get('DEFAULT_WAREHOUSE') or '60',
     }
 
-    response = _request_get(url, params, timeout=cfg.get('QTY_TIMEOUT', 45))
+    response = _request_get(url, params, timeout=timeout if timeout is not None else cfg.get('QTY_TIMEOUT', 45))
 
     try:
         payload = response.json()
@@ -821,6 +821,140 @@ def lookup_by_name(name_query: str, limit: int = 50) -> list[dict]:
             best[code] = row
 
     return _rows_to_item_dicts(best[c] for c in ordered)
+
+
+def _stock_value_from_qty_rows(rows: list[dict]) -> tuple[float, float]:
+    """
+    قيمة صنف واحد من صفوف GetItemQtyCost.
+    يعتمد صفاً واحداً فقط (وحدة الرصيد التي عليها تكلفة) لتفادي المضاعفة.
+    يرجع (التكلفة الإجمالية، الكمية المستخدمة).
+    """
+    with_cost: list[tuple[float, float, str]] = []
+    for row in rows:
+        cost = _to_float(row.get('avg_cost') or row.get('cost'))
+        qty = _to_float(row.get('quantity'))
+        if cost is None:
+            continue
+        if qty is None:
+            qty = 0.0
+        with_cost.append((qty, cost, str(row.get('unit') or '')))
+    if not with_cost:
+        return 0.0, 0.0
+    for qty, cost, unit in with_cost:
+        if _is_weight_unit(unit):
+            return qty * cost, qty
+    qty, cost, _ = with_cost[0]
+    return qty * cost, qty
+
+
+def _item_group_map() -> dict[str, dict[str, str]]:
+    """رقم صنف → {g_code, name} من الفهرس المحلي."""
+    from .models import ItemBarcode
+
+    mapping: dict[str, dict[str, str]] = {}
+    rows = ItemBarcode.objects.exclude(item_code='').only('item_code', 'g_code', 'name')
+    for row in rows.iterator(chunk_size=2000):
+        code = (row.item_code or '').strip()
+        if not code:
+            continue
+        current = mapping.get(code)
+        if current is None:
+            mapping[code] = {
+                'g_code': (row.g_code or '').strip(),
+                'name': (row.name or '').strip(),
+            }
+            continue
+        if not current['g_code'] and (row.g_code or '').strip():
+            current['g_code'] = (row.g_code or '').strip()
+        if not current['name'] and (row.name or '').strip():
+            current['name'] = (row.name or '').strip()
+    return mapping
+
+
+def aggregate_group_stock_cost(warehouse: str, max_workers: int = 16) -> dict[str, Any]:
+    """
+    إجمالي تكلفة المخزون حسب المجموعة لمخزن محدد.
+    يعتمد الفهرس المحلي للمجموعات + GetItemQtyCost لكل صنف.
+    """
+    from .models import ItemGroup
+
+    started = time.monotonic()
+    warehouse = str(warehouse or '').strip()
+    if not warehouse:
+        raise ApiClientError('المخزن مطلوب لحساب تكلفة المخزون.')
+
+    item_map = _item_group_map()
+    if not item_map:
+        raise ApiClientError('الفهرس فارغ. زامِن الأصناف أولاً ثم أعد المحاولة.')
+
+    group_names = {
+        g.g_code: g.g_name
+        for g in ItemGroup.objects.all().only('g_code', 'g_name')
+    }
+
+    totals: dict[str, dict[str, Any]] = {}
+    errors = 0
+    valued_items = 0
+    bulk_timeout = int(
+        getattr(settings, 'EXTERNAL_API', {}).get('STOCK_COST_TIMEOUT', 20) or 20
+    )
+    workers = max(1, min(int(max_workers or 16), 24))
+
+    def _one(item_code: str) -> tuple[str, float, float, bool]:
+        try:
+            rows = fetch_qty_by_code(item_code, w_code=warehouse, timeout=bulk_timeout)
+            value, qty = _stock_value_from_qty_rows(rows)
+            return item_code, value, qty, True
+        except Exception:
+            return item_code, 0.0, 0.0, False
+
+    codes = list(item_map.keys())
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for item_code, value, qty, ok in pool.map(_one, codes, chunksize=8):
+            meta = item_map[item_code]
+            g_code = meta.get('g_code') or '—'
+            bucket = totals.get(g_code)
+            if bucket is None:
+                bucket = {
+                    'g_code': g_code,
+                    'g_name': group_names.get(g_code, '') if g_code != '—' else 'بدون مجموعة',
+                    'item_count': 0,
+                    'items_valued': 0,
+                    'total_cost': 0.0,
+                    'total_qty': 0.0,
+                }
+                totals[g_code] = bucket
+            bucket['item_count'] += 1
+            if not ok:
+                errors += 1
+                continue
+            bucket['items_valued'] += 1
+            bucket['total_cost'] += value
+            bucket['total_qty'] += qty
+            if value or qty:
+                valued_items += 1
+
+    rows = sorted(
+        totals.values(),
+        key=lambda r: (-float(r['total_cost']), str(r['g_code'])),
+    )
+    for row in rows:
+        row['total_cost'] = round(float(row['total_cost']), 2)
+        row['total_qty'] = round(float(row['total_qty']), 4)
+        row['total_cost_display'] = _fmt_cost(row['total_cost'])
+        row['total_qty_display'] = _fmt_qty(row['total_qty'])
+
+    grand = round(sum(float(r['total_cost']) for r in rows), 2)
+    return {
+        'warehouse': warehouse,
+        'rows': rows,
+        'grand_total': grand,
+        'grand_total_display': _fmt_cost(grand),
+        'item_total': len(codes),
+        'items_valued': valued_items,
+        'errors': errors,
+        'elapsed_sec': round(time.monotonic() - started, 1),
+    }
 
 
 # توافق مع الاستدعاءات القديمة

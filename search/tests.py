@@ -87,6 +87,73 @@ class NameSearchTests(TestCase):
         self.assertEqual(response.context['items'][0]['code'], 'B200')
 
 
+class StockCostReportTests(TestCase):
+    def setUp(self):
+        from search.models import ItemBarcode, ItemGroup
+
+        self.user = get_user_model().objects.create_user(
+            username='stockuser',
+            password='StrongPassword123!',
+        )
+        self.client.force_login(self.user)
+        ItemGroup.objects.create(g_code='G1', g_name='ألبان')
+        ItemGroup.objects.create(g_code='G2', g_name='تمور')
+        ItemBarcode.objects.create(
+            barcode='1', item_code='A1', name='حليب', unit='كيلو', g_code='G1'
+        )
+        ItemBarcode.objects.create(
+            barcode='2', item_code='A2', name='لبن', unit='كيلو', g_code='G1'
+        )
+        ItemBarcode.objects.create(
+            barcode='3', item_code='B1', name='تمر', unit='كيلو', g_code='G2'
+        )
+
+    def test_stock_cost_page_requires_login(self):
+        self.client.logout()
+        response = self.client.get(reverse('stock_cost'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_stock_cost_page_loads(self):
+        response = self.client.get(reverse('stock_cost'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'تكلفة المخزون')
+
+    @patch('search.stock_views.aggregate_group_stock_cost')
+    def test_stock_cost_post_returns_json_report(self, mocked):
+        mocked.return_value = {
+            'warehouse': '60',
+            'rows': [
+                {
+                    'g_code': 'G1',
+                    'g_name': 'ألبان',
+                    'item_count': 2,
+                    'items_valued': 2,
+                    'total_cost': 100.5,
+                    'total_qty': 10,
+                    'total_cost_display': '100.50',
+                    'total_qty_display': '10',
+                }
+            ],
+            'grand_total': 100.5,
+            'grand_total_display': '100.50',
+            'item_total': 3,
+            'items_valued': 2,
+            'errors': 0,
+            'elapsed_sec': 1.2,
+        }
+        response = self.client.post(
+            reverse('stock_cost'),
+            {'warehouse': '60'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['report']['grand_total'], 100.5)
+        mocked.assert_called_once_with('60')
+
+
 class AuthenticationTests(TestCase):
     def test_anonymous_user_is_redirected_to_login(self):
         response = self.client.get(reverse('item_search'))

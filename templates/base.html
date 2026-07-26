@@ -41,6 +41,7 @@
               </svg>
               <span class="btn-refresh-text">تحديث</span>
             </button>
+            <a class="btn-users" href="{% url 'stock_cost' %}" title="تكلفة المخزون حسب المجموعة">تكلفة المخزون</a>
             {% if request.user.is_staff %}
               <a class="btn-users" href="{% url 'user_list' %}" title="إدارة المستخدمين">المستخدمون</a>
             {% endif %}
@@ -65,5 +66,6 @@
   <script src="/static/js/vendor/zxing-browser.min.js" defer></script>
   <script src="/static/js/sync-progress.js" defer></script>
   <script src="/static/js/barcode-scanner.js" defer></script>
+  <script src="/static/js/stock-cost.js" defer></script>
 </body>
 </html>
