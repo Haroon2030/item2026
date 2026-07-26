@@ -54,11 +54,11 @@
       </div>
 
       <div class="stock-cost-actions">
-        <button type="submit" class="btn-primary" id="stock-cost-btn" data-action="view">
+        <button type="button" class="btn-primary" id="stock-cost-btn" data-action="view">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M3 6h18M3 18h12"/></svg>
           عرض من التخزين
         </button>
-        <button type="submit" class="btn-ghost" id="stock-cost-refresh-btn" data-action="refresh">
+        <button type="button" class="btn-ghost" id="stock-cost-refresh-btn" data-action="refresh">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
           تحديث من النظام
         </button>
@@ -71,7 +71,7 @@
         {% if cache_updated_display %}
           — آخر لقطة للمخزن: {{ cache_updated_display }}
         {% else %}
-          — لا توجد لقطة بعد؛ ابدأ بـ «تحديث من النظام» (يفضّل مجموعة واحدة).
+          — لا توجد لقطة بعد؛ اختر مجموعة ثم اضغط «تحديث من النظام».
         {% endif %}
       {% else %}
         الفهرس فارغ — زامِن الأصناف من شاشة البحث أولاً.

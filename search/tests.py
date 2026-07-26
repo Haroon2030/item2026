@@ -202,8 +202,8 @@ class StockCostReportTests(TestCase):
     def test_stock_cost_refresh_passes_flag(self, mocked):
         mocked.return_value = {
             'warehouse': '60',
-            'g_code': '',
-            'g_name': '',
+            'g_code': 'G1',
+            'g_name': 'ألبان',
             'rows': [],
             'grand_total': 0,
             'grand_total_display': '0.00',
@@ -215,12 +215,24 @@ class StockCostReportTests(TestCase):
         }
         response = self.client.post(
             reverse('stock_cost'),
-            {'warehouse': '60', 'action': 'refresh'},
+            {'warehouse': '60', 'g_code': 'G1', 'action': 'refresh'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
             HTTP_ACCEPT='application/json',
         )
         self.assertEqual(response.status_code, 200)
-        mocked.assert_called_once_with('60', g_code=None, refresh=True)
+        mocked.assert_called_once_with('60', g_code='G1', refresh=True)
+
+    def test_stock_cost_refresh_requires_group(self):
+        response = self.client.post(
+            reverse('stock_cost'),
+            {'warehouse': '60', 'action': 'refresh'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            HTTP_ACCEPT='application/json',
+        )
+        self.assertEqual(response.status_code, 502)
+        payload = response.json()
+        self.assertFalse(payload['ok'])
+        self.assertIn('مجموعة', payload['error'])
 
     def test_stock_cost_page_shows_group_select(self):
         response = self.client.get(reverse('stock_cost'))

@@ -14,11 +14,15 @@
   var refreshBtn = document.getElementById("stock-cost-refresh-btn");
   var actionInput = document.getElementById("stock-cost-action");
   var results = document.getElementById("stock-cost-results");
+  var groupSelect = document.getElementById("g_code");
   var timer = null;
   var value = 0;
   var currentAction = "view";
+  var abortCtrl = null;
+  var busy = false;
 
   function setButtonsDisabled(disabled) {
+    busy = !!disabled;
     if (viewBtn) viewBtn.disabled = disabled;
     if (refreshBtn) refreshBtn.disabled = disabled;
   }
@@ -38,10 +42,9 @@
       titleEl.textContent = isRefresh ? "تحديث من النظام" : "عرض من التخزين";
     }
     if (statusEl) {
-      var groupSelect = form.querySelector("#g_code");
       var groupLabel = groupSelect && groupSelect.value ? " للمجموعة المحددة" : "";
       statusEl.textContent = isRefresh
-        ? "جاري جلب التكلفة من النظام" + groupLabel + "… قد يستغرق دقائق عند كل المجموعات."
+        ? "جاري جلب التكلفة من النظام" + groupLabel + "… قد يستغرق دقيقة أو أكثر."
         : "جاري تجميع الإجماليات من التخزين المحلي…";
     }
     setProgress(isRefresh ? 8 : 35);
@@ -58,8 +61,10 @@
     stopTimer();
     value = isRefresh ? 8 : 35;
     timer = window.setInterval(function () {
-      if (value < 92) setProgress(value + Math.max(0.4, (92 - value) * (isRefresh ? 0.025 : 0.12)));
-    }, isRefresh ? 400 : 120);
+      if (value < 92) {
+        setProgress(value + Math.max(0.4, (92 - value) * (isRefresh ? 0.02 : 0.12)));
+      }
+    }, isRefresh ? 500 : 120);
   }
 
   function escapeHtml(text) {
@@ -68,6 +73,16 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function showInlineError(message) {
+    if (!results) {
+      window.alert(message);
+      return;
+    }
+    results.innerHTML =
+      '<div class="alert alert-error" role="alert">' +
+      '<span>' + escapeHtml(message) + "</span></div>";
   }
 
   function renderReport(report) {
@@ -123,17 +138,47 @@
       "</th></tr></tfoot></table></div></div>";
   }
 
+  function finishError(message) {
+    stopTimer();
+    if (overlay) overlay.classList.add("is-error");
+    if (statusEl) statusEl.textContent = message || "حدث خطأ أثناء الحساب.";
+    if (label) label.textContent = "!";
+    if (closeBtn) closeBtn.hidden = false;
+    setButtonsDisabled(false);
+    showInlineError(message || "حدث خطأ أثناء الحساب.");
+  }
+
   function runAction(action) {
+    if (busy) return;
+
     currentAction = action === "refresh" ? "refresh" : "view";
+
+    if (currentAction === "refresh") {
+      if (!groupSelect || !String(groupSelect.value || "").trim()) {
+        showInlineError(
+          "لاختيار «تحديث من النظام» حدّد مجموعة واحدة أولاً. تحديث كل المجموعات دفعة واحدة ثقيل جداً وقد لا يكتمل."
+        );
+        if (groupSelect) groupSelect.focus();
+        return;
+      }
+    }
+
     if (actionInput) actionInput.value = currentAction;
     setButtonsDisabled(true);
     showOverlay(currentAction === "refresh");
     startTimer(currentAction === "refresh");
 
+    if (abortCtrl) {
+      try {
+        abortCtrl.abort();
+      } catch (e) {}
+    }
+    abortCtrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+
     var body = new FormData(form);
     body.set("action", currentAction);
 
-    fetch(form.action, {
+    var fetchOpts = {
       method: "POST",
       body: body,
       headers: {
@@ -141,7 +186,19 @@
         Accept: "application/json",
       },
       credentials: "same-origin",
-    })
+    };
+    if (abortCtrl) fetchOpts.signal = abortCtrl.signal;
+
+    // حدّ زمني من المتصفح حتى لا يبقى الطلب معلّقاً صامتاً
+    var hangTimer = window.setTimeout(function () {
+      if (abortCtrl) {
+        try {
+          abortCtrl.abort();
+        } catch (e) {}
+      }
+    }, currentAction === "refresh" ? 170000 : 30000);
+
+    fetch(form.action || window.location.href, fetchOpts)
       .then(function (res) {
         return res.text().then(function (text) {
           var data = null;
@@ -151,7 +208,9 @@
             throw new Error(
               res.status === 403
                 ? "تم رفض الطلب. أعد تسجيل الدخول ثم حاول مجدداً."
-                : "استجابة غير متوقعة من الخادم."
+                : res.status === 504 || res.status === 502
+                  ? "انتهت مهلة الخادم أثناء التحديث. جرّب مجموعة أصغر أو أعد المحاولة."
+                  : "استجابة غير متوقعة من الخادم."
             );
           }
           if (!res.ok || !data || !data.ok) {
@@ -161,6 +220,7 @@
         });
       })
       .then(function (data) {
+        window.clearTimeout(hangTimer);
         stopTimer();
         setProgress(100);
         if (overlay) overlay.classList.add("is-done");
@@ -177,13 +237,35 @@
         }, 450);
       })
       .catch(function (err) {
-        stopTimer();
-        if (overlay) overlay.classList.add("is-error");
-        if (statusEl) statusEl.textContent = err.message || "حدث خطأ أثناء الحساب.";
-        if (label) label.textContent = "!";
-        if (closeBtn) closeBtn.hidden = false;
-        setButtonsDisabled(false);
+        window.clearTimeout(hangTimer);
+        var msg = err && err.message ? err.message : "حدث خطأ أثناء الحساب.";
+        if (err && err.name === "AbortError") {
+          msg =
+            currentAction === "refresh"
+              ? "انتهت مهلة التحديث. اختر مجموعة أصغر أو أعد المحاولة."
+              : "انتهت مهلة الطلب.";
+        }
+        finishError(msg);
       });
+  }
+
+  function onButtonClick(action, event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    runAction(action);
+  }
+
+  if (viewBtn) {
+    viewBtn.addEventListener("click", function (event) {
+      onButtonClick("view", event);
+    });
+  }
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", function (event) {
+      onButtonClick("refresh", event);
+    });
   }
 
   form.addEventListener("submit", function (event) {
@@ -198,6 +280,11 @@
 
   if (closeBtn) {
     closeBtn.addEventListener("click", function () {
+      if (abortCtrl) {
+        try {
+          abortCtrl.abort();
+        } catch (e) {}
+      }
       if (overlay) overlay.hidden = true;
       setButtonsDisabled(false);
     });

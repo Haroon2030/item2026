@@ -110,6 +110,11 @@ def stock_cost_report(request):
     if request.method == 'POST':
         refresh = _wants_refresh(data)
         try:
+            if refresh and not g_code:
+                raise ApiClientError(
+                    'لتحديث من النظام اختر مجموعة واحدة أولاً. '
+                    'بعدها يمكن عرض كل المجموعات من التخزين بسرعة.'
+                )
             report = aggregate_group_stock_cost(
                 warehouse,
                 g_code=g_code or None,
