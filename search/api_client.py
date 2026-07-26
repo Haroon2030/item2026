@@ -871,15 +871,21 @@ def _item_group_map() -> dict[str, dict[str, str]]:
     return mapping
 
 
-def aggregate_group_stock_cost(warehouse: str, max_workers: int = 16) -> dict[str, Any]:
+def aggregate_group_stock_cost(
+    warehouse: str,
+    g_code: str | None = None,
+    max_workers: int = 16,
+) -> dict[str, Any]:
     """
     إجمالي تكلفة المخزون حسب المجموعة لمخزن محدد.
+    يمكن تصفية مجموعة واحدة عبر g_code.
     يعتمد الفهرس المحلي للمجموعات + GetItemQtyCost لكل صنف.
     """
     from .models import ItemGroup
 
     started = time.monotonic()
     warehouse = str(warehouse or '').strip()
+    selected_group = str(g_code or '').strip()
     if not warehouse:
         raise ApiClientError('المخزن مطلوب لحساب تكلفة المخزون.')
 
@@ -891,6 +897,23 @@ def aggregate_group_stock_cost(warehouse: str, max_workers: int = 16) -> dict[st
         g.g_code: g.g_name
         for g in ItemGroup.objects.all().only('g_code', 'g_name')
     }
+    if selected_group and selected_group != '—' and selected_group not in group_names:
+        # اسمح بمجموعات موجودة في الفهرس حتى لو لم تُزامَن أسماؤها
+        has_items = any(
+            (meta.get('g_code') or '').strip() == selected_group
+            for meta in item_map.values()
+        )
+        if not has_items:
+            raise ApiClientError('المجموعة المحددة غير موجودة في الفهرس.')
+
+    if selected_group:
+        item_map = {
+            code: meta
+            for code, meta in item_map.items()
+            if (meta.get('g_code') or '').strip() == selected_group
+        }
+        if not item_map:
+            raise ApiClientError('لا توجد أصناف لهذه المجموعة في الفهرس.')
 
     totals: dict[str, dict[str, Any]] = {}
     errors = 0
@@ -912,18 +935,18 @@ def aggregate_group_stock_cost(warehouse: str, max_workers: int = 16) -> dict[st
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for item_code, value, qty, ok in pool.map(_one, codes, chunksize=8):
             meta = item_map[item_code]
-            g_code = meta.get('g_code') or '—'
-            bucket = totals.get(g_code)
+            row_g = meta.get('g_code') or '—'
+            bucket = totals.get(row_g)
             if bucket is None:
                 bucket = {
-                    'g_code': g_code,
-                    'g_name': group_names.get(g_code, '') if g_code != '—' else 'بدون مجموعة',
+                    'g_code': row_g,
+                    'g_name': group_names.get(row_g, '') if row_g != '—' else 'بدون مجموعة',
                     'item_count': 0,
                     'items_valued': 0,
                     'total_cost': 0.0,
                     'total_qty': 0.0,
                 }
-                totals[g_code] = bucket
+                totals[row_g] = bucket
             bucket['item_count'] += 1
             if not ok:
                 errors += 1
@@ -945,8 +968,13 @@ def aggregate_group_stock_cost(warehouse: str, max_workers: int = 16) -> dict[st
         row['total_qty_display'] = _fmt_qty(row['total_qty'])
 
     grand = round(sum(float(r['total_cost']) for r in rows), 2)
+    selected_name = ''
+    if selected_group:
+        selected_name = group_names.get(selected_group, '') or selected_group
     return {
         'warehouse': warehouse,
+        'g_code': selected_group,
+        'g_name': selected_name,
         'rows': rows,
         'grand_total': grand,
         'grand_total_display': _fmt_cost(grand),

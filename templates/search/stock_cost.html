@@ -7,7 +7,7 @@
   <div class="stock-cost-head">
     <div>
       <h2>تكلفة المخزون</h2>
-      <p>اختر المخزن لعرض إجمالي تكلفة كل مجموعة في جدول منفصل</p>
+      <p>اختر المخزن والمجموعة لعرض إجمالي التكلفة في جدول منفصل</p>
     </div>
     <a class="btn-ghost" href="{% url 'item_search' %}">العودة للبحث</a>
   </div>
@@ -31,6 +31,27 @@
           </span>
         </div>
       </div>
+
+      <div class="field group-field">
+        <label for="g_code">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          المجموعة
+        </label>
+        <div class="select-shell">
+          <select id="g_code" name="g_code" class="warehouse-select" aria-label="اختر المجموعة">
+            <option value="" {% if not g_code %}selected{% endif %}>كل المجموعات</option>
+            {% for g in groups %}
+              <option value="{{ g.code }}" {% if g.code == g_code %}selected{% endif %}>
+                {{ g.code }}{% if g.name %} — {{ g.name }}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <span class="select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+
       <button type="submit" class="btn-primary" id="stock-cost-btn">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         عرض إجمالي التكلفة
@@ -38,7 +59,8 @@
     </div>
     <p class="stock-cost-hint">
       {% if index_count %}
-        الفهرس: {{ index_count|floatformat:0 }} سجل — الحساب يجلب التكلفة من النظام لكل صنف حسب المخزن المختار.
+        الفهرس: {{ index_count|floatformat:0 }} سجل —
+        {% if groups %}{{ groups|length }} مجموعة متاحة.{% else %}لا توجد مجموعات بعد — زامِن الفهرس.{% endif %}
       {% else %}
         الفهرس فارغ — زامِن الأصناف من شاشة البحث أولاً.
       {% endif %}
@@ -65,7 +87,7 @@
       <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
     </div>
     <h3 id="stock-cost-progress-title">حساب تكلفة المخزون</h3>
-    <p id="stock-cost-progress-status" class="sync-progress-status">جاري جلب التكلفة من النظام حسب المجموعات…</p>
+    <p id="stock-cost-progress-status" class="sync-progress-status">جاري جلب التكلفة من النظام…</p>
     <div class="sync-progress-track" aria-hidden="true">
       <div id="stock-cost-progress-fill" class="sync-progress-fill" style="width:8%"></div>
     </div>

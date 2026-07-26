@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -9,30 +11,63 @@ from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from .api_client import ApiClientError, aggregate_group_stock_cost
-from .models import ItemBarcode
+from .models import ItemBarcode, ItemGroup
 from .validators import ValidationError, resolve_warehouse
+
+_GROUP_RE = re.compile(r'^[0-9A-Za-z_\-]{1,64}$')
 
 
 def _warehouses() -> list[dict]:
     return list(settings.EXTERNAL_API.get('WAREHOUSES') or [])
 
 
+def _groups() -> list[dict]:
+    return [
+        {'code': g.g_code, 'name': g.g_name or g.g_code}
+        for g in ItemGroup.objects.order_by('g_code').only('g_code', 'g_name')
+    ]
+
+
+def _resolve_group(raw: str | None) -> str:
+    selected = (raw or '').strip()
+    if not selected:
+        return ''
+    if not _GROUP_RE.match(selected):
+        raise ValidationError('المجموعة المحددة غير صالحة.')
+    return selected
+
+
+def _page_context(*, warehouses, groups, warehouse, g_code, error='', report=None):
+    return {
+        'warehouses': warehouses,
+        'groups': groups,
+        'warehouse': warehouse,
+        'g_code': g_code,
+        'error': error,
+        'report': report,
+        'index_count': ItemBarcode.objects.count(),
+    }
+
+
 @login_required
 @require_http_methods(['GET', 'POST'])
 def stock_cost_report(request):
     warehouses = _warehouses()
+    groups = _groups()
     default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
     wants_json = (
         request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         or 'application/json' in (request.headers.get('Accept') or '')
     )
+    data = request.POST if request.method == 'POST' else request.GET
 
     try:
         warehouse = resolve_warehouse(
-            request.POST.get('warehouse') if request.method == 'POST' else request.GET.get('warehouse'),
+            data.get('warehouse'),
             warehouses,
             default_wh,
         )
+        g_code = _resolve_group(data.get('g_code'))
     except ValidationError as exc:
         if wants_json:
             return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
@@ -42,13 +77,13 @@ def stock_cost_report(request):
         return render(
             request,
             'search/stock_cost.html',
-            {
-                'warehouses': warehouses,
-                'warehouse': warehouse,
-                'error': str(exc),
-                'report': None,
-                'index_count': ItemBarcode.objects.count(),
-            },
+            _page_context(
+                warehouses=warehouses,
+                groups=groups,
+                warehouse=warehouse,
+                g_code='',
+                error=str(exc),
+            ),
         )
 
     report = None
@@ -56,7 +91,7 @@ def stock_cost_report(request):
 
     if request.method == 'POST':
         try:
-            report = aggregate_group_stock_cost(warehouse)
+            report = aggregate_group_stock_cost(warehouse, g_code=g_code or None)
             if wants_json:
                 return JsonResponse({'ok': True, 'report': report})
         except ApiClientError as exc:
@@ -71,11 +106,12 @@ def stock_cost_report(request):
     return render(
         request,
         'search/stock_cost.html',
-        {
-            'warehouses': warehouses,
-            'warehouse': warehouse,
-            'error': error,
-            'report': report,
-            'index_count': ItemBarcode.objects.count(),
-        },
+        _page_context(
+            warehouses=warehouses,
+            groups=groups,
+            warehouse=warehouse,
+            g_code=g_code,
+            error=error,
+            report=report,
+        ),
     )

@@ -26,7 +26,13 @@
     overlay.classList.remove("is-done", "is-error");
     if (closeBtn) closeBtn.hidden = true;
     if (statusEl) {
-      statusEl.textContent = "جاري جلب التكلفة من النظام حسب المجموعات… قد يستغرق دقيقة أو أكثر.";
+      var groupSelect = form.querySelector('#g_code');
+      var groupLabel = "";
+      if (groupSelect && groupSelect.value) {
+        groupLabel = " للمجموعة المحددة";
+      }
+      statusEl.textContent =
+        "جاري جلب التكلفة من النظام" + groupLabel + "… قد يستغرق دقيقة أو أكثر.";
     }
     setProgress(8);
   }
@@ -75,11 +81,15 @@
       rowsHtml = '<tr><td colspan="6">لا توجد مجموعات لعرضها.</td></tr>';
     }
 
+    var titleExtra = report.g_code
+      ? " | مجموعة " + escapeHtml(report.g_code) + (report.g_name ? " — " + escapeHtml(report.g_name) : "")
+      : " | كل المجموعات";
+
     results.innerHTML =
       '<div class="panel panel-blue stock-cost-report">' +
       '<div class="panel-head stock-cost-report-head">' +
       '<span class="panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>' +
-      "<div><h3>إجمالي التكلفة — مخزن " + escapeHtml(report.warehouse) + "</h3>" +
+      "<div><h3>إجمالي التكلفة — مخزن " + escapeHtml(report.warehouse) + titleExtra + "</h3>" +
       '<p class="panel-sub">' +
       escapeHtml(report.item_total) + " صنف | قُيّم " + escapeHtml(report.items_valued) +
       (report.errors ? " | تعذّر " + escapeHtml(report.errors) : "") +

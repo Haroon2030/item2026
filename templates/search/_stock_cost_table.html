@@ -4,7 +4,14 @@
       <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
     </span>
     <div>
-      <h3>إجمالي التكلفة — مخزن {{ report.warehouse }}</h3>
+      <h3>
+        إجمالي التكلفة — مخزن {{ report.warehouse }}
+        {% if report.g_code %}
+          | مجموعة {{ report.g_code }}{% if report.g_name %} — {{ report.g_name }}{% endif %}
+        {% else %}
+          | كل المجموعات
+        {% endif %}
+      </h3>
       <p class="panel-sub">
         {{ report.item_total }} صنف |
         قُيّم {{ report.items_valued }} |

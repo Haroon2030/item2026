@@ -122,6 +122,8 @@ class StockCostReportTests(TestCase):
     def test_stock_cost_post_returns_json_report(self, mocked):
         mocked.return_value = {
             'warehouse': '60',
+            'g_code': 'G1',
+            'g_name': 'ألبان',
             'rows': [
                 {
                     'g_code': 'G1',
@@ -143,7 +145,7 @@ class StockCostReportTests(TestCase):
         }
         response = self.client.post(
             reverse('stock_cost'),
-            {'warehouse': '60'},
+            {'warehouse': '60', 'g_code': 'G1'},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
             HTTP_ACCEPT='application/json',
         )
@@ -151,7 +153,14 @@ class StockCostReportTests(TestCase):
         payload = response.json()
         self.assertTrue(payload['ok'])
         self.assertEqual(payload['report']['grand_total'], 100.5)
-        mocked.assert_called_once_with('60')
+        mocked.assert_called_once_with('60', g_code='G1')
+
+    def test_stock_cost_page_shows_group_select(self):
+        response = self.client.get(reverse('stock_cost'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'كل المجموعات')
+        self.assertContains(response, 'G1')
+        self.assertContains(response, 'ألبان')
 
 
 class AuthenticationTests(TestCase):
