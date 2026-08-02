@@ -308,6 +308,23 @@ EXTERNAL_API = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# أوراكل أونكس — قراءة فقط (SELECT) للموجود الحقيقي
+# ---------------------------------------------------------------------------
+ORACLE = {
+    'ENABLED': _env_bool('ORACLE_ENABLED', default=False),
+    'HOST': _env('ORACLE_HOST', ''),
+    'PORT': int(_env('ORACLE_PORT', '1521') or '1521'),
+    'SERVICE_NAME': _env('ORACLE_SERVICE_NAME', ''),
+    'SID': _env('ORACLE_SID', ''),
+    'USER': _env('ORACLE_USER', ''),
+    'PASSWORD': _env('ORACLE_PASSWORD', ''),
+    'SCHEMA': _env('ORACLE_SCHEMA', ''),
+    'CLIENT_LIB_DIR': _env('ORACLE_CLIENT_LIB_DIR', ''),
+}
+# oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
+STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

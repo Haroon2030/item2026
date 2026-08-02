@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}تصفح بالمجموعة — بيانات الأصناف{% endblock %}
+
+{% block page_class %}{% if browsed and items %}results-focus{% endif %}{% endblock %}
+
+{% block content %}
+<section class="search-box" aria-label="تصفح أصناف المجموعة">
+  <div class="search-head">
+    <span class="panel-ico" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2.5"/></svg>
+    </span>
+    <div>
+      <h2>تصفح بالمجموعة</h2>
+      <p>اختر المخزن والمجموعة لعرض الأصناف التي لها كمية فقط</p>
+    </div>
+  </div>
+
+  <form method="get" action="{% url 'browse_groups' %}" class="search-form browse-form" role="search">
+    <div class="field warehouse-field">
+      <label for="warehouse">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
+        المخزن
+      </label>
+      <div class="select-shell">
+        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن" required>
+          {% for wh in warehouses %}
+            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+          {% endfor %}
+        </select>
+        <span class="select-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
+    </div>
+
+    <div class="field group-field">
+      <label for="group">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        المجموعة
+      </label>
+      <div class="select-shell">
+        <select id="group" name="group" class="warehouse-select" aria-label="اختر المجموعة" required>
+          <option value="" {% if not group %}selected{% endif %} disabled>اختر المجموعة…</option>
+          {% for g in groups %}
+            <option value="{{ g.g_code }}" {% if g.g_code == group %}selected{% endif %}>
+              {{ g.g_name }}{% if g.g_name != g.g_code %} ({{ g.g_code }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <span class="select-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-primary" id="browse-submit">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2.5"/></svg>
+      عرض الأصناف
+    </button>
+  </form>
+
+<div id="browse-loading" class="browse-loading" hidden>
+  <div class="browse-loading-card" role="status" aria-live="polite">
+    <div class="browse-loading-row">
+      <span class="browse-loading-title">جاري الجلب</span>
+      <span id="browse-loading-label" class="browse-loading-label">1%</span>
+    </div>
+    <div class="browse-loading-track">
+      <div id="browse-loading-fill" class="browse-loading-fill" style="width:1%"></div>
+    </div>
+    <button type="button" id="browse-loading-cancel" class="browse-loading-cancel">إلغاء</button>
+  </div>
+</div>
+
+  <div class="toolbar">
+    <a class="btn-ghost" href="{% url 'item_search' %}?warehouse={{ warehouse|urlencode }}">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      البحث بالباركود
+    </a>
+    <p class="cache-meta {% if groups %}is-ready{% else %}is-empty{% endif %}">
+      {% if groups %}
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+        {{ groups|length }} مجموعة جاهزة
+      {% else %}
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        لا مجموعات — زامِن الفهرس من شاشة البحث أولاً
+      {% endif %}
+    </p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if browsed %}
+  <section class="results">
+    {% if items %}
+      <div class="results-topbar">
+        <span class="results-topbar-title">
+          أصناف بكمية ({{ total_count }})
+          {% if page_obj %}
+            — صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}
+          {% endif %}
+        </span>
+        <a class="btn-new-search" href="{% url 'browse_groups' %}?warehouse={{ warehouse|urlencode }}">اختيار جديد</a>
+      </div>
+
+      <div class="panel panel-blue name-results browse-results">
+        <div class="panel-head browse-results-head">
+          <span class="panel-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2.5"/></svg>
+          </span>
+          <div class="browse-results-title">
+            <h3>{{ group_name }}</h3>
+            <div class="browse-results-meta">
+              <span class="browse-meta-chip">مخزن <b class="mono">{{ warehouse }}</b></span>
+              {% if group %}<span class="browse-meta-chip mono">{{ group }}</span>{% endif %}
+              <span class="browse-meta-chip">كتالوج <b class="mono">{{ catalog_count }}</b></span>
+              <span class="browse-meta-chip is-ok">بكمية <b class="mono">{{ total_count }}</b></span>
+              {% if zero_excluded %}<span class="browse-meta-chip is-warn">صفر <b class="mono">{{ zero_excluded }}</b></span>{% endif %}
+              {% if fetch_failed %}<span class="browse-meta-chip is-muted">فشل جلب <b class="mono">{{ fetch_failed }}</b></span>{% endif %}
+              {% if fetch_complete %}<span class="browse-meta-chip is-ok">جلب مكتمل</span>{% else %}{% if browsed %}<span class="browse-meta-chip is-muted">غير مكتمل</span>{% endif %}{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table browse-price-table">
+            <thead>
+              <tr>
+                <th>رقم الصنف</th>
+                <th>الاسم</th>
+                <th>الوحدة</th>
+                <th>السعر</th>
+                <th>التكلفة</th>
+                <th>الكمية</th>
+                <th>تكلفة الصنف</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+                <tr>
+                  <td>
+                    <a class="browse-item-link mono" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&warehouse={{ warehouse|urlencode }}">{{ item.code }}</a>
+                  </td>
+                  <td>
+                    <a class="browse-item-link browse-item-name" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&warehouse={{ warehouse|urlencode }}">{{ item.name|default:"—" }}</a>
+                  </td>
+                  <td>{% firstof item.pricing_unit item.unit "—" %}</td>
+                  <td class="mono price-cell">
+                    {% if item.price %}
+                      <span class="money">
+                        <span class="money-value">{{ item.price }}</span>
+                        <svg class="sar-symbol" viewBox="0 0 1124.14 1256.39" aria-label="ريال سعودي" role="img" focusable="false">
+                          <path fill="currentColor" d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/>
+                          <path fill="currentColor" d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-123.31,26.15V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.83c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-50.9l36.68-30.52v92.57l-123.31,26.15v-92.57l36.68,30.52c17.06,26.5,43.3,44.55,73.83,50.9l375.04,79.7Z"/>
+                        </svg>
+                      </span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="mono cost-cell">{{ item.avg_cost|default:"—" }}</td>
+                  <td class="mono qty-cell">{{ item.quantity|default:"—" }}</td>
+                  <td class="mono cost-cell">{% if item.line_cost %}{{ item.line_cost }}{% else %}—{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if page_obj and page_obj.paginator.num_pages > 1 %}
+          <nav class="browse-pager" aria-label="ترقيم الصفحات">
+            {% if page_obj.has_previous %}
+              <a class="browse-pager-btn" href="?warehouse={{ warehouse|urlencode }}&group={{ group|urlencode }}&page={{ page_obj.previous_page_number }}">السابق</a>
+            {% else %}
+              <span class="browse-pager-btn is-disabled">السابق</span>
+            {% endif %}
+
+            <div class="browse-pager-pages">
+              {% for num in page_obj.paginator.page_range %}
+                {% if num == page_obj.number %}
+                  <span class="browse-pager-num is-current" aria-current="page">{{ num }}</span>
+                {% elif num == 1 or num == page_obj.paginator.num_pages or num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+                  <a class="browse-pager-num" href="?warehouse={{ warehouse|urlencode }}&group={{ group|urlencode }}&page={{ num }}">{{ num }}</a>
+                {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
+                  <span class="browse-pager-ellipsis">…</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            {% if page_obj.has_next %}
+              <a class="browse-pager-btn" href="?warehouse={{ warehouse|urlencode }}&group={{ group|urlencode }}&page={{ page_obj.next_page_number }}">التالي</a>
+            {% else %}
+              <span class="browse-pager-btn is-disabled">التالي</span>
+            {% endif %}
+          </nav>
+        {% endif %}
+
+        <div class="browse-stock-total" role="status">
+          <div class="browse-stock-total-glow" aria-hidden="true"></div>
+          <div class="browse-stock-total-main">
+            <div class="browse-stock-total-copy">
+              <span class="browse-stock-total-kicker">ملخص المخزون</span>
+              <strong>إجمالي تكلفة المخزون</strong>
+              <span class="browse-stock-total-formula">
+                {% if qty_source == 'oracle' %}
+                  موجود أوراكل (قراءة) · الكمية × التكلفة · يشمل غير النشط إن وُجد رصيد
+                {% else %}
+                  المتاح بعد التخصيم · الكمية × التكلفة
+                {% endif %}
+              </span>
+            </div>
+            <div class="browse-stock-total-value mono">
+              {% if stock_cost_total %}
+                <span class="money browse-stock-money">
+                  <span class="money-value">{{ stock_cost_total }}</span>
+                  <svg class="sar-symbol" viewBox="0 0 1124.14 1256.39" aria-label="ريال سعودي" role="img" focusable="false">
+                    <path fill="currentColor" d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/>
+                    <path fill="currentColor" d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-123.31,26.15V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.83c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-50.9l36.68-30.52v92.57l-123.31,26.15v-92.57l36.68,30.52c17.06,26.5,43.3,44.55,73.83,50.9l375.04,79.7Z"/>
+                  </svg>
+                </span>
+              {% else %}
+                —
+              {% endif %}
+            </div>
+          </div>
+          <div class="browse-stock-total-chips">
+            <span class="browse-stock-chip">
+              <span class="browse-stock-chip-n mono">{{ stock_cost_used }}</span>
+              <span class="browse-stock-chip-l">صنف محسوب</span>
+            </span>
+            {% if stock_cost_skipped %}
+            <span class="browse-stock-chip is-muted">
+              <span class="browse-stock-chip-n mono">{{ stock_cost_skipped }}</span>
+              <span class="browse-stock-chip-l">مستبعد</span>
+            </span>
+            {% endif %}
+            <span class="browse-stock-chip is-soft">
+              <span class="browse-stock-chip-n mono">{{ warehouse }}</span>
+              <span class="browse-stock-chip-l">المخزن</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="results-topbar">
+        <span class="results-topbar-title">لا أصناف بكمية</span>
+        <a class="btn-new-search" href="{% url 'browse_groups' %}?warehouse={{ warehouse|urlencode }}">اختيار جديد</a>
+      </div>
+      <div class="empty-state">
+        <svg class="ico lg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2.5"/></svg>
+        <p class="empty-title">لا أصناف بكمية في هذه المجموعة</p>
+        <p>
+          لا يوجد صنف بكمية أكبر من صفر للمجموعة «{{ group_name }}» في المخزن الحالي.
+          {% if catalog_count %} الكتالوج: {{ catalog_count }}.{% endif %}
+          {% if zero_excluded %} صفر: {{ zero_excluded }}.{% endif %}
+          {% if fetch_failed %} فشل جلب: {{ fetch_failed }}.{% endif %}
+        </p>
+      </div>
+    {% endif %}
+  </section>
+{% endif %}
+
+<script src="/static/js/browse-progress.js?v=2" defer></script>
+{% endblock %}

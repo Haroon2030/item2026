@@ -12,17 +12,30 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=54">
 </head>
 <body class="{% block body_class %}{% endblock %}">
+  <script>
+    try {
+      if (localStorage.getItem("sidebar-collapsed") === "1") {
+        document.documentElement.classList.add("sidebar-collapsed");
+      }
+    } catch (e) {}
+  </script>
   <div class="app-backdrop" aria-hidden="true">
     <span class="app-orb app-orb-a"></span>
     <span class="app-orb app-orb-b"></span>
     <span class="app-grid"></span>
   </div>
-  <div class="page {% block page_class %}{% endblock %}">
-    <header class="topbar">
-      <div class="brand-wrap">
+
+  {% if request.user.is_authenticated %}
+    <button type="button" class="sidebar-open" id="sidebar-open" aria-controls="app-sidebar" aria-expanded="false" aria-label="فتح القائمة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+
+    <aside class="sidebar" id="app-sidebar" aria-label="القائمة الرئيسية">
+      <div class="sidebar-brand">
         <span class="brand-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -32,42 +45,74 @@
         </span>
         <div class="brand-copy">
           <p class="brand">بيانات الأصناف</p>
-          <p class="tagline">بحث وفهرسة الأصناف بالباركود</p>
+          <p class="tagline">بحث وفهرسة بالباركود</p>
         </div>
-        {% if request.user.is_authenticated %}
-          <div class="topbar-actions">
-            <button type="button" class="btn-refresh" id="btn-refresh" title="تحديث الصفحة" aria-label="تحديث الصفحة">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M21 2v6h-6"/>
-                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
-                <path d="M3 22v-6h6"/>
-                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-              </svg>
-              <span class="btn-refresh-text">تحديث</span>
-            </button>
-            {% if request.user.is_staff %}
-              <a class="btn-users" href="{% url 'user_list' %}" title="إدارة المستخدمين">المستخدمون</a>
-            {% endif %}
-            <form method="post" action="{% url 'logout' %}" class="logout-form">
-              {% csrf_token %}
-              <button type="submit" class="btn-logout" title="تسجيل الخروج">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                </svg>
-                خروج
-              </button>
-            </form>
-          </div>
-        {% endif %}
+        <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-controls="app-sidebar" aria-expanded="true" aria-label="طي الشريط الجانبي" title="طي الشريط">
+          <svg class="sidebar-collapse-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+        </button>
+        <button type="button" class="sidebar-close" id="sidebar-close" aria-label="إغلاق القائمة">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-    </header>
+
+      <nav class="sidebar-nav">
+        <p class="sidebar-section-label">الأقسام</p>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'item_search' %}is-active{% endif %}" href="{% url 'item_search' %}" title="بحث">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <span>بحث</span>
+        </a>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_groups' %}is-active{% endif %}" href="{% url 'browse_groups' %}" title="بالمجموعة">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7v7H4zM13 6h7v4h-7zM13 12h7v6h-7zM4 15h7v3H4z"/></svg>
+          <span>بالمجموعة</span>
+        </a>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_sales' %}is-active{% endif %}" href="{% url 'browse_sales' %}" title="داشبورد المبيعات">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
+          <span>داشبورد المبيعات</span>
+        </a>
+        {% if request.user.is_staff %}
+          <a class="sidebar-link {% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' %}is-active{% endif %}" href="{% url 'user_list' %}" title="المستخدمون">
+            <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>المستخدمون</span>
+          </a>
+        {% endif %}
+      </nav>
+
+      <div class="sidebar-foot">
+        <button type="button" class="sidebar-link sidebar-action btn-refresh" id="btn-refresh" title="تحديث الصفحة" aria-label="تحديث الصفحة">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 2v6h-6"/>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+            <path d="M3 22v-6h6"/>
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+          </svg>
+          <span class="btn-refresh-text">تحديث</span>
+        </button>
+        <form method="post" action="{% url 'logout' %}" class="logout-form">
+          {% csrf_token %}
+          <button type="submit" class="sidebar-link sidebar-action btn-logout" title="تسجيل الخروج">
+            <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            </svg>
+            <span>خروج</span>
+          </button>
+        </form>
+      </div>
+    </aside>
+  {% endif %}
+
+  <div class="page {% if request.user.is_authenticated %}has-sidebar{% endif %} {% block page_class %}{% endblock %}">
     <main>
       {% block content %}{% endblock %}
     </main>
   </div>
+
   <script src="/static/js/vendor/zxing.min.js" defer></script>
   <script src="/static/js/vendor/zxing-browser.min.js" defer></script>
   <script src="/static/js/sync-progress.js" defer></script>
   <script src="/static/js/barcode-scanner.js" defer></script>
+  <script src="/static/js/sidebar.js" defer></script>
+  {% block extra_js %}{% endblock %}
 </body>
 </html>

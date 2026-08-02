@@ -1,22 +1,50 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from .api_client import (
     ApiClientError,
+    compute_inventory_stock_cost,
+    enrich_group_browse,
     get_item_group,
     index_meta_incomplete,
+    list_groups,
     lookup_by_barcode,
+    lookup_by_group,
     lookup_by_item_code,
     lookup_by_name,
     search_item_details,
     sync_barcode_index,
 )
 from .models import ItemBarcode
-from .validators import ValidationError, looks_like_item_code, resolve_warehouse, sanitize_search_query
+from .validators import ValidationError, looks_like_item_code, resolve_group, resolve_warehouse, sanitize_search_query
+
+logger = logging.getLogger(__name__)
+
+
+def _fetch_suppliers_safe(item_code: str) -> list[dict]:
+    """جلب موردي الصنف من أوراكل (قراءة فقط) دون تعطيل نتيجة البحث عند الفشل."""
+    code = str(item_code or '').strip()
+    if not code:
+        return []
+    try:
+        from .oracle_stock import fetch_item_suppliers, oracle_enabled
+
+        if not oracle_enabled():
+            return []
+        return fetch_item_suppliers(code)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Item suppliers skipped: %s', exc)
+        return []
 
 
 def _warehouses() -> list[dict]:
@@ -249,6 +277,15 @@ def item_search(request):
         prices, matched_price = _enrich_prices_with_match(prices, items, query)
     selected_price = matched_price or (prices[0] if prices else None)
 
+    suppliers: list[dict] = []
+    if match_type != 'name_list' and (selected_price or items):
+        supplier_code = ''
+        if selected_price:
+            supplier_code = str(selected_price.get('code') or '').strip()
+        if not supplier_code and items:
+            supplier_code = str(items[0].get('code') or '').strip()
+        suppliers = _fetch_suppliers_safe(supplier_code)
+
     return render(
         request,
         'search/item_search.html',
@@ -258,6 +295,7 @@ def item_search(request):
             'prices': prices,
             'matched_price': matched_price,
             'selected_price': selected_price,
+            'suppliers': suppliers,
             'error': error,
             'searched': searched,
             'match_type': match_type,
@@ -310,3 +348,997 @@ def sync_barcodes(request):
     except Exception as exc:
         # أي فشل قاعدة بيانات/مزامنة يجب أن يعود JSON للواجهة لا صفحة HTML
         return respond_error(f'فشلت المزامنة: {exc}', status=500)
+
+
+def _parse_qty(value) -> float | None:
+    if value is None or value == '':
+        return None
+    try:
+        return float(str(value).replace(',', '').strip())
+    except ValueError:
+        return None
+
+
+def _priced_items_for_group(
+    warehouse: str, group_code: str, all_items: list[dict]
+) -> tuple[list[dict], dict[str, int], str]:
+    """
+    مسار التصفح الدقيق: أصناف بكمية > 0 + كاش فقط عند اكتمال الجلب.
+    """
+    qty_src = (getattr(settings, 'STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
+    cache_key = f'browse_stocked:v14:{qty_src}:{warehouse}:{group_code}:{len(all_items)}'
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict) and 'stocked' in cached and cached.get('counts', {}).get('complete'):
+        return cached['stocked'], cached.get('counts') or {}, ''
+
+    error = ''
+    stocked: list[dict] = []
+    counts: dict[str, int] = {
+        'catalog_count': len(all_items),
+        'stocked_count': 0,
+        'zero_count': 0,
+        'fetch_failed': 0,
+        'complete': False,
+    }
+    try:
+        stocked, counts = enrich_group_browse(
+            all_items,
+            warehouse,
+            max_workers=20,
+            group_code=group_code,
+        )
+        if counts.get('complete') and (
+            counts.get('stocked_count', 0) > 0 or counts.get('zero_count', 0) > 0
+        ):
+            cache.set(cache_key, {'stocked': stocked, 'counts': counts}, 900)
+        elif counts.get('fetch_failed', 0) > 0:
+            error = (
+                f'الجلب غير مكتمل: تعذّر {counts["fetch_failed"]} صنف — '
+                'الإجمالي أدناه غير معتمد حتى يكتمل الجلب. أعد التحميل.'
+            )
+        elif all_items and counts.get('stocked_count', 0) == 0 and counts.get('zero_count', 0) == 0:
+            error = 'نظام أونكس لا يستجيب حالياً — الكميات غير متاحة مؤقتاً. أعد المحاولة بعد قليل.'
+    except Exception as exc:  # noqa: BLE001
+        error = f'تعذّر جلب الكميات: {exc}'
+    return stocked, counts, error
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_groups(request):
+    """اختيار مجموعة ومخزن ثم عرض أصناف المجموعة (بكمية فقط)."""
+    warehouses = _warehouses()
+    default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
+    groups = list_groups()
+    items = []
+    page_obj = None
+    error = ''
+    browsed = False
+    group_code = ''
+    group_name = ''
+    total_count = 0
+    catalog_count = 0
+    zero_excluded = 0
+    missing_qty = 0
+    fetch_failed = 0
+    stock_cost_total = ''
+    stock_cost_used = 0
+    stock_cost_skipped = 0
+    fetch_complete = False
+    qty_source = ''
+
+    empty_ctx = {
+        'warehouses': warehouses,
+        'groups': groups,
+        'items': items,
+        'page_obj': page_obj,
+        'total_count': 0,
+        'catalog_count': 0,
+        'zero_excluded': 0,
+        'missing_qty': 0,
+        'fetch_failed': 0,
+        'stock_cost_total': '',
+        'stock_cost_used': 0,
+        'stock_cost_skipped': 0,
+        'fetch_complete': False,
+        'qty_source': '',
+        'browsed': False,
+    }
+
+    try:
+        warehouse = resolve_warehouse(
+            request.GET.get('warehouse'),
+            warehouses,
+            default_wh,
+        )
+        submitted = 'group' in request.GET
+        group_code = resolve_group(request.GET.get('group'), groups, required=submitted)
+    except ValidationError as exc:
+        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else '60'
+        group_code = (request.GET.get('group') or '').strip()[:64]
+        return render(
+            request,
+            'search/browse_groups.html',
+            {
+                **empty_ctx,
+                'warehouse': warehouse,
+                'group': group_code,
+                'group_name': '',
+                'error': str(exc),
+            },
+        )
+
+    if group_code:
+        browsed = True
+        group_name = next(
+            (g['g_name'] for g in groups if g['g_code'] == group_code),
+            group_code,
+        )
+        all_items = lookup_by_group(group_code)
+        stocked, counts, error = _priced_items_for_group(warehouse, group_code, all_items)
+
+        catalog_count = counts.get('catalog_count', len(all_items))
+        total_count = counts.get('stocked_count', len(stocked))
+        zero_excluded = counts.get('zero_count', 0)
+        fetch_failed = counts.get('fetch_failed', 0)
+        missing_qty = fetch_failed
+        fetch_complete = bool(counts.get('complete'))
+        qty_source = str(counts.get('qty_source') or '')
+
+        stock = compute_inventory_stock_cost(stocked)
+        stock_cost_total = stock['total']
+        stock_cost_used = stock['used_count']
+        stock_cost_skipped = stock['skipped_count']
+        if fetch_failed and not error:
+            error = (
+                f'الجلب غير مكتمل: تعذّر {fetch_failed} صنف — '
+                'الإجمالي غير معتمد. أعد التحميل.'
+            )
+
+        paginator = Paginator(stocked, 10)
+        try:
+            page_obj = paginator.page(request.GET.get('page') or 1)
+        except PageNotAnInteger:
+            page_obj = paginator.page(1)
+        except EmptyPage:
+            page_obj = paginator.page(paginator.num_pages)
+        items = list(page_obj.object_list)
+
+    return render(
+        request,
+        'search/browse_groups.html',
+        {
+            'warehouses': warehouses,
+            'warehouse': warehouse,
+            'groups': groups,
+            'group': group_code,
+            'group_name': group_name,
+            'items': items,
+            'page_obj': page_obj,
+            'total_count': total_count,
+            'catalog_count': catalog_count,
+            'zero_excluded': zero_excluded,
+            'missing_qty': missing_qty,
+            'fetch_failed': fetch_failed,
+            'stock_cost_total': stock_cost_total,
+            'stock_cost_used': stock_cost_used,
+            'stock_cost_skipped': stock_cost_skipped,
+            'fetch_complete': fetch_complete,
+            'qty_source': qty_source,
+            'error': error,
+            'browsed': browsed,
+        },
+    )
+
+
+def _parse_sales_dates(raw_from: str | None, raw_to: str | None):
+    """يحوّل تواريخ النموذج إلى date؛ الافتراضي الشهر الحالي."""
+    from datetime import date, datetime
+
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    def parse_one(raw: str | None, fallback: date) -> date:
+        text = (raw or '').strip()
+        if not text:
+            return fallback
+        try:
+            return datetime.strptime(text[:10], '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValidationError('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.') from exc
+
+    d_from = parse_one(raw_from, month_start)
+    d_to = parse_one(raw_to, today)
+    if d_from > d_to:
+        raise ValidationError('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.')
+    # حد أقصى معقول لتفادي استعلام ضخم
+    if (d_to - d_from).days > 366:
+        raise ValidationError('الفترة القصوى سنة واحدة.')
+    return d_from, d_to
+
+
+def _format_sales_metric_rows(rows):
+    for row in rows:
+        row['net_total_display'] = f"{float(row.get('net_total') or 0):,.2f}"
+        row['vat_total_display'] = f"{float(row.get('vat_total') or 0):,.2f}"
+        row['sales_total_display'] = f"{float(row.get('sales_total') or 0):,.2f}"
+        row['gross_total_display'] = f"{float(row.get('gross_total') or 0):,.2f}"
+        row['avg_basket_display'] = f"{float(row.get('avg_basket') or 0):,.2f}"
+        row['invoice_count_display'] = f"{int(row.get('invoice_count') or 0):,}"
+        row['return_count_display'] = f"{int(row.get('return_count') or 0):,}"
+
+
+def _build_sales_system(
+    key,
+    label,
+    date_from,
+    date_to,
+    requested_user,
+    branch_code='',
+    *,
+    light=False,
+):
+    """يجمع إجماليات الفروع (أو يومي لفرع) وأعلى المستخدمين لنظام بيع واحد."""
+    from .oracle_stock import (
+        fetch_branch_daily_sales_totals,
+        fetch_sales_mst_bundle,
+        fetch_user_invoice_details,
+    )
+
+    bundle = fetch_sales_mst_bundle(
+        date_from,
+        date_to,
+        system=key,
+        light=light,
+        top_users_limit=8,
+    )
+    branch_rows = bundle.get('branches') or []
+    branches = [
+        {
+            'code': str(r.get('branch_code') or ''),
+            'name': str(r.get('branch_name') or ''),
+        }
+        for r in branch_rows
+        if r.get('branch_code')
+    ]
+    branches_by_code = {b['code']: b for b in branches}
+    selected_branch = str(branch_code or '').strip()
+    if selected_branch and selected_branch not in branches_by_code:
+        selected_branch = ''
+
+    daily_mode = bool(selected_branch) and not light
+    if daily_mode:
+        rows = fetch_branch_daily_sales_totals(
+            date_from,
+            date_to,
+            selected_branch,
+            system=key,
+        )
+        selected_branch_name = branches_by_code[selected_branch]['name']
+    else:
+        rows = branch_rows
+        selected_branch_name = ''
+
+    _format_sales_metric_rows(rows)
+    top_users: list[dict] = []
+    if not light:
+        top_users = list(bundle.get('top_users') or [])
+        for user in top_users:
+            user['net_total_display'] = f"{float(user.get('net_total') or 0):,.2f}"
+            user['sales_total_display'] = f"{float(user.get('sales_total') or 0):,.2f}"
+
+    users_by_code = {str(u.get('user_code') or ''): u for u in top_users}
+    selected_code = requested_user if requested_user in users_by_code else ''
+    selected_name = ''
+    invoice_groups: list[dict] = []
+    if selected_code and not light:
+        selected_name = str(users_by_code[selected_code].get('user_name') or '')
+        invoice_groups = fetch_user_invoice_details(
+            date_from,
+            date_to,
+            selected_code,
+            system=key,
+        )
+        for group in invoice_groups:
+            group['sales_total_display'] = (
+                f"{float(group.get('sales_total') or 0):,.2f}"
+            )
+            for invoice in group.get('invoices') or []:
+                invoice['bill_total_display'] = (
+                    f"{float(invoice.get('bill_total') or 0):,.2f}"
+                )
+
+    grand_net = sum(float(r.get('net_total') or 0) for r in rows)
+    grand_vat = sum(float(r.get('vat_total') or 0) for r in rows)
+    grand_sales = sum(float(r.get('sales_total') or 0) for r in rows)
+    grand_gross = sum(float(r.get('gross_total') or 0) for r in rows)
+    grand_invoices = sum(int(r.get('invoice_count') or 0) for r in rows)
+    grand_returns = sum(int(r.get('return_count') or 0) for r in rows)
+    grand_avg = round(grand_sales / grand_invoices, 2) if grand_invoices else 0.0
+
+    top_visit_branch = ''
+    top_visit_invoices = 0
+    top_visit_invoices_display = '0'
+    if branch_rows:
+        best = max(branch_rows, key=lambda r: int(r.get('invoice_count') or 0))
+        top_visit_invoices = int(best.get('invoice_count') or 0)
+        if top_visit_invoices > 0:
+            top_visit_branch = str(
+                best.get('branch_name') or best.get('branch_code') or ''
+            )
+            top_visit_invoices_display = f'{top_visit_invoices:,}'
+
+    seller_count = int(bundle.get('seller_count') or 0)
+    device_count = int(bundle.get('device_count') or 0)
+
+    chart_branches: list[dict] = []
+    if not light and branch_rows:
+        ranked = sorted(
+            branch_rows,
+            key=lambda r: float(r.get('sales_total') or 0),
+            reverse=True,
+        )[:15]
+        total = sum(float(r.get('sales_total') or 0) for r in ranked)
+        assigned = 0.0
+        for idx, row in enumerate(ranked):
+            sales = float(row.get('sales_total') or 0)
+            inv = int(row.get('invoice_count') or 0)
+            if not total:
+                pct = 0.0
+            elif idx == len(ranked) - 1:
+                pct = round(max(0.0, 100.0 - assigned), 1)
+            else:
+                pct = round((sales / total) * 100.0, 1)
+                assigned += pct
+            chart_branches.append(
+                {
+                    'branch_code': str(row.get('branch_code') or ''),
+                    'branch_name': str(
+                        row.get('branch_name') or row.get('branch_code') or ''
+                    ),
+                    'sales_total': sales,
+                    'sales_total_display': f'{sales:,.2f}',
+                    'invoice_count': inv,
+                    'invoice_count_display': f'{inv:,}',
+                    'share_pct': pct,
+                }
+            )
+
+    return {
+        'key': key,
+        'label': label,
+        'rows': rows if not light else [],
+        'branches': branches,
+        'chart_branches': chart_branches,
+        'daily_mode': daily_mode,
+        'selected_branch': selected_branch if not light else '',
+        'selected_branch_name': selected_branch_name,
+        'top_users': top_users,
+        'invoice_groups': invoice_groups,
+        'selected_user_code': selected_code,
+        'selected_user_name': selected_name,
+        'branch_count': len(branch_rows),
+        'day_count': len(rows) if daily_mode else 0,
+        'seller_count': seller_count,
+        'seller_count_display': f'{seller_count:,}',
+        'device_count': device_count,
+        'device_count_display': f'{device_count:,}',
+        'grand_invoices': grand_invoices,
+        'grand_returns': grand_returns,
+        'grand_invoices_display': f'{grand_invoices:,}',
+        'grand_returns_display': f'{grand_returns:,}',
+        'grand_gross': f'{grand_gross:,.2f}',
+        'grand_net': f'{grand_net:,.2f}',
+        'grand_vat': f'{grand_vat:,.2f}',
+        'grand_sales': f'{grand_sales:,.2f}',
+        'grand_avg_basket': f'{grand_avg:,.2f}',
+        'grand_sales_num': grand_sales,
+        'top_user_name': str(top_users[0].get('user_name') or '') if top_users else '',
+        'top_user_sales': top_users[0]['sales_total_display'] if top_users else '0.00',
+        'top_visit_branch': top_visit_branch,
+        'top_visit_invoices': top_visit_invoices,
+        'top_visit_invoices_display': top_visit_invoices_display,
+    }
+
+
+def _empty_group_panel(selected_branch='', selected_group='', groups=None):
+    return {
+        'rows': [],
+        'groups': groups or [],
+        'selected_group': selected_group,
+        'selected_group_name': '',
+        'selected_branch': selected_branch,
+        'by_branch': bool(selected_group),
+        'grand_invoices_display': '0',
+        'grand_qty_display': '0.00',
+        'grand_sales': '0.00',
+        'grand_gross': '0.00',
+        'grand_net': '0.00',
+        'grand_vat': '0.00',
+        'grand_avg_basket': '0.00',
+        'fast_mode': False,
+        'loading': True,
+    }
+
+
+def _build_group_panel(
+    date_from,
+    date_to,
+    active_system,
+    branches,
+    selected_group='',
+    selected_branch='',
+):
+    from .oracle_stock import (
+        fetch_group_sales_totals,
+        fetch_sales_group_options,
+        sales_fast_mode,
+    )
+
+    group_options = fetch_sales_group_options()
+    group_codes = {g['code'] for g in group_options}
+    if selected_group and selected_group not in group_codes:
+        selected_group = ''
+    by_branch = bool(selected_group)
+    group_rows = fetch_group_sales_totals(
+        date_from,
+        date_to,
+        system=active_system,
+        branch_code=selected_branch,
+        group_code=selected_group,
+        by_branch=by_branch,
+    )
+    _format_sales_metric_rows(group_rows)
+    for row in group_rows:
+        row['qty_total_display'] = f"{float(row.get('qty_total') or 0):,.2f}"
+    if not by_branch and selected_branch:
+        branch_label = next(
+            (
+                str(b.get('name') or b.get('code') or '')
+                for b in (branches or [])
+                if str(b.get('code') or '') == selected_branch
+            ),
+            selected_branch,
+        )
+        for row in group_rows:
+            row['branch_code'] = selected_branch
+            row['branch_name'] = branch_label
+    g_net = sum(float(r.get('net_total') or 0) for r in group_rows)
+    g_vat = sum(float(r.get('vat_total') or 0) for r in group_rows)
+    g_sales = sum(float(r.get('sales_total') or 0) for r in group_rows)
+    g_gross = sum(float(r.get('gross_total') or 0) for r in group_rows)
+    g_inv = sum(int(r.get('invoice_count') or 0) for r in group_rows)
+    g_qty = sum(float(r.get('qty_total') or 0) for r in group_rows)
+    g_avg = round(g_sales / g_inv, 2) if g_inv else 0.0
+    selected_group_name = ''
+    if by_branch and group_rows:
+        selected_group_name = str(group_rows[0].get('group_name') or selected_group)
+    elif selected_group:
+        selected_group_name = next(
+            (g['name'] for g in group_options if g['code'] == selected_group),
+            selected_group,
+        )
+    return {
+        'rows': group_rows,
+        'groups': group_options,
+        'selected_group': selected_group,
+        'selected_group_name': selected_group_name,
+        'selected_branch': selected_branch,
+        'by_branch': by_branch,
+        'grand_invoices_display': f'{g_inv:,}',
+        'grand_qty_display': f'{g_qty:,.2f}',
+        'grand_sales': f'{g_sales:,.2f}',
+        'grand_gross': f'{g_gross:,.2f}',
+        'grand_net': f'{g_net:,.2f}',
+        'grand_vat': f'{g_vat:,.2f}',
+        'grand_avg_basket': f'{g_avg:,.2f}',
+        'fast_mode': sales_fast_mode(date_from, date_to),
+        'loading': False,
+    }
+
+
+def _build_sales_panels_payload(
+    date_from,
+    date_to,
+    active_system,
+    selected_group='',
+    selected_branch='',
+    item_limit=20,
+):
+    """مجموعات + أصناف مبيعات + أصناف مرتجعة في جلسة أوراكل واحدة."""
+    panel = _build_group_panel(
+        date_from,
+        date_to,
+        active_system,
+        branches=[],
+        selected_group=selected_group,
+        selected_branch=selected_branch,
+    )
+    gcode = panel.get('selected_group') or ''
+    items, fast_mode = _build_top_items_list(
+        date_from,
+        date_to,
+        active_system,
+        selected_branch=selected_branch,
+        selected_group=gcode,
+        limit=item_limit,
+    )
+    return_items = _build_top_return_items_list(
+        date_from,
+        date_to,
+        active_system,
+        selected_branch=selected_branch,
+        selected_group=gcode,
+        limit=item_limit,
+    )
+    return panel, items, return_items, fast_mode
+
+
+def _build_top_items_list(
+    date_from,
+    date_to,
+    active_system,
+    selected_branch='',
+    selected_group='',
+    limit=20,
+):
+    from .oracle_stock import fetch_top_sales_items, sales_fast_mode
+
+    top_items = fetch_top_sales_items(
+        date_from,
+        date_to,
+        system=active_system,
+        branch_code=selected_branch,
+        group_code=selected_group,
+        limit=limit,
+    )
+    for item in top_items:
+        item['sales_total_display'] = f"{float(item.get('sales_total') or 0):,.2f}"
+        item['qty_total_display'] = f"{float(item.get('qty_total') or 0):,.2f}"
+    return top_items, sales_fast_mode(date_from, date_to)
+
+
+def _build_top_return_items_list(
+    date_from,
+    date_to,
+    active_system,
+    selected_branch='',
+    selected_group='',
+    limit=20,
+):
+    from .oracle_stock import fetch_top_returned_items
+
+    rows = fetch_top_returned_items(
+        date_from,
+        date_to,
+        system=active_system,
+        branch_code=selected_branch,
+        group_code=selected_group,
+        limit=limit,
+    )
+    for item in rows:
+        total = float(item.get('return_total') or item.get('sales_total') or 0)
+        item['sales_total_display'] = f'{total:,.2f}'
+        item['return_total_display'] = f'{total:,.2f}'
+        item['qty_total_display'] = f"{float(item.get('qty_total') or 0):,.2f}"
+    return rows
+
+
+def _build_chart_branches_list(
+    date_from,
+    date_to,
+    active_system,
+    selected_branch='',
+    selected_group='',
+    limit=15,
+):
+    """فروع مرتبة حسب المبيعات — مع فلتر مجموعة/فرع اختياري."""
+    from .oracle_stock import fetch_branch_sales_totals, fetch_group_sales_totals
+
+    brn = str(selected_branch or '').strip()
+    gcode = str(selected_group or '').strip()
+    lim = max(1, min(int(limit or 15), 40))
+
+    if gcode:
+        rows = fetch_group_sales_totals(
+            date_from,
+            date_to,
+            system=active_system,
+            branch_code=brn,
+            group_code=gcode,
+            by_branch=True,
+        )
+        if brn:
+            rows = [r for r in rows if str(r.get('branch_code') or '') == brn]
+        ranked = sorted(
+            rows,
+            key=lambda r: float(r.get('sales_total') or 0),
+            reverse=True,
+        )[:lim]
+    else:
+        rows = fetch_branch_sales_totals(date_from, date_to, system=active_system)
+        if brn:
+            rows = [r for r in rows if str(r.get('branch_code') or '') == brn]
+        ranked = sorted(
+            rows,
+            key=lambda r: float(r.get('sales_total') or 0),
+            reverse=True,
+        )[:lim]
+
+    total = sum(float(r.get('sales_total') or 0) for r in ranked)
+    out: list[dict] = []
+    assigned = 0.0
+    for idx, row in enumerate(ranked):
+        sales = float(row.get('sales_total') or 0)
+        inv = int(row.get('invoice_count') or 0)
+        if not total:
+            pct = 0.0
+        elif idx == len(ranked) - 1:
+            pct = round(max(0.0, 100.0 - assigned), 1)
+        else:
+            pct = round((sales / total) * 100.0, 1)
+            assigned += pct
+        out.append(
+            {
+                'branch_code': str(row.get('branch_code') or ''),
+                'branch_name': str(
+                    row.get('branch_name') or row.get('branch_code') or ''
+                ),
+                'sales_total': sales,
+                'sales_total_display': f'{sales:,.2f}',
+                'invoice_count': inv,
+                'invoice_count_display': f'{inv:,}',
+                'share_pct': pct,
+            }
+        )
+    return out
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales(request):
+    """داشبورد مبيعات: نقاط البيع والجملة بأرقام صحيحة دون تكرار."""
+    error = ''
+    systems: list[dict] = []
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        from datetime import date as date_cls
+
+        today = date_cls.today()
+        return render(
+            request,
+            'search/browse_sales.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'systems': [],
+                'active': None,
+                'active_system': active_system,
+                'kpi': None,
+                'browsed': False,
+                'error': str(exc),
+                'default_from': today.replace(day=1).isoformat(),
+                'default_to': today.isoformat(),
+            },
+        )
+
+    selected_group = str(request.GET.get('group') or '').strip()
+    active = None
+    systems_by_key: dict = {}
+    top_items: list[dict] = []
+    group_panel = _empty_group_panel()
+    defer_heavy = True
+    try:
+        from .oracle_stock import (
+            SALES_SYSTEMS,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن جلب المبيعات.'
+        else:
+            requested_branch = str(request.GET.get('branch') or '').strip()
+
+            def _job_system(key, label, is_active):
+                with oracle_session():
+                    return _build_sales_system(
+                        key,
+                        label,
+                        date_from,
+                        date_to,
+                        str(request.GET.get('user_id') or '').strip() if is_active else '',
+                        requested_branch if is_active else '',
+                        light=not is_active,
+                    )
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = {
+                    pool.submit(
+                        _job_system,
+                        key,
+                        conf['label'],
+                        key == active_system,
+                    ): key
+                    for key, conf in SALES_SYSTEMS.items()
+                }
+                built = {}
+                for fut in as_completed(futures):
+                    built[futures[fut]] = fut.result()
+                systems = [
+                    built[key] for key in SALES_SYSTEMS.keys() if key in built
+                ]
+
+            systems_by_key = {s['key']: s for s in systems}
+            active = systems_by_key.get(active_system) or (
+                systems[0] if systems else None
+            )
+            if active:
+                active_system = active['key']
+
+            if active:
+                from .oracle_stock import fetch_sales_group_options
+
+                group_options = fetch_sales_group_options()
+                group_codes = {g['code'] for g in group_options}
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+                group_panel = _empty_group_panel(
+                    selected_branch=active.get('selected_branch') or '',
+                    selected_group=selected_group,
+                    groups=group_options,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales failed: %s', exc)
+        error = f'تعذّر جلب المبيعات: {exc}'
+        systems = []
+        active = None
+        systems_by_key = {}
+        top_items = []
+        defer_heavy = False
+
+    kpi = None
+    if systems:
+        if not systems_by_key:
+            systems_by_key = {s['key']: s for s in systems}
+        pos = systems_by_key.get('pos') or {}
+        wholesale = systems_by_key.get('wholesale') or {}
+        total_sales = float(pos.get('grand_sales_num') or 0) + float(
+            wholesale.get('grand_sales_num') or 0
+        )
+        total_invoices = int(pos.get('grand_invoices') or 0) + int(
+            wholesale.get('grand_invoices') or 0
+        )
+        kpi = {
+            'pos_sales': pos.get('grand_sales') or '0.00',
+            'pos_invoices': pos.get('grand_invoices_display') or '0',
+            'wholesale_sales': wholesale.get('grand_sales') or '0.00',
+            'wholesale_invoices': wholesale.get('grand_invoices_display') or '0',
+            'total_sales': f'{total_sales:,.2f}',
+            'total_invoices': f'{total_invoices:,}',
+            'branch_count': max(
+                int(pos.get('branch_count') or 0),
+                int(wholesale.get('branch_count') or 0),
+            ),
+            'seller_count': (active or {}).get('seller_count_display')
+            or f"{int((active or {}).get('seller_count') or 0):,}",
+            'device_count': (active or {}).get('device_count_display')
+            or f"{int((active or {}).get('device_count') or 0):,}",
+            'seller_system_label': (active or {}).get('label') or '',
+            'top_visit_branch': (
+                pos.get('top_visit_branch')
+                or (active or {}).get('top_visit_branch')
+                or '—'
+            ),
+            'top_visit_invoices': (
+                pos.get('top_visit_invoices_display')
+                or (active or {}).get('top_visit_invoices_display')
+                or '0'
+            ),
+        }
+
+    return render(
+        request,
+        'search/browse_sales.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'systems': systems,
+            'active': active,
+            'active_system': active_system,
+            'selected_branch': (active or {}).get('selected_branch') or '',
+            'selected_group': selected_group,
+            'group_panel': group_panel,
+            'top_items': top_items,
+            'defer_heavy': defer_heavy and bool(active) and not error,
+            'kpi': kpi,
+            'browsed': bool(systems) and not error,
+            'error': error,
+            'default_from': date_from.isoformat(),
+            'default_to': date_to.isoformat(),
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_groups_api(request):
+    """تحميل لاحق لجدول المجموعات (ثقيل على الفترات الطويلة)."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            panel = _build_group_panel(
+                date_from,
+                date_to,
+                active_system,
+                branches=[],
+                selected_group=selected_group,
+                selected_branch=selected_branch,
+            )
+        return JsonResponse({'ok': True, 'panel': panel})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_groups_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_items_api(request):
+    """تحميل لاحق للأصناف الأكثر مبيعاً."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            items, fast_mode = _build_top_items_list(
+                date_from,
+                date_to,
+                active_system,
+                selected_branch=selected_branch,
+                selected_group=selected_group,
+                limit=20,
+            )
+        return JsonResponse({'ok': True, 'items': items, 'fast_mode': fast_mode})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_items_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_panels_api(request):
+    """طلب واحد: مجموعات + أعلى أصناف (جلسة أوراكل واحدة)."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            panel, items, return_items, fast_mode = _build_sales_panels_payload(
+                date_from,
+                date_to,
+                active_system,
+                selected_group=selected_group,
+                selected_branch=selected_branch,
+                item_limit=20,
+            )
+        return JsonResponse(
+            {
+                'ok': True,
+                'panel': panel,
+                'items': items,
+                'return_items': return_items,
+                'fast_mode': fast_mode,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_panels_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_charts_api(request):
+    """رسوم الفروع + الأصناف الأكثر إرجاعاً مع فلتر فرع/مجموعة."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            chart_branches = _build_chart_branches_list(
+                date_from,
+                date_to,
+                active_system,
+                selected_branch=selected_branch,
+                selected_group=selected_group,
+                limit=15,
+            )
+            return_items = _build_top_return_items_list(
+                date_from,
+                date_to,
+                active_system,
+                selected_branch=selected_branch,
+                selected_group=selected_group,
+                limit=20,
+            )
+        return JsonResponse(
+            {
+                'ok': True,
+                'chart_branches': chart_branches,
+                'return_items': return_items,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_charts_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)

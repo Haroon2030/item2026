@@ -4,6 +4,12 @@ from . import user_views, views
 
 urlpatterns = [
     path('', views.item_search, name='item_search'),
+    path('browse/', views.browse_groups, name='browse_groups'),
+    path('sales/', views.browse_sales, name='browse_sales'),
+    path('sales/api/groups/', views.browse_sales_groups_api, name='browse_sales_groups_api'),
+    path('sales/api/items/', views.browse_sales_items_api, name='browse_sales_items_api'),
+    path('sales/api/panels/', views.browse_sales_panels_api, name='browse_sales_panels_api'),
+    path('sales/api/charts/', views.browse_sales_charts_api, name='browse_sales_charts_api'),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
     path('users/', user_views.user_list, name='user_list'),
     path('users/add/', user_views.user_create, name='user_create'),

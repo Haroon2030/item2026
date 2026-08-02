@@ -1,17 +1,8 @@
-"""تسجيل مؤقت لتشخيص الدخول — بدون أسماء أو كلمات سر."""
+"""مساعدات تشخيص دخول خفيفة — بدون كتابة ملفات على القرص."""
 
 from __future__ import annotations
 
 import hashlib
-import json
-import time
-from pathlib import Path
-
-from django.conf import settings
-from django.http import JsonResponse
-
-SESSION_ID = '5b001b'
-LOG_PATH = Path(settings.BASE_DIR) / 'debug-5b001b.log'
 
 
 def fingerprint(value: str) -> str:
@@ -19,29 +10,5 @@ def fingerprint(value: str) -> str:
 
 
 def auth_log(hypothesis_id: str, location: str, message: str, data: dict) -> None:
-    payload_data = dict(data or {})
-    run_id = payload_data.pop('runId', 'post-fix')
-    payload = {
-        'sessionId': SESSION_ID,
-        'runId': run_id,
-        'hypothesisId': hypothesis_id,
-        'location': location,
-        'message': message,
-        'data': payload_data,
-        'timestamp': int(time.time() * 1000),
-    }
-    try:
-        with LOG_PATH.open('a', encoding='utf-8') as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False) + '\n')
-    except OSError:
-        pass
-
-
-def auth_debug_dump(request):
-    """مخرج مؤقت؛ السجل لا يحتوي بيانات اعتماد أو معلومات شخصية."""
-    try:
-        lines = LOG_PATH.read_text(encoding='utf-8').splitlines()[-100:]
-        logs = [json.loads(line) for line in lines if line.strip()]
-    except (OSError, ValueError):
-        logs = []
-    return JsonResponse({'sessionId': SESSION_ID, 'logs': logs})
+    """محفوظ للتوافق؛ لا يسجّل شيئاً في الإنتاج."""
+    return

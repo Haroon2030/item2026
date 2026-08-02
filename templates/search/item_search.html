@@ -229,6 +229,24 @@
               </tbody>
             </table>
           </div>
+          {% if suppliers %}
+            <div class="item-suppliers" aria-label="موردو الصنف">
+              <div class="item-suppliers-head">
+                <span class="item-suppliers-title">الموردون الذين نُزّل منهم</span>
+                <span class="item-suppliers-count">{{ suppliers|length }}</span>
+              </div>
+              <ul class="item-suppliers-list">
+                {% for s in suppliers %}
+                  <li>
+                    <span class="item-supplier-name">{{ s.name }}</span>
+                    {% if s.code %}<span class="item-supplier-code mono">{{ s.code }}</span>{% endif %}
+                    {% if s.last_date %}<span class="item-supplier-date">آخر توريد {{ s.last_date }}</span>{% endif %}
+                    {% if s.main %}<span class="item-supplier-main">رئيسي</span>{% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
         </div>
       {% elif items %}
         <div class="panel panel-blue name-results">
@@ -241,6 +259,23 @@
               <p class="panel-sub mono">رقم الصنف: {{ items.0.code }}</p>
             </div>
           </div>
+          {% if suppliers %}
+            <div class="item-suppliers item-suppliers-inline" aria-label="موردو الصنف">
+              <div class="item-suppliers-head">
+                <span class="item-suppliers-title">الموردون الذين نُزّل منهم</span>
+                <span class="item-suppliers-count">{{ suppliers|length }}</span>
+              </div>
+              <ul class="item-suppliers-list">
+                {% for s in suppliers %}
+                  <li>
+                    <span class="item-supplier-name">{{ s.name }}</span>
+                    {% if s.code %}<span class="item-supplier-code mono">{{ s.code }}</span>{% endif %}
+                    {% if s.last_date %}<span class="item-supplier-date">آخر توريد {{ s.last_date }}</span>{% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
           <ul class="name-result-list">
             {% for item in items %}
               <li>

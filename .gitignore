@@ -19,3 +19,11 @@ staticfiles/
 .DS_Store
 Thumbs.db
 *.swp
+
+# تجارب مؤقتة
+_shot_*.png
+_probe_*.py
+_oracle_*.py
+_diag_*.py
+_verify_*.py
+debug-*.log
