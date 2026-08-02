@@ -88,13 +88,20 @@ def _init_thick_client() -> None:
         import oracledb
 
         lib_dir = str(_cfg().get("CLIENT_LIB_DIR") or "").strip()
+        # على Docker/Linux غالباً thin mode يكفي؛ مسار Windows المحلي يُتجاهل بأمان.
         if lib_dir:
-            oracledb.init_oracle_client(lib_dir=lib_dir)
+            try:
+                oracledb.init_oracle_client(lib_dir=lib_dir)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Oracle thick client lib_dir failed (%s); using thin mode",
+                    exc,
+                )
         else:
             try:
                 oracledb.init_oracle_client()
             except Exception:
-                logger.warning("Oracle thick client init skipped; falling back if possible")
+                logger.warning("Oracle thick client init skipped; using thin mode")
         _client_ready = True
 
 
