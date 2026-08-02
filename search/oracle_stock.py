@@ -1389,11 +1389,10 @@ def _fetch_pos_group_totals(
         """
 
     try:
-        # نظرة عامة: تجميع خفيف (مبالغ) — أسرع بكثير من تجميع كل فاتورة
-        # تفصيل مجموعة×فرع: تجميع على مرحلتين لعدد الفواتير بدقة
-        sales_rows = _fetch_all(sales_sql if by_branch else light_sql, params)
+        # تجميع على مرحلتين يعطي عدد الفواتير الصحيح (نظرة عامة وتفصيل فرع)
+        sales_rows = _fetch_all(sales_sql, params)
     except Exception as exc:  # noqa: BLE001
-        if by_branch and _is_temp_space_error(exc):
+        if _is_temp_space_error(exc):
             logger.warning("POS group sales TEMP; light fallback: %s", exc)
             skip_returns = True
             sales_rows = _fetch_all(light_sql, params)
@@ -1547,9 +1546,9 @@ def _fetch_bill_group_totals(
         """
 
     try:
-        sales_rows = _fetch_all(sales_sql if by_branch else light_sql, params)
+        sales_rows = _fetch_all(sales_sql, params)
     except Exception as exc:  # noqa: BLE001
-        if by_branch and _is_temp_space_error(exc):
+        if _is_temp_space_error(exc):
             logger.warning("Bill group sales TEMP; light fallback: %s", exc)
             skip_returns = True
             sales_rows = _fetch_all(light_sql, params)
@@ -1635,7 +1634,7 @@ def fetch_group_sales_totals(
     split_by_branch = bool(by_branch) if by_branch is not None else bool(gcode)
     fast = _use_fast_sales(date_from, date_to)
     cache_key = (
-        f"sales:groups:v3:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:groups:v4:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:f{int(fast)}"
     )
     cached = _sales_cache_get(cache_key)
