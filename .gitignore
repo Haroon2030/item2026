@@ -15,10 +15,12 @@ data/
 *.log
 staticfiles/
 
-# نظام
+# نظام / أدوات محلية
 .DS_Store
 Thumbs.db
 *.swp
+.cursor/
+.vscode/
 
 # تجارب مؤقتة
 _shot_*.png

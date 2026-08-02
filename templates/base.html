@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>{% block title %}بيانات الأصناف — بحث بالباركود{% endblock %}</title>
+  <title>{% block title %}تحليل البيانات{% endblock %}</title>
   <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/static/img/favicon.ico" sizes="any">
   <link rel="icon" href="/static/img/favicon-32.png" type="image/png" sizes="32x32">
@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=55">
+  <link rel="stylesheet" href="/static/css/style.css?v=92">
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <script>
@@ -38,14 +38,15 @@
       <div class="sidebar-brand">
         <span class="brand-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            <path d="M3.3 7L12 12l8.7-5"/>
-            <path d="M12 22V12"/>
+            <rect x="3" y="3" width="7" height="9" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="5" rx="1.5"/>
+            <rect x="14" y="12" width="7" height="9" rx="1.5"/>
+            <rect x="3" y="16" width="7" height="5" rx="1.5"/>
+            <path d="M5.5 9.5v-2M7.2 9.5v-3.5M8.9 9.5V6"/>
           </svg>
         </span>
         <div class="brand-copy">
-          <p class="brand">بيانات الأصناف</p>
-          <p class="tagline">بحث وفهرسة بالباركود</p>
+          <p class="brand">تحليل البيانات</p>
         </div>
         <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-controls="app-sidebar" aria-expanded="true" aria-label="طي الشريط الجانبي" title="طي الشريط">
           <svg class="sidebar-collapse-ico" viewBox="0 0 24 24" aria-hidden="true">
@@ -59,17 +60,25 @@
 
       <nav class="sidebar-nav">
         <p class="sidebar-section-label">الأقسام</p>
-        <a class="sidebar-link {% if request.resolver_match.url_name == 'item_search' %}is-active{% endif %}" href="{% url 'item_search' %}" title="بحث">
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'item_search' %}is-active{% endif %}" href="{% url 'item_search' %}" title="البحث عن معلومات الصنف">
           <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <span>بحث</span>
+          <span>البحث عن معلومات الصنف</span>
         </a>
-        <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_groups' %}is-active{% endif %}" href="{% url 'browse_groups' %}" title="بالمجموعة">
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_groups' %}is-active{% endif %}" href="{% url 'browse_groups' %}" title="سحب مخزون المجموعات">
           <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7v7H4zM13 6h7v4h-7zM13 12h7v6h-7zM4 15h7v3H4z"/></svg>
-          <span>بالمجموعة</span>
+          <span>سحب مخزون المجموعات</span>
+        </a>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_inventory' %}is-active{% endif %}" href="{% url 'browse_inventory' %}" title="تحليل المخزون">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+          <span>تحليل المخزون</span>
         </a>
         <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_sales' %}is-active{% endif %}" href="{% url 'browse_sales' %}" title="داشبورد المبيعات">
           <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
           <span>داشبورد المبيعات</span>
+        </a>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'browse_performance' %}is-active{% endif %}" href="{% url 'browse_performance' %}" title="قياس الأداء">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M18 20V4M6 20v-4"/><path d="M4 20h16"/></svg>
+          <span>قياس الأداء</span>
         </a>
         {% if request.user.is_staff %}
           <a class="sidebar-link {% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' %}is-active{% endif %}" href="{% url 'user_list' %}" title="المستخدمون">
@@ -108,10 +117,6 @@
     </main>
   </div>
 
-  <script src="/static/js/vendor/zxing.min.js" defer></script>
-  <script src="/static/js/vendor/zxing-browser.min.js" defer></script>
-  <script src="/static/js/sync-progress.js" defer></script>
-  <script src="/static/js/barcode-scanner.js" defer></script>
   <script src="/static/js/sidebar.js" defer></script>
   {% block extra_js %}{% endblock %}
 </body>

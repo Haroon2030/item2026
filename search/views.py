@@ -1328,3 +1328,253 @@ def browse_sales_charts_api(request):
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_charts_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_performance(request):
+    """قياس الأداء — فلترة حقيقية ومقارنة فترتين."""
+    from datetime import date as date_cls
+    from datetime import datetime
+    from datetime import timedelta
+
+    error = ''
+    insights = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    compare_mode = str(request.GET.get('compare') or 'auto').strip().lower()
+    if compare_mode not in ('auto', 'custom'):
+        compare_mode = 'auto'
+
+    systems = [
+        {'key': 'pos', 'label': 'نقاط البيع'},
+        {'key': 'wholesale', 'label': 'الآجل'},
+    ]
+
+    def _parse_one(raw: str | None, fallback: date_cls) -> date_cls:
+        text = (raw or '').strip()
+        if not text:
+            return fallback
+        try:
+            return datetime.strptime(text[:10], '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValidationError('صيغة التاريخ غير صحيحة.') from exc
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        today = date_cls.today()
+        return render(
+            request,
+            'search/browse_performance.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'compare_from': (request.GET.get('compare_from') or '')[:10],
+                'compare_to': (request.GET.get('compare_to') or '')[:10],
+                'default_from': today.replace(day=1).isoformat(),
+                'default_to': today.isoformat(),
+                'active_system': active_system,
+                'selected_branch': selected_branch,
+                'selected_group': selected_group,
+                'compare_mode': compare_mode,
+                'systems': systems,
+                'branches': [],
+                'groups': [],
+                'insights': None,
+                'error': str(exc),
+            },
+        )
+
+    span_days = (date_to - date_from).days
+    default_b_to = date_from - timedelta(days=1)
+    default_b_from = default_b_to - timedelta(days=span_days)
+    compare_from = None
+    compare_to = None
+    if compare_mode == 'custom':
+        try:
+            compare_from = _parse_one(request.GET.get('compare_from'), default_b_from)
+            compare_to = _parse_one(request.GET.get('compare_to'), default_b_to)
+            if compare_from > compare_to:
+                raise ValidationError('فترة المقارنة: تاريخ البداية بعد النهاية.')
+            if (compare_to - compare_from).days > 366:
+                raise ValidationError('فترة المقارنة القصوى سنة واحدة.')
+        except ValidationError as exc:
+            error = str(exc)
+
+    try:
+        from .oracle_stock import (
+            SALES_SYSTEMS,
+            fetch_branch_sales_totals,
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .sales_insights import build_performance_insights
+
+        systems = [
+            {'key': key, 'label': conf['label']}
+            for key, conf in SALES_SYSTEMS.items()
+        ]
+        if not oracle_enabled():
+            error = error or 'أوراكل غير مفعّل — لا يمكن قياس الأداء.'
+        elif not error:
+            with oracle_session():
+                branches = [
+                    {
+                        'code': str(r.get('branch_code') or ''),
+                        'name': str(r.get('branch_name') or r.get('branch_code') or ''),
+                    }
+                    for r in fetch_branch_sales_totals(
+                        date_from, date_to, system=active_system
+                    )
+                    if r.get('branch_code')
+                ]
+                groups = fetch_sales_group_options()
+                group_codes = {g['code'] for g in groups}
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+                insights = build_performance_insights(
+                    date_from,
+                    date_to,
+                    system=active_system,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    compare_from=compare_from if compare_mode == 'custom' else None,
+                    compare_to=compare_to if compare_mode == 'custom' else None,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_performance failed: %s', exc)
+        error = f'تعذّر حساب قياس الأداء: {exc}'
+        insights = None
+
+    if compare_mode == 'custom' and compare_from and compare_to:
+        compare_from_s = compare_from.isoformat()
+        compare_to_s = compare_to.isoformat()
+    else:
+        compare_from_s = default_b_from.isoformat()
+        compare_to_s = default_b_to.isoformat()
+
+    return render(
+        request,
+        'search/browse_performance.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'compare_from': compare_from_s,
+            'compare_to': compare_to_s,
+            'default_from': date_from.isoformat(),
+            'default_to': date_to.isoformat(),
+            'active_system': active_system,
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'compare_mode': compare_mode,
+            'systems': systems,
+            'branches': branches,
+            'groups': groups,
+            'insights': insights,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_inventory(request):
+    """تحليل المخزون — إجماليات حسب المخازن والمجموعات والفروع."""
+    error = ''
+    insights = None
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    branches: list[dict] = []
+
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+
+    try:
+        from .inventory_insights import build_inventory_insights
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن تحليل المخزون.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True)
+                groups = fetch_sales_group_options()
+                wh_codes = {w['code'] for w in warehouses}
+                group_codes = {g['code'] for g in groups}
+                if selected_warehouse and selected_warehouse not in wh_codes:
+                    selected_warehouse = ''
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+
+                branch_map: dict[str, str] = {}
+                for w in warehouses:
+                    brn = str(w.get('branch_code') or '').strip()
+                    if brn:
+                        branch_map[brn] = str(w.get('branch_name') or brn)
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
+                ]
+                if selected_branch and selected_branch not in branch_map:
+                    selected_branch = ''
+
+                # عند اختيار فرع: اعرض مخازنه فقط في القائمة
+                warehouse_choices = warehouses
+                if selected_branch:
+                    warehouse_choices = [
+                        w
+                        for w in warehouses
+                        if str(w.get('branch_code') or '') == selected_branch
+                    ]
+                    if (
+                        selected_warehouse
+                        and selected_warehouse
+                        not in {w['code'] for w in warehouse_choices}
+                    ):
+                        selected_warehouse = ''
+
+                insights = build_inventory_insights(
+                    warehouse=selected_warehouse,
+                    group_code=selected_group,
+                    branch_code=selected_branch,
+                )
+                warehouses = warehouse_choices
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_inventory failed: %s', exc)
+        error = f'تعذّر تحليل المخزون: {exc}'
+        insights = None
+
+    return render(
+        request,
+        'search/browse_inventory.html',
+        {
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'selected_branch': selected_branch,
+            'warehouses': warehouses,
+            'groups': groups,
+            'branches': branches,
+            'insights': insights,
+            'error': error,
+        },
+    )

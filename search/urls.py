@@ -5,7 +5,9 @@ from . import user_views, views
 urlpatterns = [
     path('', views.item_search, name='item_search'),
     path('browse/', views.browse_groups, name='browse_groups'),
+    path('inventory/', views.browse_inventory, name='browse_inventory'),
     path('sales/', views.browse_sales, name='browse_sales'),
+    path('sales/performance/', views.browse_performance, name='browse_performance'),
     path('sales/api/groups/', views.browse_sales_groups_api, name='browse_sales_groups_api'),
     path('sales/api/items/', views.browse_sales_items_api, name='browse_sales_items_api'),
     path('sales/api/panels/', views.browse_sales_panels_api, name='browse_sales_panels_api'),

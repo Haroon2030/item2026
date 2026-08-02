@@ -1,37 +1,53 @@
-# بحث الأصناف — Django + API
+# تحليل البيانات — Django
 
-واجهة Django بسيطة للبحث عن الأصناف عبر API خارجي.
+تطبيق Django داخلي: بحث الأصناف، سحب مخزون المجموعات، تحليل المخزون، المبيعات، وقياس الأداء — مع قراءة Oracle للتقارير.
 
-## التشغيل
+## هيكل الجذر
+
+```
+item/
+├── config/           # إعدادات Django (settings, urls, wsgi)
+├── search/           # التطبيق الرئيسي (views, oracle, insights)
+├── templates/        # قوالب HTML
+├── static/           # CSS / JS / أيقونات
+├── deploy/           # إعدادات نشر (nginx)
+├── scripts/          # أدوات تشغيل/صيانة
+├── manage.py
+├── Dockerfile
+├── docker-compose.yml
+├── entrypoint.sh
+├── requirements.txt
+└── .env.example      # انسخه إلى .env محلياً (لا يُرفع)
+```
+
+ملفات محلية لا تُرفع: `.env` · `.secret_key` · `db.sqlite3`
+
+## التشغيل محلياً
 
 ```bash
 pip install -r requirements.txt
+copy .env.example .env   # عدّل القيم
 python manage.py migrate
 python manage.py runserver
 ```
 
-ثم افتح: http://127.0.0.1:8000/
+ثم: http://127.0.0.1:8000/
 
-## ربط الـ API
+## الصفحات
 
-عدّل القاموس `EXTERNAL_API` في ملف `config/settings.py` بعد إرسال تفاصيل الـ API:
+| المسار | الوظيفة |
+|--------|---------|
+| `/` | البحث عن معلومات الصنف |
+| `/browse/` | سحب مخزون المجموعات |
+| `/inventory/` | تحليل المخزون |
+| `/sales/` | لوحة المبيعات |
+| `/sales/performance/` | قياس الأداء |
+| `/users/` | إدارة المستخدمين (مدير النظام) |
 
-| الإعداد | الوصف |
-|---------|--------|
-| `BASE_URL` | رابط النظام الأساسي |
-| `SEARCH_PATH` | مسار البحث |
-| `QUERY_PARAM` | اسم معامل البحث (`q`, `barcode`, ...) |
-| `METHOD` | `GET` أو `POST` |
-| `API_KEY` | مفتاح الوصول إن وُجد |
-| `RESULTS_PATH` | مسار قائمة النتائج داخل JSON |
-| `FIELD_MAP` | مطابقة أسماء الحقول للعرض |
+## Docker
 
-## ما نحتاجه منك لربط النظام
+```bash
+docker compose up --build
+```
 
-أرسل أيًا مما يلي:
-
-1. رابط الـ API (Endpoint)
-2. مثال طلب (Request) ومثال استجابة (Response JSON)
-3. هل البحث بـ GET أم POST؟
-4. اسم معامل البحث ومفتاح المصادقة إن وُجد
-5. أسماء حقول الصنف (الرمز، الاسم، الباركود، السعر، ...)
+راجع `deploy/nginx-ssl.conf` لتهيئة البروكسي العكسي إن لزم.

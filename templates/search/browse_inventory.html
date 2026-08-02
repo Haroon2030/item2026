@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block title %}تحليل المخزون{% endblock %}
+{% block page_class %}sales-dash inv-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="تحليل المخزون">
+  <div class="dash-head-copy">
+    <h2>تحليل المخزون</h2>
+    <p>إجماليات حقيقية حسب المخازن والمجموعات والفروع — قيمة بالتكلفة</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if insights %}
+  <section class="inv-top" aria-label="ملخص المخزون">
+    <article class="dash-kpi-card dash-kpi-glass inv-summary-scope">
+      <div class="inv-summary-scope-main">
+        <span class="dash-kpi-ico inv-kpi-ico-rows" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        </span>
+        <div class="inv-summary-scope-text">
+          <span class="inv-summary-scope-label">نطاق التحليل</span>
+          <strong class="inv-summary-scope-title" title="{{ insights.note }}">{{ insights.scope_label }}</strong>
+        </div>
+      </div>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-hl-wh">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/></svg>
+        </span>
+        أعلى مخزن
+      </span>
+      <strong class="inv-hl-name">{{ insights.highlights.top_warehouse.name }}</strong>
+      <span class="dash-kpi-value mono">{{ insights.highlights.top_warehouse.value }}</span>
+      <span class="dash-kpi-hint mono inv-share">{{ insights.highlights.top_warehouse.share }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-hl-group">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-rows" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6h7v7H4zM13 6h7v4h-7zM13 12h7v6h-7zM4 15h7v3H4z"/></svg>
+        </span>
+        أعلى مجموعة
+      </span>
+      <strong class="inv-hl-name">{{ insights.highlights.top_group.name }}</strong>
+      <span class="dash-kpi-value mono">{{ insights.highlights.top_group.value }}</span>
+      <span class="dash-kpi-hint mono inv-share">{{ insights.highlights.top_group.share }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-hl-branch">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-scope" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-8h6v8"/></svg>
+        </span>
+        أعلى فرع
+      </span>
+      <strong class="inv-hl-name">{{ insights.highlights.top_branch.name }}</strong>
+      <span class="dash-kpi-value mono">{{ insights.highlights.top_branch.value }}</span>
+      <span class="dash-kpi-hint mono inv-share">{{ insights.highlights.top_branch.share }}</span>
+    </article>
+  </section>
+
+  <section class="inv-kpi-grid" aria-label="مؤشرات المخزون">
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-kpi-value">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-value" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M7 8h7.5a2.5 2.5 0 0 1 0 5H9a2.5 2.5 0 0 0 0 5H17"/></svg>
+        </span>
+        قيمة المخزون
+      </span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.stock_value }}</strong>
+      <span class="dash-kpi-hint">تكلفة × كمية</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-kpi-qty">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        إجمالي الكمية
+      </span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.qty_total }}</strong>
+      <span class="dash-kpi-hint">وحدات التخزين</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-kpi-rows">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-rows" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        </span>
+        صفوف الرصيد
+      </span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.row_count }}</strong>
+      <span class="dash-kpi-hint">صنف × وحدة × مخزن</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-kpi-scope">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico inv-kpi-ico-scope" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-8h6v8"/></svg>
+        </span>
+        مخازن / مجموعات / فروع
+      </span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.warehouse_count }} / {{ insights.kpis.group_count }} / {{ insights.kpis.branch_count }}</strong>
+      <span class="dash-kpi-hint">ضمن الفلتر</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_inventory' %}" class="perf-filter dash-panel-glass inv-filter" role="search">
+  <div class="perf-filter-grid">
+    <div class="field">
+      <label for="inv-branch">الفرع</label>
+      <select id="inv-branch" name="branch">
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="inv-warehouse">المخزن</label>
+      <select id="inv-warehouse" name="warehouse">
+        <option value="">كل المخازن</option>
+        {% for w in warehouses %}
+          <option value="{{ w.code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="inv-group">المجموعة</label>
+      <select id="inv-group" name="group">
+        <option value="">كل المجموعات</option>
+        {% for g in groups %}
+          <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="perf-filter-actions">
+    <button type="submit" class="btn-primary">تحليل المخزون</button>
+    <a class="sales-view-btn" href="{% url 'browse_groups' %}{% if selected_warehouse %}?warehouse={{ selected_warehouse }}{% endif %}{% if selected_group %}{% if selected_warehouse %}&amp;{% else %}?{% endif %}group={{ selected_group }}{% endif %}">فتح بالمجموعة</a>
+  </div>
+</form>
+
+{% if insights %}
+  <section class="inv-tables-duo" aria-label="المخازن والمجموعات">
+    <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب المخازن">
+      <div class="dash-panel-head">
+        <h3>حسب المخازن</h3>
+        <span class="result-pill">{{ insights.by_warehouse|length }}</span>
+      </div>
+      <div class="table-wrap inv-table-scroll">
+        <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المخزن">
+          <thead>
+            <tr>
+              <th>رقم</th>
+              <th>المخزن</th>
+              <th>الفرع</th>
+              <th>أصناف</th>
+              <th>الكمية</th>
+              <th class="inv-value">القيمة</th>
+              <th class="inv-share">الحصة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in insights.by_warehouse %}
+              <tr>
+                <td class="mono">{{ row.code }}</td>
+                <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
+                <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
+                <td class="mono">{{ row.item_count_display }}</td>
+                <td class="mono">{{ row.qty_display }}</td>
+                <td class="mono inv-value">{{ row.stock_value_display }}</td>
+                <td class="mono inv-share">{{ row.share_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if insights.by_warehouse %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td colspan="3">الإجمالي</td>
+                <td class="mono">{{ insights.warehouse_totals.item_count_display }}</td>
+                <td class="mono">{{ insights.warehouse_totals.qty_display }}</td>
+                <td class="mono inv-value">{{ insights.warehouse_totals.stock_value_display }}</td>
+                <td class="mono inv-share">{{ insights.warehouse_totals.share_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب المجموعات">
+      <div class="dash-panel-head">
+        <h3>حسب المجموعات</h3>
+        <span class="result-pill">{{ insights.by_group|length }}</span>
+      </div>
+      <div class="table-wrap inv-table-scroll">
+        <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المجموعة">
+          <thead>
+            <tr>
+              <th>المجموعة</th>
+              <th>مخازن</th>
+              <th>أصناف</th>
+              <th>الكمية</th>
+              <th class="inv-value">القيمة</th>
+              <th class="inv-share">الحصة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in insights.by_group %}
+              <tr>
+                <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
+                <td class="mono">{{ row.warehouse_count }}</td>
+                <td class="mono">{{ row.item_count_display }}</td>
+                <td class="mono">{{ row.qty_display }}</td>
+                <td class="mono inv-value">{{ row.stock_value_display }}</td>
+                <td class="mono inv-share">{{ row.share_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="sales-empty">لا مجموعات ضمن هذا الفلتر.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if insights.by_group %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td>الإجمالي</td>
+                <td class="mono">{{ insights.group_totals.warehouse_count_display }}</td>
+                <td class="mono">{{ insights.group_totals.item_count_display }}</td>
+                <td class="mono">{{ insights.group_totals.qty_display }}</td>
+                <td class="mono inv-value">{{ insights.group_totals.stock_value_display }}</td>
+                <td class="mono inv-share">{{ insights.group_totals.share_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section class="inv-tables-duo inv-branch-charts-row" aria-label="الفروع والترتيب البياني">
+    <div class="inv-branch-stagnant-stack" aria-label="الفروع والمخزون الراكد">
+      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب الفروع">
+        <div class="dash-panel-head">
+          <h3>حسب الفروع</h3>
+          <span class="result-pill">{{ insights.by_branch|length }}</span>
+        </div>
+        <div class="table-wrap inv-table-scroll">
+          <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب الفرع">
+            <thead>
+              <tr>
+                <th>الفرع</th>
+                <th>مخازن</th>
+                <th>أصناف</th>
+                <th>الكمية</th>
+                <th class="inv-value">القيمة</th>
+                <th class="inv-share">الحصة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in insights.by_branch %}
+                <tr>
+                  <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
+                  <td class="mono">{{ row.warehouse_count }}</td>
+                  <td class="mono">{{ row.item_count_display }}</td>
+                  <td class="mono">{{ row.qty_display }}</td>
+                  <td class="mono inv-value">{{ row.stock_value_display }}</td>
+                  <td class="mono inv-share">{{ row.share_display }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6" class="sales-empty">لا فروع ضمن هذا الفلتر.</td></tr>
+              {% endfor %}
+            </tbody>
+            {% if insights.by_branch %}
+              <tfoot>
+                <tr class="sales-grand-row">
+                  <td>الإجمالي</td>
+                  <td class="mono">{{ insights.branch_totals.warehouse_count_display }}</td>
+                  <td class="mono">{{ insights.branch_totals.item_count_display }}</td>
+                  <td class="mono">{{ insights.branch_totals.qty_display }}</td>
+                  <td class="mono inv-value">{{ insights.branch_totals.stock_value_display }}</td>
+                  <td class="mono inv-share">{{ insights.branch_totals.share_display }}</td>
+                </tr>
+              </tfoot>
+            {% endif %}
+          </table>
+        </div>
+      </section>
+
+      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact inv-stagnant-panel" aria-label="المخزون الراكد">
+        <div class="dash-panel-head">
+          <h3>المخزون الراكد · بلا حركة</h3>
+          <span class="result-pill" id="inv-stagnant-pill">{{ insights.stagnant.count }} مجموعة</span>
+        </div>
+        <p class="inv-rank-period">
+          بلا مبيعات · {{ insights.sales_period_label }}
+          · {{ insights.stagnant.stock_value_display }}
+          ({{ insights.stagnant.of_total_display }})
+        </p>
+        {{ insights.stagnant.rows|json_script:"inv-stagnant-data" }}
+        <div id="inv-stagnant-board" class="branch-chart branch-donut inv-stagnant-donut" hidden></div>
+        <p id="inv-stagnant-empty" class="sales-empty"{% if insights.stagnant.rows %} hidden{% endif %}>
+          لا مجموعات راكدة ضمن الفلتر.
+        </p>
+      </section>
+    </div>
+
+    <div class="inv-rank-stack" aria-label="ترتيب المخازن والمجموعات">
+      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="ترتيب المخازن">
+        <div class="dash-panel-head">
+          <h3>المخازن · الأفضل → الأسوأ</h3>
+          <span class="result-pill">أعلى 12</span>
+        </div>
+        <div class="inv-rank-chart" role="list">
+          {% for row in insights.by_warehouse|slice:":12" %}
+            <div class="inv-rank-row" role="listitem" style="--bar-pct: {{ row.share_pct }}%; --i: {{ forloop.counter0 }}">
+              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <div class="inv-rank-body">
+                <div class="inv-rank-head">
+                  <strong class="inv-rank-name" title="{{ row.name }}">{{ row.name }}</strong>
+                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
+                </div>
+                <div class="inv-rank-track" aria-hidden="true"><span class="inv-rank-fill inv-rank-fill-wh"></span></div>
+                <span class="inv-rank-meta mono">{{ row.stock_value_display }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <p class="sales-empty">لا مخازن للعرض.</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="ترتيب المجموعات">
+        <div class="dash-panel-head">
+          <h3>دوران المجموعات في المبيعات</h3>
+          <span class="result-pill">آخر 7 أيام</span>
+        </div>
+        <p class="inv-rank-period">الأكثر مبيعاً → الأقل · {{ insights.sales_period_label }}</p>
+        <div class="inv-rank-chart" role="list">
+          {% for row in insights.group_sales_rank %}
+            <div class="inv-rank-row" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
+              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <div class="inv-rank-body">
+                <div class="inv-rank-head">
+                  <strong class="inv-rank-name" title="{{ row.name }}">{{ row.name }}</strong>
+                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
+                </div>
+                <div class="inv-rank-track" aria-hidden="true"><span class="inv-rank-fill inv-rank-fill-group"></span></div>
+                <span class="inv-rank-meta mono">{{ row.sales_display }} · {{ row.turnover_display }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <p class="sales-empty">لا مبيعات مجموعات لهذه الفترة.</p>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </section>
+
+  {% if insights.alerts or insights.actions %}
+  <section class="perf-grid" aria-label="ملاحظات التحليل">
+    <div class="dash-panel dash-panel-glass perf-panel">
+      <div class="dash-panel-head"><h3>ماذا أفعل؟</h3></div>
+      <ol class="perf-actions">
+        {% for a in insights.actions %}
+          <li class="perf-action sev-{{ a.severity }}">
+            <span class="perf-action-text">{{ a.text }}</span>
+            <span class="perf-action-src">{{ a.from_alert }}</span>
+          </li>
+        {% empty %}
+          <li class="perf-action sev-low"><span class="perf-action-text">لا توجد أفعال عاجلة.</span></li>
+        {% endfor %}
+      </ol>
+    </div>
+    <div class="dash-panel dash-panel-glass perf-panel">
+      <div class="dash-panel-head">
+        <h3>تنبيهات</h3>
+        <span class="result-pill">{{ insights.alerts|length }}</span>
+      </div>
+      <ul class="perf-alerts">
+        {% for al in insights.alerts %}
+          <li class="perf-alert sev-{{ al.severity }}">
+            <strong>{{ al.title }}</strong>
+            <p>{{ al.detail }}</p>
+          </li>
+        {% empty %}
+          <li class="perf-alert sev-low"><strong>لا تنبيهات</strong><p>التوزيع ضمن الحدود المعتادة.</p></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/inv-select.js?v=1" defer></script>
+<script src="/static/js/inv-stagnant-donut.js?v=1" defer></script>
+{% endblock %}

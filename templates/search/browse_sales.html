@@ -121,7 +121,7 @@
 
   <section class="dash-grid {% if active.daily_mode %}is-daily{% endif %}" aria-label="{{ active.label }}">
     <div class="dash-main-col">
-      <div class="dash-panel dash-branches" id="dash-branches">
+      <div class="dash-panel dash-branches dash-panel-glass" id="dash-branches">
         <div class="dash-panel-head">
           <div class="dash-branches-title">
             {% if active.daily_mode %}
@@ -223,7 +223,7 @@
       </div>
 
       {% if group_panel %}
-        <div class="dash-panel dash-groups" id="dash-groups" aria-label="المبيعات حسب المجموعة"
+        <div class="dash-panel dash-groups dash-panel-glass" id="dash-groups" aria-label="المبيعات حسب المجموعة"
           {% if defer_heavy %}
           data-panels-url="/sales/api/panels/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
           {% endif %}
@@ -346,13 +346,13 @@
             </table>
             {% endif %}
           </div>
-          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">الفترة طويلة: تم تسريع الحساب بدون مسح كل المرتجعات.</p>
+          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">تنبيه: حساب مبسّط بدون مرتجعات (غير مستخدم حالياً).</p>
         </div>
       {% endif %}
     </div>
 
     <div class="dash-side-col">
-      <aside class="dash-panel dash-sellers">
+      <aside class="dash-panel dash-sellers dash-panel-glass">
         <div class="dash-panel-head">
           <div class="dash-sellers-title">
             <span class="dash-sellers-mark" aria-hidden="true">
@@ -391,7 +391,7 @@
         {% endif %}
       </aside>
 
-      <aside class="dash-panel dash-top-items" aria-label="الأصناف الأكثر مبيعاً" id="dash-top-items"
+      <aside class="dash-panel dash-top-items dash-panel-glass" aria-label="الأصناف الأكثر مبيعاً" id="dash-top-items"
         {% if defer_heavy %}
         data-panels-url="/sales/api/panels/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
         {% endif %}
@@ -444,7 +444,7 @@
     aria-label="الفروع الأكثر إرجاعاً والأصناف الأكثر إرجاعاً"
     data-charts-url="/sales/api/charts/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
   >
-    <div class="dash-panel dash-branch-chart" aria-label="الفروع الأكثر إرجاعاً">
+    <div class="dash-panel dash-branch-chart dash-panel-glass" aria-label="الفروع الأكثر إرجاعاً">
       <div class="dash-panel-head">
         <div class="dash-sellers-title">
           <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
@@ -483,7 +483,7 @@
       {% endif %}
     </div>
 
-    <div class="dash-panel dash-chart-items" aria-label="الأصناف الأكثر إرجاعاً">
+    <div class="dash-panel dash-chart-items dash-panel-glass" aria-label="الأصناف الأكثر إرجاعاً">
       <div class="dash-panel-head">
         <div class="dash-sellers-title">
           <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
@@ -525,7 +525,7 @@
   </section>
 
   {% if active.selected_user_code %}
-    <section class="dash-panel dash-invoices" id="invoices" aria-label="فواتير المستخدم">
+    <section class="dash-panel dash-invoices dash-panel-glass" id="invoices" aria-label="فواتير المستخدم">
       <div class="dash-panel-head">
         <div>
           <h3>فواتير {{ active.selected_user_name }}</h3>

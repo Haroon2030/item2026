@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+
+{% block title %}قياس الأداء{% endblock %}
+{% block page_class %}sales-dash perf-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="قياس الأداء">
+  <div class="dash-head-copy">
+    <h2>قياس الأداء</h2>
+    <p>فلترة حقيقية ومقارنة فترتين — اقرأ ثم قرر</p>
+  </div>
+</section>
+
+{% if insights %}
+  <section class="perf-hero dash-panel-glass perf-hero-{{ insights.health.tone }}" aria-label="صحة النطاق">
+    <div class="perf-score perf-score-{{ insights.health.tone }}">
+      <span class="perf-score-ring" aria-hidden="true">
+        <strong class="mono">{{ insights.health.score }}</strong>
+      </span>
+      <div class="perf-score-copy">
+        <span class="perf-score-eyebrow">صحة النطاق</span>
+        <h3>{{ insights.health.label }}</h3>
+        <p>
+          النطاق: <b>{{ insights.scope_label }}</b>
+          · أ: {{ insights.period_a_label }}
+          · ب: {{ insights.period_b_label }}
+          {% if insights.compare_mode == 'custom' %}· مقارنة مخصصة{% else %}· مقارنة تلقائية{% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="perf-hero-meta">
+      <article class="perf-meta-card perf-meta-best">
+        <span class="perf-meta-label">أفضل ضمن الفلتر</span>
+        <strong class="perf-meta-name" title="{{ insights.highlights.best_branch.name }}">{{ insights.highlights.best_branch.name }}</strong>
+        <span class="mono perf-meta-value">{{ insights.highlights.best_branch.value }}</span>
+      </article>
+      <article class="perf-meta-card perf-meta-drop">
+        <span class="perf-meta-label">أكبر تراجع</span>
+        <strong class="perf-meta-name" title="{{ insights.highlights.worst_drop.name }}">{{ insights.highlights.worst_drop.name }}</strong>
+        <span class="mono perf-meta-value">{{ insights.highlights.worst_drop.value }}</span>
+      </article>
+      <article class="perf-meta-card perf-meta-return">
+        <span class="perf-meta-label">أعلى مرتجع</span>
+        <strong class="perf-meta-name" title="{{ insights.highlights.top_return_branch.name }}">{{ insights.highlights.top_return_branch.name }}</strong>
+        <span class="mono perf-meta-value">{{ insights.highlights.top_return_branch.value }}</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="dash-kpi perf-kpi perf-kpi-top" aria-label="مؤشرات سريعة">
+    <article class="dash-kpi-card dash-kpi-glass perf-kpi-sales">
+      <span class="dash-kpi-label">مبيعات أ</span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.sales }}</strong>
+      <span class="dash-kpi-hint mono {% if insights.kpis.sales_delta is not None and insights.kpis.sales_delta < 0 %}is-down{% elif insights.kpis.sales_delta is not None and insights.kpis.sales_delta > 0 %}is-up{% endif %}">
+        {{ insights.kpis.sales_delta_display }} vs ب
+      </span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass perf-kpi-invoices">
+      <span class="dash-kpi-label">فواتير أ</span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.invoices }}</strong>
+      <span class="dash-kpi-hint mono">{{ insights.kpis.invoices_delta_display }} vs ب</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass perf-kpi-returns">
+      <span class="dash-kpi-label">مرتجع أ</span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.returns }}</strong>
+      <span class="dash-kpi-hint mono">{{ insights.kpis.returns_delta_display }} vs ب</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass perf-kpi-rate">
+      <span class="dash-kpi-label">نسبة المرتجع</span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.return_rate_display }}</strong>
+      <span class="dash-kpi-hint mono">ب: {{ insights.kpis.prior_return_rate_display }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass perf-kpi-basket">
+      <span class="dash-kpi-label">متوسط السلة</span>
+      <strong class="dash-kpi-value mono">{{ insights.kpis.avg_basket }}</strong>
+      <span class="dash-kpi-hint mono">{{ insights.kpis.avg_basket_delta_display }} vs ب</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass perf-kpi-rows">
+      <span class="dash-kpi-label">صفوف المقارنة</span>
+      <strong class="dash-kpi-value mono">{{ insights.compare_table|length }}</strong>
+      <span class="dash-kpi-hint">{{ insights.scope_label }}</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_performance' %}" class="perf-filter dash-panel-glass" role="search">
+  <div class="perf-filter-grid">
+    <div class="field">
+      <label for="perf-sys">النظام</label>
+      <select id="perf-sys" name="sys">
+        {% for s in systems %}
+          <option value="{{ s.key }}" {% if s.key == active_system %}selected{% endif %}>{{ s.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="perf-branch">الفرع</label>
+      <select id="perf-branch" name="branch">
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="perf-group">المجموعة</label>
+      <select id="perf-group" name="group">
+        <option value="">كل المجموعات</option>
+        {% for g in groups %}
+          <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="perf-compare">نوع المقارنة</label>
+      <select id="perf-compare" name="compare">
+        <option value="auto" {% if compare_mode == 'auto' %}selected{% endif %}>تلقائي (نفس المدة السابقة)</option>
+        <option value="custom" {% if compare_mode == 'custom' %}selected{% endif %}>فترة مخصصة</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="perf-filter-periods">
+    <fieldset class="perf-period perf-period-a">
+      <legend><span class="perf-period-badge" aria-hidden="true">أ</span> الفترة أ (الحالية)</legend>
+      <div class="field">
+        <label for="date_from">من</label>
+        <input id="date_from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+      </div>
+      <div class="field">
+        <label for="date_to">إلى</label>
+        <input id="date_to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+      </div>
+    </fieldset>
+    <fieldset class="perf-period perf-period-b" id="perf-period-b">
+      <legend><span class="perf-period-badge" aria-hidden="true">ب</span> الفترة ب (المقارنة)</legend>
+      <div class="field">
+        <label for="compare_from">من</label>
+        <input id="compare_from" type="date" name="compare_from" value="{{ compare_from }}">
+      </div>
+      <div class="field">
+        <label for="compare_to">إلى</label>
+        <input id="compare_to" type="date" name="compare_to" value="{{ compare_to }}">
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="perf-filter-actions">
+    <button type="submit" class="btn-primary">تحليل ومقارنة</button>
+    <a class="sales-view-btn" href="{% url 'browse_sales' %}?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}">فتح المبيعات</a>
+  </div>
+</form>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if insights %}
+  <section class="dash-panel dash-panel-glass perf-panel" aria-label="ملخص المقارنة">
+    <div class="dash-panel-head">
+      <h3>أ مقابل ب</h3>
+      <span class="result-pill">{{ insights.compare_summary|length }} مقاييس</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table sales-table perf-compare-table" aria-label="مقارنة المقاييس">
+        <thead>
+          <tr>
+            <th>المقياس</th>
+            <th>الفترة أ</th>
+            <th>الفترة ب</th>
+            <th>الفرق %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in insights.compare_summary %}
+            <tr>
+              <td>{{ row.metric }}</td>
+              <td class="mono sales-amt">{{ row.a }}</td>
+              <td class="mono">{{ row.b }}</td>
+              <td class="mono {% if row.delta_num is not None and row.delta_num < 0 %}is-down{% elif row.delta_num is not None and row.delta_num > 0 %}is-up{% endif %}">{{ row.delta }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel" aria-label="مقارنة الفروع">
+    <div class="dash-panel-head">
+      <h3>تفاصيل الفروع — أ مقابل ب</h3>
+      <span class="result-pill">{{ insights.compare_table|length }} صف</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table sales-table perf-compare-table" aria-label="مقارنة الفروع">
+        <thead>
+          <tr>
+            <th>الفرع</th>
+            <th>مبيعات أ</th>
+            <th>مبيعات ب</th>
+            <th>فرق المبيعات</th>
+            <th>فواتير أ</th>
+            <th>فواتير ب</th>
+            <th>مرتجع أ</th>
+            <th>نسبة مرتجع أ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in insights.compare_table %}
+            <tr>
+              <td>{{ row.branch_name }}</td>
+              <td class="mono sales-amt">{{ row.sales_a_display }}</td>
+              <td class="mono">{{ row.sales_b_display }}</td>
+              <td class="mono {% if row.sales_delta is not None and row.sales_delta < 0 %}is-down{% elif row.sales_delta is not None and row.sales_delta > 0 %}is-up{% endif %}">{{ row.sales_delta_display }}</td>
+              <td class="mono">{{ row.inv_a_display }}</td>
+              <td class="mono">{{ row.inv_b_display }}</td>
+              <td class="mono">{{ row.ret_a_display }}</td>
+              <td class="mono">{{ row.return_rate_a_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="sales-empty">لا توجد بيانات ضمن هذا الفلتر.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if insights.compare_table %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td>الإجمالي</td>
+              <td class="mono sales-amt">{{ insights.compare_totals.sales_a_display }}</td>
+              <td class="mono">{{ insights.compare_totals.sales_b_display }}</td>
+              <td class="mono {% if insights.compare_totals.sales_delta is not None and insights.compare_totals.sales_delta < 0 %}is-down{% elif insights.compare_totals.sales_delta is not None and insights.compare_totals.sales_delta > 0 %}is-up{% endif %}">{{ insights.compare_totals.sales_delta_display }}</td>
+              <td class="mono">{{ insights.compare_totals.inv_a_display }}</td>
+              <td class="mono">{{ insights.compare_totals.inv_b_display }}</td>
+              <td class="mono">{{ insights.compare_totals.ret_a_display }}</td>
+              <td class="mono">{{ insights.compare_totals.return_rate_a_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel" aria-label="تحليل المجموعات">
+    <div class="dash-panel-head">
+      <h3>تحليل المجموعات — أ مقابل ب</h3>
+      <span class="result-pill">{{ insights.group_compare_table|length }} مجموعة</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table sales-table perf-compare-table" aria-label="مقارنة المجموعات">
+        <thead>
+          <tr>
+            <th>المجموعة</th>
+            <th>مبيعات أ</th>
+            <th>مبيعات ب</th>
+            <th>فرق المبيعات</th>
+            <th>فواتير أ</th>
+            <th>فواتير ب</th>
+            <th>متوسط السلة أ</th>
+            <th>مرتجع أ</th>
+            <th>نسبة مرتجع أ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in insights.group_compare_table %}
+            <tr>
+              <td>{{ row.group_name }}</td>
+              <td class="mono sales-amt">{{ row.sales_a_display }}</td>
+              <td class="mono">{{ row.sales_b_display }}</td>
+              <td class="mono {% if row.sales_delta is not None and row.sales_delta < 0 %}is-down{% elif row.sales_delta is not None and row.sales_delta > 0 %}is-up{% endif %}">{{ row.sales_delta_display }}</td>
+              <td class="mono">{{ row.inv_a_display }}</td>
+              <td class="mono">{{ row.inv_b_display }}</td>
+              <td class="mono">{{ row.avg_a_display }}</td>
+              <td class="mono">{{ row.ret_a_display }}</td>
+              <td class="mono">{{ row.return_rate_a_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9" class="sales-empty">لا توجد مجموعات ضمن هذا الفلتر.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if insights.group_compare_table %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td>الإجمالي</td>
+              <td class="mono sales-amt">{{ insights.group_totals.sales_a_display }}</td>
+              <td class="mono">{{ insights.group_totals.sales_b_display }}</td>
+              <td class="mono {% if insights.group_totals.sales_delta is not None and insights.group_totals.sales_delta < 0 %}is-down{% elif insights.group_totals.sales_delta is not None and insights.group_totals.sales_delta > 0 %}is-up{% endif %}">{{ insights.group_totals.sales_delta_display }}</td>
+              <td class="mono">{{ insights.group_totals.inv_a_display }}</td>
+              <td class="mono">{{ insights.group_totals.inv_b_display }}</td>
+              <td class="mono">{{ insights.group_totals.avg_a_display }}</td>
+              <td class="mono">{{ insights.group_totals.ret_a_display }}</td>
+              <td class="mono">{{ insights.group_totals.return_rate_a_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel" aria-label="التحليل اليومي">
+    <div class="dash-panel-head">
+      <h3>التحليل اليومي — الفترة أ</h3>
+      <span class="result-pill">{{ insights.daily_table|length }} يوم</span>
+    </div>
+    {% if insights.daily_note %}
+      <p class="perf-note">{{ insights.daily_note }}</p>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="data-table sales-table perf-compare-table" aria-label="التحليل اليومي">
+        <thead>
+          <tr>
+            <th>اليوم</th>
+            <th>المبيعات</th>
+            <th>الفواتير</th>
+            <th>عدد المرتجعات</th>
+            <th>متوسط السلة</th>
+            <th>قبل خصم المرتجع</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in insights.daily_table %}
+            <tr>
+              <td class="mono">{{ row.day_display }}</td>
+              <td class="mono sales-amt">{{ row.sales_display }}</td>
+              <td class="mono">{{ row.inv_display }}</td>
+              <td class="mono">{{ row.ret_count_display }}</td>
+              <td class="mono">{{ row.avg_display }}</td>
+              <td class="mono">{{ row.gross_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="sales-empty">لا يوجد تفصيل يومي لهذا الفلتر.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if insights.daily_table %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td>الإجمالي</td>
+              <td class="mono sales-amt">{{ insights.daily_totals.sales_display }}</td>
+              <td class="mono">{{ insights.daily_totals.inv_display }}</td>
+              <td class="mono">{{ insights.daily_totals.ret_count_display }}</td>
+              <td class="mono">{{ insights.daily_totals.avg_display }}</td>
+              <td class="mono">{{ insights.daily_totals.gross_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+
+  <section class="perf-grid" aria-label="تحليل الأصناف">
+    <div class="dash-panel dash-panel-glass perf-panel">
+      <div class="dash-panel-head">
+        <h3>أعلى أصناف مبيعاً — أ مقابل ب</h3>
+        <span class="result-pill">{{ insights.sales_items_table|length }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table sales-table perf-compare-table" aria-label="أصناف المبيعات">
+          <thead>
+            <tr>
+              <th>الصنف</th>
+              <th>مبيعات أ</th>
+              <th>مبيعات ب</th>
+              <th>فرق %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in insights.sales_items_table %}
+              <tr>
+                <td title="{{ row.item_code }}">{{ row.item_name }}</td>
+                <td class="mono sales-amt">{{ row.sales_a_display }}</td>
+                <td class="mono">{{ row.sales_b_display }}</td>
+                <td class="mono {% if row.sales_delta is not None and row.sales_delta < 0 %}is-down{% elif row.sales_delta is not None and row.sales_delta > 0 %}is-up{% endif %}">{{ row.sales_delta_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="sales-empty">لا أصناف.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if insights.sales_items_table %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td>الإجمالي</td>
+                <td class="mono sales-amt">{{ insights.sales_items_totals.sales_a_display }}</td>
+                <td class="mono">{{ insights.sales_items_totals.sales_b_display }}</td>
+                <td class="mono {% if insights.sales_items_totals.sales_delta is not None and insights.sales_items_totals.sales_delta < 0 %}is-down{% elif insights.sales_items_totals.sales_delta is not None and insights.sales_items_totals.sales_delta > 0 %}is-up{% endif %}">{{ insights.sales_items_totals.sales_delta_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+    <div class="dash-panel dash-panel-glass perf-panel">
+      <div class="dash-panel-head">
+        <h3>أعلى أصناف مرتجعاً — أ مقابل ب</h3>
+        <span class="result-pill">{{ insights.return_items_table|length }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table sales-table perf-compare-table" aria-label="أصناف المرتجع">
+          <thead>
+            <tr>
+              <th>الصنف</th>
+              <th>مرتجع أ</th>
+              <th>مرتجع ب</th>
+              <th>فرق %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in insights.return_items_table %}
+              <tr>
+                <td title="{{ row.item_code }}">{{ row.item_name }}</td>
+                <td class="mono sales-amt">{{ row.ret_a_display }}</td>
+                <td class="mono">{{ row.ret_b_display }}</td>
+                <td class="mono {% if row.ret_delta is not None and row.ret_delta < 0 %}is-down{% elif row.ret_delta is not None and row.ret_delta > 0 %}is-up{% endif %}">{{ row.ret_delta_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="sales-empty">لا مرتجعات أصناف.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if insights.return_items_table %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td>الإجمالي</td>
+                <td class="mono sales-amt">{{ insights.return_items_totals.ret_a_display }}</td>
+                <td class="mono">{{ insights.return_items_totals.ret_b_display }}</td>
+                <td class="mono {% if insights.return_items_totals.ret_delta is not None and insights.return_items_totals.ret_delta < 0 %}is-down{% elif insights.return_items_totals.ret_delta is not None and insights.return_items_totals.ret_delta > 0 %}is-up{% endif %}">{{ insights.return_items_totals.ret_delta_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="perf-grid" aria-label="التنبيهات والأفعال">
+    <div class="dash-panel dash-panel-glass perf-panel">
+      <div class="dash-panel-head">
+        <h3>ماذا أفعل؟</h3>
+      </div>
+      <ol class="perf-actions">
+        {% for a in insights.actions %}
+          <li class="perf-action sev-{{ a.severity }}">
+            <span class="perf-action-text">{{ a.text }}</span>
+            <span class="perf-action-src">{{ a.from_alert }}</span>
+          </li>
+        {% empty %}
+          <li class="perf-action sev-low"><span class="perf-action-text">لا توجد أفعال.</span></li>
+        {% endfor %}
+      </ol>
+    </div>
+    <div class="dash-panel dash-panel-glass perf-panel">
+      <div class="dash-panel-head">
+        <h3>تنبيهات</h3>
+        <span class="result-pill">{{ insights.alerts|length }}</span>
+      </div>
+      <ul class="perf-alerts">
+        {% for al in insights.alerts %}
+          <li class="perf-alert sev-{{ al.severity }}">
+            <strong>{{ al.title }}</strong>
+            <p>{{ al.detail }}</p>
+          </li>
+        {% empty %}
+          <li class="perf-alert sev-low"><strong>لا تنبيهات</strong><p>ضمن الحدود المعتادة لهذا الفلتر.</p></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+{% endif %}
+
+<script>
+(function () {
+  var mode = document.getElementById("perf-compare");
+  var box = document.getElementById("perf-period-b");
+  if (!mode || !box) return;
+  function sync() {
+    var custom = mode.value === "custom";
+    box.classList.toggle("is-disabled", !custom);
+    box.querySelectorAll("input").forEach(function (el) {
+      el.disabled = !custom;
+    });
+  }
+  mode.addEventListener("change", sync);
+  sync();
+})();
+</script>
+{% endblock %}

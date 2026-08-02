@@ -1,16 +1,30 @@
 {% extends "base.html" %}
 
-{% block title %}إدارة المستخدمين — بيانات الأصناف{% endblock %}
+{% block title %}إدارة المستخدمين — تحليل البيانات{% endblock %}
+{% block page_class %}sales-dash users-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
 <section class="users-page" aria-label="إدارة المستخدمين">
-  <div class="users-head">
-    <div>
-      <h2>{% if editing %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}</h2>
-      <p>الاسم والرقم وكلمة السر — مع إمكانية التعديل والحذف</p>
+  <section class="dash-head users-dash-head" aria-label="عنوان الصفحة">
+    <div class="dash-head-copy">
+      <h2>إدارة المستخدمين</h2>
+      <p>إضافة وتعديل وحذف حسابات الدخول — الاسم والرقم وكلمة السر</p>
     </div>
-    <a class="btn-ghost" href="{% url 'item_search' %}">العودة للبحث</a>
-  </div>
+    <div class="users-head-actions">
+      <span class="result-pill users-count-pill">{{ users|length }} مستخدم</span>
+      <button
+        type="button"
+        class="btn-primary users-open-modal"
+        id="users-open-add"
+        aria-haspopup="dialog"
+        aria-controls="users-modal"
+      >
+        إضافة مستخدم
+      </button>
+      <a class="sales-view-btn" href="{% url 'item_search' %}">العودة للبحث</a>
+    </div>
+  </section>
 
   {% if messages %}
     {% for message in messages %}
@@ -20,24 +34,103 @@
     {% endfor %}
   {% endif %}
 
+  <section class="dash-panel dash-panel-glass users-table-panel" aria-label="قائمة المستخدمين">
+    <div class="dash-panel-head">
+      <h3>المستخدمون</h3>
+      <span class="result-pill">{{ users|length }}</span>
+    </div>
+    <div class="table-wrap users-table-wrap">
+      <table class="data-table sales-table users-table" aria-label="جدول المستخدمين">
+        <thead>
+          <tr>
+            <th class="users-col-num">#</th>
+            <th>المستخدم</th>
+            <th>الرقم</th>
+            <th>الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr {% if editing and editing.id == u.id %}class="is-editing-row"{% endif %}>
+              <td class="mono users-col-num">{{ forloop.counter }}</td>
+              <td>
+                <div class="users-name-cell">
+                  <span class="users-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="8" r="3.5"/>
+                      <path d="M5.5 19.5c1.6-3.2 3.9-4.8 6.5-4.8s4.9 1.6 6.5 4.8"/>
+                    </svg>
+                  </span>
+                  <strong class="users-name">{{ u.name }}</strong>
+                  {% if u.is_self %}<span class="row-tag row-tag-self">أنت</span>{% endif %}
+                  {% if u.is_staff %}<span class="row-tag row-tag-staff">مدير النظام</span>{% endif %}
+                </div>
+              </td>
+              <td class="mono users-phone" dir="ltr">{{ u.phone }}</td>
+              <td class="actions-cell">
+                <a class="btn-action btn-edit" href="{% url 'user_edit' u.id %}">تعديل</a>
+                {% if not u.is_self %}
+                  <form method="post" action="{% url 'user_delete' u.id %}" class="inline-form" onsubmit="return confirm('حذف المستخدم؟');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-action btn-delete">حذف</button>
+                  </form>
+                {% else %}
+                  <span class="users-locked" title="لا يمكن حذف حسابك">محمي</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" class="empty-cell">لا يوجد مستخدمون بعد.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<dialog
+  class="users-modal-dialog dash-panel-glass {% if editing %}is-editing{% else %}is-adding{% endif %}"
+  id="users-modal"
+  aria-labelledby="users-modal-title"
+  data-open-on-load="{% if editing or form.errors %}1{% else %}0{% endif %}"
+  data-list-url="{% url 'user_list' %}"
+>
+  <div class="users-modal-head">
+    <div>
+      <h3 id="users-modal-title">
+        {% if editing %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}
+      </h3>
+      <p class="users-modal-sub">
+        {% if editing %}حدّث بيانات الحساب ثم احفظ{% else %}أدخل الاسم والرقم وكلمة السر{% endif %}
+      </p>
+    </div>
+    <button type="button" class="users-modal-x" id="users-modal-close" aria-label="إغلاق">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
   <form
     method="post"
     action="{% if editing %}{% url 'user_edit' editing.id %}{% else %}{% url 'user_create' %}{% endif %}"
-    class="user-form panel panel-blue"
+    class="user-form"
   >
     {% csrf_token %}
     <div class="user-form-grid">
-      <div class="field">
+      <div class="field users-field-name">
         <label for="id_name">{{ form.name.label }}</label>
         {{ form.name }}
         {% if form.name.errors %}<p class="field-error">{{ form.name.errors.0 }}</p>{% endif %}
       </div>
-      <div class="field">
+      <div class="field users-field-phone">
         <label for="id_phone">{{ form.phone.label }}</label>
         {{ form.phone }}
         {% if form.phone.errors %}<p class="field-error">{{ form.phone.errors.0 }}</p>{% endif %}
       </div>
-      <div class="field">
+      <div class="field users-field-pass">
         <label for="id_password">{{ form.password.label }}</label>
         {{ form.password }}
         {% if form.password.help_text %}<p class="field-hint">{{ form.password.help_text }}</p>{% endif %}
@@ -46,57 +139,15 @@
     </div>
     <div class="user-form-actions">
       <button type="submit" class="btn-primary">
-        {% if editing %}حفظ التعديل{% else %}إضافة{% endif %}
+        {% if editing %}حفظ التعديل{% else %}إضافة المستخدم{% endif %}
       </button>
       {% if editing %}
         <a class="btn-ghost" href="{% url 'user_list' %}">إلغاء</a>
+      {% else %}
+        <button type="button" class="btn-ghost" id="users-modal-cancel">إغلاق</button>
       {% endif %}
     </div>
   </form>
-
-  <div class="panel panel-blue users-table-panel">
-    <div class="panel-head">
-      <span class="panel-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      </span>
-      <strong>المستخدمون</strong>
-    </div>
-    <div class="table-wrap">
-      <table class="data-table users-table">
-        <thead>
-          <tr>
-            <th>الاسم</th>
-            <th>الرقم</th>
-            <th>الإجراءات</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for u in users %}
-            <tr {% if editing and editing.id == u.id %}class="is-editing-row"{% endif %}>
-              <td>
-                <strong>{{ u.name }}</strong>
-                {% if u.is_self %}<span class="row-tag">أنت</span>{% endif %}
-                {% if u.is_staff %}<span class="row-tag">مشرف</span>{% endif %}
-              </td>
-              <td class="mono" dir="ltr">{{ u.phone }}</td>
-              <td class="actions-cell">
-                <a class="btn-action btn-edit" href="{% url 'user_edit' u.id %}">تعديل</a>
-                {% if not u.is_self %}
-                  <form method="post" action="{% url 'user_delete' u.id %}" class="inline-form" onsubmit="return confirm('حذف المستخدم؟');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn-action btn-delete">حذف</button>
-                  </form>
-                {% endif %}
-              </td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="3" class="empty-cell">لا يوجد مستخدمون بعد.</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
+</dialog>
+<script src="/static/js/users-modal.js?v=2" defer></script>
 {% endblock %}

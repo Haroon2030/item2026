@@ -12,3 +12,4 @@ staticfiles
 .DS_Store
 Thumbs.db
 .cursor
+.vscode
