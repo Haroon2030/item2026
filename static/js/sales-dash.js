@@ -119,6 +119,39 @@
     "#445468", "#b0754a", "#9aa8b8", "#2f6fbd", "#a83752"
   ];
 
+  function syncReturnFiltersFromBranchChart() {
+    var brSrc = document.getElementById("chart-br-branch");
+    var grSrc = document.getElementById("chart-br-group");
+    var brDst = document.getElementById("chart-ret-branch");
+    var grDst = document.getElementById("chart-ret-group");
+    if (brSrc && brDst) brDst.value = brSrc.value;
+    if (grSrc && grDst) grDst.value = grSrc.value;
+  }
+
+  function filterReturnsByBranch(branchCode) {
+    var brDst = document.getElementById("chart-ret-branch");
+    var grSrc = document.getElementById("chart-br-group");
+    var grDst = document.getElementById("chart-ret-group");
+    if (brDst) brDst.value = branchCode || "";
+    if (grSrc && grDst) grDst.value = grSrc.value;
+    loadReturnsChart();
+  }
+
+  function bindDonutBranchLinks(board, list) {
+    if (!board) return;
+    board.querySelectorAll("[data-branch-code]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        filterReturnsByBranch(el.getAttribute("data-branch-code") || "");
+      });
+      el.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          filterReturnsByBranch(el.getAttribute("data-branch-code") || "");
+        }
+      });
+    });
+  }
+
   function renderChartBranches(rows) {
     var loading = document.getElementById("chart-branches-loading");
     var empty = document.getElementById("chart-branches-empty");
@@ -132,7 +165,7 @@
     board.hidden = false;
     board.className = "branch-chart branch-donut";
     if (!list.length) {
-      board.innerHTML = '<p class="sales-empty">لا توجد فروع لهذه الفلترة.</p>';
+      board.innerHTML = '<p class="sales-empty">لا توجد مرتجعات فروع لهذه الفلترة.</p>';
       return;
     }
 
@@ -153,14 +186,16 @@
       var pct = total > 0 ? sales / total : 0;
       var len = pct * circ;
       var color = DONUT_COLORS[i % DONUT_COLORS.length];
+      var code = esc(b.branch_code || "");
       slices +=
         '<circle class="branch-donut-slice" cx="50" cy="50" r="' + r + '"' +
         ' fill="none" stroke="' + color + '" stroke-width="18"' +
         ' stroke-dasharray="' + len.toFixed(3) + " " + (circ - len).toFixed(3) + '"' +
         ' stroke-dashoffset="' + (-acc).toFixed(3) + '"' +
-        ' data-i="' + i + '">' +
+        ' data-i="' + i + '" data-branch-code="' + code + '" tabindex="0" role="button"' +
+        ' style="cursor:pointer">' +
         "<title>" + esc(b.branch_name) + " — " + esc(b.share_pct) + "% — " +
-        esc(b.sales_total_display) + "</title></circle>";
+        esc(b.sales_total_display) + " (اضغط لعرض أصناف المرتجع)</title></circle>";
 
       if (pct >= 0.035) {
         var mid = -Math.PI / 2 + 2 * Math.PI * (fracAcc + pct / 2);
@@ -178,25 +213,27 @@
     list.forEach(function (b, i) {
       var color = DONUT_COLORS[i % DONUT_COLORS.length];
       legend +=
-        '<li class="branch-donut-legend-item" role="listitem" style="--i: ' + i + '"' +
-        ' title="' + esc(b.branch_name) + " — " + esc(b.sales_total_display) + '">' +
+        '<li class="branch-donut-legend-item is-clickable" role="button" tabindex="0" style="--i: ' + i + '"' +
+        ' data-branch-code="' + esc(b.branch_code || "") + '"' +
+        ' title="' + esc(b.branch_name) + " — " + esc(b.sales_total_display) + ' — عرض أصناف المرتجع">' +
         '<span class="branch-donut-swatch" style="background:' + color + '" aria-hidden="true"></span>' +
         '<span class="branch-donut-legend-body">' +
         '<span class="branch-donut-legend-name">' + esc(b.branch_name) + "</span>" +
         '<span class="branch-donut-legend-meta mono">' +
-        esc(b.sales_total_display) + " · " + esc(b.invoice_count_display) + " فاتورة" +
+        esc(b.sales_total_display) + " · " + esc(b.invoice_count_display) + " مرتجع" +
         "</span></span>" +
         '<span class="branch-donut-pct mono">' + esc(b.share_pct) + "%</span></li>";
     });
 
     board.innerHTML =
       '<div class="branch-donut-visual">' +
-      '<svg class="branch-donut-svg" viewBox="0 0 100 100" role="img" aria-label="توزيع مبيعات الفروع">' +
+      '<svg class="branch-donut-svg" viewBox="0 0 100 100" role="img" aria-label="توزيع مرتجعات الفروع">' +
       '<g transform="rotate(-90 50 50)">' + slices + "</g>" +
       '<circle cx="50" cy="50" r="28" fill="#fff" class="branch-donut-hole"></circle>' +
       labels +
       "</svg></div>" +
       '<ul class="branch-donut-legend" role="list">' + legend + "</ul>";
+    bindDonutBranchLinks(board, list);
   }
 
   function renderReturnItems(items) {
@@ -290,24 +327,32 @@
   }
 
   function loadBranchChart() {
+    syncReturnFiltersFromBranchChart();
     var url = chartsUrl(
       document.getElementById("chart-br-branch"),
       document.getElementById("chart-br-group")
     );
     if (!url) return;
     var loadingBr = document.getElementById("chart-branches-loading");
+    var loadingIt = document.getElementById("chart-items-loading");
     if (loadingBr) {
       loadingBr.hidden = false;
       loadingBr.textContent = "جاري تحديث الفروع…";
+    }
+    if (loadingIt) {
+      loadingIt.hidden = false;
+      loadingIt.textContent = "جاري تحديث المرتجعات…";
     }
     fetch(url, { credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderChartBranches(data.chart_branches || []);
+        renderReturnItems(data.return_items || []);
       })
       .catch(function (err) {
         if (loadingBr) loadingBr.textContent = "تعذّر تحديث الفروع: " + (err.message || err);
+        if (loadingIt) loadingIt.textContent = "تعذّر تحديث المرتجعات: " + (err.message || err);
       });
   }
 

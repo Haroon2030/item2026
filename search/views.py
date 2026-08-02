@@ -676,20 +676,21 @@ def _build_sales_system(
     if not light and branch_rows:
         ranked = sorted(
             branch_rows,
-            key=lambda r: float(r.get('sales_total') or 0),
+            key=lambda r: float(r.get('return_total') or 0),
             reverse=True,
-        )[:15]
-        total = sum(float(r.get('sales_total') or 0) for r in ranked)
+        )
+        ranked = [r for r in ranked if float(r.get('return_total') or 0) > 0][:15]
+        total = sum(float(r.get('return_total') or 0) for r in ranked)
         assigned = 0.0
         for idx, row in enumerate(ranked):
-            sales = float(row.get('sales_total') or 0)
-            inv = int(row.get('invoice_count') or 0)
+            amount = float(row.get('return_total') or 0)
+            inv = int(row.get('return_count') or 0)
             if not total:
                 pct = 0.0
             elif idx == len(ranked) - 1:
                 pct = round(max(0.0, 100.0 - assigned), 1)
             else:
-                pct = round((sales / total) * 100.0, 1)
+                pct = round((amount / total) * 100.0, 1)
                 assigned += pct
             chart_branches.append(
                 {
@@ -697,8 +698,8 @@ def _build_sales_system(
                     'branch_name': str(
                         row.get('branch_name') or row.get('branch_code') or ''
                     ),
-                    'sales_total': sales,
-                    'sales_total_display': f'{sales:,.2f}',
+                    'sales_total': amount,
+                    'sales_total_display': f'{amount:,.2f}',
                     'invoice_count': inv,
                     'invoice_count_display': f'{inv:,}',
                     'share_pct': pct,
@@ -933,51 +934,29 @@ def _build_chart_branches_list(
     selected_group='',
     limit=15,
 ):
-    """فروع مرتبة حسب المبيعات — مع فلتر مجموعة/فرع اختياري."""
-    from .oracle_stock import fetch_branch_sales_totals, fetch_group_sales_totals
+    """فروع مرتبة حسب قيمة المرتجع — مع فلتر مجموعة/فرع اختياري."""
+    from .oracle_stock import fetch_branch_return_totals
 
-    brn = str(selected_branch or '').strip()
-    gcode = str(selected_group or '').strip()
-    lim = max(1, min(int(limit or 15), 40))
-
-    if gcode:
-        rows = fetch_group_sales_totals(
-            date_from,
-            date_to,
-            system=active_system,
-            branch_code=brn,
-            group_code=gcode,
-            by_branch=True,
-        )
-        if brn:
-            rows = [r for r in rows if str(r.get('branch_code') or '') == brn]
-        ranked = sorted(
-            rows,
-            key=lambda r: float(r.get('sales_total') or 0),
-            reverse=True,
-        )[:lim]
-    else:
-        rows = fetch_branch_sales_totals(date_from, date_to, system=active_system)
-        if brn:
-            rows = [r for r in rows if str(r.get('branch_code') or '') == brn]
-        ranked = sorted(
-            rows,
-            key=lambda r: float(r.get('sales_total') or 0),
-            reverse=True,
-        )[:lim]
-
-    total = sum(float(r.get('sales_total') or 0) for r in ranked)
+    ranked = fetch_branch_return_totals(
+        date_from,
+        date_to,
+        system=active_system,
+        branch_code=selected_branch,
+        group_code=selected_group,
+        limit=limit,
+    )
+    total = sum(float(r.get('return_total') or r.get('sales_total') or 0) for r in ranked)
     out: list[dict] = []
     assigned = 0.0
     for idx, row in enumerate(ranked):
-        sales = float(row.get('sales_total') or 0)
-        inv = int(row.get('invoice_count') or 0)
+        amount = float(row.get('return_total') or row.get('sales_total') or 0)
+        inv = int(row.get('return_count') or row.get('invoice_count') or 0)
         if not total:
             pct = 0.0
         elif idx == len(ranked) - 1:
             pct = round(max(0.0, 100.0 - assigned), 1)
         else:
-            pct = round((sales / total) * 100.0, 1)
+            pct = round((amount / total) * 100.0, 1)
             assigned += pct
         out.append(
             {
@@ -985,8 +964,8 @@ def _build_chart_branches_list(
                 'branch_name': str(
                     row.get('branch_name') or row.get('branch_code') or ''
                 ),
-                'sales_total': sales,
-                'sales_total_display': f'{sales:,.2f}',
+                'sales_total': amount,
+                'sales_total_display': f'{amount:,.2f}',
                 'invoice_count': inv,
                 'invoice_count_display': f'{inv:,}',
                 'share_pct': pct,
@@ -1098,6 +1077,13 @@ def browse_sales(request):
                     selected_group=selected_group,
                     groups=group_options,
                 )
+                with oracle_session():
+                    active['chart_branches'] = _build_chart_branches_list(
+                        date_from,
+                        date_to,
+                        active_system,
+                        limit=15,
+                    )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales failed: %s', exc)
         error = f'تعذّر جلب المبيعات: {exc}'

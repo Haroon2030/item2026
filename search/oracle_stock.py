@@ -654,6 +654,7 @@ def _assemble_branch_rows(sales_rows, returns_by_brn) -> list[dict]:
                 "branch_name": names.get(code) or code,
                 "invoice_count": sales_count,
                 "return_count": ret_count,
+                "return_total": round(ret_net + ret_vat, 2),
                 "net_invoice_count": sales_count - ret_count,
                 "gross_total": round(gross_total, 2),
                 "net_total": round(net, 2),
@@ -794,6 +795,157 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
         rows = _fetch_bill_branch_totals(date_from, date_to, conf)
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
+
+
+def fetch_branch_return_totals(
+    date_from,
+    date_to,
+    system: str = "pos",
+    branch_code: str = "",
+    group_code: str = "",
+    limit: int = 15,
+) -> list[dict]:
+    """فروع مرتبة حسب قيمة المرتجع — SELECT فقط."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    lim = max(1, min(int(limit or 15), 40))
+    cache_key = (
+        f"sales:ret_branches:v1:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
+    )
+    cached = _sales_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    conf = _system_conf(system)
+    params: dict = _date_params(date_from, date_to)
+    schema = _schema()
+    names = _branch_names()
+    rows_raw: list[dict] = []
+
+    if conf.get("source") == "pos":
+        pos = _pos_owner()
+        branch_filter = ""
+        group_filter = ""
+        if brn:
+            params["brn"] = brn
+            branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+        if gcode:
+            params["gcode"] = gcode
+            group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+            rows_raw = _fetch_all(
+                f"""
+                SELECT
+                    TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+                    COUNT(DISTINCT m.RT_BILL_NO) AS RETURN_COUNT,
+                    ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET,
+                    ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
+                FROM {pos}.IAS_POS_RT_BILL_DTL d
+                JOIN {pos}.IAS_POS_RT_BILL_MST m
+                  ON m.RT_BILL_NO = d.RT_BILL_NO
+                 AND m.BRN_NO = d.BRN_NO
+                LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+                WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+                  AND NVL(m.HUNG, 0) = 0
+                  {branch_filter}
+                  {group_filter}
+                GROUP BY TO_CHAR(m.BRN_NO)
+                """,
+                params,
+            )
+        else:
+            rows_raw = _fetch_all(
+                f"""
+                SELECT
+                    TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+                    COUNT(DISTINCT m.RT_BILL_NO) AS RETURN_COUNT,
+                    ROUND(SUM(NVL(m.RT_BILL_AMT, 0)), 2) AS RET_NET,
+                    ROUND(SUM(NVL(m.VAT_AMT, 0)), 2) AS RET_VAT
+                FROM {pos}.IAS_POS_RT_BILL_MST m
+                WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+                  AND NVL(m.HUNG, 0) = 0
+                  {branch_filter}
+                GROUP BY TO_CHAR(m.BRN_NO)
+                """,
+                params,
+            )
+    else:
+        ret_doc = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", params)
+        ret_cash = "AND r.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
+        branch_filter = ""
+        if brn:
+            params["brn"] = brn
+            branch_filter = "AND TO_CHAR(r.BRN_NO) = :brn"
+        if gcode:
+            params["gcode"] = gcode
+            rows_raw = _fetch_all(
+                f"""
+                SELECT
+                    TO_CHAR(r.BRN_NO) AS BRANCH_CODE,
+                    COUNT(DISTINCT r.RT_BILL_SER) AS RETURN_COUNT,
+                    ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET,
+                    ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
+                FROM {schema}.IAS_RT_BILL_DTL d
+                JOIN {schema}.IAS_RT_BILL_MST r
+                  ON r.RT_BILL_SER = d.RT_BILL_SER
+                 AND r.BRN_NO = d.BRN_NO
+                LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+                WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
+                  AND NVL(r.CNCL_FLG, 0) = 0
+                  {ret_doc}
+                  {ret_cash}
+                  {branch_filter}
+                  AND TO_CHAR(i.G_CODE) = :gcode
+                GROUP BY TO_CHAR(r.BRN_NO)
+                """,
+                params,
+            )
+        else:
+            rows_raw = _fetch_all(
+                f"""
+                SELECT
+                    TO_CHAR(r.BRN_NO) AS BRANCH_CODE,
+                    COUNT(DISTINCT r.RT_BILL_SER) AS RETURN_COUNT,
+                    ROUND(SUM(NVL(r.BILL_AMT, 0)), 2) AS RET_NET,
+                    ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
+                FROM {schema}.IAS_RT_BILL_MST r
+                WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
+                  AND NVL(r.CNCL_FLG, 0) = 0
+                  {ret_doc}
+                  {ret_cash}
+                  {branch_filter}
+                GROUP BY TO_CHAR(r.BRN_NO)
+                """,
+                params,
+            )
+
+    out: list[dict] = []
+    for row in rows_raw:
+        code = str(row.get("BRANCH_CODE") or "").strip()
+        if not code:
+            continue
+        ret_net = float(row.get("RET_NET") or 0)
+        ret_vat = float(row.get("RET_VAT") or 0)
+        total = round(ret_net + ret_vat, 2)
+        if total <= 0:
+            continue
+        out.append(
+            {
+                "branch_code": code,
+                "branch_name": names.get(code) or code,
+                "return_count": int(row.get("RETURN_COUNT") or 0),
+                "return_total": total,
+                # توافق مع واجهة الدونات
+                "sales_total": total,
+                "invoice_count": int(row.get("RETURN_COUNT") or 0),
+            }
+        )
+    out.sort(key=lambda r: (-r["return_total"], r["branch_code"]))
+    out = out[:lim]
+    _sales_cache_set(cache_key, out, date_from=date_from, date_to=date_to)
+    return out
 
 
 def fetch_sales_mst_bundle(

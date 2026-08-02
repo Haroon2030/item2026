@@ -441,17 +441,17 @@
   <section
     class="dash-charts"
     id="dash-charts"
-    aria-label="الفروع الأكثر مردوداً والأصناف الأكثر إرجاعاً"
+    aria-label="الفروع الأكثر إرجاعاً والأصناف الأكثر إرجاعاً"
     data-charts-url="/sales/api/charts/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
   >
-    <div class="dash-panel dash-branch-chart" aria-label="الفروع الأكثر مردوداً">
+    <div class="dash-panel dash-branch-chart" aria-label="الفروع الأكثر إرجاعاً">
       <div class="dash-panel-head">
         <div class="dash-sellers-title">
-          <span class="dash-sellers-mark" aria-hidden="true">
+          <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
           </span>
           <div>
-            <h3>الفروع الأكثر مردوداً</h3>
+            <h3>الفروع الأكثر إرجاعاً</h3>
           </div>
         </div>
         <div class="dash-panel-head-actions">
@@ -581,5 +581,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=11" defer></script>
+<script src="/static/js/sales-dash.js?v=12" defer></script>
 {% endblock %}

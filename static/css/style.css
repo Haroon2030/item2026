@@ -2248,9 +2248,20 @@ body.sales-dash-body .app-backdrop {
   filter: drop-shadow(0 4px 14px rgba(29, 79, 145, 0.12));
 }
 
+.branch-donut-legend-item.is-clickable {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.branch-donut-legend-item.is-clickable:hover,
+.branch-donut-legend-item.is-clickable:focus-visible {
+  background: #eef4fb;
+  outline: none;
+}
+
 .branch-donut-slice {
+  cursor: pointer;
   transition: stroke-width 0.2s ease, opacity 0.2s ease;
-  cursor: default;
 }
 
 .branch-donut-visual:hover .branch-donut-slice {
