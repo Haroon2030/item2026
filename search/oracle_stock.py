@@ -79,29 +79,40 @@ def _assert_readonly_sql(sql: str) -> str:
 
 
 def _init_thick_client() -> None:
+    """تفعيل Thick mode — مطلوب لقواعد تستخدم مصادق كلمة سر قديمة (DPY-3015)."""
     global _client_ready
     if _client_ready:
         return
     with _client_lock:
         if _client_ready:
             return
+        import platform
         import oracledb
 
+        system = platform.system()
         lib_dir = str(_cfg().get("CLIENT_LIB_DIR") or "").strip()
-        # على Docker/Linux غالباً thin mode يكفي؛ مسار Windows المحلي يُتجاهل بأمان.
-        if lib_dir:
-            try:
-                oracledb.init_oracle_client(lib_dir=lib_dir)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Oracle thick client lib_dir failed (%s); using thin mode",
-                    exc,
-                )
-        else:
-            try:
+        try:
+            if system == "Windows":
+                # على Windows يُمرَّر مسار Instant Client إن وُجد
+                if lib_dir:
+                    oracledb.init_oracle_client(lib_dir=lib_dir)
+                else:
+                    oracledb.init_oracle_client()
+            elif system == "Darwin":
+                if lib_dir:
+                    oracledb.init_oracle_client(lib_dir=lib_dir)
+                else:
+                    oracledb.init_oracle_client()
+            else:
+                # Linux: لا يُمرَّر lib_dir — الاعتماد على ldconfig في الصورة
                 oracledb.init_oracle_client()
-            except Exception:
-                logger.warning("Oracle thick client init skipped; using thin mode")
+            logger.info("Oracle thick mode ready (%s)", system)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Oracle thick client init failed: %s", exc)
+            raise OracleStockError(
+                "تعذّر تفعيل Oracle Thick mode. ثبّت Instant Client في السيرفر "
+                "(Thin mode لا يدعم نوع كلمة السر الحالي — DPY-3015)."
+            ) from exc
         _client_ready = True
 
 
