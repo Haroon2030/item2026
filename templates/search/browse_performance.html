@@ -23,8 +23,8 @@
         <h3>{{ insights.health.label }}</h3>
         <p>
           النطاق: <b>{{ insights.scope_label }}</b>
-          · أ: {{ insights.period_a_label }}
-          · ب: {{ insights.period_b_label }}
+          · <span class="perf-period-tag is-current">الحالية</span> {{ insights.period_a_label }}
+          · <span class="perf-period-tag is-previous">السابقة</span> {{ insights.period_b_label }}
           {% if insights.compare_mode == 'custom' %}· مقارنة مخصصة{% else %}· مقارنة تلقائية{% endif %}
         </p>
       </div>
@@ -123,7 +123,13 @@
 
   <div class="perf-filter-periods">
     <fieldset class="perf-period perf-period-a">
-      <legend><span class="perf-period-badge" aria-hidden="true">أ</span> الفترة أ (الحالية)</legend>
+      <legend>
+        <span class="perf-period-badge" aria-hidden="true">أ</span>
+        <span class="perf-period-title">
+          <strong>الفترة الحالية</strong>
+          <em>المدة التي تريد قياسها الآن</em>
+        </span>
+      </legend>
       <div class="field">
         <label for="date_from">من</label>
         <input id="date_from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
@@ -133,8 +139,15 @@
         <input id="date_to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
       </div>
     </fieldset>
+    <div class="perf-period-vs" aria-hidden="true">مقابل</div>
     <fieldset class="perf-period perf-period-b" id="perf-period-b">
-      <legend><span class="perf-period-badge" aria-hidden="true">ب</span> الفترة ب (المقارنة)</legend>
+      <legend>
+        <span class="perf-period-badge" aria-hidden="true">ب</span>
+        <span class="perf-period-title">
+          <strong>الفترة السابقة</strong>
+          <em>للمقارنة مع الحالية</em>
+        </span>
+      </legend>
       <div class="field">
         <label for="compare_from">من</label>
         <input id="compare_from" type="date" name="compare_from" value="{{ compare_from }}">
@@ -162,7 +175,7 @@
 {% if insights %}
   <section class="dash-panel dash-panel-glass perf-panel" aria-label="ملخص المقارنة">
     <div class="dash-panel-head">
-      <h3>أ مقابل ب</h3>
+      <h3>الحالية مقابل السابقة</h3>
       <span class="result-pill">{{ insights.compare_summary|length }} مقاييس</span>
     </div>
     <div class="table-wrap">
@@ -170,8 +183,8 @@
         <thead>
           <tr>
             <th>المقياس</th>
-            <th>الفترة أ</th>
-            <th>الفترة ب</th>
+            <th class="perf-col-a">الحالية</th>
+            <th class="perf-col-b">السابقة</th>
             <th>الفرق %</th>
           </tr>
         </thead>
@@ -199,13 +212,13 @@
         <thead>
           <tr>
             <th>الفرع</th>
-            <th>مبيعات أ</th>
-            <th>مبيعات ب</th>
+            <th class="perf-col-a">مبيعات حالية</th>
+            <th class="perf-col-b">مبيعات سابقة</th>
             <th>فرق المبيعات</th>
-            <th>فواتير أ</th>
-            <th>فواتير ب</th>
-            <th>مرتجع أ</th>
-            <th>نسبة مرتجع أ</th>
+            <th class="perf-col-a">فواتير حالية</th>
+            <th class="perf-col-b">فواتير سابقة</th>
+            <th class="perf-col-a">مرتجع حالي</th>
+            <th class="perf-col-a">نسبة مرتجع حالي</th>
           </tr>
         </thead>
         <tbody>
@@ -252,14 +265,14 @@
         <thead>
           <tr>
             <th>المجموعة</th>
-            <th>مبيعات أ</th>
-            <th>مبيعات ب</th>
+            <th class="perf-col-a">مبيعات حالية</th>
+            <th class="perf-col-b">مبيعات سابقة</th>
             <th>فرق المبيعات</th>
-            <th>فواتير أ</th>
-            <th>فواتير ب</th>
-            <th>متوسط السلة أ</th>
-            <th>مرتجع أ</th>
-            <th>نسبة مرتجع أ</th>
+            <th class="perf-col-a">فواتير حالية</th>
+            <th class="perf-col-b">فواتير سابقة</th>
+            <th class="perf-col-a">متوسط السلة حالي</th>
+            <th class="perf-col-a">مرتجع حالي</th>
+            <th class="perf-col-a">نسبة مرتجع حالي</th>
           </tr>
         </thead>
         <tbody>
@@ -300,7 +313,7 @@
 
   <section class="dash-panel dash-panel-glass perf-panel" aria-label="التحليل اليومي">
     <div class="dash-panel-head">
-      <h3>التحليل اليومي — الفترة أ</h3>
+      <h3>التحليل اليومي — الفترة الحالية</h3>
       <span class="result-pill">{{ insights.daily_table|length }} يوم</span>
     </div>
     {% if insights.daily_note %}
@@ -359,8 +372,8 @@
           <thead>
             <tr>
               <th>الصنف</th>
-              <th>مبيعات أ</th>
-              <th>مبيعات ب</th>
+              <th class="perf-col-a">مبيعات حالية</th>
+              <th class="perf-col-b">مبيعات سابقة</th>
               <th>فرق %</th>
             </tr>
           </thead>
@@ -399,8 +412,8 @@
           <thead>
             <tr>
               <th>الصنف</th>
-              <th>مرتجع أ</th>
-              <th>مرتجع ب</th>
+              <th class="perf-col-a">مرتجع حالي</th>
+              <th class="perf-col-b">مرتجع سابق</th>
               <th>فرق %</th>
             </tr>
           </thead>
