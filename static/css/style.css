@@ -84,14 +84,14 @@ body.login-body .app-backdrop { display: none; }
 .page {
   position: relative;
   z-index: 1;
-  width: min(1000px, calc(100% - 1.5rem));
+  width: min(1600px, calc(100% - 1.5rem));
   margin: 0 auto;
   padding: 1.35rem 0 2.5rem;
   animation: login-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .page.has-sidebar {
-  width: min(1000px, calc(100% - var(--sidebar-w) - 2.5rem));
+  width: min(1600px, calc(100% - var(--sidebar-w) - 2.5rem));
   margin-inline-start: calc(var(--sidebar-w) + 1.25rem);
   margin-inline-end: auto;
   transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
@@ -774,7 +774,7 @@ body.login-body {
   border: 1px solid rgba(201, 216, 234, 0.95);
   border-radius: 22px;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--shadow);
 }
 
@@ -785,6 +785,7 @@ body.login-body {
   padding: 1rem 1.15rem;
   background: linear-gradient(180deg, rgba(243, 248, 255, 0.95) 0%, rgba(234, 242, 252, 0.75) 100%);
   border-bottom: 1px solid rgba(201, 216, 234, 0.85);
+  border-radius: 22px 22px 0 0;
 }
 
 .search-head h2 {
@@ -806,6 +807,16 @@ body.login-body {
   gap: 0.8rem;
   align-items: flex-end;
   padding: 1.1rem 1.15rem;
+  position: relative;
+  z-index: 4;
+}
+
+.warehouse-field {
+  flex: 0 1 20rem;
+  min-width: 14rem;
+  max-width: 24rem;
+  position: relative;
+  z-index: 6;
 }
 
 .field {
@@ -863,6 +874,132 @@ body.login-body {
   color: #143a6b;
   cursor: pointer;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.search-box .inv-select {
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.search-box .inv-select.is-open {
+  z-index: 80;
+}
+
+.search-box .inv-select-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.search-box .inv-select-trigger {
+  width: 100%;
+  min-height: 3.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem 0.7rem 0.95rem;
+  border: 1px solid #c5d5e8;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f9fd 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  font: 700 0.95rem var(--font);
+  color: #143a6b;
+  cursor: pointer;
+  text-align: right;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-box .inv-select-trigger:hover {
+  border-color: #9bb6d6;
+  background: #fff;
+}
+
+.search-box .inv-select.is-open .inv-select-trigger {
+  border-color: #2f6fbd;
+  box-shadow: 0 0 0 4px rgba(47, 111, 189, 0.14);
+}
+
+.search-box .inv-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-box .inv-select-caret {
+  display: grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  color: #1f4f8a;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.search-box .inv-select-caret svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.search-box .inv-select.is-open .inv-select-caret {
+  transform: rotate(180deg);
+}
+
+.search-box .inv-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 18rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.35rem;
+  border: 1px solid #c5d5e8;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow:
+    0 16px 36px rgba(18, 52, 95, 0.18),
+    0 2px 0 rgba(255, 255, 255, 0.8) inset;
+  backdrop-filter: blur(10px);
+}
+
+.search-box .inv-select-option {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #1a3358;
+  font: 700 0.9rem var(--font);
+  text-align: right;
+  cursor: pointer;
+}
+
+.search-box .inv-select-option:hover {
+  background: rgba(232, 241, 251, 0.95);
+}
+
+.search-box .inv-select-option.is-selected {
+  background: rgba(47, 111, 189, 0.12);
+  color: #1d4f91;
 }
 
 .select-shell .warehouse-select:hover {
@@ -1905,7 +2042,7 @@ body.sales-dash-body .app-backdrop {
 }
 
 .page.sales-dash {
-  width: min(1480px, calc(100% - var(--sidebar-w) - 2rem));
+  width: min(1600px, calc(100% - var(--sidebar-w) - 2rem));
   max-width: calc(100% - 1.25rem);
   min-width: 0;
   background: #fff;
@@ -2206,6 +2343,93 @@ body.sales-dash-body .app-backdrop {
   margin-bottom: 0.95rem;
   align-items: stretch;
 }
+
+.dash-margins {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.95rem;
+  margin-top: 0.95rem;
+  margin-bottom: 0.95rem;
+  align-items: stretch;
+}
+
+.dash-margins .dash-panel {
+  min-width: 0;
+}
+
+.dash-margins .table-wrap {
+  max-height: calc(2.2rem + (15 * 2.05rem));
+  overflow: auto;
+  padding: 0 0.55rem 0.55rem;
+}
+
+.dash-margins .margin-table-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* الصفوف تتمرر — الإجمالي ثابت تحتها */
+.dash-margins .margin-scroll {
+  max-height: calc(2.2rem + (15 * 2.05rem));
+  overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.55rem;
+}
+
+.dash-margins .margin-scroll::after {
+  display: none;
+}
+
+.dash-margins .margin-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eef4fb;
+}
+
+.dash-margins .margin-scroll .sales-table,
+.dash-margins .margin-totals-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.dash-margins .m-col-idx { width: 2.4rem; }
+.dash-margins .m-col-name { width: auto; }
+.dash-margins .m-col-num { width: 6.2rem; }
+
+.dash-margins .margin-totals {
+  flex: 0 0 auto;
+  padding: 0 0.55rem 0.45rem;
+  border-top: 1px solid #c5d8ef;
+  background: #e8f1fb;
+}
+
+.dash-margins .margin-totals-table td {
+  white-space: nowrap;
+  font-size: 0.78rem;
+  padding: 0.45rem 0.45rem;
+  border-bottom: 0;
+  font-weight: 800;
+}
+
+.dash-margins .sales-table th,
+.dash-margins .sales-table td {
+  white-space: nowrap;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.dash-margins .sales-table td:nth-child(2) {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-margins .sales-table .is-up { color: #0b7a45; font-weight: 800; }
+.dash-margins .sales-table .is-down { color: #b34040; font-weight: 800; }
 
 .dash-branch-chart,
 .dash-charts .dash-top-items,
@@ -3394,7 +3618,8 @@ html[dir="rtl"] .seller-fill {
 
 @media (max-width: 1180px) {
   .dash-grid,
-  .dash-charts {
+  .dash-charts,
+  .dash-margins {
     grid-template-columns: 1fr;
   }
 

@@ -114,7 +114,7 @@
   }
 
   function init() {
-    document.querySelectorAll(".inv-filter select").forEach(enhance);
+    document.querySelectorAll(".inv-filter select, select.warehouse-select").forEach(enhance);
   }
 
   document.addEventListener("click", function (e) {

@@ -20,16 +20,11 @@
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
         المخزن
       </label>
-      <div class="select-shell">
-        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
-          {% for wh in warehouses %}
-            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
-          {% endfor %}
-        </select>
-        <span class="select-chevron" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-        </span>
-      </div>
+      <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+        {% for wh in warehouses %}
+          <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+        {% endfor %}
+      </select>
     </div>
 
     <div class="field query-field">
@@ -309,4 +304,5 @@
 <script src="/static/js/vendor/zxing-browser.min.js" defer></script>
 <script src="/static/js/sync-progress.js" defer></script>
 <script src="/static/js/barcode-scanner.js" defer></script>
+<script src="/static/js/inv-select.js?v=2" defer></script>
 {% endblock %}

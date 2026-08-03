@@ -48,7 +48,38 @@ def _fetch_suppliers_safe(item_code: str) -> list[dict]:
 
 
 def _warehouses() -> list[dict]:
-    return list(settings.EXTERNAL_API.get('WAREHOUSES') or [])
+    """قائمة المخازن: من أوراكل بالاسم الحقيقي، مع الرجوع لإعدادات WAREHOUSES عند التعذر."""
+    fallback = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+        }
+        for w in (settings.EXTERNAL_API.get('WAREHOUSES') or [])
+        if str(w.get('code') or '').strip()
+    ]
+    try:
+        from .oracle_stock import fetch_warehouse_options, oracle_enabled
+
+        if not oracle_enabled():
+            return fallback
+        rows = fetch_warehouse_options(active_only=True)
+        if not rows:
+            return fallback
+        out: list[dict] = []
+        for w in rows:
+            code = str(w.get('code') or '').strip()
+            if not code:
+                continue
+            raw_name = str(w.get('name') or '').strip()
+            if raw_name and raw_name != code:
+                label = f'{raw_name} ({code})'
+            else:
+                label = f'مخزن {code}'
+            out.append({'code': code, 'name': label})
+        return out or fallback
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Warehouse list from Oracle failed: %s', exc)
+        return fallback
 
 
 def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str) -> tuple[list[dict], dict | None]:
@@ -623,7 +654,18 @@ def _build_sales_system(
     _format_sales_metric_rows(rows)
     top_users: list[dict] = []
     if not light:
-        top_users = list(bundle.get('top_users') or [])
+        if selected_branch:
+            from .oracle_stock import fetch_top_sales_users
+
+            top_users = fetch_top_sales_users(
+                date_from,
+                date_to,
+                system=key,
+                branch_code=selected_branch,
+                limit=8,
+            )
+        else:
+            top_users = list(bundle.get('top_users') or [])
         for user in top_users:
             user['net_total_display'] = f"{float(user.get('net_total') or 0):,.2f}"
             user['sales_total_display'] = f"{float(user.get('sales_total') or 0):,.2f}"
@@ -898,6 +940,28 @@ def _build_top_items_list(
         item['sales_total_display'] = f"{float(item.get('sales_total') or 0):,.2f}"
         item['qty_total_display'] = f"{float(item.get('qty_total') or 0):,.2f}"
     return top_items, sales_fast_mode(date_from, date_to)
+
+
+def _build_top_users_list(
+    date_from,
+    date_to,
+    active_system,
+    selected_branch='',
+    limit=8,
+):
+    from .oracle_stock import fetch_top_sales_users
+
+    top_users = fetch_top_sales_users(
+        date_from,
+        date_to,
+        system=active_system,
+        branch_code=selected_branch,
+        limit=limit,
+    )
+    for user in top_users:
+        user['net_total_display'] = f"{float(user.get('net_total') or 0):,.2f}"
+        user['sales_total_display'] = f"{float(user.get('sales_total') or 0):,.2f}"
+    return top_users
 
 
 def _build_top_return_items_list(
@@ -1235,6 +1299,42 @@ def browse_sales_items_api(request):
 @login_required
 @require_GET
 @never_cache
+def browse_sales_users_api(request):
+    """أكثر المستخدمين مبيعاً مع فلتر فرع."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            users = _build_top_users_list(
+                date_from,
+                date_to,
+                active_system,
+                selected_branch=selected_branch,
+                limit=8,
+            )
+        return JsonResponse({'ok': True, 'users': users})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_users_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_sales_panels_api(request):
     """طلب واحد: مجموعات + أعلى أصناف (جلسة أوراكل واحدة)."""
     try:
@@ -1327,6 +1427,68 @@ def browse_sales_charts_api(request):
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_charts_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_margins_api(request):
+    """هامش ربح الفروع والمجموعات — أعلى 15 من الأفضل إلى الأسوأ."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import fetch_margin_ranks, oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            payload = fetch_margin_ranks(
+                date_from,
+                date_to,
+                system=active_system,
+                branch_code=selected_branch,
+                group_code=selected_group,
+                limit=15,
+            )
+        branches = []
+        for row in payload.get('branches') or []:
+            branch = dict(row)
+            branch['sales_net_display'] = f"{float(branch.get('sales_net') or 0):,.2f}"
+            branch['cost_total_display'] = f"{float(branch.get('cost_total') or 0):,.2f}"
+            branch['profit_display'] = f"{float(branch.get('profit') or 0):,.2f}"
+            branch['qty_total_display'] = f"{float(branch.get('qty_total') or 0):,.2f}"
+            margin = branch.get('margin_pct')
+            branch['margin_pct_display'] = (
+                f"{float(margin):.2f}%" if margin is not None else '—'
+            )
+            branches.append(branch)
+        groups = []
+        for row in payload.get('groups') or []:
+            group = dict(row)
+            group['sales_net_display'] = f"{float(group.get('sales_net') or 0):,.2f}"
+            group['cost_total_display'] = f"{float(group.get('cost_total') or 0):,.2f}"
+            group['profit_display'] = f"{float(group.get('profit') or 0):,.2f}"
+            group['qty_total_display'] = f"{float(group.get('qty_total') or 0):,.2f}"
+            margin = group.get('margin_pct')
+            group['margin_pct_display'] = (
+                f"{float(margin):.2f}%" if margin is not None else '—'
+            )
+            groups.append(group)
+        return JsonResponse({'ok': True, 'branches': branches, 'groups': groups})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_margins_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
 

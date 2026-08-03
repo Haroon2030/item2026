@@ -270,9 +270,11 @@
   function renderItems(items) {
     var loading = document.getElementById("items-loading");
     var board = document.getElementById("items-board");
+    var pill = document.getElementById("items-pill");
     var list = items || [];
 
     if (loading) loading.hidden = true;
+    if (pill) pill.textContent = "أعلى " + (list.length || 20);
     if (!board) return;
     board.hidden = false;
     if (!list.length) {
@@ -303,6 +305,114 @@
         "</span></div>";
     });
     board.innerHTML = html;
+  }
+
+  function sellerInvoiceHref(userCode, branchCode) {
+    var params = new URLSearchParams(window.location.search);
+    if (branchCode) params.set("branch", branchCode);
+    else params.delete("branch");
+    params.set("user_id", userCode);
+    return "?" + params.toString() + "#invoices";
+  }
+
+  function renderSellers(users) {
+    var loading = document.getElementById("sellers-loading");
+    var board = document.getElementById("sellers-board");
+    var pill = document.getElementById("sellers-pill");
+    var branchSel = document.getElementById("side-sellers-branch");
+    var branchCode = branchSel && branchSel.value ? branchSel.value : "";
+    var list = users || [];
+    if (loading) loading.hidden = true;
+    if (pill) pill.textContent = "أعلى " + (list.length || 8);
+    if (!board) return;
+    if (!list.length) {
+      board.innerHTML = '<p class="sales-empty">لا يوجد مستخدمون في هذه الفترة.</p>';
+      return;
+    }
+    var html = "";
+    list.forEach(function (u, i) {
+      var rank = i + 1;
+      html +=
+        '<a class="seller-card rank-' + rank + '" href="' +
+        esc(sellerInvoiceHref(u.user_code, branchCode)) +
+        '" role="listitem" style="--bar-pct: ' + esc(u.share_pct) + "%; --i: " + i +
+        '" data-user-code="' + esc(u.user_code) + '">' +
+        '<span class="seller-rank mono" aria-hidden="true">' + rank + "</span>" +
+        '<span class="seller-body">' +
+        '<span class="seller-name" title="' + esc(u.user_name) + " — " + esc(u.user_code) + '">' +
+        esc(u.user_name) +
+        "</span>" +
+        '<span class="seller-meta mono">' +
+        esc(u.invoice_count) +
+        " فاتورة · #" +
+        esc(u.user_code) +
+        "</span>" +
+        '<span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>' +
+        "</span>" +
+        '<span class="seller-side">' +
+        '<span class="seller-amt mono">' + esc(u.sales_total_display) + "</span>" +
+        '<span class="seller-pct mono">' + esc(u.share_pct) + "%</span>" +
+        "</span></a>";
+    });
+    board.innerHTML = html;
+  }
+
+  function sideItemsUrl() {
+    var box = document.getElementById("dash-top-items");
+    if (!box || !box.dataset.itemsUrl) return "";
+    var url = box.dataset.itemsUrl;
+    var branchSel = document.getElementById("side-items-branch");
+    if (branchSel && branchSel.value) url += "&branch=" + encodeURIComponent(branchSel.value);
+    return url;
+  }
+
+  function sideUsersUrl() {
+    var box = document.getElementById("dash-top-sellers");
+    if (!box || !box.dataset.usersUrl) return "";
+    var url = box.dataset.usersUrl;
+    var branchSel = document.getElementById("side-sellers-branch");
+    if (branchSel && branchSel.value) url += "&branch=" + encodeURIComponent(branchSel.value);
+    return url;
+  }
+
+  function loadSideItems() {
+    var url = sideItemsUrl();
+    if (!url) return;
+    var loading = document.getElementById("items-loading");
+    var board = document.getElementById("items-board");
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = "جاري تحميل الأصناف…";
+    }
+    if (board) board.hidden = true;
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderItems(data.items || []);
+      })
+      .catch(function (err) {
+        if (loading) loading.textContent = "تعذّر تحميل الأصناف: " + (err.message || err);
+      });
+  }
+
+  function loadSideSellers() {
+    var url = sideUsersUrl();
+    if (!url) return;
+    var loading = document.getElementById("sellers-loading");
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = "جاري تحميل البائعين…";
+    }
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderSellers(data.users || []);
+      })
+      .catch(function (err) {
+        if (loading) loading.textContent = "تعذّر تحميل البائعين: " + (err.message || err);
+      });
   }
 
   function failGroups(err) {
@@ -402,10 +512,224 @@
     return true;
   }
 
+  function marginTone(pct) {
+    if (pct == null || isNaN(Number(pct))) return "";
+    var n = Number(pct);
+    if (n >= 25) return "is-up";
+    if (n < 0) return "is-down";
+    if (n < 10) return "is-down";
+    return "";
+  }
+
+  function fmtMarginMoney(n) {
+    var x = Number(n);
+    if (!isFinite(x)) return "0.00";
+    return x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function marginTotals(rows) {
+    var sales = 0;
+    var cost = 0;
+    var profit = 0;
+    (rows || []).forEach(function (row) {
+      sales += Number(row.sales_net) || 0;
+      cost += Number(row.cost_total) || 0;
+      profit += Number(row.profit) || 0;
+    });
+    var pct = cost > 0 ? Math.round((profit / cost) * 10000) / 100 : null;
+    return {
+      sales_net: sales,
+      cost_total: cost,
+      profit: profit,
+      margin_pct: pct,
+      sales_net_display: fmtMarginMoney(sales),
+      cost_total_display: fmtMarginMoney(cost),
+      profit_display: fmtMarginMoney(profit),
+      margin_pct_display: pct == null ? "—" : fmtMarginMoney(pct) + "%"
+    };
+  }
+
+  function renderMarginTotals(totalsId, totals) {
+    var box = document.getElementById(totalsId);
+    if (!box) return;
+    if (!totals) {
+      box.innerHTML = "";
+      box.hidden = true;
+      return;
+    }
+    var tone = marginTone(totals.margin_pct);
+    box.hidden = false;
+    box.innerHTML =
+      '<table class="data-table sales-table margin-totals-table" aria-hidden="true">' +
+      "<colgroup>" +
+      '<col class="m-col-idx" />' +
+      '<col class="m-col-name" />' +
+      '<col class="m-col-num" />' +
+      '<col class="m-col-num" />' +
+      '<col class="m-col-num" />' +
+      '<col class="m-col-num" />' +
+      "</colgroup><tbody>" +
+      '<tr class="sales-grand-row">' +
+      '<td colspan="2">الإجمالي</td>' +
+      '<td class="mono sales-amt">' + esc(totals.sales_net_display) + "</td>" +
+      '<td class="mono">' + esc(totals.cost_total_display) + "</td>" +
+      '<td class="mono ' + tone + '">' + esc(totals.profit_display) + "</td>" +
+      '<td class="mono ' + tone + '">' + esc(totals.margin_pct_display) + "</td>" +
+      "</tr></tbody></table>";
+  }
+
+  function renderMarginBranches(rows) {
+    var loading = document.getElementById("margin-branches-loading");
+    var block = document.getElementById("margin-branches-block");
+    var wrap = document.getElementById("margin-branches-wrap");
+    var empty = document.getElementById("margin-branches-empty");
+    var body = document.getElementById("margin-branches-body");
+    var pill = document.getElementById("margin-branches-pill");
+    var list = rows || [];
+    if (loading) loading.hidden = true;
+    if (pill) pill.textContent = list.length ? (list.length + " فرع") : "كل الفروع";
+    if (!body) return;
+    if (!list.length) {
+      if (block) block.hidden = true;
+      if (wrap) wrap.hidden = true;
+      if (empty) empty.hidden = false;
+      body.innerHTML = "";
+      renderMarginTotals("margin-branches-totals", null);
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (block) block.hidden = false;
+    if (wrap) wrap.hidden = false;
+    body.innerHTML = list.map(function (row, i) {
+      var tone = marginTone(row.margin_pct);
+      return (
+        "<tr>" +
+        '<td class="mono">' + (i + 1) + "</td>" +
+        "<td title=\"" + esc(row.branch_code || "") + "\">" + esc(row.branch_name || row.branch_code || "") + "</td>" +
+        '<td class="mono sales-amt">' + esc(row.sales_net_display || "0.00") + "</td>" +
+        '<td class="mono">' + esc(row.cost_total_display || "0.00") + "</td>" +
+        '<td class="mono ' + tone + '">' + esc(row.profit_display || "0.00") + "</td>" +
+        '<td class="mono ' + tone + '">' + esc(row.margin_pct_display || "—") + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+    renderMarginTotals("margin-branches-totals", marginTotals(list));
+  }
+
+  function renderMarginGroups(rows) {
+    var loading = document.getElementById("margin-groups-loading");
+    var block = document.getElementById("margin-groups-block");
+    var wrap = document.getElementById("margin-groups-wrap");
+    var empty = document.getElementById("margin-groups-empty");
+    var body = document.getElementById("margin-groups-body");
+    var pill = document.getElementById("margin-groups-pill");
+    var list = rows || [];
+    if (loading) loading.hidden = true;
+    if (pill) pill.textContent = list.length ? (list.length + " مجموعة") : "كل المجموعات";
+    if (!body) return;
+    if (!list.length) {
+      if (block) block.hidden = true;
+      if (wrap) wrap.hidden = true;
+      if (empty) empty.hidden = false;
+      body.innerHTML = "";
+      renderMarginTotals("margin-groups-totals", null);
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (block) block.hidden = false;
+    if (wrap) wrap.hidden = false;
+    body.innerHTML = list.map(function (row, i) {
+      var tone = marginTone(row.margin_pct);
+      return (
+        "<tr>" +
+        '<td class="mono">' + (i + 1) + "</td>" +
+        "<td title=\"" + esc(row.group_code || "") + "\">" + esc(row.group_name || row.group_code || "") + "</td>" +
+        '<td class="mono sales-amt">' + esc(row.sales_net_display || "0.00") + "</td>" +
+        '<td class="mono">' + esc(row.cost_total_display || "0.00") + "</td>" +
+        '<td class="mono ' + tone + '">' + esc(row.profit_display || "0.00") + "</td>" +
+        '<td class="mono ' + tone + '">' + esc(row.margin_pct_display || "—") + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+    renderMarginTotals("margin-groups-totals", marginTotals(list));
+  }
+
+  function marginsUrl(branchSel, groupSel) {
+    var box = document.getElementById("dash-margins");
+    if (!box || !box.dataset.marginsUrl) return "";
+    var url = box.dataset.marginsUrl;
+    if (branchSel && branchSel.value) url += "&branch=" + encodeURIComponent(branchSel.value);
+    if (groupSel && groupSel.value) url += "&group=" + encodeURIComponent(groupSel.value);
+    return url;
+  }
+
+  function loadMarginBranches() {
+    var url = marginsUrl(
+      document.getElementById("margin-br-branch"),
+      document.getElementById("margin-br-group")
+    );
+    if (!url) return;
+    var loading = document.getElementById("margin-branches-loading");
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = "جاري تحميل هامش الفروع…";
+    }
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderMarginBranches(data.branches || []);
+      })
+      .catch(function (err) {
+        if (loading) loading.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
+      });
+  }
+
+  function loadMarginGroups() {
+    var url = marginsUrl(
+      document.getElementById("margin-gr-branch"),
+      document.getElementById("margin-gr-group")
+    );
+    if (!url) return;
+    var loading = document.getElementById("margin-groups-loading");
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = "جاري تحميل هامش المجموعات…";
+    }
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderMarginGroups(data.groups || []);
+      })
+      .catch(function (err) {
+        if (loading) loading.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
+      });
+  }
+
+  function loadMargins() {
+    loadMarginBranches();
+    loadMarginGroups();
+  }
+
   document.querySelectorAll("[data-chart-apply]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       if (btn.getAttribute("data-chart-apply") === "branches") loadBranchChart();
       else loadReturnsChart();
+    });
+  });
+
+  document.querySelectorAll("[data-side-apply]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.getAttribute("data-side-apply") === "items") loadSideItems();
+      else loadSideSellers();
+    });
+  });
+
+  document.querySelectorAll("[data-margin-apply]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.getAttribute("data-margin-apply") === "branches") loadMarginBranches();
+      else loadMarginGroups();
     });
   });
 
@@ -416,6 +740,7 @@
     } catch (e) { /* keep server HTML if any */ }
   }
 
+  loadMargins();
   if (!loadPanels()) {
     var box = document.getElementById("dash-groups");
     if (box && box.dataset.groupsUrl) {

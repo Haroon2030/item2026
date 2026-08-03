@@ -2772,15 +2772,18 @@ def fetch_top_sales_users(
     date_from,
     date_to,
     system: str = "pos",
+    branch_code: str = "",
     limit: int = 10,
 ) -> list[dict]:
     """أكثر المستخدمين مبيعاً — من جدول POS أو فواتير الآجل."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
 
+    brn = str(branch_code or "").strip()
+    lim = int(limit or 10)
     cache_key = (
-        f"sales:users:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{int(limit or 10)}"
+        f"sales:users:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -2788,6 +2791,10 @@ def fetch_top_sales_users(
 
     conf = _system_conf(system)
     params: dict = _date_params(date_from, date_to)
+    branch_filter = ""
+    if brn:
+        params["brn"] = brn
+        branch_filter = "AND TO_CHAR(p.BRN_NO) = :brn"
     returns_by_user: dict[str, tuple[int, float, float]] = {}
 
     if conf.get("source") == "pos":
@@ -2803,11 +2810,14 @@ def fetch_top_sales_users(
             WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
               AND NVL(p.HUNG, 0) = 0
               AND p.AD_U_ID IS NOT NULL
+              {branch_filter}
             GROUP BY TO_CHAR(p.AD_U_ID)
             """,
             params,
         )
         try:
+            ret_params = dict(params)
+            ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn" if brn else ""
             for row in _fetch_all(
                 f"""
                 SELECT
@@ -2819,9 +2829,10 @@ def fetch_top_sales_users(
                 WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
                   AND NVL(r.HUNG, 0) = 0
                   AND r.AD_U_ID IS NOT NULL
+                  {ret_branch}
                 GROUP BY TO_CHAR(r.AD_U_ID)
                 """,
-                params,
+                ret_params,
             ):
                 code = str(row.get("USER_CODE") or "").strip()
                 returns_by_user[code] = (
@@ -2832,11 +2843,15 @@ def fetch_top_sales_users(
         except Exception as exc:  # noqa: BLE001
             logger.exception("POS user returns failed: %s", exc)
             raise
-        rows = _assemble_user_rows(sales_rows, returns_by_user, limit)
+        rows = _assemble_user_rows(sales_rows, returns_by_user, lim)
         _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
         return rows
 
     schema = _schema()
+    bill_branch = ""
+    if brn:
+        params["brn"] = brn
+        bill_branch = "AND TO_CHAR(b.BRN_NO) = :brn"
     doc_filter = _doc_type_filter(conf, "b", "BILL_DOC_TYPE", params)
     cash_filter = "AND b.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
     sales_rows = _fetch_all(
@@ -2850,6 +2865,7 @@ def fetch_top_sales_users(
         WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
           {doc_filter}
           {cash_filter}
+          {bill_branch}
           AND NVL(b.CNCL_FLG, 0) = 0
           AND b.AD_U_ID IS NOT NULL
         GROUP BY TO_CHAR(b.AD_U_ID)
@@ -2858,8 +2874,11 @@ def fetch_top_sales_users(
     )
     try:
         ret_params: dict = _date_params(date_from, date_to)
+        if brn:
+            ret_params["brn"] = brn
         ret_doc_filter = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", ret_params)
         ret_cash_filter = "AND r.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
+        ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn" if brn else ""
         for row in _fetch_all(
             f"""
             SELECT
@@ -2871,6 +2890,7 @@ def fetch_top_sales_users(
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
               {ret_doc_filter}
               {ret_cash_filter}
+              {ret_branch}
               AND NVL(r.CNCL_FLG, 0) = 0
               AND r.AD_U_ID IS NOT NULL
             GROUP BY TO_CHAR(r.AD_U_ID)
@@ -2886,7 +2906,7 @@ def fetch_top_sales_users(
     except Exception as exc:  # noqa: BLE001
         logger.exception("Bill user returns failed: %s", exc)
         raise
-    rows = _assemble_user_rows(sales_rows, returns_by_user, limit)
+    rows = _assemble_user_rows(sales_rows, returns_by_user, lim)
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
 
@@ -3000,3 +3020,399 @@ def fetch_user_invoice_details(
         )
     )
     return out
+
+
+def _unit_cost_join_sql(schema: str, branch_code: str = "", params: dict | None = None) -> str:
+    """JOIN لتكلفة الوحدة من IAS_ITM_WCODE (احتياطي لنقاط البيع بلا STK_COST)."""
+    brn = str(branch_code or "").strip()
+    branch_join = ""
+    branch_filter = ""
+    if brn and params is not None:
+        params["cost_brn"] = brn
+        branch_join = f"""
+            JOIN {schema}.WAREHOUSE_DETAILS wh
+              ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+        """
+        branch_filter = "AND TO_CHAR(wh.CONN_BRN_NO) = :cost_brn"
+    return f"""
+        LEFT JOIN (
+          SELECT
+              TO_CHAR(w.I_CODE) AS I_CODE,
+              ROUND(
+                NVL(
+                  SUM(
+                    CASE
+                      WHEN NVL(w.AVL_QTY, 0) > 0
+                       AND NVL(w.I_CWTAVG, w.PRIMARY_COST) IS NOT NULL
+                      THEN NVL(w.AVL_QTY, 0) * NVL(w.I_CWTAVG, w.PRIMARY_COST)
+                    END
+                  )
+                  / NULLIF(
+                    SUM(
+                      CASE
+                        WHEN NVL(w.AVL_QTY, 0) > 0
+                         AND NVL(w.I_CWTAVG, w.PRIMARY_COST) IS NOT NULL
+                        THEN NVL(w.AVL_QTY, 0)
+                      END
+                    ),
+                    0
+                  ),
+                  AVG(NVL(w.I_CWTAVG, w.PRIMARY_COST))
+                ),
+                6
+              ) AS UNIT_COST
+          FROM {schema}.IAS_ITM_WCODE w
+          {branch_join}
+          WHERE w.I_CODE IS NOT NULL
+            AND NVL(w.I_CWTAVG, w.PRIMARY_COST) IS NOT NULL
+            AND NVL(w.I_CWTAVG, w.PRIMARY_COST) > 0
+            {branch_filter}
+          GROUP BY TO_CHAR(w.I_CODE)
+        ) uc ON uc.I_CODE = TO_CHAR(d.I_CODE)
+    """
+
+
+def _fetch_pos_margin_item_sales(
+    date_from,
+    date_to,
+    branch_code: str = "",
+    group_code: str = "",
+    candidate_limit: int = 0,
+) -> list[dict]:
+    """مبيعات أصناف×فرع POS: صافي الفاتورة + تكلفة تقديرية (لا يوجد STK_COST على سطر POS)."""
+    pos = _pos_owner()
+    schema = _schema()
+    params: dict = _date_params(date_from, date_to)
+    branch_filter = ""
+    group_filter = ""
+    brn = str(branch_code or "").strip()
+    if brn:
+        params["brn"] = brn
+        branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+    if group_code:
+        params["gcode"] = group_code
+        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+    cost_join = _unit_cost_join_sql(schema, brn, params)
+
+    sales_rows = _fetch_all(
+        f"""
+        SELECT
+            TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+            MAX(NVL(i.I_NAME, TO_CHAR(d.I_CODE))) AS ITEM_NAME,
+            NVL(TO_CHAR(MAX(i.G_CODE)), '(بلا)') AS GROUP_CODE,
+            ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+            ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
+            ROUND(SUM(NVL(d.I_QTY, 0) * NVL(uc.UNIT_COST, 0)), 2) AS COST_TOTAL
+        FROM {pos}.IAS_POS_BILL_DTL d
+        JOIN {pos}.IAS_POS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+         AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        {cost_join}
+        WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+          AND NVL(m.HUNG, 0) = 0
+          AND d.I_CODE IS NOT NULL
+          {branch_filter}
+          {group_filter}
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
+        """,
+        params,
+    )
+
+    returns_by_key: dict[str, tuple[float, float, float]] = {}
+    try:
+        ret_params = dict(params)
+        ret_cost_join = _unit_cost_join_sql(schema, brn, ret_params)
+        for row in _fetch_all(
+            f"""
+            SELECT
+                TO_CHAR(d.I_CODE) AS ITEM_CODE,
+                TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+                ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS RET_QTY,
+                ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET,
+                ROUND(SUM(NVL(d.I_QTY, 0) * NVL(uc.UNIT_COST, 0)), 2) AS RET_COST
+            FROM {pos}.IAS_POS_RT_BILL_DTL d
+            JOIN {pos}.IAS_POS_RT_BILL_MST m
+              ON m.RT_BILL_NO = d.RT_BILL_NO
+             AND m.BRN_NO = d.BRN_NO
+            LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            {ret_cost_join}
+            WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+              AND NVL(m.HUNG, 0) = 0
+              AND d.I_CODE IS NOT NULL
+              {branch_filter}
+              {group_filter}
+            GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
+            """,
+            ret_params,
+        ):
+            code = str(row.get("ITEM_CODE") or "").strip()
+            rbrn = str(row.get("BRANCH_CODE") or "").strip()
+            if not code:
+                continue
+            returns_by_key[f"{code}|{rbrn}"] = (
+                float(row.get("RET_QTY") or 0),
+                float(row.get("RET_NET") or 0),
+                float(row.get("RET_COST") or 0),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("POS margin returns failed: %s", exc)
+        raise
+
+    out: list[dict] = []
+    for row in sales_rows:
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if not code:
+            continue
+        rbrn = str(row.get("BRANCH_CODE") or "").strip()
+        ret_qty, ret_net, ret_cost = returns_by_key.get(f"{code}|{rbrn}", (0.0, 0.0, 0.0))
+        qty = round(float(row.get("QTY_TOTAL") or 0) - ret_qty, 2)
+        net = round(float(row.get("NET_TOTAL") or 0) - ret_net, 2)
+        cost_total = round(float(row.get("COST_TOTAL") or 0) - ret_cost, 2)
+        if net <= 0 and qty <= 0:
+            continue
+        if cost_total < 0:
+            cost_total = 0.0
+        out.append(
+            {
+                "item_code": code,
+                "item_name": str(row.get("ITEM_NAME") or "").strip() or code,
+                "group_code": str(row.get("GROUP_CODE") or "").strip() or "(بلا)",
+                "branch_code": rbrn,
+                "qty_total": qty,
+                "net_total": net,
+                "cost_total": cost_total,
+            }
+        )
+    return out
+
+
+def _fetch_bill_margin_item_sales(
+    date_from,
+    date_to,
+    conf: dict,
+    branch_code: str = "",
+    group_code: str = "",
+    candidate_limit: int = 0,
+) -> list[dict]:
+    """مبيعات أصناف×فرع الآجل كما تقرير النظام: صافي الفاتورة + STK_COST×الكمية."""
+    del conf, candidate_limit  # الهامش يطابق تقرير أونكس بدون فلتر doc_types الضيق
+    schema = _schema()
+    params: dict = _date_params(date_from, date_to)
+    branch_filter = ""
+    group_filter = ""
+    brn = str(branch_code or "").strip()
+    if brn:
+        params["brn"] = brn
+        branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+    if group_code:
+        params["gcode"] = group_code
+        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+
+    sales_rows = _fetch_all(
+        f"""
+        SELECT
+            TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+            MAX(NVL(i.I_NAME, TO_CHAR(d.I_CODE))) AS ITEM_NAME,
+            NVL(TO_CHAR(MAX(i.G_CODE)), '(بلا)') AS GROUP_CODE,
+            ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+            ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
+            ROUND(SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 2) AS COST_TOTAL
+        FROM {schema}.IAS_BILL_DTL d
+        JOIN {schema}.IAS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+         AND NVL(m.BILL_SER, 0) = NVL(d.BILL_SER, 0)
+        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+          AND d.I_CODE IS NOT NULL
+          {branch_filter}
+          {group_filter}
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
+        """,
+        params,
+    )
+
+    out: list[dict] = []
+    for row in sales_rows:
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if not code:
+            continue
+        qty = round(float(row.get("QTY_TOTAL") or 0), 2)
+        net = round(float(row.get("NET_TOTAL") or 0), 2)
+        cost_total = round(float(row.get("COST_TOTAL") or 0), 2)
+        if net <= 0 and qty <= 0:
+            continue
+        out.append(
+            {
+                "item_code": code,
+                "item_name": str(row.get("ITEM_NAME") or "").strip() or code,
+                "group_code": str(row.get("GROUP_CODE") or "").strip() or "(بلا)",
+                "branch_code": str(row.get("BRANCH_CODE") or "").strip(),
+                "qty_total": qty,
+                "net_total": net,
+                "cost_total": cost_total,
+            }
+        )
+    return out
+
+
+def _assemble_margin_ranks(
+    item_sales: list[dict],
+    group_names: dict[str, str],
+    branch_names: dict[str, str],
+    *,
+    branch_limit: int = 15,
+    group_limit: int | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """يبني ترتيب الهامش كما تقرير النظام: نسبة الربح = (صافي − تكلفة) / تكلفة × 100."""
+    branch_acc: dict[str, dict] = {}
+    group_acc: dict[str, dict] = {}
+
+    for row in item_sales:
+        code = str(row.get("item_code") or "").strip()
+        if not code:
+            continue
+        qty = float(row.get("qty_total") or 0)
+        net = float(row.get("net_total") or 0)
+        if net <= 0:
+            continue
+        cost_total = float(row.get("cost_total") or 0)
+        gcode = str(row.get("group_code") or "").strip() or "(بلا)"
+        brn = str(row.get("branch_code") or "").strip() or "(بلا)"
+
+        b_bucket = branch_acc.get(brn)
+        if not b_bucket:
+            b_bucket = {
+                "branch_code": brn,
+                "branch_name": branch_names.get(brn) or brn,
+                "qty_total": 0.0,
+                "sales_net": 0.0,
+                "cost_total": 0.0,
+            }
+            branch_acc[brn] = b_bucket
+        b_bucket["qty_total"] += qty
+        b_bucket["sales_net"] += net
+        b_bucket["cost_total"] += cost_total
+
+        g_bucket = group_acc.get(gcode)
+        if not g_bucket:
+            g_bucket = {
+                "group_code": gcode,
+                "group_name": group_names.get(gcode) or gcode,
+                "qty_total": 0.0,
+                "sales_net": 0.0,
+                "cost_total": 0.0,
+            }
+            group_acc[gcode] = g_bucket
+        g_bucket["qty_total"] += qty
+        g_bucket["sales_net"] += net
+        g_bucket["cost_total"] += cost_total
+
+    def _finalize(
+        buckets: dict[str, dict],
+        code_key: str,
+        name_key: str,
+        *,
+        limit: int | None,
+    ) -> list[dict]:
+        rows: list[dict] = []
+        for bucket in buckets.values():
+            net = round(float(bucket["sales_net"] or 0), 2)
+            if net <= 0:
+                continue
+            cost_total = round(float(bucket["cost_total"] or 0), 2)
+            profit = round(net - cost_total, 2)
+            # مثل تقرير أونكس: نسبة الربح على التكلفة (وليس على المبيعات)
+            if cost_total > 0:
+                margin_pct = round((profit / cost_total) * 100.0, 2)
+            else:
+                margin_pct = None
+            rows.append(
+                {
+                    code_key: bucket[code_key],
+                    name_key: bucket[name_key],
+                    "qty_total": round(float(bucket["qty_total"] or 0), 2),
+                    "sales_net": net,
+                    "cost_total": cost_total,
+                    "profit": profit,
+                    "margin_pct": margin_pct,
+                }
+            )
+        rows.sort(
+            key=lambda r: (
+                r["margin_pct"] is None,
+                -(r["margin_pct"] if r["margin_pct"] is not None else 0),
+                -r["profit"],
+                r[name_key],
+            )
+        )
+        if limit is None:
+            return rows
+        return rows[: max(1, int(limit or 15))]
+
+    return (
+        _finalize(
+            branch_acc, "branch_code", "branch_name", limit=branch_limit
+        ),
+        _finalize(group_acc, "group_code", "group_name", limit=group_limit),
+    )
+
+
+def fetch_margin_ranks(
+    date_from,
+    date_to,
+    system: str = "pos",
+    branch_code: str = "",
+    group_code: str = "",
+    limit: int = 15,
+) -> dict[str, list[dict]]:
+    """هامش الربح كما تقرير النظام (صافي الفاتورة − تكلفة الفاتورة) / التكلفة.
+
+    يعيد كل الفروع وكل المجموعات مرتبة الأفضل → الأسوأ.
+    الآجل: تكلفة السطر = STK_COST × الكمية من IAS_BILL_DTL.
+    نقاط البيع: تقدير من I_CWTAVG/PRIMARY_COST (لا يوجد STK_COST على سطر POS).
+    """
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    lim = max(1, int(limit or 15))
+    cache_key = (
+        f"sales:margin:v6:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
+    )
+    cached = _sales_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    conf = _system_conf(system)
+    if conf.get("source") == "pos":
+        item_sales = _fetch_pos_margin_item_sales(
+            date_from, date_to, brn, gcode, candidate_limit=0
+        )
+    else:
+        item_sales = _fetch_bill_margin_item_sales(
+            date_from,
+            date_to,
+            conf,
+            brn,
+            gcode,
+            candidate_limit=0,
+        )
+
+    group_names = _group_name_lookup()
+    branch_names = _branch_names()
+    branches, groups = _assemble_margin_ranks(
+        item_sales,
+        group_names,
+        branch_names,
+        branch_limit=None,
+        group_limit=None,
+    )
+    payload = {"branches": branches, "groups": groups}
+    _sales_cache_set(cache_key, payload, date_from=date_from, date_to=date_to)
+    return payload
