@@ -708,6 +708,42 @@
   }
 
   function loadMargins() {
+    var box = document.getElementById("dash-margins");
+    if (!box || !box.dataset.marginsUrl) return;
+    // طلب واحد للفروع والمجموعات (نفس الحمولة) — أسرع من طلبين متوازيين
+    var brSel = document.getElementById("margin-br-branch");
+    var brGrp = document.getElementById("margin-br-group");
+    var grSel = document.getElementById("margin-gr-branch");
+    var grGrp = document.getElementById("margin-gr-group");
+    var sameFilters =
+      (!brSel || !grSel || brSel.value === grSel.value) &&
+      (!brGrp || !grGrp || brGrp.value === grGrp.value);
+    if (sameFilters) {
+      var url = marginsUrl(brSel || grSel, brGrp || grGrp);
+      if (!url) return;
+      var loadingBranches = document.getElementById("margin-branches-loading");
+      var loadingGroups = document.getElementById("margin-groups-loading");
+      if (loadingBranches) {
+        loadingBranches.hidden = false;
+        loadingBranches.textContent = "جاري تحميل هامش الفروع…";
+      }
+      if (loadingGroups) {
+        loadingGroups.hidden = false;
+        loadingGroups.textContent = "جاري تحميل هامش المجموعات…";
+      }
+      fetch(url, { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.ok) throw new Error(data.error || "فشل التحميل");
+          renderMarginBranches(data.branches || []);
+          renderMarginGroups(data.groups || []);
+        })
+        .catch(function (err) {
+          if (loadingBranches) loadingBranches.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
+          if (loadingGroups) loadingGroups.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
+        });
+      return;
+    }
     loadMarginBranches();
     loadMarginGroups();
   }
