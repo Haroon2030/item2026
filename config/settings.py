@@ -321,6 +321,12 @@ ORACLE = {
     'PASSWORD': _env('ORACLE_PASSWORD', ''),
     'SCHEMA': _env('ORACLE_SCHEMA', ''),
     'CLIENT_LIB_DIR': _env('ORACLE_CLIENT_LIB_DIR', ''),
+    # مهلة فتح TCP بالثواني (افتراضي أوراكل غالباً 20)
+    'TCP_CONNECT_TIMEOUT': int(_env('ORACLE_TCP_CONNECT_TIMEOUT', '60') or '60'),
+    'RETRY_COUNT': int(_env('ORACLE_RETRY_COUNT', '3') or '3'),
+    'RETRY_DELAY': int(_env('ORACLE_RETRY_DELAY', '2') or '2'),
+    # دقائق: فحص الاتصالات الخاملة في المجمع
+    'POOL_EXPIRE_TIME': int(_env('ORACLE_POOL_EXPIRE_TIME', '4') or '4'),
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()

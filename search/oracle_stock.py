@@ -47,10 +47,79 @@ _pool = None
 _pool_lock = threading.Lock()
 _pool_dsn = None
 _pool_user = None
+_pool_opts = None
 
 
 class OracleStockError(Exception):
     """فشل قراءة المخزون من أوراكل."""
+
+
+def _is_connect_timeout(exc: BaseException) -> bool:
+    text = str(exc or "").upper()
+    return any(
+        token in text
+        for token in (
+            "ORA-12170",
+            "ORA-12541",
+            "ORA-12543",
+            "ORA-12535",
+            "ORA-12547",
+            "DPY-6005",
+            "DPY-4011",
+            "TIMEOUT",
+            "TIMED OUT",
+            "CANNOT CONNECT",
+            "CONNECTION REFUSED",
+            "NETWORK",
+        )
+    )
+
+
+def _friendly_connect_error(exc: BaseException) -> str:
+    if _is_connect_timeout(exc):
+        return (
+            "تعذّر الاتصال بأوراكل (انتهت مهلة الشبكة). "
+            "تحقق من VPN/الإنترنت أو أعد المحاولة بعد لحظات."
+        )
+    return f"تعذّر الاتصال بأوراكل: {exc}"
+
+
+def _connect_kwargs() -> dict:
+    """خيارات اتصال مشتركة للمجمّع والاتصال المباشر."""
+    cfg = _cfg()
+    tcp_timeout = max(5, int(cfg.get("TCP_CONNECT_TIMEOUT") or 60))
+    retry_count = max(0, int(cfg.get("RETRY_COUNT") or 3))
+    retry_delay = max(0, int(cfg.get("RETRY_DELAY") or 2))
+    return {
+        "tcp_connect_timeout": tcp_timeout,
+        "retry_count": retry_count,
+        "retry_delay": retry_delay,
+    }
+
+
+def _resolve_host_ipv4(host: str) -> str:
+    """يفضّل IPv4 الصريح — يتجنّب تعثّر DDNS/IPv6 على بعض الشبكات."""
+    import socket
+
+    raw = str(host or "").strip()
+    if not raw:
+        return raw
+    try:
+        socket.inet_pton(socket.AF_INET, raw)
+        return raw
+    except OSError:
+        pass
+    try:
+        infos = socket.getaddrinfo(raw, None, socket.AF_INET, socket.SOCK_STREAM)
+        if infos:
+            ip = str(infos[0][4][0] or "").strip()
+            if ip:
+                if ip != raw:
+                    logger.info("Oracle host %s resolved to IPv4 %s", raw, ip)
+                return ip
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Oracle host resolve failed for %s: %s", raw, exc)
+    return raw
 
 
 def oracle_enabled() -> bool:
@@ -118,32 +187,71 @@ def _init_thick_client() -> None:
 
 
 def _oracle_dsn() -> tuple[str, str, str]:
-    """يعيد (user, password, dsn)."""
-    import oracledb
-
+    """يعيد (user, password, dsn) مع CONNECT_TIMEOUT داخل الوصف (Thick mode)."""
     cfg = _cfg()
     user = str(cfg.get("USER") or "").strip()
     password = str(cfg.get("PASSWORD") or "")
-    host = str(cfg.get("HOST") or "").strip()
+    host = _resolve_host_ipv4(str(cfg.get("HOST") or "").strip())
     port = int(cfg.get("PORT") or 1521)
     service = str(cfg.get("SERVICE_NAME") or "").strip()
     sid = str(cfg.get("SID") or "").strip()
     if not (user and password and host and (service or sid)):
         raise OracleStockError("إعدادات أوراكل غير مكتملة.")
     _init_thick_client()
+    opts = _connect_kwargs()
+    tcp_timeout = int(opts["tcp_connect_timeout"])
+    retry_count = int(opts["retry_count"])
+    retry_delay = int(opts["retry_delay"])
     if service:
-        dsn = oracledb.makedsn(host, port, service_name=service)
+        connect_data = f"(SERVICE_NAME={service})"
     else:
-        dsn = oracledb.makedsn(host, port, sid=sid)
+        connect_data = f"(SID={sid})"
+    # CONNECT_TIMEOUT داخل الوصف يعمل مع Instant Client (Thick)
+    dsn = (
+        "(DESCRIPTION="
+        "(ADDRESS="
+        f"(PROTOCOL=TCP)(HOST={host})(PORT={port})"
+        ")"
+        f"(CONNECT_TIMEOUT={tcp_timeout})"
+        f"(RETRY_COUNT={retry_count})"
+        f"(RETRY_DELAY={retry_delay})"
+        f"(CONNECT_DATA={connect_data})"
+        ")"
+    )
     return user, password, dsn
+
+
+def _reset_pool() -> None:
+    """إغلاق مجمع الاتصالات التالف لإعادة إنشائه لاحقاً."""
+    global _pool, _pool_dsn, _pool_user, _pool_opts
+    with _pool_lock:
+        if _pool is None:
+            return
+        try:
+            _pool.close(force=True)
+        except Exception:
+            pass
+        _pool = None
+        _pool_dsn = None
+        _pool_user = None
+        _pool_opts = None
+        logger.warning("Oracle connection pool reset")
 
 
 def _get_pool():
     """مجمع اتصالات أوراكل مشترك — يقلّل زمن فتح الاتصال."""
-    global _pool, _pool_dsn, _pool_user
+    global _pool, _pool_dsn, _pool_user, _pool_opts
     user, password, dsn = _oracle_dsn()
+    opts = _connect_kwargs()
+    expire_time = max(1, int(_cfg().get("POOL_EXPIRE_TIME") or 4))
+    opts_key = (opts.get("tcp_connect_timeout"), opts.get("retry_count"), opts.get("retry_delay"), expire_time)
     with _pool_lock:
-        if _pool is not None and _pool_dsn == dsn and _pool_user == user:
+        if (
+            _pool is not None
+            and _pool_dsn == dsn
+            and _pool_user == user
+            and _pool_opts == opts_key
+        ):
             return _pool
         import oracledb
 
@@ -158,34 +266,97 @@ def _get_pool():
                 user=user,
                 password=password,
                 dsn=dsn,
-                min=1,
+                min=0,
                 max=8,
                 increment=1,
+                getmode=oracledb.POOL_GETMODE_WAIT,
+                wait_timeout=30_000,
+                expire_time=expire_time,
+                tcp_connect_timeout=opts["tcp_connect_timeout"],
+                retry_count=opts["retry_count"],
+                retry_delay=opts["retry_delay"],
             )
             _pool_dsn = dsn
             _pool_user = user
-            logger.info("Oracle connection pool ready (max=8)")
+            _pool_opts = opts_key
+            logger.info(
+                "Oracle connection pool ready (max=8, tcp=%ss, retry=%s)",
+                opts["tcp_connect_timeout"],
+                opts["retry_count"],
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Oracle pool create failed: %s", exc)
             _pool = None
+            _pool_dsn = None
+            _pool_user = None
+            _pool_opts = None
         return _pool
 
 
-def _connect():
+def _connect_once():
     import oracledb
 
+    opts = _connect_kwargs()
     pool = _get_pool()
     if pool is not None:
         try:
             conn = pool.acquire()
+            # تأكد أن الاتصال حيّ قبل الاستخدام
+            try:
+                conn.ping()
+            except Exception:
+                try:
+                    pool.drop(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                raise
             setattr(conn, "_from_pool", True)
             return conn
         except Exception as exc:  # noqa: BLE001
             logger.warning("Oracle pool acquire failed: %s", exc)
+            if _is_connect_timeout(exc):
+                _reset_pool()
     user, password, dsn = _oracle_dsn()
-    conn = oracledb.connect(user=user, password=password, dsn=dsn)
+    conn = oracledb.connect(
+        user=user,
+        password=password,
+        dsn=dsn,
+        tcp_connect_timeout=opts["tcp_connect_timeout"],
+        retry_count=opts["retry_count"],
+        retry_delay=opts["retry_delay"],
+    )
     setattr(conn, "_from_pool", False)
     return conn
+
+
+def _connect():
+    """اتصال أوراكل مع إعادة محاولة عند انتهاء مهلة الشبكة."""
+    import time
+
+    cfg = _cfg()
+    attempts = max(1, int(cfg.get("RETRY_COUNT") or 3) + 1)
+    delay = max(0, int(cfg.get("RETRY_DELAY") or 2))
+    last_exc: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _connect_once()
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            logger.warning(
+                "Oracle connect attempt %s/%s failed: %s",
+                attempt,
+                attempts,
+                exc,
+            )
+            if not _is_connect_timeout(exc) or attempt >= attempts:
+                break
+            _reset_pool()
+            if delay > 0:
+                time.sleep(delay * attempt)
+    raise OracleStockError(_friendly_connect_error(last_exc or Exception("unknown"))) from last_exc
 
 
 def _release_conn(conn) -> None:
