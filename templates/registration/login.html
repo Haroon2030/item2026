@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}تسجيل الدخول — بيانات الأصناف{% endblock %}
+{% block title %}تسجيل الدخول — منصة التحليل{% endblock %}
 {% block body_class %}login-body{% endblock %}
 {% block page_class %}login-page{% endblock %}
 
@@ -14,20 +14,9 @@
 
   <div class="login-panel">
     <header class="login-brand-block">
-      <span class="login-mark" aria-hidden="true" title="رمز صنف">
-        <svg class="login-mark-barcode" viewBox="0 0 24 24" role="img" aria-label="رمز صنف">
-          <rect x="3" y="4" width="1.4" height="16" rx="0.3"/>
-          <rect x="5.6" y="4" width="0.9" height="16" rx="0.3"/>
-          <rect x="7.6" y="4" width="2" height="16" rx="0.3"/>
-          <rect x="10.6" y="4" width="0.9" height="16" rx="0.3"/>
-          <rect x="12.6" y="4" width="1.5" height="16" rx="0.3"/>
-          <rect x="15.2" y="4" width="0.9" height="16" rx="0.3"/>
-          <rect x="17.2" y="4" width="2.2" height="16" rx="0.3"/>
-          <rect x="20.4" y="4" width="0.9" height="16" rx="0.3"/>
-        </svg>
-      </span>
-      <h1 id="login-brand" class="login-brand">بيانات الأصناف</h1>
-      <p class="login-tagline">بحث وفهرسة الأصناف بالباركود</p>
+      <span class="login-mark" aria-hidden="true" title="منصة التحليل">تحليل</span>
+      <h1 id="login-brand" class="login-brand">منصة التحليل</h1>
+      <p class="login-tagline">أصناف · مخزون · مبيعات · أداء</p>
     </header>
 
     {% if form.errors %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block page_class %}{% if searched and not error %}{% if items or prices or selected_price %}results-focus{% endif %}{% endif %}{% endblock %}
+{% block page_class %}{% if searched and not error %}{% if items or prices or selected_price or warehouse_compare %}results-focus search-keep-form{% endif %}{% endif %}{% endblock %}
 
 {% block content %}
 <section class="search-box" aria-label="بحث الأصناف">
@@ -14,8 +14,25 @@
     </div>
   </div>
 
-  <form method="get" action="{% url 'item_search' %}" class="search-form" role="search">
-    <div class="field warehouse-field">
+  <form method="get" action="{% url 'item_search' %}" class="search-form" role="search" id="item-search-form">
+    <div class="field scope-field" role="radiogroup" aria-label="نطاق البحث">
+      <span class="scope-field-label">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
+        النطاق
+      </span>
+      <div class="scope-toggle">
+        <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
+          <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
+          <span>مخزن واحد</span>
+        </label>
+        <label class="scope-option {% if compare_mode %}is-active{% endif %}">
+          <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
+          <span>كل المخازن المختارة</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="field warehouse-field" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
       <label for="warehouse">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
         المخزن
@@ -133,12 +150,12 @@
 
 {% if searched and not error %}
   <section class="results">
-    {% if items or prices %}
+    {% if items or prices or warehouse_compare %}
       <div class="results-topbar">
         <span class="results-topbar-title">
-          {% if match_type == 'name_list' %}نتائج الاسم ({{ items|length }}){% else %}نتيجة البحث{% endif %}
+          {% if match_type == 'name_list' %}نتائج الاسم ({{ items|length }}){% elif compare_mode %}مقارنة المخازن{% else %}نتيجة البحث{% endif %}
         </span>
-        <a class="btn-new-search" href="{% url 'item_search' %}?warehouse={{ warehouse }}">بحث جديد</a>
+        <a class="btn-new-search" href="{% url 'item_search' %}?scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse }}">بحث جديد</a>
       </div>
 
       {% if match_type == 'name_list' %}
@@ -155,7 +172,7 @@
           <ul class="name-result-list">
             {% for item in items %}
               <li>
-                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&warehouse={{ warehouse|urlencode }}">
+                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse|urlencode }}">
                   <span class="name-result-code mono">{{ item.code }}</span>
                   <span class="name-result-name">{{ item.name }}</span>
                   {% if item.unit %}<span class="name-result-unit">{{ item.unit }}</span>{% endif %}
@@ -164,7 +181,7 @@
             {% endfor %}
           </ul>
         </div>
-      {% elif selected_price %}
+      {% elif selected_price or warehouse_compare or compare_mode %}
         <div class="panel panel-blue result-prices">
           <div class="panel-head result-combined-head">
             <span class="panel-ico" aria-hidden="true">
@@ -175,16 +192,58 @@
               {% if items %}
                 <strong class="result-combined-code mono">{{ items.0.code }}</strong>
                 <span class="result-combined-name">{{ items.0.name }}</span>
-              {% else %}
+              {% elif prices %}
                 <strong class="result-combined-code mono">{{ prices.0.code }}</strong>
                 <span class="result-combined-name">{{ prices.0.name }}</span>
+              {% elif warehouse_compare %}
+                <strong class="result-combined-code mono">{{ warehouse_compare.0.code }}</strong>
+                <span class="result-combined-name">مقارنة عبر المخازن</span>
               {% endif %}
             </div>
             <div class="result-hero-side">
-              <span class="result-pill">مخزن {{ warehouse }}</span>
+              {% if compare_mode %}
+                <span class="result-pill">كل المخازن</span>
+              {% else %}
+                <span class="result-pill">مخزن {{ warehouse }}</span>
+              {% endif %}
               {% if query %}<span class="result-pill mono">{{ query }}</span>{% endif %}
             </div>
           </div>
+
+          {% if compare_mode %}
+            <div class="table-wrap">
+              <table class="data-table price-table warehouse-compare-table" aria-label="مقارنة السعر والتكلفة بين المخازن">
+                <thead>
+                  <tr>
+                    <th>المخزن</th>
+                    <th>الوحدة</th>
+                    <th>سعر البيع</th>
+                    <th>آخر توريد</th>
+                    <th>التكلفة</th>
+                    <th>الكمية</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in warehouse_compare %}
+                    <tr class="{% if row.ok %}is-ok{% else %}is-empty{% endif %}">
+                      <td class="warehouse-compare-wh" title="{{ row.warehouse }} — {{ row.name }}">
+                        <span class="warehouse-compare-name">{{ row.name }}</span><span class="mono warehouse-compare-code">{{ row.warehouse }}</span>
+                      </td>
+                      <td class="unit-cell">{{ row.unit|default:"—" }}</td>
+                      <td class="mono price-cell">{{ row.price|default:"—" }}</td>
+                      <td class="mono buy-cell" {% if row.last_buy_date %}title="تاريخ آخر فاتورة: {{ row.last_buy_date }}"{% endif %}>{{ row.last_buy|default:"—" }}</td>
+                      <td class="mono cost-cell">{{ row.avg_cost|default:"—" }}</td>
+                      <td class="mono qty-cell">{{ row.quantity|default:"—" }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="6">تعذّر جلب مقارنة المخازن حالياً — أعد المحاولة بعد قليل.</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% elif selected_price %}
           <div class="table-wrap">
             <table class="data-table price-table">
               <thead>
@@ -224,6 +283,7 @@
               </tbody>
             </table>
           </div>
+          {% endif %}
           {% if suppliers %}
             <div class="item-suppliers" aria-label="موردو الصنف">
               <div class="item-suppliers-head">
@@ -274,7 +334,7 @@
           <ul class="name-result-list">
             {% for item in items %}
               <li>
-                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&warehouse={{ warehouse|urlencode }}">
+                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse|urlencode }}">
                   <span class="name-result-code mono">{{ item.code }}</span>
                   <span class="name-result-name">{{ item.name }}{% if item.unit %} — {{ item.unit }}{% endif %}</span>
                   {% if item.barcode %}<span class="name-result-unit mono">{{ item.barcode }}</span>{% endif %}
@@ -287,7 +347,7 @@
     {% else %}
       <div class="results-topbar">
         <span class="results-topbar-title">لا نتائج</span>
-        <a class="btn-new-search" href="{% url 'item_search' %}?warehouse={{ warehouse }}">بحث جديد</a>
+        <a class="btn-new-search" href="{% url 'item_search' %}?scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse }}">بحث جديد</a>
       </div>
       <div class="empty-state">
         <svg class="ico lg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/></svg>
@@ -305,4 +365,28 @@
 <script src="/static/js/sync-progress.js" defer></script>
 <script src="/static/js/barcode-scanner.js" defer></script>
 <script src="/static/js/inv-select.js?v=2" defer></script>
+<script>
+(function () {
+  var form = document.getElementById('item-search-form');
+  if (!form) return;
+  var field = document.getElementById('warehouse-field');
+  var radios = form.querySelectorAll('input[name="scope"]');
+
+  function sync() {
+    var compare = false;
+    radios.forEach(function (r) {
+      var on = !!r.checked;
+      if (r.value === 'compare' && on) compare = true;
+      var label = r.closest('.scope-option');
+      if (label) label.classList.toggle('is-active', on);
+    });
+    if (field) field.hidden = compare;
+  }
+
+  radios.forEach(function (r) {
+    r.addEventListener('change', sync);
+  });
+  sync();
+})();
+</script>
 {% endblock %}

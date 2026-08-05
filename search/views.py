@@ -13,6 +13,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .api_client import (
     ApiClientError,
+    compare_item_across_warehouses,
     compute_inventory_stock_cost,
     enrich_group_browse,
     get_item_group,
@@ -72,7 +73,11 @@ def _warehouses() -> list[dict]:
                 continue
             raw_name = str(w.get('name') or '').strip()
             if raw_name and raw_name != code:
-                label = f'{raw_name} ({code})'
+                # أزل تكرار رقم المخزن إن وُجد داخل الاسم
+                suffix = f'({code})'
+                if raw_name.endswith(suffix):
+                    raw_name = raw_name[: -len(suffix)].strip()
+                label = f'{raw_name} - {code}'
             else:
                 label = f'مخزن {code}'
             out.append({'code': code, 'name': label})
@@ -193,11 +198,18 @@ def item_search(request):
     meta_incomplete = index_meta_incomplete()
     warehouses = _warehouses()
     default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
+    warehouse_compare: list[dict] = []
+    scope_raw = str(request.GET.get('scope') or 'one').strip().lower()
+    raw_wh = str(request.GET.get('warehouse') or '').strip()
+    # توافق مع الروابط القديمة warehouse=all
+    compare_mode = scope_raw in ('compare', 'all') or raw_wh == 'all'
+    if raw_wh == 'all':
+        raw_wh = ''
 
     try:
         query = sanitize_search_query(raw_query)
         warehouse = resolve_warehouse(
-            request.GET.get('warehouse'),
+            raw_wh or None,
             warehouses,
             default_wh,
         )
@@ -220,11 +232,18 @@ def item_search(request):
                 'meta_incomplete': False,
                 'warehouses': warehouses,
                 'warehouse': warehouse,
+                'detail_warehouse': warehouse,
+                'compare_mode': compare_mode,
+                'warehouse_compare': [],
                 'g_code': '',
                 'g_name': '',
                 'sync_secret_required': bool(settings.SYNC_SECRET) or not settings.DEBUG,
             },
         )
+
+    detail_wh = warehouse
+    if detail_wh not in {w['code'] for w in warehouses}:
+        detail_wh = next((w['code'] for w in warehouses), '60')
 
     if query:
         searched = True
@@ -241,12 +260,13 @@ def item_search(request):
                     'g_code': items[0].get('g_code', '') or barcode_hits[0].get('g_code', ''),
                     'g_name': items[0].get('g_name', '') or barcode_hits[0].get('g_name', ''),
                 }
-                try:
-                    prices = search_item_details(item_code, warehouse=warehouse)
-                except ApiClientError:
-                    prices = []
-                if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
-                    items = _items_from_prices(prices, group_info) or items
+                if not compare_mode:
+                    try:
+                        prices = search_item_details(item_code, warehouse=detail_wh)
+                    except ApiClientError:
+                        prices = []
+                    if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                        items = _items_from_prices(prices, group_info) or items
             elif code_hits:
                 # بحث مباشر برقم الصنف من الفهرس المحلي
                 match_type = 'code'
@@ -256,12 +276,13 @@ def item_search(request):
                     'g_code': items[0].get('g_code', ''),
                     'g_name': items[0].get('g_name', ''),
                 }
-                try:
-                    prices = search_item_details(item_code, warehouse=warehouse)
-                except ApiClientError:
-                    prices = []
-                if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
-                    items = _items_from_prices(prices, group_info) or items
+                if not compare_mode:
+                    try:
+                        prices = search_item_details(item_code, warehouse=detail_wh)
+                    except ApiClientError:
+                        prices = []
+                    if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                        items = _items_from_prices(prices, group_info) or items
             elif len(name_hits) == 1:
                 # اسم واحد مطابق → اعرض تفاصيله كصنف محدد
                 match_type = 'name'
@@ -271,12 +292,13 @@ def item_search(request):
                     'g_code': items[0].get('g_code', ''),
                     'g_name': items[0].get('g_name', ''),
                 }
-                try:
-                    prices = search_item_details(item_code, warehouse=warehouse)
-                except ApiClientError:
-                    prices = []
-                if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
-                    items = _items_from_prices(prices, group_info) or items
+                if not compare_mode:
+                    try:
+                        prices = search_item_details(item_code, warehouse=detail_wh)
+                    except ApiClientError:
+                        prices = []
+                    if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                        items = _items_from_prices(prices, group_info) or items
             elif len(name_hits) > 1:
                 # عدة أسماء → قائمة اختيار
                 match_type = 'name_list'
@@ -284,18 +306,27 @@ def item_search(request):
                 prices = []
             elif looks_like_item_code(query):
                 # احتياطي: إرسال النص للنظام كرقم صنف فقط
-                prices = search_item_details(query, warehouse=warehouse)
-                if prices:
-                    item_code = str(prices[0].get('code') or '').strip() or query
-                    match_type = 'barcode' if item_code != query else 'code'
+                if compare_mode:
+                    # في وضع المقارنة نكتفي برقم الاستعلام ونترك المقارنة تجلب التفاصيل
+                    match_type = 'code'
+                    item_code = query
                     group_info = get_item_group(item_code)
-                    items = lookup_by_item_code(item_code)
-                    if not items:
-                        items = _items_from_prices(prices, group_info)
-                elif cache_count == 0:
-                    error = (
-                        'فهرس الباركود فارغ. اضغط «مزامنة» أو انتظر المزامنة التلقائية بعد النشر ثم أعد البحث.'
-                    )
+                    items = lookup_by_item_code(item_code) or [
+                        {'code': item_code, 'name': '', 'barcode': '', 'unit': ''}
+                    ]
+                else:
+                    prices = search_item_details(query, warehouse=detail_wh)
+                    if prices:
+                        item_code = str(prices[0].get('code') or '').strip() or query
+                        match_type = 'barcode' if item_code != query else 'code'
+                        group_info = get_item_group(item_code)
+                        items = lookup_by_item_code(item_code)
+                        if not items:
+                            items = _items_from_prices(prices, group_info)
+                    elif cache_count == 0:
+                        error = (
+                            'فهرس الباركود فارغ. اضغط «مزامنة» أو انتظر المزامنة التلقائية بعد النشر ثم أعد البحث.'
+                        )
             elif cache_count == 0:
                 error = (
                     'فهرس الباركود فارغ. اضغط «مزامنة» أولاً ثم ابحث بالاسم أو الباركود.'
@@ -308,13 +339,40 @@ def item_search(request):
         prices, matched_price = _enrich_prices_with_match(prices, items, query)
     selected_price = matched_price or (prices[0] if prices else None)
 
+    if compare_mode and match_type != 'name_list' and not error:
+        compare_code = ''
+        if selected_price:
+            compare_code = str(selected_price.get('code') or '').strip()
+        if not compare_code and items:
+            compare_code = str(items[0].get('code') or '').strip()
+        if not compare_code and query:
+            compare_code = str(query).strip()
+        if compare_code:
+            name_map = {str(w['code']): str(w['name']) for w in warehouses}
+            try:
+                warehouse_compare = compare_item_across_warehouses(
+                    compare_code,
+                    warehouse_names=name_map,
+                )
+                logger.info(
+                    'warehouse compare code=%s rows=%s ok=%s',
+                    compare_code,
+                    len(warehouse_compare),
+                    sum(1 for r in warehouse_compare if r.get('ok')),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning('Warehouse compare failed: %s', exc)
+                warehouse_compare = []
+
     suppliers: list[dict] = []
-    if match_type != 'name_list' and (selected_price or items):
+    if match_type != 'name_list' and (selected_price or items or warehouse_compare):
         supplier_code = ''
         if selected_price:
             supplier_code = str(selected_price.get('code') or '').strip()
         if not supplier_code and items:
             supplier_code = str(items[0].get('code') or '').strip()
+        if not supplier_code and warehouse_compare:
+            supplier_code = str(warehouse_compare[0].get('code') or '').strip()
         suppliers = _fetch_suppliers_safe(supplier_code)
 
     return render(
@@ -334,6 +392,9 @@ def item_search(request):
             'meta_incomplete': meta_incomplete,
             'warehouses': warehouses,
             'warehouse': warehouse,
+            'detail_warehouse': detail_wh,
+            'compare_mode': compare_mode,
+            'warehouse_compare': warehouse_compare,
             'g_code': group_info.get('g_code', ''),
             'g_name': group_info.get('g_name', ''),
             'sync_secret_required': bool(settings.SYNC_SECRET) or not settings.DEBUG,
@@ -1148,6 +1209,15 @@ def browse_sales(request):
                         active_system,
                         limit=15,
                     )
+                    from .oracle_stock import fetch_sales_item_highlights
+
+                    active['item_highlights'] = fetch_sales_item_highlights(
+                        date_from,
+                        date_to,
+                        branch_code=active.get('selected_branch') or '',
+                        group_code=selected_group,
+                        system=active_system,
+                    )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales failed: %s', exc)
         error = f'تعذّر جلب المبيعات: {exc}'
@@ -1169,6 +1239,7 @@ def browse_sales(request):
         total_invoices = int(pos.get('grand_invoices') or 0) + int(
             wholesale.get('grand_invoices') or 0
         )
+        highlights = (active or {}).get('item_highlights') or {}
         kpi = {
             'pos_sales': pos.get('grand_sales') or '0.00',
             'pos_invoices': pos.get('grand_invoices_display') or '0',
@@ -1195,6 +1266,15 @@ def browse_sales(request):
                 or (active or {}).get('top_visit_invoices_display')
                 or '0'
             ),
+            'top_item_amount_name': highlights.get('top_amount_name') or '—',
+            'top_item_amount_code': highlights.get('top_amount_code') or '',
+            'top_item_amount_value': highlights.get('top_amount_value') or '0.00',
+            'top_item_qty_name': highlights.get('top_qty_name') or '—',
+            'top_item_qty_code': highlights.get('top_qty_code') or '',
+            'top_item_qty_value': highlights.get('top_qty_value') or '0.00',
+            'top_item_return_name': highlights.get('top_return_name') or '—',
+            'top_item_return_code': highlights.get('top_return_code') or '',
+            'top_item_return_value': highlights.get('top_return_value') or '0.00',
         }
 
     return render(
@@ -1737,6 +1817,116 @@ def browse_inventory(request):
             'groups': groups,
             'branches': branches,
             'insights': insights,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_income(request):
+    """قائمة الدخل — أرصدة مع حركة من قيود أوراكل حسب الفرع ومركز التكلفة."""
+    from datetime import date as date_cls
+    from datetime import datetime
+
+    error = ''
+    statement = None
+    branches: list[dict] = []
+    cost_centers: list[dict] = []
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_cc = str(request.GET.get('cc') or '').strip()
+    # افتراضي: كل القيود (مرحّل + غير مرحّل) — أرصدة كلية
+    posted_raw = request.GET.get('posted')
+    if posted_raw is None:
+        posted_only = False
+    else:
+        posted_only = str(posted_raw).strip() in ('1', 'true', 'yes', 'on')
+
+    today = date_cls.today()
+    year_start = today.replace(month=1, day=1)
+
+    def parse_one(raw: str | None, fallback: date_cls) -> date_cls:
+        text = (raw or '').strip()
+        if not text:
+            return fallback
+        try:
+            return datetime.strptime(text[:10], '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValidationError('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.') from exc
+
+    try:
+        date_from = parse_one(request.GET.get('date_from'), year_start)
+        date_to = parse_one(request.GET.get('date_to'), today)
+        if date_from > date_to:
+            raise ValidationError('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.')
+        if (date_to - date_from).days > 366:
+            raise ValidationError('الفترة القصوى سنة واحدة.')
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_income.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': year_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_cc': selected_cc,
+                'posted_only': posted_only,
+                'branches': [],
+                'cost_centers': [],
+                'statement': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import (
+            build_income_statement,
+            fetch_income_branches,
+            fetch_income_cost_centers,
+        )
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض قائمة الدخل.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                cost_centers = fetch_income_cost_centers()
+                branch_codes = {b['code'] for b in branches}
+                cc_codes = {c['code'] for c in cost_centers}
+                if selected_branch and selected_branch not in branch_codes:
+                    selected_branch = ''
+                if selected_cc and selected_cc not in cc_codes:
+                    selected_cc = ''
+                statement = build_income_statement(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    cc_code=selected_cc,
+                    posted_only=posted_only,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_income failed: %s', exc)
+        error = f'تعذّر تحميل قائمة الدخل: {exc}'
+        statement = None
+
+    return render(
+        request,
+        'search/browse_income.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': year_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_cc': selected_cc,
+            'posted_only': posted_only,
+            'branches': branches,
+            'cost_centers': cost_centers,
+            'statement': statement,
             'error': error,
         },
     )

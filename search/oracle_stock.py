@@ -4,8 +4,10 @@
 الجداول المستخدمة (قراءة):
 - IAS_ITM_WCODE   : الكمية/التكلفة حسب المخزن
 - IAS_ITM_MST     : اسم الصنف والمجموعة وحالة Inactive
+- IAS_ITM_DTL     : وحدات الصنف والعبوة والوحدة الرئيسية
+- IAS_ITEM_PRICE  : أسعار البيع حسب المخزن/الوحدة
 - WAREHOUSE_DETAILS : أسماء المخازن وربط الفرع (CONN_BRN_NO)
-- IAS_PI_BILL_*   : فواتير الشراء (الموردون الذين نُزّل منهم الصنف)
+- IAS_PI_BILL_*   : فواتير الشراء (الموردون وآخر سعر توريد لكل مخزن)
 - IAS_VNDR_ITM    : موردو الصنف المرتبطون
 - V_DETAILS       : أسماء الموردين
 - IAS_BILL_MST    : فواتير المبيعات / الآجل
@@ -1018,6 +1020,373 @@ def fetch_item_suppliers(item_code: str, *, limit: int = 40) -> list[dict]:
         logger.warning("Item suppliers (default) failed: %s", exc)
         return []
     return [_supplier_row(r, source="default") for r in rows if r.get("V_CODE")]
+
+
+def fetch_last_purchase_by_warehouse(
+    item_code: str,
+    warehouses: list[str] | None = None,
+) -> tuple[dict[str, dict], dict[str, float], str]:
+    """
+    آخر سعر شراء/توريد من أونكس (فواتير الشراء) لكل مخزن.
+
+    المنطق كأونكس: يأخذ آخر فاتورة شراء بأي وحدة (الوحدة الأب/الأكبر
+    مثل باكت)، ثم يُشتق سعر الوحدة الأساسية عبر I_PRICE / P_SIZE
+    (باكت بعبوة 4 كيلو وسعر 20 → سعر الكيلو = 5).
+
+    يعيد: (
+      {w_code: {price, price_base, p_size, unit, date}},
+      {unit: p_size},
+      main_unit,
+    )
+    """
+    empty: tuple[dict[str, dict], dict[str, float], str] = ({}, {}, "")
+    if not oracle_enabled():
+        return empty
+    code = str(item_code or "").strip()
+    if not code:
+        return empty
+    wh_list = [str(w).strip() for w in (warehouses or []) if str(w).strip()]
+    schema = _schema()
+
+    wh_filter = ""
+    params: dict[str, Any] = {"code": code}
+    if wh_list:
+        placeholders = []
+        for i, wh in enumerate(wh_list):
+            key = f"w{i}"
+            placeholders.append(f":{key}")
+            params[key] = wh
+        wh_filter = (
+            f"AND TO_CHAR(NVL(d.W_CODE, m.W_CODE)) IN ({', '.join(placeholders)})"
+        )
+
+    sql = f"""
+        SELECT
+            TO_CHAR(w_code) AS W_CODE,
+            ROUND(price, 4) AS PRICE,
+            ROUND(price_base, 6) AS PRICE_BASE,
+            ROUND(p_size, 4) AS P_SIZE,
+            unt AS UNIT,
+            dt AS BILL_DATE
+        FROM (
+            SELECT
+                NVL(d.W_CODE, m.W_CODE) AS w_code,
+                d.I_PRICE AS price,
+                CASE
+                  WHEN NVL(d.P_SIZE, 0) > 0 THEN d.I_PRICE / d.P_SIZE
+                  ELSE d.I_PRICE
+                END AS price_base,
+                NVL(d.P_SIZE, 0) AS p_size,
+                d.ITM_UNT AS unt,
+                m.BILL_DATE AS dt,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+                    ORDER BY m.BILL_DATE DESC NULLS LAST,
+                             m.BILL_NO DESC NULLS LAST
+                ) AS rn
+            FROM {schema}.IAS_PI_BILL_DTL d
+            JOIN {schema}.IAS_PI_BILL_MST m
+              ON m.BILL_NO = d.BILL_NO
+             AND m.BILL_SER = d.BILL_SER
+             AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+            WHERE TO_CHAR(d.I_CODE) = :code
+              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+              {wh_filter}
+        )
+        WHERE rn = 1
+    """
+    try:
+        rows = _fetch_all(sql, params)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Last purchase by warehouse failed: %s", exc)
+        rows = []
+
+    out: dict[str, dict] = {}
+    for row in rows:
+        wh = str(row.get("W_CODE") or "").strip()
+        if not wh:
+            continue
+        price = row.get("PRICE")
+        price_base = row.get("PRICE_BASE")
+        p_size = row.get("P_SIZE")
+        last_dt = row.get("BILL_DATE")
+        last_date = ""
+        if last_dt is not None:
+            try:
+                last_date = last_dt.strftime("%Y-%m-%d")
+            except Exception:
+                last_date = str(last_dt)[:10]
+        out[wh] = {
+            "price": "" if price in (None, "") else str(price).strip(),
+            "price_base": (
+                "" if price_base in (None, "") else str(price_base).strip()
+            ),
+            "p_size": "" if p_size in (None, "") else str(p_size).strip(),
+            "unit": str(row.get("UNIT") or "").strip(),
+            "date": last_date,
+        }
+
+    unit_packs: dict[str, float] = {}
+    main_unit = ""
+    try:
+        unit_rows = _fetch_all(
+            f"""
+            SELECT ITM_UNT, P_SIZE, MAIN_UNIT, STOCK_UNIT, SALE_UNIT
+            FROM {schema}.IAS_ITM_DTL
+            WHERE TO_CHAR(I_CODE) = :code
+              AND NVL(P_SIZE, 0) > 0
+            """,
+            {"code": code},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Item unit packs failed: %s", exc)
+        unit_rows = []
+
+    for row in unit_rows:
+        unit = str(row.get("ITM_UNT") or "").strip()
+        try:
+            psz = float(row.get("P_SIZE") or 0)
+        except (TypeError, ValueError):
+            psz = 0.0
+        if not unit or psz <= 0:
+            continue
+        unit_packs[unit] = psz
+        if not main_unit and int(row.get("MAIN_UNIT") or 0) == 1:
+            main_unit = unit
+        if not main_unit and int(row.get("STOCK_UNIT") or 0) == 1:
+            main_unit = unit
+
+    if not main_unit:
+        for row in unit_rows:
+            if int(row.get("SALE_UNIT") or 0) == 1:
+                main_unit = str(row.get("ITM_UNT") or "").strip()
+                break
+    if not main_unit and unit_packs:
+        # أصغر عبوة غالباً الوحدة الأساسية
+        main_unit = min(unit_packs.items(), key=lambda kv: kv[1])[0]
+
+    return out, unit_packs, main_unit
+
+
+def fetch_item_stock_by_warehouses(
+    item_code: str,
+    warehouses: list[str] | None = None,
+) -> dict[str, dict]:
+    """
+    رصيد الصنف من IAS_ITM_WCODE لكل مخزن: وحدة + كمية + متوسط تكلفة.
+    يعيد: {w_code: {unit, quantity, avg_cost}}
+    """
+    if not oracle_enabled():
+        return {}
+    code = str(item_code or "").strip()
+    if not code:
+        return {}
+    wh_list = [str(w).strip() for w in (warehouses or []) if str(w).strip()]
+    schema = _schema()
+
+    wh_filter = ""
+    params: dict[str, Any] = {"code": code}
+    if wh_list:
+        placeholders = []
+        for i, wh in enumerate(wh_list):
+            key = f"w{i}"
+            placeholders.append(f":{key}")
+            params[key] = wh
+        wh_filter = f"AND TO_CHAR(w.W_CODE) IN ({', '.join(placeholders)})"
+
+    sql = f"""
+        SELECT
+            TO_CHAR(w.W_CODE) AS W_CODE,
+            w.ITM_UNT AS UNIT,
+            ROUND(NVL(w.AVL_QTY, 0), 4) AS QTY,
+            ROUND(NVL(w.I_CWTAVG, w.PRIMARY_COST), 6) AS COST
+        FROM {schema}.IAS_ITM_WCODE w
+        WHERE TO_CHAR(w.I_CODE) = :code
+          {wh_filter}
+    """
+    try:
+        rows = _fetch_all(sql, params)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Item stock by warehouse failed: %s", exc)
+        return {}
+
+    out: dict[str, dict] = {}
+    for row in rows:
+        wh = str(row.get("W_CODE") or "").strip()
+        if not wh:
+            continue
+        qty = row.get("QTY")
+        cost = row.get("COST")
+        out[wh] = {
+            "unit": str(row.get("UNIT") or "").strip(),
+            "quantity": "" if qty in (None, "") else str(qty).strip(),
+            "avg_cost": "" if cost in (None, "") else str(cost).strip(),
+        }
+    return out
+
+
+def fetch_item_compare_from_oracle(
+    item_code: str,
+    warehouses: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    مقارنة صنف عبر المخازن بالكامل من أوراكل (بدون REST):
+    - الوحدة الرئيسية من IAS_ITM_DTL
+    - الكمية/التكلفة من IAS_ITM_WCODE
+    - سعر البيع من IAS_ITEM_PRICE (LEV_NO=1)
+    - آخر توريد من IAS_PI_BILL_* محوّل للوحدة الرئيسية
+    """
+    empty = {
+        "main_unit": "",
+        "unit_packs": {},
+        "rows": {},
+    }
+    if not oracle_enabled():
+        return empty
+    code = str(item_code or "").strip()
+    if not code:
+        return empty
+    wh_list = [str(w).strip() for w in (warehouses or []) if str(w).strip()]
+    if not wh_list:
+        return empty
+
+    buys, unit_packs, main_unit = fetch_last_purchase_by_warehouse(code, wh_list)
+    stock = fetch_item_stock_by_warehouses(code, wh_list)
+
+    schema = _schema()
+    params: dict[str, Any] = {"code": code, "lev": 1}
+    placeholders = []
+    for i, wh in enumerate(wh_list):
+        key = f"w{i}"
+        placeholders.append(f":{key}")
+        params[key] = wh
+    wh_in = ", ".join(placeholders)
+
+    prices: dict[str, dict[str, str]] = {}
+    try:
+        price_rows = _fetch_all(
+            f"""
+            SELECT
+                TO_CHAR(p.W_CODE) AS W_CODE,
+                p.ITM_UNT AS UNIT,
+                ROUND(p.I_PRICE, 4) AS PRICE
+            FROM {schema}.IAS_ITEM_PRICE p
+            WHERE TO_CHAR(p.I_CODE) = :code
+              AND NVL(p.LEV_NO, 1) = :lev
+              AND TO_CHAR(p.W_CODE) IN ({wh_in})
+              AND NVL(p.I_PRICE, 0) <> 0
+            """,
+            params,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Item compare prices failed: %s", exc)
+        price_rows = []
+
+    for row in price_rows:
+        wh = str(row.get("W_CODE") or "").strip()
+        unit = str(row.get("UNIT") or "").strip()
+        if not wh or not unit:
+            continue
+        price = row.get("PRICE")
+        prices.setdefault(wh, {})[unit] = (
+            "" if price in (None, "") else str(price).strip()
+        )
+
+    def _unit_key(unit: str) -> str:
+        text = str(unit or "").strip()
+        for ch in ("\u200e", "\u200f", "\u0640", " ", "\u00a0"):
+            text = text.replace(ch, "")
+        return text.casefold()
+
+    def _pack_for(unit: str) -> float | None:
+        if not unit:
+            return None
+        if unit in unit_packs:
+            return unit_packs[unit]
+        key = _unit_key(unit)
+        for name, psz in unit_packs.items():
+            if _unit_key(name) == key:
+                return psz
+        return None
+
+    def _price_for(wh: str, unit: str) -> str:
+        by_unit = prices.get(wh) or {}
+        if unit in by_unit:
+            return by_unit[unit]
+        key = _unit_key(unit)
+        for name, val in by_unit.items():
+            if _unit_key(name) == key:
+                return val
+        return ""
+
+    def _last_buy_for(wh: str, unit: str) -> tuple[str, str]:
+        buy = buys.get(wh) or {}
+        if not buy:
+            return "", ""
+        date = str(buy.get("date") or "")
+        buy_unit = str(buy.get("unit") or "").strip()
+        if unit and buy_unit and _unit_key(unit) == _unit_key(buy_unit):
+            raw = buy.get("price")
+            return ("" if raw in (None, "") else str(raw).strip()), date
+        try:
+            base = float(str(buy.get("price_base") or "").replace(",", ""))
+        except (TypeError, ValueError):
+            base = None
+            try:
+                raw = float(str(buy.get("price") or "").replace(",", ""))
+                psz = float(str(buy.get("p_size") or "0").replace(",", "") or 0)
+                if psz > 0:
+                    base = raw / psz
+                else:
+                    base = raw
+            except (TypeError, ValueError):
+                base = None
+        if base is None:
+            return "", date
+        disp = _pack_for(unit)
+        if disp and disp > 0:
+            return str(round(base * disp, 4)), date
+        return str(round(base, 4)), date
+
+    compare_unit = str(main_unit or "").strip()
+    if not compare_unit:
+        for st in stock.values():
+            u = str((st or {}).get("unit") or "").strip()
+            if u:
+                compare_unit = u
+                break
+
+    rows_out: dict[str, dict] = {}
+    for wh in wh_list:
+        st = stock.get(wh) or {}
+        unit = compare_unit or str(st.get("unit") or "").strip()
+        # إن اختلفت وحدة الرصيد عن وحدة المقارنة لا نخلط الكمية
+        qty = ""
+        cost = ""
+        st_unit = str(st.get("unit") or "").strip()
+        if st and (
+            not unit
+            or not st_unit
+            or _unit_key(st_unit) == _unit_key(unit)
+        ):
+            qty = str(st.get("quantity") or "").strip()
+            cost = str(st.get("avg_cost") or "").strip()
+        price = _price_for(wh, unit) if unit else ""
+        last_buy, last_date = _last_buy_for(wh, unit) if unit else ("", "")
+        rows_out[wh] = {
+            "unit": unit,
+            "price": price,
+            "quantity": qty,
+            "avg_cost": cost,
+            "last_buy": last_buy,
+            "last_buy_date": last_date,
+        }
+
+    return {
+        "main_unit": compare_unit,
+        "unit_packs": unit_packs,
+        "rows": rows_out,
+    }
 
 
 def _branch_names() -> dict[str, str]:
@@ -2378,7 +2747,12 @@ def _item_in_filter(alias_col: str, codes: list[str], params: dict) -> str:
     return f"AND {alias_col} IN ({', '.join(keys)})"
 
 
-def _assemble_top_item_rows(sales_rows, returns_by_item, limit: int) -> list[dict]:
+def _assemble_top_item_rows(
+    sales_rows,
+    returns_by_item,
+    limit: int,
+    order_by: str = "sales",
+) -> list[dict]:
     merged: list[dict] = []
     for row in sales_rows:
         code = str(row.get("ITEM_CODE") or "").strip()
@@ -2402,13 +2776,31 @@ def _assemble_top_item_rows(sales_rows, returns_by_item, limit: int) -> list[dic
                 "sales_total": sales_total,
             }
         )
-    merged.sort(key=lambda r: (-r["sales_total"], -r["qty_total"], r["item_code"]))
+    by_qty = str(order_by or "sales").strip().lower() == "qty"
+    if by_qty:
+        merged.sort(key=lambda r: (-r["qty_total"], -r["sales_total"], r["item_code"]))
+    else:
+        merged.sort(key=lambda r: (-r["sales_total"], -r["qty_total"], r["item_code"]))
     top = merged[: max(1, int(limit or 8))]
-    peak = top[0]["sales_total"] if top else 0.0
-    for row in top:
-        share = (row["sales_total"] / peak * 100.0) if peak else 0.0
-        row["share_pct"] = round(share, 1)
+    if by_qty:
+        peak = top[0]["qty_total"] if top else 0.0
+        for row in top:
+            share = (row["qty_total"] / peak * 100.0) if peak else 0.0
+            row["share_pct"] = round(share, 1)
+    else:
+        peak = top[0]["sales_total"] if top else 0.0
+        for row in top:
+            share = (row["sales_total"] / peak * 100.0) if peak else 0.0
+            row["share_pct"] = round(share, 1)
     return top
+
+
+def _item_order_sql(order_by: str = "sales") -> str:
+    if str(order_by or "sales").strip().lower() == "qty":
+        return "SUM(NVL(d.I_QTY, 0)) DESC"
+    return (
+        "SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0) + NVL(d.VAT_AMT, 0)) DESC"
+    )
 
 
 def _fetch_pos_top_items(
@@ -2418,6 +2810,7 @@ def _fetch_pos_top_items(
     group_code: str = "",
     limit: int = 8,
     skip_returns: bool = False,
+    order_by: str = "sales",
 ) -> list[dict]:
     pos = _pos_owner()
     schema = _schema()
@@ -2430,6 +2823,7 @@ def _fetch_pos_top_items(
     if group_code:
         params["gcode"] = group_code
         group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+    order_sql = _item_order_sql(order_by)
 
     sales_rows = _fetch_all(
         f"""
@@ -2453,8 +2847,7 @@ def _fetch_pos_top_items(
             {branch_filter}
             {group_filter}
           GROUP BY TO_CHAR(d.I_CODE)
-          ORDER BY
-              SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0) + NVL(d.VAT_AMT, 0)) DESC
+          ORDER BY {order_sql}
         ) WHERE ROWNUM <= :lim
         """,
         {**params, "lim": max(int(limit or 8) * (2 if skip_returns else 3), 24)},
@@ -2467,7 +2860,9 @@ def _fetch_pos_top_items(
         if str(row.get("ITEM_CODE") or "").strip()
     ]
     if not item_codes or skip_returns:
-        return _assemble_top_item_rows(sales_rows, returns_by_item, limit)
+        return _assemble_top_item_rows(
+            sales_rows, returns_by_item, limit, order_by=order_by
+        )
     try:
         ret_params = dict(params)
         item_filter = _item_in_filter("d.I_CODE", item_codes, ret_params)
@@ -2502,7 +2897,9 @@ def _fetch_pos_top_items(
     except Exception as exc:  # noqa: BLE001
         logger.exception("POS top items returns failed: %s", exc)
         raise
-    return _assemble_top_item_rows(sales_rows, returns_by_item, limit)
+    return _assemble_top_item_rows(
+        sales_rows, returns_by_item, limit, order_by=order_by
+    )
 
 
 def _fetch_bill_top_items(
@@ -2513,6 +2910,7 @@ def _fetch_bill_top_items(
     group_code: str = "",
     limit: int = 8,
     skip_returns: bool = False,
+    order_by: str = "sales",
 ) -> list[dict]:
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
@@ -2526,6 +2924,7 @@ def _fetch_bill_top_items(
     if group_code:
         params["gcode"] = group_code
         group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+    order_sql = _item_order_sql(order_by)
 
     sales_rows = _fetch_all(
         f"""
@@ -2550,8 +2949,7 @@ def _fetch_bill_top_items(
             {branch_filter}
             {group_filter}
           GROUP BY TO_CHAR(d.I_CODE)
-          ORDER BY
-              SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0) + NVL(d.VAT_AMT, 0)) DESC
+          ORDER BY {order_sql}
         ) WHERE ROWNUM <= :lim
         """,
         {**params, "lim": max(int(limit or 8) * (2 if skip_returns else 3), 24)},
@@ -2564,7 +2962,9 @@ def _fetch_bill_top_items(
         if str(row.get("ITEM_CODE") or "").strip()
     ]
     if not item_codes or skip_returns:
-        return _assemble_top_item_rows(sales_rows, returns_by_item, limit)
+        return _assemble_top_item_rows(
+            sales_rows, returns_by_item, limit, order_by=order_by
+        )
     try:
         ret_params: dict = _date_params(date_from, date_to)
         ret_doc = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", ret_params)
@@ -2611,7 +3011,9 @@ def _fetch_bill_top_items(
     except Exception as exc:  # noqa: BLE001
         logger.exception("Bill top items returns failed: %s", exc)
         raise
-    return _assemble_top_item_rows(sales_rows, returns_by_item, limit)
+    return _assemble_top_item_rows(
+        sales_rows, returns_by_item, limit, order_by=order_by
+    )
 
 
 def fetch_top_sales_items(
@@ -2621,15 +3023,17 @@ def fetch_top_sales_items(
     branch_code: str = "",
     group_code: str = "",
     limit: int = 8,
+    order_by: str = "sales",
 ) -> list[dict]:
     """أكثر الأصناف مبيعاً خلال الفترة — SELECT فقط."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
+    order = "qty" if str(order_by or "sales").strip().lower() == "qty" else "sales"
     cache_key = (
-        f"sales:items:v3:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:net"
+        f"sales:items:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:net:{order}"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -2637,14 +3041,109 @@ def fetch_top_sales_items(
     conf = _system_conf(system)
     if conf.get("source") == "pos":
         rows = _fetch_pos_top_items(
-            date_from, date_to, brn, gcode, limit, skip_returns=False
+            date_from,
+            date_to,
+            brn,
+            gcode,
+            limit,
+            skip_returns=False,
+            order_by=order,
         )
     else:
         rows = _fetch_bill_top_items(
-            date_from, date_to, conf, brn, gcode, limit, skip_returns=False
+            date_from,
+            date_to,
+            conf,
+            brn,
+            gcode,
+            limit,
+            skip_returns=False,
+            order_by=order,
         )
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
+
+
+def fetch_sales_item_highlights(
+    date_from,
+    date_to,
+    branch_code: str = "",
+    group_code: str = "",
+    system: str = "",
+) -> dict:
+    """أعلى صنف مبيع/سحب/إرجاع — بنفس نطاق تبويب الداشبورد (نظام واحد)."""
+    empty = {
+        "top_amount_name": "—",
+        "top_amount_code": "",
+        "top_amount_value": "0.00",
+        "top_qty_name": "—",
+        "top_qty_code": "",
+        "top_qty_value": "0.00",
+        "top_return_name": "—",
+        "top_return_code": "",
+        "top_return_value": "0.00",
+    }
+    if not oracle_enabled():
+        return empty
+
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    sys = str(system or "pos").strip().lower()
+    if sys not in ("pos", "wholesale"):
+        sys = "pos"
+
+    top_amt = None
+    top_qty = None
+    top_ret = None
+    try:
+        amt_rows = fetch_top_sales_items(
+            date_from,
+            date_to,
+            system=sys,
+            branch_code=brn,
+            group_code=gcode,
+            limit=1,
+            order_by="sales",
+        )
+        top_amt = amt_rows[0] if amt_rows else None
+        qty_rows = fetch_top_sales_items(
+            date_from,
+            date_to,
+            system=sys,
+            branch_code=brn,
+            group_code=gcode,
+            limit=1,
+            order_by="qty",
+        )
+        top_qty = qty_rows[0] if qty_rows else None
+        ret_rows = fetch_top_returned_items(
+            date_from,
+            date_to,
+            system=sys,
+            branch_code=brn,
+            group_code=gcode,
+            limit=1,
+        )
+        top_ret = ret_rows[0] if ret_rows else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("item highlights (%s) failed: %s", sys, exc)
+        return empty
+
+    if not top_amt and not top_qty and not top_ret:
+        return empty
+    return {
+        "top_amount_name": (top_amt or {}).get("item_name") or "—",
+        "top_amount_code": (top_amt or {}).get("item_code") or "",
+        "top_amount_value": f"{float((top_amt or {}).get('sales_total') or 0):,.2f}",
+        "top_qty_name": (top_qty or {}).get("item_name") or "—",
+        "top_qty_code": (top_qty or {}).get("item_code") or "",
+        "top_qty_value": f"{float((top_qty or {}).get('qty_total') or 0):,.2f}",
+        "top_return_name": (top_ret or {}).get("item_name") or "—",
+        "top_return_code": (top_ret or {}).get("item_code") or "",
+        "top_return_value": (
+            f"{float((top_ret or {}).get('return_total') or (top_ret or {}).get('sales_total') or 0):,.2f}"
+        ),
+    }
 
 
 def _assemble_top_return_rows(rows, limit: int) -> list[dict]:

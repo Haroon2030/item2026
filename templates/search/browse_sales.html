@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% load money_fmt %}
 
-{% block title %}داشبورد المبيعات{% endblock %}
+{% block title %}تحليل المبيعات{% endblock %}
 {% block page_class %}sales-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="داشبورد المبيعات">
+<section class="dash-head" aria-label="تحليل المبيعات">
   <div class="dash-head-copy">
-    <h2>داشبورد المبيعات</h2>
+    <h2>تحليل المبيعات</h2>
     <p>نقاط البيع (نقد + بطائق) والآجل — أرقام منفصلة مطابقة لأونكس</p>
   </div>
   <form method="get" action="{% url 'browse_sales' %}" class="dash-filter" role="search">
@@ -42,7 +43,7 @@
         </span>
         نقاط البيع
       </span>
-      <strong class="dash-kpi-value mono">{{ kpi.pos_sales }}</strong>
+      <strong class="dash-kpi-value mono">{% money kpi.pos_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ kpi.pos_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
@@ -52,7 +53,7 @@
         </span>
         الآجل
       </span>
-      <strong class="dash-kpi-value mono">{{ kpi.wholesale_sales }}</strong>
+      <strong class="dash-kpi-value mono">{% money kpi.wholesale_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ kpi.wholesale_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total dash-kpi-accent">
@@ -62,7 +63,7 @@
         </span>
         الإجمالي الكلي
       </span>
-      <strong class="dash-kpi-value mono">{{ kpi.total_sales }}</strong>
+      <strong class="dash-kpi-value mono">{% money kpi.total_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ kpi.total_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-sellers">
@@ -105,6 +106,36 @@
       <strong class="dash-kpi-value">{{ kpi.top_visit_branch }}</strong>
       <span class="dash-kpi-hint mono">{{ kpi.top_visit_invoices }} زيارة · نقاط البيع</span>
     </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-amt">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-item-amt" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M7 8h7.5a2.5 2.5 0 0 1 0 5H9a2.5 2.5 0 0 0 0 5H17"/></svg>
+        </span>
+        الصنف الأكثر مبيعاً
+      </span>
+      <strong class="dash-kpi-value" title="{{ kpi.top_item_amount_code }}">{{ kpi.top_item_amount_name }}</strong>
+      <span class="dash-kpi-hint mono">{% money kpi.top_item_amount_value %} مبلغ</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-item-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        الصنف الأكثر سحباً
+      </span>
+      <strong class="dash-kpi-value" title="{{ kpi.top_item_qty_code }}">{{ kpi.top_item_qty_name }}</strong>
+      <span class="dash-kpi-hint mono">{{ kpi.top_item_qty_value }} كمية</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-item-ret" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v5l3 2"/></svg>
+        </span>
+        الصنف الأكثر إرجاعاً
+      </span>
+      <strong class="dash-kpi-value" title="{{ kpi.top_item_return_code }}">{{ kpi.top_item_return_name }}</strong>
+      <span class="dash-kpi-hint mono">{% money kpi.top_item_return_value %} مبلغ مرتجع · {{ kpi.seller_system_label }}</span>
+    </article>
   </section>
 
   <nav class="dash-tabs" aria-label="نظام المبيعات">
@@ -114,7 +145,7 @@
         href="?sys={{ sys.key }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
       >
         {{ sys.label }}
-        <span class="mono">{{ sys.grand_sales }}</span>
+        <span class="mono">{% money sys.grand_sales %}</span>
       </a>
     {% endfor %}
   </nav>
@@ -195,11 +226,11 @@
                       title="إظهار كل الأعمدة"
                     >{{ row.invoice_count_display }}</button>
                   </td>
-                  <td class="mono sales-amt">{{ row.gross_total_display }}</td>
-                  <td class="mono sales-amt">{{ row.sales_total_display }}</td>
-                  <td class="mono sales-amt">{{ row.avg_basket_display }}</td>
-                  <td class="mono sales-amt sales-col-extra">{{ row.net_total_display }}</td>
-                  <td class="mono sales-amt sales-col-extra">{{ row.vat_total_display }}</td>
+                  <td class="mono sales-amt sales-amt-gross">{% money row.gross_total_display %}</td>
+                  <td class="mono sales-amt sales-amt-net">{% money row.sales_total_display %}</td>
+                  <td class="mono sales-amt sales-amt-avg">{% money row.avg_basket_display %}</td>
+                  <td class="mono sales-amt sales-col-extra">{% money row.net_total_display %}</td>
+                  <td class="mono sales-amt sales-col-extra">{% money row.vat_total_display %}</td>
                 </tr>
               {% empty %}
                 <tr><td colspan="8" class="sales-empty">لا توجد فواتير في هذه الفترة.</td></tr>
@@ -210,11 +241,11 @@
                 <tr class="sales-grand-row">
                   <td colspan="2">الإجمالي</td>
                   <td class="mono">{{ active.grand_invoices_display }}</td>
-                  <td class="mono sales-amt">{{ active.grand_gross }}</td>
-                  <td class="mono sales-amt">{{ active.grand_sales }}</td>
-                  <td class="mono sales-amt">{{ active.grand_avg_basket }}</td>
-                  <td class="mono sales-amt sales-col-extra">{{ active.grand_net }}</td>
-                  <td class="mono sales-amt sales-col-extra">{{ active.grand_vat }}</td>
+                  <td class="mono sales-amt sales-amt-gross">{% money active.grand_gross %}</td>
+                  <td class="mono sales-amt sales-amt-net">{% money active.grand_sales %}</td>
+                  <td class="mono sales-amt sales-amt-avg">{% money active.grand_avg_basket %}</td>
+                  <td class="mono sales-amt sales-col-extra">{% money active.grand_net %}</td>
+                  <td class="mono sales-amt sales-col-extra">{% money active.grand_vat %}</td>
                 </tr>
               </tfoot>
             {% endif %}
@@ -318,12 +349,12 @@
                         title="إظهار كل الأعمدة"
                       >{{ row.invoice_count_display }}</button>
                     </td>
-                    <td class="mono sales-amt">{{ row.gross_total_display }}</td>
-                    <td class="mono sales-amt">{{ row.sales_total_display }}</td>
-                    <td class="mono sales-amt">{{ row.avg_basket_display }}</td>
+                    <td class="mono sales-amt sales-amt-gross">{% money row.gross_total_display %}</td>
+                    <td class="mono sales-amt sales-amt-net">{% money row.sales_total_display %}</td>
+                    <td class="mono sales-amt sales-amt-avg">{% money row.avg_basket_display %}</td>
                     <td class="mono sales-col-extra">{{ row.qty_total_display }}</td>
-                    <td class="mono sales-amt sales-col-extra">{{ row.net_total_display }}</td>
-                    <td class="mono sales-amt sales-col-extra">{{ row.vat_total_display }}</td>
+                    <td class="mono sales-amt sales-col-extra">{% money row.net_total_display %}</td>
+                    <td class="mono sales-amt sales-col-extra">{% money row.vat_total_display %}</td>
                   </tr>
                 {% empty %}
                   <tr><td colspan="10" class="sales-empty">لا توجد مبيعات مجموعات في هذه الفترة.</td></tr>
@@ -334,12 +365,12 @@
                   <tr class="sales-grand-row">
                     <td colspan="3">{% if group_panel.by_branch %}إجمالي المجموعة{% else %}الإجمالي{% endif %}</td>
                     <td class="mono">{{ group_panel.grand_invoices_display }}</td>
-                    <td class="mono sales-amt">{{ group_panel.grand_gross }}</td>
-                    <td class="mono sales-amt">{{ group_panel.grand_sales }}</td>
-                    <td class="mono sales-amt">{{ group_panel.grand_avg_basket }}</td>
+                    <td class="mono sales-amt sales-amt-gross">{% money group_panel.grand_gross %}</td>
+                    <td class="mono sales-amt sales-amt-net">{% money group_panel.grand_sales %}</td>
+                    <td class="mono sales-amt sales-amt-avg">{% money group_panel.grand_avg_basket %}</td>
                     <td class="mono sales-col-extra">{{ group_panel.grand_qty_display }}</td>
-                    <td class="mono sales-amt sales-col-extra">{{ group_panel.grand_net }}</td>
-                    <td class="mono sales-amt sales-col-extra">{{ group_panel.grand_vat }}</td>
+                    <td class="mono sales-amt sales-col-extra">{% money group_panel.grand_net %}</td>
+                    <td class="mono sales-amt sales-col-extra">{% money group_panel.grand_vat %}</td>
                   </tr>
                 </tfoot>
               {% endif %}
@@ -396,11 +427,14 @@
                 <span class="seller-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
                 <span class="seller-body">
                   <span class="seller-name" title="{{ item.item_name }} — {{ item.item_code }}">{{ item.item_name }}</span>
-                  <span class="seller-meta mono">{{ item.qty_total_display }} كمية · {{ item.invoice_count }} فاتورة</span>
+                  <span class="seller-meta">
+                    <span class="seller-meta-inv mono">{{ item.qty_total_display }} كمية</span>
+                    <span class="seller-meta-code mono">{{ item.invoice_count }} فاتورة</span>
+                  </span>
                   <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
                 </span>
                 <span class="seller-side">
-                  <span class="seller-amt mono">{{ item.sales_total_display }}</span>
+                  {% money item.sales_total_display "seller-amt mono money" %}
                   <span class="seller-pct mono">{{ item.share_pct }}%</span>
                 </span>
               </div>
@@ -452,11 +486,14 @@
                 <span class="seller-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
                 <span class="seller-body">
                   <span class="seller-name" title="{{ u.user_name }} — {{ u.user_code }}">{{ u.user_name }}</span>
-                  <span class="seller-meta mono">{{ u.invoice_count }} فاتورة · #{{ u.user_code }}</span>
+                  <span class="seller-meta">
+                    <span class="seller-meta-inv mono">{{ u.invoice_count }} فاتورة</span>
+                    <span class="seller-meta-code mono">#{{ u.user_code }}</span>
+                  </span>
                   <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
                 </span>
                 <span class="seller-side">
-                  <span class="seller-amt mono">{{ u.sales_total_display }}</span>
+                  {% money u.sales_total_display "seller-amt mono money" %}
                   <span class="seller-pct mono">{{ u.share_pct }}%</span>
                 </span>
               </a>
@@ -706,7 +743,7 @@
             </span>
             <span class="cashier-machine-totals">
               <b class="mono">{{ group.invoice_count }}</b> فاتورة
-              <b class="mono">{{ group.sales_total_display }}</b>
+              <b class="mono">{% money group.sales_total_display %}</b>
             </span>
           </summary>
           <div class="table-wrap cashier-bills-wrap">
@@ -725,7 +762,7 @@
                     <td class="mono">{{ forloop.counter }}</td>
                     <td class="mono">{{ invoice.bill_no }}</td>
                     <td class="mono">{{ invoice.bill_date }}</td>
-                    <td class="mono sales-amt">{{ invoice.bill_total_display }}</td>
+                    <td class="mono sales-amt">{% money invoice.bill_total_display %}</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -741,5 +778,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=23" defer></script>
+<script src="/static/js/sales-dash.js?v=27" defer></script>
 {% endblock %}

@@ -267,6 +267,8 @@ EXTERNAL_API = {
     'QUERY_PARAM': 'i_code',
     'TIMEOUT': int(_env('ONYX_TIMEOUT', '60') or '60'),
     'QTY_TIMEOUT': int(_env('ONYX_QTY_TIMEOUT', '45') or '45'),
+    'COMPARE_TIMEOUT': int(_env('ONYX_COMPARE_TIMEOUT', '8') or '8'),
+    'COMPARE_CACHE_TTL': int(_env('ONYX_COMPARE_CACHE_TTL', '90') or '90'),
     'RETRIES': int(_env('ONYX_RETRIES', '1') or '1'),
     'ITEMS_TIMEOUT': int(_env('ONYX_ITEMS_TIMEOUT', '180') or '180'),
     'ITEMS_PARAMS': {
@@ -287,8 +289,15 @@ EXTERNAL_API = {
         {'code': '1901', 'name': 'مخزن 1901'},
         {'code': '2001', 'name': 'مخزن 2001'},
         {'code': '30', 'name': 'مخزن 30'},
+        {'code': '1', 'name': 'مخزن 1'},
     ],
     'DEFAULT_WAREHOUSE': _env('ONYX_DEFAULT_WAREHOUSE', '60'),
+    # مخازن مقارنة السعر/التكلفة في بحث الأصناف
+    'COMPARE_WAREHOUSES': [
+        c.strip()
+        for c in (_env('ONYX_COMPARE_WAREHOUSES', '1201,1,30,1901,2001,1801,60,701') or '').split(',')
+        if c.strip()
+    ],
     'API_KEY': _env('ONYX_API_KEY', ''),
     'API_KEY_HEADER': _env('ONYX_API_KEY_HEADER', 'Authorization'),
     'API_KEY_PREFIX': _env('ONYX_API_KEY_PREFIX', 'Bearer'),

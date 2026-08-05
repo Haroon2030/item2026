@@ -39,6 +39,30 @@
     return d.innerHTML;
   }
 
+  var SAR_SVG =
+    '<svg class="sar-symbol" viewBox="0 0 1124.14 1256.39" aria-label="ريال سعودي" role="img" focusable="false">' +
+    '<path fill="currentColor" d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/>' +
+    '<path fill="currentColor" d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-123.31,26.15V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.83c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-50.9l36.68-30.52v92.57l-123.31,26.15v-92.57l36.68,30.52c17.06,26.5,43.3,44.55,73.83,50.9l375.04,79.7Z"/>' +
+    "</svg>";
+
+  function moneyHtml(amount, className) {
+    className = className || "money";
+    return (
+      '<span class="' +
+      className +
+      '"><span class="money-value">' +
+      esc(amount) +
+      "</span>" +
+      SAR_SVG +
+      "</span>"
+    );
+  }
+
+  function moneyCell(amount, extraClass) {
+    var cls = "mono sales-amt" + (extraClass ? " " + extraClass : "");
+    return '<td class="' + cls + '">' + moneyHtml(amount) + "</td>";
+  }
+
   function renderGroups(dataPanel) {
     var loading = document.getElementById("groups-loading");
     var table = document.getElementById("sales-groups-table");
@@ -74,12 +98,12 @@
         '<td class="mono"><button type="button" class="sales-num-btn" data-sales-cols-toggle aria-controls="sales-groups-table">' +
         esc(row.invoice_count_display) +
         "</button></td>" +
-        '<td class="mono sales-amt">' + esc(row.gross_total_display) + "</td>" +
-        '<td class="mono sales-amt">' + esc(row.sales_total_display) + "</td>" +
-        '<td class="mono sales-amt">' + esc(row.avg_basket_display) + "</td>" +
+        moneyCell(row.gross_total_display, "sales-amt-gross") +
+        moneyCell(row.sales_total_display, "sales-amt-net") +
+        moneyCell(row.avg_basket_display, "sales-amt-avg") +
         '<td class="mono sales-col-extra">' + esc(row.qty_total_display) + "</td>" +
-        '<td class="mono sales-amt sales-col-extra">' + esc(row.net_total_display) + "</td>" +
-        '<td class="mono sales-amt sales-col-extra">' + esc(row.vat_total_display) + "</td>" +
+        moneyCell(row.net_total_display, "sales-col-extra") +
+        moneyCell(row.vat_total_display, "sales-col-extra") +
         "</tr>";
     });
     tbody.innerHTML = html;
@@ -89,12 +113,12 @@
         '<tr class="sales-grand-row">' +
         "<td colspan=\"3\">" + (panelData.by_branch ? "إجمالي المجموعة" : "الإجمالي") + "</td>" +
         '<td class="mono">' + esc(panelData.grand_invoices_display) + "</td>" +
-        '<td class="mono sales-amt">' + esc(panelData.grand_gross) + "</td>" +
-        '<td class="mono sales-amt">' + esc(panelData.grand_sales) + "</td>" +
-        '<td class="mono sales-amt">' + esc(panelData.grand_avg_basket) + "</td>" +
+        moneyCell(panelData.grand_gross, "sales-amt-gross") +
+        moneyCell(panelData.grand_sales, "sales-amt-net") +
+        moneyCell(panelData.grand_avg_basket, "sales-amt-avg") +
         '<td class="mono sales-col-extra">' + esc(panelData.grand_qty_display) + "</td>" +
-        '<td class="mono sales-amt sales-col-extra">' + esc(panelData.grand_net) + "</td>" +
-        '<td class="mono sales-amt sales-col-extra">' + esc(panelData.grand_vat) + "</td>" +
+        moneyCell(panelData.grand_net, "sales-col-extra") +
+        moneyCell(panelData.grand_vat, "sales-col-extra") +
         "</tr>";
     }
   }
@@ -220,7 +244,7 @@
         '<span class="branch-donut-legend-body">' +
         '<span class="branch-donut-legend-name">' + esc(b.branch_name) + "</span>" +
         '<span class="branch-donut-legend-meta mono">' +
-        esc(b.sales_total_display) + " · " + esc(b.invoice_count_display) + " مرتجع" +
+        moneyHtml(b.sales_total_display) + " · " + esc(b.invoice_count_display) + " مرتجع" +
         "</span></span>" +
         '<span class="branch-donut-pct mono">' + esc(b.share_pct) + "%</span></li>";
     });
@@ -260,7 +284,7 @@
         '<span class="branch-chart-name">' + esc(item.item_name) + "</span>" +
         '<span class="branch-chart-track" aria-hidden="true"><span class="branch-chart-fill"></span></span>' +
         '<span class="branch-chart-meta">' +
-        '<span class="branch-chart-amt mono">' + esc(amt) + "</span>" +
+        '<span class="branch-chart-amt mono">' + moneyHtml(amt) + "</span>" +
         '<span class="branch-chart-inv mono">' + esc(item.qty_total_display) + " كمية مرتجعة</span>" +
         "</span></div>";
     });
@@ -292,15 +316,14 @@
         '<span class="seller-name" title="' + esc(item.item_name) + " — " + esc(item.item_code) + '">' +
         esc(item.item_name) +
         "</span>" +
-        '<span class="seller-meta mono">' +
-        esc(item.qty_total_display) +
-        " كمية · " +
-        esc(item.invoice_count) +
-        " فاتورة</span>" +
+        '<span class="seller-meta">' +
+        '<span class="seller-meta-inv mono">' + esc(item.qty_total_display) + " كمية</span>" +
+        '<span class="seller-meta-code mono">' + esc(item.invoice_count) + " فاتورة</span>" +
+        "</span>" +
         '<span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>' +
         "</span>" +
         '<span class="seller-side">' +
-        '<span class="seller-amt mono">' + esc(item.sales_total_display) + "</span>" +
+        moneyHtml(item.sales_total_display, "seller-amt mono money") +
         '<span class="seller-pct mono">' + esc(item.share_pct) + "%</span>" +
         "</span></div>";
     });
@@ -342,15 +365,14 @@
         '<span class="seller-name" title="' + esc(u.user_name) + " — " + esc(u.user_code) + '">' +
         esc(u.user_name) +
         "</span>" +
-        '<span class="seller-meta mono">' +
-        esc(u.invoice_count) +
-        " فاتورة · #" +
-        esc(u.user_code) +
+        '<span class="seller-meta">' +
+        '<span class="seller-meta-inv mono">' + esc(u.invoice_count) + " فاتورة</span>" +
+        '<span class="seller-meta-code mono">#' + esc(u.user_code) + "</span>" +
         "</span>" +
         '<span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>' +
         "</span>" +
         '<span class="seller-side">' +
-        '<span class="seller-amt mono">' + esc(u.sales_total_display) + "</span>" +
+        moneyHtml(u.sales_total_display, "seller-amt mono money") +
         '<span class="seller-pct mono">' + esc(u.share_pct) + "%</span>" +
         "</span></a>";
     });
@@ -571,9 +593,9 @@
       "</colgroup><tbody>" +
       '<tr class="sales-grand-row">' +
       '<td colspan="2">الإجمالي</td>' +
-      '<td class="mono sales-amt">' + esc(totals.sales_net_display) + "</td>" +
-      '<td class="mono">' + esc(totals.cost_total_display) + "</td>" +
-      '<td class="mono ' + tone + '">' + esc(totals.profit_display) + "</td>" +
+      '<td class="mono sales-amt">' + moneyHtml(totals.sales_net_display) + "</td>" +
+      '<td class="mono margin-cost">' + moneyHtml(totals.cost_total_display) + "</td>" +
+      '<td class="mono ' + tone + '">' + moneyHtml(totals.profit_display) + "</td>" +
       '<td class="mono ' + tone + '">' + esc(totals.margin_pct_display) + "</td>" +
       "</tr></tbody></table>";
   }
@@ -605,10 +627,10 @@
       return (
         "<tr>" +
         '<td class="mono">' + (i + 1) + "</td>" +
-        "<td title=\"" + esc(row.branch_code || "") + "\">" + esc(row.branch_name || row.branch_code || "") + "</td>" +
-        '<td class="mono sales-amt">' + esc(row.sales_net_display || "0.00") + "</td>" +
-        '<td class="mono">' + esc(row.cost_total_display || "0.00") + "</td>" +
-        '<td class="mono ' + tone + '">' + esc(row.profit_display || "0.00") + "</td>" +
+        "<td title=\"" + esc((row.branch_name || "") + " " + (row.branch_code || "")) + "\">" + esc(row.branch_name || row.branch_code || "") + "</td>" +
+        '<td class="mono sales-amt">' + moneyHtml(row.sales_net_display || "0.00") + "</td>" +
+        '<td class="mono margin-cost">' + moneyHtml(row.cost_total_display || "0.00") + "</td>" +
+        '<td class="mono ' + tone + '">' + moneyHtml(row.profit_display || "0.00") + "</td>" +
         '<td class="mono ' + tone + '">' + esc(row.margin_pct_display || "—") + "</td>" +
         "</tr>"
       );
@@ -643,10 +665,10 @@
       return (
         "<tr>" +
         '<td class="mono">' + (i + 1) + "</td>" +
-        "<td title=\"" + esc(row.group_code || "") + "\">" + esc(row.group_name || row.group_code || "") + "</td>" +
-        '<td class="mono sales-amt">' + esc(row.sales_net_display || "0.00") + "</td>" +
-        '<td class="mono">' + esc(row.cost_total_display || "0.00") + "</td>" +
-        '<td class="mono ' + tone + '">' + esc(row.profit_display || "0.00") + "</td>" +
+        "<td title=\"" + esc((row.group_name || "") + " " + (row.group_code || "")) + "\">" + esc(row.group_name || row.group_code || "") + "</td>" +
+        '<td class="mono sales-amt">' + moneyHtml(row.sales_net_display || "0.00") + "</td>" +
+        '<td class="mono margin-cost">' + moneyHtml(row.cost_total_display || "0.00") + "</td>" +
+        '<td class="mono ' + tone + '">' + moneyHtml(row.profit_display || "0.00") + "</td>" +
         '<td class="mono ' + tone + '">' + esc(row.margin_pct_display || "—") + "</td>" +
         "</tr>"
       );

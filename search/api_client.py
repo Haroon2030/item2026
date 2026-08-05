@@ -150,7 +150,14 @@ def _is_valid_item(raw: dict) -> bool:
     return bool(raw.get('I_CODE') or raw.get('I_NAME'))
 
 
-def search_prices_by_code(item_code: str, price_w_code: str | None = None) -> list[dict]:
+def search_prices_by_code(
+    item_code: str,
+    price_w_code: str | None = None,
+    *,
+    timeout: int | None = None,
+    retries: int | None = None,
+    fast: bool = False,
+) -> list[dict]:
     """جلب أسعار صنف عبر GetAllPrice باستخدام رقم الصنف والمخزن."""
     cfg = settings.EXTERNAL_API
     url = _safe_url(cfg.get('SEARCH_PATH', '/GetAllPrice'))
@@ -161,7 +168,13 @@ def search_prices_by_code(item_code: str, price_w_code: str | None = None) -> li
     if price_w_code:
         params['price_w_code'] = price_w_code
 
-    response = _request_get(url, params)
+    req_timeout = timeout if timeout is not None else cfg.get('TIMEOUT', 60)
+    if fast:
+        session = _stock_session()
+        response = session.get(url, params=params, headers=_headers(), timeout=req_timeout)
+        response.raise_for_status()
+    else:
+        response = _request_get(url, params, timeout=req_timeout, retries=retries)
 
     try:
         payload = response.json()
@@ -595,6 +608,98 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
     return merged
 
 
+def compare_item_across_warehouses(
+    item_code: str,
+    warehouses: list[str] | None = None,
+    *,
+    warehouse_names: dict[str, str] | None = None,
+) -> list[dict]:
+    """
+    مقارنة سعر البيع والتكلفة وآخر توريد لنفس الصنف عبر عدة مخازن.
+    المصدر: أوراكل فقط (أسرع وأكثر ثباتاً من REST).
+    يعيد صفاً لكل مخزن: warehouse, name, unit, price, last_buy, avg_cost, quantity.
+    """
+    from django.core.cache import cache
+
+    from .oracle_stock import fetch_item_compare_from_oracle, oracle_session
+
+    cfg = settings.EXTERNAL_API
+    codes = [
+        str(c).strip()
+        for c in (warehouses or cfg.get('COMPARE_WAREHOUSES') or [])
+        if str(c).strip()
+    ]
+    if not codes:
+        codes = ['1201', '1', '30', '1901', '2001', '1801', '60', '701']
+    names = {str(k).strip(): str(v).strip() for k, v in (warehouse_names or {}).items()}
+    queried = str(item_code or '').strip()
+    if not queried or not codes:
+        return []
+
+    cache_key = f"item:compare:v9:{queried}:{','.join(codes)}"
+    cached = cache.get(cache_key)
+    if isinstance(cached, list) and cached:
+        return cached
+
+    def _clean_name(wh: str, raw: str) -> str:
+        label = (raw or '').strip() or f'مخزن {wh}'
+        for suffix in (f' - {wh}', f'-{wh}', f'({wh})', f'（{wh}）'):
+            if label.endswith(suffix):
+                label = label[: -len(suffix)].strip()
+        if label == wh or label == f'مخزن {wh}':
+            return f'مخزن {wh}'
+        return label
+
+    try:
+        with oracle_session():
+            bundle = fetch_item_compare_from_oracle(queried, codes)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Oracle warehouse compare failed: %s', exc)
+        bundle = {'rows': {}}
+
+    ora_rows = bundle.get('rows') or {}
+    out: list[dict] = []
+    for wh in codes:
+        row = ora_rows.get(wh) or {}
+        price_num = _to_float(row.get('price'))
+        buy_num = _to_float(row.get('last_buy'))
+        qty_num = _to_float(row.get('quantity'))
+        price = _fmt_cost(price_num) if price_num is not None else (
+            str(row.get('price') or '').strip()
+        )
+        last_buy = _fmt_cost(buy_num) if buy_num is not None else (
+            str(row.get('last_buy') or '').strip()
+        )
+        avg_cost = str(row.get('avg_cost') or '').strip()
+        quantity = ''
+        if qty_num is not None:
+            quantity = _fmt_qty(qty_num)
+        elif str(row.get('quantity') or '').strip():
+            quantity = str(row.get('quantity')).strip()
+
+        unit = str(row.get('unit') or '').strip()
+        out.append(
+            {
+                'warehouse': wh,
+                'name': _clean_name(wh, names.get(wh, '')),
+                'code': queried,
+                'unit': unit,
+                'price': price,
+                'last_buy': last_buy,
+                'last_buy_date': str(row.get('last_buy_date') or ''),
+                'avg_cost': avg_cost,
+                'quantity': quantity,
+                'ok': bool(price or avg_cost or quantity or last_buy or unit),
+            }
+        )
+
+    try:
+        cache.set(cache_key, out, int(cfg.get('COMPARE_CACHE_TTL', 90) or 90))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def fetch_all_items(*, g_code: str | None = None, subg_code: str | None = None) -> list[dict]:
     """جلب الأصناف من GetAllItems، مع تصفية اختيارية بالمجموعة/الفرعية."""
     cfg = settings.EXTERNAL_API
@@ -839,11 +944,11 @@ def _pick_pricing_summary(prices: list[dict], qtys: list[dict]) -> dict:
             if str(row.get('unit') or '').strip() == stock_unit:
                 price = str(row.get('price') or '').strip()
                 break
-    if not price and prices:
+    elif prices:
+        # لا وحدة مخزون بعد — خذ أول سعر مع وحدته (بدون خلط وحدات)
         row0 = prices[0]
         price = str(row0.get('price') or '').strip()
-        if not stock_unit:
-            price_unit = str(row0.get('unit') or '').strip()
+        price_unit = str(row0.get('unit') or '').strip()
 
     return {
         'unit': stock_unit or price_unit,

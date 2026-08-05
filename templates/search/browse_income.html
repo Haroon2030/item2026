@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}قائمة الدخل{% endblock %}
+{% block page_class %}sales-dash income-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="قائمة الدخل">
+  <div class="dash-head-copy">
+    <h2>قائمة الدخل</h2>
+    <p>أرصدة كلية من دفتر الترحيل — مرحّل وغير مرحّل</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if statement %}
+  <section class="income-kpi-grid" aria-label="ملخص الفترة">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg>
+        </span>
+        الإيرادات
+      </span>
+      <strong class="dash-kpi-value mono">{{ statement.kpis.revenue_display }}</strong>
+      <span class="dash-kpi-hint">حسابات 3</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        التكلفة
+      </span>
+      <strong class="dash-kpi-value mono">{{ statement.kpis.cogs_display }}</strong>
+      <span class="dash-kpi-hint">حسابات 4</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-exp">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-exp" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M12 19l-4-4M12 19l4-4"/></svg>
+        </span>
+        المصروفات
+      </span>
+      <strong class="dash-kpi-value mono">{{ statement.kpis.expense_display }}</strong>
+      <span class="dash-kpi-hint">حسابات 5</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-net {% if statement.kpis.net_kind == 'loss' %}is-down{% elif statement.kpis.net_kind == 'profit' %}is-up{% endif %}">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-net" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
+        </span>
+        {{ statement.kpis.net_title }}
+      </span>
+      <strong class="dash-kpi-value mono">{{ statement.kpis.net_abs_display }}</strong>
+      <span class="dash-kpi-hint income-kpi-net-meta">
+        <span class="income-kpi-pct {% if statement.kpis.net_kind == 'loss' %}is-down{% elif statement.kpis.net_kind == 'profit' %}is-up{% endif %}">{{ statement.kpis.net_pct_display }} من الإيراد</span>
+        <span class="income-kpi-formula">دائن الحركة − مدين الحركة</span>
+      </span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_income' %}" class="income-filter-bar" role="search" aria-label="فترة قائمة الدخل">
+  <div class="income-filter-bar-main">
+    <div class="income-filter-period" role="group" aria-label="الفترة">
+      <span class="income-filter-period-label">الفترة</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="income-from">من</label>
+          <input id="income-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">—</span>
+        <div class="income-filter-field">
+          <label for="income-to">إلى</label>
+          <input id="income-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+        </div>
+      </div>
+    </div>
+    <div class="income-filter-field income-filter-posted">
+      <label for="income-posted">الترحيل</label>
+      <select id="income-posted" name="posted">
+        <option value="0" {% if not posted_only %}selected{% endif %}>الكل (مرحّل + غير مرحّل)</option>
+        <option value="1" {% if posted_only %}selected{% endif %}>مرحّل فقط</option>
+      </select>
+    </div>
+  </div>
+  <input type="hidden" name="branch" value="{{ selected_branch }}">
+  <input type="hidden" name="cc" value="{{ selected_cc }}">
+  <button type="submit" class="btn-primary income-filter-submit">عرض</button>
+</form>
+
+{% if statement %}
+  <section class="income-duo" aria-label="الحسابات والفروع">
+    <section class="dash-panel dash-panel-glass perf-panel income-accounts-panel" aria-label="رصيد الحركة">
+      <div class="dash-panel-head income-accounts-head">
+        <h3>رصيد الحركة — حسب الحساب</h3>
+        <form method="get" action="{% url 'browse_income' %}" class="income-scope-filter" aria-label="فلتر الفرع والمركز">
+          <input type="hidden" name="date_from" value="{{ date_from }}">
+          <input type="hidden" name="date_to" value="{{ date_to }}">
+          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
+          <label class="income-scope-field" for="income-branch">
+            <span>الفرع</span>
+            <select id="income-branch" name="branch">
+              <option value="">كل الفروع</option>
+              {% for b in branches %}
+                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="income-scope-field" for="income-cc">
+            <span>المركز</span>
+            <select id="income-cc" name="cc">
+              <option value="">كل المراكز</option>
+              {% for c in cost_centers %}
+                <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="btn-primary income-scope-submit">عرض</button>
+        </form>
+        <span class="result-pill">{{ statement.by_account_total_count }} حساب</span>
+      </div>
+      <div class="income-account-shell">
+        <div class="income-account-scroll">
+          <table class="data-table sales-table income-account-table" aria-label="أرصدة قائمة الدخل">
+            <colgroup>
+              <col class="income-col-code">
+              <col class="income-col-name">
+              <col class="income-col-num">
+              <col class="income-col-num">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>الرقم</th>
+                <th>الاسم</th>
+                <th>مدين</th>
+                <th>دائن</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in statement.by_account %}
+                <tr class="income-kind-{{ row.kind }}">
+                  <td class="mono">{{ row.account_code }}</td>
+                  <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
+                  <td class="mono">{{ row.mv_dr_display }}</td>
+                  <td class="mono">{{ row.mv_cr_display }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4">لا أرصدة ضمن الفلتر</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if statement.by_account %}
+          <div class="income-account-foot" aria-label="إجماليات قائمة الدخل">
+            <table class="data-table sales-table income-account-table income-account-foot-table">
+              <colgroup>
+                <col class="income-col-code">
+                <col class="income-col-name">
+                <col class="income-col-num">
+                <col class="income-col-num">
+              </colgroup>
+              <tbody>
+                <tr class="income-tfoot-total">
+                  <td colspan="2">الإجمالي</td>
+                  <td class="mono income-foot-num">{{ statement.account_totals.mv_dr_display }}</td>
+                  <td class="mono income-foot-num">{{ statement.account_totals.mv_cr_display }}</td>
+                </tr>
+                <tr class="income-tfoot-net {% if statement.kpis.net_kind == 'loss' %}is-down{% elif statement.kpis.net_kind == 'profit' %}is-up{% endif %}">
+                  <td colspan="2">رصيد الفترة — {{ statement.kpis.net_title }}</td>
+                  <td class="mono income-foot-num">{{ statement.kpis.period_dr_display }}{{ statement.kpis.final_dr_display }}</td>
+                  <td class="mono income-foot-num">{{ statement.kpis.period_cr_display }}{{ statement.kpis.final_cr_display }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass perf-panel income-branch-panel" aria-label="الفروع الأكثر ربحاً">
+      <div class="dash-panel-head">
+        <h3>الفروع · الأكثر ربحاً</h3>
+        <span class="result-pill">{{ statement.by_branch_profit|length }} فرع</span>
+      </div>
+      <p class="income-rank-period">{{ statement.period_label }} · صافي = دائن − مدين</p>
+      <div class="income-rank-chart" role="list">
+        {% for row in statement.by_branch_profit %}
+          <div class="income-rank-row is-{{ row.net_kind }}" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
+            <span class="income-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+            <div class="income-rank-body">
+              <div class="income-rank-head">
+                <strong class="income-rank-name" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
+                <span class="income-rank-amt mono">{{ row.net_display }}</span>
+              </div>
+              <div class="income-rank-track" aria-hidden="true">
+                <span class="income-rank-fill"></span>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <p class="sales-empty">لا فروع ضمن الفترة.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </section>
+
+  <section class="income-duo income-analyst-duo" aria-label="كشف الصناديق وأعلى المصروفات">
+    <section class="dash-panel dash-panel-glass perf-panel income-reconcile-panel" aria-label="كشف حساب الصناديق">
+      <div class="dash-panel-head income-accounts-head">
+        <h3>كشف حساب الصناديق</h3>
+        <form method="get" action="{% url 'browse_income' %}" class="income-scope-filter" aria-label="فلتر الصناديق حسب الفرع والمركز">
+          <input type="hidden" name="date_from" value="{{ date_from }}">
+          <input type="hidden" name="date_to" value="{{ date_to }}">
+          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
+          <label class="income-scope-field" for="income-cash-branch">
+            <span>الفرع</span>
+            <select id="income-cash-branch" name="branch">
+              <option value="">كل الفروع</option>
+              {% for b in branches %}
+                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="income-scope-field" for="income-cash-cc">
+            <span>المركز</span>
+            <select id="income-cash-cc" name="cc">
+              <option value="">كل المراكز</option>
+              {% for c in cost_centers %}
+                <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="btn-primary income-scope-submit">عرض</button>
+        </form>
+        <span class="result-pill {% if statement.reconciliation.all_ok %}is-ok{% else %}is-bad{% endif %}">
+          {{ statement.reconciliation.summary }}
+        </span>
+      </div>
+      <div class="income-cash-shell">
+        <div class="table-wrap income-analyst-scroll income-cash-scroll">
+          <table class="data-table sales-table income-analyst-table income-reconcile-table income-cash-stmt-table" aria-label="كشف حساب الصناديق">
+            <colgroup>
+              <col class="income-cash-col-name">
+              <col class="income-cash-col-num">
+              <col class="income-cash-col-num">
+              <col class="income-cash-col-num">
+              <col class="income-cash-col-num">
+              <col class="income-cash-col-status">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>الصندوق</th>
+                <th>افتتاحي</th>
+                <th>مدين</th>
+                <th>دائن</th>
+                <th>ختامي</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in statement.reconciliation.rows %}
+                <tr class="{% if row.ok %}is-ok{% else %}is-bad{% endif %}">
+                  <td>
+                    <strong>{{ row.cash_no }}</strong>
+                    <span class="income-check-note">{{ row.cash_name }}</span>
+                  </td>
+                  <td class="mono">{{ row.open_display }}</td>
+                  <td class="mono">{{ row.mv_dr_display }}</td>
+                  <td class="mono">{{ row.mv_cr_display }}</td>
+                  <td class="mono income-box-val">{{ row.close_display }}</td>
+                  <td>
+                    <span class="income-check-badge {% if row.ok %}is-ok{% else %}is-bad{% endif %}">{{ row.status }}</span>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6">لا بيانات صناديق ضمن الفلتر</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if statement.reconciliation.rows %}
+          <div class="income-cash-foot" aria-label="إجماليات الصناديق">
+            <table class="data-table sales-table income-analyst-table income-cash-stmt-table income-cash-foot-table">
+              <colgroup>
+                <col class="income-cash-col-name">
+                <col class="income-cash-col-num">
+                <col class="income-cash-col-num">
+                <col class="income-cash-col-num">
+                <col class="income-cash-col-num">
+                <col class="income-cash-col-status">
+              </colgroup>
+              <tbody>
+                <tr class="income-cash-tfoot-total {% if statement.reconciliation.totals.diff %}is-mismatch{% else %}is-match{% endif %}">
+                  <td>الإجمالي ({{ statement.reconciliation.totals.count }})</td>
+                  <td class="mono">{{ statement.reconciliation.totals.open_display }}</td>
+                  <td class="mono">{{ statement.reconciliation.totals.mv_dr_display }}</td>
+                  <td class="mono">{{ statement.reconciliation.totals.mv_cr_display }}</td>
+                  <td class="mono income-box-val">{{ statement.reconciliation.totals.close_display }}</td>
+                  <td class="mono income-cash-foot-diff">{{ statement.reconciliation.totals.diff_display }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass perf-panel income-top-panel" aria-label="أعلى المصروفات">
+      <div class="dash-panel-head income-accounts-head">
+        <h3>أعلى المصروفات · الأعلى → الأدنى</h3>
+        <form method="get" action="{% url 'browse_income' %}" class="income-scope-filter" aria-label="فلتر المصروفات حسب الفرع والمركز">
+          <input type="hidden" name="date_from" value="{{ date_from }}">
+          <input type="hidden" name="date_to" value="{{ date_to }}">
+          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
+          <label class="income-scope-field" for="income-top-branch">
+            <span>الفرع</span>
+            <select id="income-top-branch" name="branch">
+              <option value="">كل الفروع</option>
+              {% for b in branches %}
+                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="income-scope-field" for="income-top-cc">
+            <span>المركز</span>
+            <select id="income-top-cc" name="cc">
+              <option value="">كل المراكز</option>
+              {% for c in cost_centers %}
+                <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="btn-primary income-scope-submit">عرض</button>
+        </form>
+        <span class="result-pill">{{ statement.top_accounts|length }}</span>
+      </div>
+      <div class="table-wrap income-analyst-scroll">
+        <table class="data-table sales-table income-analyst-table income-top-table" aria-label="أعلى المصروفات">
+          <colgroup>
+            <col class="income-top-col-name">
+            <col class="income-top-col-num">
+            <col class="income-top-col-num">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>الحساب</th>
+              <th>الصافي</th>
+              <th>الأثر</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in statement.top_accounts %}
+              <tr class="is-{{ row.net_kind }}">
+                <td class="income-top-name" title="{{ row.account_code }} — {{ row.account_name }}">{{ row.account_name }}</td>
+                <td class="mono income-top-net">{{ row.net_display }}</td>
+                <td class="income-top-impact-cell">
+                  <div class="income-top-impact">
+                    <span class="mono">{{ row.impact_display }}</span>
+                    <span class="income-top-bar" style="--bar-pct: {{ row.bar_pct }}%" aria-hidden="true"></span>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3">لا مصروفات ضمن الفلتر</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if statement.top_accounts %}
+            <tfoot>
+              <tr class="income-top-total">
+                <td>الإجمالي ({{ statement.top_accounts_totals.count }})</td>
+                <td class="mono income-top-net">{{ statement.top_accounts_totals.net_display }}</td>
+                <td class="mono">{{ statement.top_accounts_totals.impact_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+  </section>
+{% endif %}
+{% endblock %}
