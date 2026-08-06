@@ -176,50 +176,103 @@
       </div>
     </section>
 
-    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="المشتريات حسب الفروع">
+    <section class="dash-panel dash-panel-glass purchase-panel purchase-branch-panel" aria-label="المشتريات حسب الفروع">
       <div class="dash-panel-head">
         <h3>المشتريات حسب الفروع</h3>
         <span class="result-pill">{{ dashboard.by_branch|length }}</span>
       </div>
-      <div class="table-wrap purchase-table-scroll">
-        <table class="data-table sales-table purchase-table">
-          <thead><tr><th>#</th><th>الفرع</th><th>الموردون</th><th>الفواتير</th><th>المبلغ</th></tr></thead>
-          <tbody>
-            {% for row in dashboard.by_branch %}
-              <tr>
-                <td class="mono">{{ forloop.counter }}</td>
-                <td class="purchase-name" title="{{ row.name }}">{{ row.name }}</td>
-                <td class="mono">{{ row.vendor_count }}</td>
-                <td class="mono">{{ row.invoice_count }}</td>
-                <td class="mono purchase-amount">{% money row.amount_display %}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5" class="sales-empty">لا توجد فروع خلال الفترة.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+      {{ dashboard.by_branch|json_script:"purchase-branch-data" }}
+      <div id="purchase-branch-board" class="branch-chart branch-donut purchase-branch-donut" hidden></div>
+      <p id="purchase-branch-empty" class="sales-empty"{% if dashboard.by_branch %} hidden{% endif %}>
+        لا توجد فروع خلال الفترة.
+      </p>
     </section>
 
-    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="الأصناف الأكثر شراء">
+    <section class="dash-panel dash-panel-glass purchase-panel purchase-items-panel" aria-label="الأصناف الأكثر شراء">
       <div class="dash-panel-head">
         <h3>الأصناف الأكثر شراءً</h3>
         <span class="result-pill">أعلى {{ dashboard.top_items|length }}</span>
       </div>
+      {% if dashboard.top_items %}
+        <div class="seller-board purchase-item-board" role="list">
+          {% for row in dashboard.top_items %}
+            <div
+              class="seller-card rank-{{ forloop.counter }}"
+              role="listitem"
+              style="--bar-pct: {{ row.share_pct }}%; --i: {{ forloop.counter0 }}"
+            >
+              <span class="seller-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <span class="seller-body">
+                <span class="seller-name" title="{{ row.name }} — {{ row.code }}">{{ row.name }}</span>
+                <span class="seller-meta">
+                  <span class="seller-meta-inv mono">{{ row.qty_display }} كمية</span>
+                  <span class="seller-meta-code mono">#{{ row.code }} · {{ row.invoice_count }} فاتورة</span>
+                </span>
+                <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
+              </span>
+              <span class="seller-side">
+                {% money row.amount_display "seller-amt mono money" %}
+                <span class="seller-pct mono">{{ row.share_display }}</span>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="sales-empty">لا توجد أصناف خلال الفترة.</p>
+      {% endif %}
+    </section>
+
+    <section class="dash-panel dash-panel-glass purchase-panel purchase-users-panel" aria-label="المستخدمون الأكثر إدخالاً لطلبات الشراء">
+      <div class="dash-panel-head">
+        <h3>المستخدمون الأكثر إدخالاً لطلبات الشراء</h3>
+        <span class="result-pill">أعلى {{ dashboard.top_request_users|length }}</span>
+      </div>
+      {% if dashboard.top_request_users %}
+        <div class="purchase-hbar-chart" role="list" aria-label="رسم أعمدة أفقية لعدد الطلبات">
+          {% for row in dashboard.top_request_users %}
+            <div
+              class="purchase-hbar-row rank-{{ forloop.counter }}"
+              role="listitem"
+              style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}"
+              title="{{ row.name }} #{{ row.code }} — {{ row.request_count }} طلب ({{ row.share_display }}) · {{ row.item_count }} صنف · {{ row.qty_display }} كمية · {{ row.branch_count }} فروع"
+            >
+              <span class="purchase-hbar-label" title="{{ row.name }}">{{ row.name }}</span>
+              <span class="purchase-hbar-track" aria-hidden="true">
+                <span class="purchase-hbar-fill"></span>
+              </span>
+              <span class="purchase-hbar-meta">
+                <span class="purchase-hbar-pct mono">{{ row.share_display }}</span>
+                <span class="purchase-hbar-code mono">#{{ row.code }}</span>
+                <span class="purchase-hbar-value mono">{{ row.request_count }}</span>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="sales-empty">لا توجد طلبات شراء خلال الفترة.</p>
+      {% endif %}
+    </section>
+
+    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="المجموعات الأكثر طلب شراء">
+      <div class="dash-panel-head">
+        <h3>المجموعات الأكثر طلب شراء</h3>
+        <span class="result-pill">أعلى {{ dashboard.top_request_groups|length }}</span>
+      </div>
       <div class="table-wrap purchase-table-scroll">
         <table class="data-table sales-table purchase-table">
-          <thead><tr><th>#</th><th>الصنف</th><th>الفواتير</th><th>الكمية</th><th>المبلغ</th></tr></thead>
+          <thead><tr><th>#</th><th>المجموعة</th><th>الطلبات</th><th>الأصناف</th><th>الكمية</th><th>الفروع</th></tr></thead>
           <tbody>
-            {% for row in dashboard.top_items %}
+            {% for row in dashboard.top_request_groups %}
               <tr>
                 <td class="mono">{{ forloop.counter }}</td>
                 <td class="purchase-name" title="{{ row.name }}">{{ row.name }} <small>#{{ row.code }}</small></td>
-                <td class="mono">{{ row.invoice_count }}</td>
+                <td class="mono purchase-request-count">{{ row.request_count }}</td>
+                <td class="mono">{{ row.item_count }}</td>
                 <td class="mono purchase-qty">{{ row.qty_display }}</td>
-                <td class="mono purchase-amount">{% money row.amount_display %}</td>
+                <td class="mono">{{ row.branch_count }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="5" class="sales-empty">لا توجد أصناف خلال الفترة.</td></tr>
+              <tr><td colspan="6" class="sales-empty">لا توجد مجموعات في طلبات الشراء خلال الفترة.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -227,4 +280,8 @@
     </section>
   </section>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/purchase-branch-donut.js?v=1" defer></script>
 {% endblock %}

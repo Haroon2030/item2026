@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}مقارنة طلب شراء{% endblock %}
+{% block page_class %}sales-dash pr-compare-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مقارنة طلب شراء">
+  <div class="dash-head-copy">
+    <h2>مقارنة طلب الشراء</h2>
+    <p>جدول مقارنة: الصف = صنف، الأعمدة = مطلوب + المخازن ذات الرصيد فقط</p>
+  </div>
+  <a
+    class="sales-view-btn pr-compare-back"
+    href="{% url 'browse_pr_compare' %}?branch={{ selected_branch|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+  >رجوع للطلبات</a>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if compare %}
+  <section class="pr-compare-meta dash-panel-glass" aria-label="بيانات الطلب">
+    <div>
+      <span class="pr-compare-meta-label">الطلب</span>
+      <strong class="mono">{{ compare.header.pr_ser }} · #{{ compare.header.pr_no }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">الفرع</span>
+      <strong>{{ compare.header.branch_name }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">التاريخ</span>
+      <strong class="mono">{{ compare.header.date_label }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">المستخدم</span>
+      <strong>{{ compare.header.user_name|default:compare.header.user_code }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">الأصناف</span>
+      <strong class="mono">{{ compare.item_count }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">مخازن برصيد</span>
+      <strong class="mono">{{ compare.warehouse_count }}</strong>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass pr-compare-sheet-panel" aria-label="جدول مقارنة الأصناف">
+    <div class="dash-panel-head">
+      <h3>ورقة المقارنة</h3>
+      <span class="result-pill">{{ compare.item_count }} صف · {{ compare.warehouse_count }} مخزن</span>
+    </div>
+
+    {% if compare.items %}
+      <div class="table-wrap pr-compare-sheet-wrap">
+        <table class="pr-compare-sheet">
+          <thead>
+            <tr>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-num">#</th>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-name">الصنف</th>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-code">الكود</th>
+              <th class="pr-compare-sheet-req">مطلوب</th>
+              {% for wh in compare.warehouses %}
+                <th class="pr-compare-sheet-wh" title="{{ wh.name }} — {{ wh.branch_name }} (#{{ wh.code }})">
+                  <span class="pr-compare-sheet-wh-name">{{ wh.name }}</span>
+                  <span class="pr-compare-sheet-wh-branch">{{ wh.branch_name }}</span>
+                </th>
+              {% endfor %}
+              <th class="pr-compare-sheet-total">إجمالي المتوفر</th>
+              <th class="pr-compare-sheet-count">عدد المخازن</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in compare.items %}
+              <tr class="{% if not item.has_stock %}is-empty{% endif %}">
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-num mono">{{ forloop.counter }}</td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-name" title="{{ item.name }}">{{ item.name }}</td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-code mono">{{ item.code }}</td>
+                <td class="pr-compare-sheet-req mono">{{ item.req_display }}</td>
+                {% for cell in item.cells %}
+                  {% if cell %}
+                    <td class="pr-compare-sheet-qty mono has-qty">{{ cell.qty_display }}</td>
+                  {% else %}
+                    <td class="pr-compare-sheet-qty is-blank"></td>
+                  {% endif %}
+                {% endfor %}
+                <td class="pr-compare-sheet-total mono">{% if item.has_stock %}{{ item.stock_total_display }}{% else %}—{% endif %}</td>
+                <td class="pr-compare-sheet-count mono">{{ item.stock_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="pr-compare-sheet-note">الخلية الفارغة = لا رصيد في هذا المخزن لهذا الصنف. تظهر فقط المخازن التي لديها كمية لصنف واحد على الأقل.</p>
+    {% else %}
+      <p class="sales-empty">لا توجد أصناف في هذا الطلب.</p>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

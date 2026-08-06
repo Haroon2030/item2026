@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}مقارنات طلب الشراء{% endblock %}
+{% block page_class %}sales-dash pr-compare-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مقارنات طلب الشراء">
+  <div class="dash-head-copy">
+    <h2>مقارنات طلب الشراء</h2>
+    <p>اختر الفرع لعرض طلبات شراء اليوم، ثم افتح الطلب لمقارنة الكمية المطلوبة مع أرصدة المخازن المتوفرة فقط</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_pr_compare' %}" class="pr-compare-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="pr-branch">الفرع</label>
+    <select id="pr-branch" name="branch" required onchange="this.form.warehouse.value=''; this.form.submit()">
+      <option value="">اختر الفرع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="pr-warehouse">المخزن (اختياري)</label>
+    <select id="pr-warehouse" name="warehouse">
+      <option value="">كل المخازن ذات الرصيد</option>
+      {% for w in warehouses %}
+        <option value="{{ w.code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field pr-compare-filter-actions">
+    <label class="sr-only" for="pr-compare-submit">عرض</label>
+    <button id="pr-compare-submit" type="submit" class="sales-view-btn">عرض طلبات اليوم</button>
+  </div>
+  <p class="pr-compare-day mono">اليوم: {{ today }}</p>
+</form>
+
+<section class="dash-panel dash-panel-glass pr-compare-list-panel" aria-label="طلبات شراء اليوم">
+  <div class="dash-panel-head">
+    <h3>طلبات شراء اليوم</h3>
+    <span class="result-pill">{% if selected_branch %}{{ requests_today|length }}{% else %}—{% endif %}</span>
+  </div>
+
+  {% if not selected_branch %}
+    <p class="sales-empty">اختر الفرع أولاً لعرض طلبات شراء اليوم.</p>
+  {% elif requests_today %}
+    <div class="table-wrap pr-compare-table-wrap">
+      <table class="data-table sales-table pr-compare-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الطلب</th>
+            <th>الوقت</th>
+            <th>المستخدم</th>
+            <th>الأصناف</th>
+            <th>الكمية</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in requests_today %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="pr-compare-req-id mono" title="{{ row.pr_type }}/{{ row.pr_no }}/{{ row.pr_ser }}">
+                {{ row.pr_ser }}
+                <small>#{{ row.pr_no }}</small>
+              </td>
+              <td class="mono">{{ row.date_label }}</td>
+              <td class="pr-compare-user" title="{{ row.user_name }} #{{ row.user_code }}">{{ row.user_name|default:row.user_code }}</td>
+              <td class="mono">{{ row.item_count }}</td>
+              <td class="mono pr-compare-qty">{{ row.qty_display }}</td>
+              <td>
+                <a
+                  class="sales-view-btn pr-compare-open"
+                  href="{% url 'browse_pr_compare_detail' %}?pr_type={{ row.pr_type|urlencode }}&amp;pr_no={{ row.pr_no|urlencode }}&amp;pr_ser={{ row.pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+                >مقارنة</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="sales-empty">لا توجد طلبات شراء اليوم لهذا الفرع.</p>
+  {% endif %}
+</section>
+{% endblock %}

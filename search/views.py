@@ -1925,6 +1925,117 @@ def browse_purchases(request):
 @login_required
 @require_GET
 @never_cache
+def browse_pr_compare(request):
+    """قائمة طلبات شراء اليوم لمقارنة الأرصدة حسب الفرع/المخزن."""
+    from datetime import date
+
+    today = date.today()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    requests_today: list[dict] = []
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    error = ''
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_pr_compare import (
+            fetch_today_purchase_requests,
+            fetch_warehouses_for_branch,
+        )
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن مقارنة طلبات الشراء.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                warehouses = fetch_warehouses_for_branch(selected_branch)
+                if selected_warehouse not in {row['code'] for row in warehouses}:
+                    selected_warehouse = ''
+                if selected_branch:
+                    requests_today = fetch_today_purchase_requests(
+                        branch_code=selected_branch,
+                        day=today,
+                    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_pr_compare failed: %s', exc)
+        error = f'تعذّر تحميل طلبات الشراء: {exc}'
+        requests_today = []
+
+    return render(
+        request,
+        'search/browse_pr_compare.html',
+        {
+            'today': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'branches': branches,
+            'warehouses': warehouses,
+            'requests_today': requests_today,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_pr_compare_detail(request):
+    """مقارنة أصناف طلب شراء مع المخازن ذات الرصيد فقط."""
+    pr_type = str(request.GET.get('pr_type') or '').strip()
+    pr_no = str(request.GET.get('pr_no') or '').strip()
+    pr_ser = str(request.GET.get('pr_ser') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    compare = None
+    error = ''
+
+    if not (pr_type and pr_no and pr_ser):
+        error = 'معرّف طلب الشراء غير مكتمل.'
+    else:
+        try:
+            from .oracle_pr_compare import build_purchase_request_compare
+            from .oracle_stock import oracle_enabled, oracle_session
+
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن مقارنة الطلب.'
+            else:
+                wh_filter = [selected_warehouse] if selected_warehouse else None
+                with oracle_session():
+                    compare = build_purchase_request_compare(
+                        pr_type=pr_type,
+                        pr_no=pr_no,
+                        pr_ser=pr_ser,
+                        warehouse_codes=wh_filter,
+                    )
+                if compare is None:
+                    error = 'طلب الشراء غير موجود أو غير نشط.'
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_pr_compare_detail failed: %s', exc)
+            error = f'تعذّر مقارنة طلب الشراء: {exc}'
+            compare = None
+
+    return render(
+        request,
+        'search/browse_pr_compare_detail.html',
+        {
+            'pr_type': pr_type,
+            'pr_no': pr_no,
+            'pr_ser': pr_ser,
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'compare': compare,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_income(request):
     """قائمة الدخل — أرصدة مع حركة من قيود أوراكل حسب الفرع ومركز التكلفة."""
     from datetime import date as date_cls
