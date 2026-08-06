@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}تحليل المشتريات{% endblock %}
+{% block page_class %}sales-dash purchase-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="تحليل المشتريات">
+  <div class="dash-head-copy">
+    <h2>تحليل المشتريات</h2>
+    <p>فواتير الشراء بعد خصم مرتجعات المشتريات — حسب المورد والفروع والمجموعات والأصناف</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if dashboard %}
+  <section class="purchase-kpis" aria-label="مؤشرات المشتريات">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-total" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
+        </span>
+        الصافي بعد المرتجع
+      </span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.total_display %}</strong>
+      <span class="dash-kpi-hint">{{ dashboard.period_label }} · شامل الضريبة</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-net">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-net" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 6h2l2.4 10.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.5L20.5 9H7"/><circle cx="10" cy="20" r="1.1"/><circle cx="17" cy="20" r="1.1"/></svg>
+        </span>
+        صافي المشتريات
+      </span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.net_display %}</strong>
+      <span class="dash-kpi-hint">شراء {% money dashboard.kpis.purchase_net_display %} − مرتجع {% money dashboard.kpis.return_net_display %}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vat">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-vat" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 17L17 7"/><circle cx="8" cy="8" r="2"/><circle cx="16" cy="16" r="2"/></svg>
+        </span>
+        صافي الضريبة
+      </span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.vat_display %}</strong>
+      <span class="dash-kpi-hint">بعد خصم مرتجعات الشراء</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-inv" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
+        </span>
+        فواتير الشراء
+      </span>
+      <strong class="dash-kpi-value mono">{{ dashboard.kpis.invoice_count }}</strong>
+      <span class="dash-kpi-hint">مرتجع {{ dashboard.kpis.return_count }} · متوسط {% money dashboard.kpis.average_display %}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vendors">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-vendors" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 9h16l-1 10a2 2 0 0 1-2 1.8H7A2 2 0 0 1 5 19z"/><path d="M8.5 9V6.8A3.5 3.5 0 0 1 12 3.3a3.5 3.5 0 0 1 3.5 3.5V9"/></svg>
+        </span>
+        الموردون / الأصناف
+      </span>
+      <strong class="dash-kpi-value mono">{{ dashboard.kpis.vendor_count }} / {{ dashboard.kpis.item_count }}</strong>
+      <span class="dash-kpi-hint">مورد نشط / صنف مشترى</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        صافي الكمية
+      </span>
+      <strong class="dash-kpi-value mono">{{ dashboard.kpis.qty_display }}</strong>
+      <span class="dash-kpi-hint">شراء − مرتجع</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_purchases' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="purchase-from">من</label>
+    <input id="purchase-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="purchase-to">إلى</label>
+    <input id="purchase-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="purchase-branch">الفرع</label>
+    <select id="purchase-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for row in branches %}
+        <option value="{{ row.code }}" {% if row.code == selected_branch %}selected{% endif %}>{{ row.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="purchase-group">المجموعة</label>
+    <select id="purchase-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for row in groups %}
+        <option value="{{ row.code }}" {% if row.code == selected_group %}selected{% endif %}>{{ row.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field purchase-vendor-field">
+    <label for="purchase-vendor">المورد</label>
+    <select id="purchase-vendor" name="vendor">
+      <option value="">كل الموردين</option>
+      {% for row in vendors %}
+        <option value="{{ row.code }}" {% if row.code == selected_vendor %}selected{% endif %}>{{ row.name }} · {{ row.code }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">تحليل المشتريات</button>
+</form>
+
+{% if dashboard %}
+  <section class="purchase-grid" aria-label="تفاصيل تحليل المشتريات">
+    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="أعلى الموردين">
+      <div class="dash-panel-head">
+        <h3>أعلى الموردين</h3>
+        <span class="result-pill">{{ dashboard.by_vendor|length }}</span>
+      </div>
+      <div class="table-wrap purchase-table-scroll">
+        <table class="data-table sales-table purchase-table">
+          <thead><tr><th>#</th><th>المورد</th><th>الفواتير</th><th>المبلغ</th><th>الحصة</th></tr></thead>
+          <tbody>
+            {% for row in dashboard.by_vendor %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td class="purchase-name" title="{{ row.name }}">{{ row.name }} <small>#{{ row.code }}</small></td>
+                <td class="mono">{{ row.invoice_count }}</td>
+                <td class="mono purchase-amount">{% money row.amount_display %}</td>
+                <td class="mono purchase-share">{{ row.share_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="sales-empty">لا توجد مشتريات خلال الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="المشتريات حسب المجموعات">
+      <div class="dash-panel-head">
+        <h3>المشتريات حسب المجموعات</h3>
+        <span class="result-pill">{{ dashboard.by_group|length }}</span>
+      </div>
+      <div class="table-wrap purchase-table-scroll">
+        <table class="data-table sales-table purchase-table">
+          <thead><tr><th>#</th><th>المجموعة</th><th>أصناف</th><th>الكمية</th><th>المبلغ</th></tr></thead>
+          <tbody>
+            {% for row in dashboard.by_group %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td class="purchase-name" title="{{ row.name }}">{{ row.name }}</td>
+                <td class="mono">{{ row.item_count }}</td>
+                <td class="mono purchase-qty">{{ row.qty_display }}</td>
+                <td class="mono purchase-amount">{% money row.amount_display %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="sales-empty">لا توجد مجموعات خلال الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="المشتريات حسب الفروع">
+      <div class="dash-panel-head">
+        <h3>المشتريات حسب الفروع</h3>
+        <span class="result-pill">{{ dashboard.by_branch|length }}</span>
+      </div>
+      <div class="table-wrap purchase-table-scroll">
+        <table class="data-table sales-table purchase-table">
+          <thead><tr><th>#</th><th>الفرع</th><th>الموردون</th><th>الفواتير</th><th>المبلغ</th></tr></thead>
+          <tbody>
+            {% for row in dashboard.by_branch %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td class="purchase-name" title="{{ row.name }}">{{ row.name }}</td>
+                <td class="mono">{{ row.vendor_count }}</td>
+                <td class="mono">{{ row.invoice_count }}</td>
+                <td class="mono purchase-amount">{% money row.amount_display %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="sales-empty">لا توجد فروع خلال الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="الأصناف الأكثر شراء">
+      <div class="dash-panel-head">
+        <h3>الأصناف الأكثر شراءً</h3>
+        <span class="result-pill">أعلى {{ dashboard.top_items|length }}</span>
+      </div>
+      <div class="table-wrap purchase-table-scroll">
+        <table class="data-table sales-table purchase-table">
+          <thead><tr><th>#</th><th>الصنف</th><th>الفواتير</th><th>الكمية</th><th>المبلغ</th></tr></thead>
+          <tbody>
+            {% for row in dashboard.top_items %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td class="purchase-name" title="{{ row.name }}">{{ row.name }} <small>#{{ row.code }}</small></td>
+                <td class="mono">{{ row.invoice_count }}</td>
+                <td class="mono purchase-qty">{{ row.qty_display }}</td>
+                <td class="mono purchase-amount">{% money row.amount_display %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="sales-empty">لا توجد أصناف خلال الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+{% endif %}
+{% endblock %}

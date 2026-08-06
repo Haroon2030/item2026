@@ -187,10 +187,13 @@ def build_inventory_insights(
     branch_code: str = "",
 ) -> dict[str, Any]:
     """يبني لوحة تحليل مخزون من أوراكل (قيمة بالتكلفة × الكمية المتاحة)."""
+    from datetime import date
+
     from .oracle_stock import (
         fetch_inventory_by_branch,
         fetch_inventory_by_group,
         fetch_inventory_by_warehouse,
+        fetch_inventory_wastage,
     )
 
     wh = str(warehouse or "").strip()
@@ -236,6 +239,16 @@ def build_inventory_insights(
         by_group,
         sales_by_code,
         total_stock_value=total_value,
+    )
+    activity_to = date.today()
+    # التوالف من بداية السنة حتى اليوم (ليست آخر 7 أيام)
+    activity_from = activity_to.replace(month=1, day=1)
+    wastage = fetch_inventory_wastage(
+        activity_from,
+        activity_to,
+        warehouse=wh,
+        group_code=gcode,
+        branch_code=brn,
     )
 
     top_wh = by_warehouse[0] if by_warehouse else None
@@ -355,6 +368,7 @@ def build_inventory_insights(
         "group_sales_rank": group_sales_rank,
         "sales_period_label": sales_period_label,
         "stagnant": stagnant,
+        "wastage": wastage,
         "warehouse_totals": warehouse_totals,
         "group_totals": group_totals,
         "branch_totals": branch_totals,

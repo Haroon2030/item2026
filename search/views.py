@@ -1825,6 +1825,106 @@ def browse_inventory(request):
 @login_required
 @require_GET
 @never_cache
+def browse_purchases(request):
+    """تحليل فواتير المشتريات حسب الفرع والمجموعة والمورد."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_vendor = str(request.GET.get('vendor') or '').strip()
+    dashboard = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+    vendors: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_purchases.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_group': selected_group,
+                'selected_vendor': selected_vendor,
+                'branches': [],
+                'groups': [],
+                'vendors': [],
+                'dashboard': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_purchases import (
+            build_purchase_dashboard,
+            fetch_purchase_vendor_options,
+        )
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن تحليل المشتريات.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                groups = fetch_sales_group_options()
+                vendors = fetch_purchase_vendor_options(date_from, date_to)
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                if selected_vendor not in {row['code'] for row in vendors}:
+                    selected_vendor = ''
+                dashboard = build_purchase_dashboard(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    vendor_code=selected_vendor,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_purchases failed: %s', exc)
+        error = f'تعذّر تحليل المشتريات: {exc}'
+        dashboard = None
+
+    return render(
+        request,
+        'search/browse_purchases.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'selected_vendor': selected_vendor,
+            'branches': branches,
+            'groups': groups,
+            'vendors': vendors,
+            'dashboard': dashboard,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_income(request):
     """قائمة الدخل — أرصدة مع حركة من قيود أوراكل حسب الفرع ومركز التكلفة."""
     from datetime import date as date_cls

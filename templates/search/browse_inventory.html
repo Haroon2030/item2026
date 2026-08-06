@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load money_fmt %}
 
 {% block title %}تحليل المخزون{% endblock %}
 {% block page_class %}sales-dash inv-dash{% endblock %}
@@ -143,7 +144,6 @@
   </div>
   <div class="perf-filter-actions">
     <button type="submit" class="btn-primary">تحليل المخزون</button>
-    <a class="sales-view-btn" href="{% url 'browse_groups' %}{% if selected_warehouse %}?warehouse={{ selected_warehouse }}{% endif %}{% if selected_group %}{% if selected_warehouse %}&amp;{% else %}?{% endif %}group={{ selected_group }}{% endif %}">فتح بالمجموعة</a>
   </div>
 </form>
 
@@ -309,6 +309,77 @@
         <p id="inv-stagnant-empty" class="sales-empty"{% if insights.stagnant.rows %} hidden{% endif %}>
           لا مجموعات راكدة ضمن الفلتر.
         </p>
+      </section>
+
+      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact inv-wastage-panel" aria-label="التوالف حسب الفرع والمجموعة">
+        <div class="dash-panel-head">
+          <h3>التوالف · حسب الفرع والمجموعة</h3>
+          <span class="result-pill inv-wastage-total">{% money insights.wastage.waste_value_display %}</span>
+        </div>
+        <p class="inv-rank-period">
+          من حساب التوالف 41101006 · {{ insights.wastage.period_label }}
+          · {{ insights.wastage.doc_count }} مستند
+        </p>
+        <article class="inv-wastage-highlight" aria-label="المجموعة الأكثر توالفاً">
+          <span class="inv-wastage-highlight-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M4 17h16v4H4z"/></svg>
+          </span>
+          <div class="inv-wastage-highlight-body">
+            <span class="inv-wastage-highlight-label">المجموعة الأكثر توالفاً</span>
+            <strong class="inv-wastage-highlight-name" title="{{ insights.wastage.top_group.name }}">
+              {{ insights.wastage.top_group.name }}
+            </strong>
+            <span class="inv-wastage-highlight-meta mono">
+              مجموعة #{{ insights.wastage.top_group.code }}
+              · كمية {{ insights.wastage.top_group.qty_display }}
+              · {{ insights.wastage.top_group.doc_count }} مستند
+              · {{ insights.wastage.top_group.branch_count }} فرع
+            </span>
+          </div>
+          <div class="inv-wastage-highlight-side">
+            <strong class="mono">{% money insights.wastage.top_group.waste_value_display %}</strong>
+            <span class="mono">{{ insights.wastage.top_group.share_display }} من التوالف</span>
+          </div>
+        </article>
+        <div class="table-wrap inv-table-scroll">
+          <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="التوالف حسب الفرع والمجموعة">
+            <thead>
+              <tr>
+                <th>الفرع</th>
+                <th>المجموعة</th>
+                <th>المستندات</th>
+                <th>الكمية</th>
+                <th class="inv-wastage-value">التكلفة</th>
+                <th class="inv-wastage-share">الحصة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in insights.wastage.rows %}
+                <tr>
+                  <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
+                  <td class="inv-cell-clip" title="{{ row.group_name }}">{{ row.group_name }}</td>
+                  <td class="mono">{{ row.doc_count }}</td>
+                  <td class="mono">{{ row.qty_display }}</td>
+                  <td class="mono inv-wastage-value">{% money row.waste_value_display %}</td>
+                  <td class="mono inv-wastage-share">{{ row.share_display }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6" class="sales-empty">لا توجد توالف ضمن الفلتر منذ بداية السنة.</td></tr>
+              {% endfor %}
+            </tbody>
+            {% if insights.wastage.rows %}
+              <tfoot>
+                <tr class="sales-grand-row">
+                  <td colspan="2">الإجمالي</td>
+                  <td class="mono">{{ insights.wastage.doc_count }}</td>
+                  <td class="mono">{{ insights.wastage.qty_display }}</td>
+                  <td class="mono inv-wastage-value">{% money insights.wastage.waste_value_display %}</td>
+                  <td class="mono inv-wastage-share">100%</td>
+                </tr>
+              </tfoot>
+            {% endif %}
+          </table>
+        </div>
       </section>
     </div>
 

@@ -901,6 +901,178 @@ def fetch_inventory_by_branch(
     return assembled
 
 
+def fetch_inventory_wastage(
+    date_from,
+    date_to,
+    *,
+    warehouse: str = "",
+    group_code: str = "",
+    branch_code: str = "",
+) -> dict[str, Any]:
+    """توالف الصرف المخزني من حساب 41101006، مجمعة حسب الفرع والمجموعة."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+
+    schema = _schema()
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    wh = str(warehouse or "").strip()
+    gcode = str(group_code or "").strip()
+    brn = str(branch_code or "").strip()
+    cache_key = (
+        f"inv:wastage:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"{wh}:{gcode}:{brn}"
+    )
+    cached = _sales_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    filters = [
+        "TO_CHAR(m.A_CODE) = '41101006'",
+        "m.OUT_DATE >= :d_from",
+        "m.OUT_DATE < :d_to_excl",
+    ]
+    params: dict[str, Any] = {
+        "d_from": d_from,
+        "d_to_excl": d_to + timedelta(days=1),
+    }
+    if wh:
+        filters.append("TO_CHAR(m.W_CODE) = :wh")
+        params["wh"] = wh
+    if gcode:
+        filters.append("TO_CHAR(i.G_CODE) = :gcode")
+        params["gcode"] = gcode
+    if brn:
+        filters.append("TO_CHAR(m.BRN_NO) = :brn")
+        params["brn"] = brn
+
+    rows = _fetch_all(
+        f"""
+        SELECT
+            NVL(TO_CHAR(m.BRN_NO), '(بلا)') AS BRANCH_CODE,
+            NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
+            COUNT(DISTINCT m.OUT_SER) AS DOC_COUNT,
+            ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+            ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)), 2) AS WASTE_VALUE
+        FROM {schema}.IAS_OUTGOING_MST m
+        JOIN {schema}.IAS_OUTGOING_DTL d
+          ON d.OUT_SER = m.OUT_SER
+         AND d.OUT_TYPE = m.OUT_TYPE
+        JOIN {schema}.IAS_ITM_MST i
+          ON i.I_CODE = d.I_CODE
+        WHERE {" AND ".join(filters)}
+        GROUP BY
+            NVL(TO_CHAR(m.BRN_NO), '(بلا)'),
+            NVL(TO_CHAR(i.G_CODE), '(بلا)')
+        HAVING SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)) <> 0
+        ORDER BY WASTE_VALUE DESC
+        """,
+        params,
+    )
+
+    branch_names = _branch_names()
+    group_names = {
+        str(g.get("code") or "").strip(): str(g.get("name") or "").strip()
+        for g in fetch_sales_group_options()
+        if str(g.get("code") or "").strip()
+    }
+    total_value = round(sum(float(r.get("WASTE_VALUE") or 0) for r in rows), 2)
+    total_qty = round(sum(float(r.get("QTY_TOTAL") or 0) for r in rows), 2)
+    out_rows: list[dict[str, Any]] = []
+    for row in rows:
+        branch = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
+        group = str(row.get("GROUP_CODE") or "").strip() or "(بلا)"
+        value = round(float(row.get("WASTE_VALUE") or 0), 2)
+        qty = round(float(row.get("QTY_TOTAL") or 0), 2)
+        share = (value / total_value * 100.0) if total_value else 0.0
+        out_rows.append(
+            {
+                "branch_code": branch,
+                "branch_name": branch_names.get(branch) or branch,
+                "group_code": group,
+                "group_name": group_names.get(group) or group,
+                "doc_count": int(row.get("DOC_COUNT") or 0),
+                "qty_total": qty,
+                "qty_display": _fmt_inv_qty(qty),
+                "waste_value": value,
+                "waste_value_display": _fmt_inv_money(value),
+                "share_pct": round(share, 1),
+                "share_display": f"{share:.1f}%",
+            }
+        )
+
+    by_group: dict[str, dict[str, Any]] = {}
+    for row in out_rows:
+        code = row["group_code"]
+        grouped = by_group.setdefault(
+            code,
+            {
+                "code": code,
+                "name": row["group_name"],
+                "waste_value": 0.0,
+                "qty_total": 0.0,
+                "doc_count": 0,
+                "branches": set(),
+            },
+        )
+        grouped["waste_value"] += row["waste_value"]
+        grouped["qty_total"] += row["qty_total"]
+        grouped["doc_count"] += row["doc_count"]
+        grouped["branches"].add(row["branch_code"])
+
+    top_group_raw = max(
+        by_group.values(),
+        key=lambda item: (item["waste_value"], item["qty_total"]),
+        default=None,
+    )
+    if top_group_raw:
+        top_value = round(float(top_group_raw["waste_value"]), 2)
+        top_qty = round(float(top_group_raw["qty_total"]), 2)
+        top_share = (top_value / total_value * 100.0) if total_value else 0.0
+        top_group = {
+            "code": top_group_raw["code"],
+            "name": top_group_raw["name"],
+            "waste_value": top_value,
+            "waste_value_display": _fmt_inv_money(top_value),
+            "qty_total": top_qty,
+            "qty_display": _fmt_inv_qty(top_qty),
+            "doc_count": top_group_raw["doc_count"],
+            "branch_count": len(top_group_raw["branches"]),
+            "share_pct": round(top_share, 1),
+            "share_display": f"{top_share:.1f}%",
+        }
+    else:
+        top_group = {
+            "code": "",
+            "name": "—",
+            "waste_value": 0.0,
+            "waste_value_display": "0.00",
+            "qty_total": 0.0,
+            "qty_display": "0",
+            "doc_count": 0,
+            "branch_count": 0,
+            "share_pct": 0.0,
+            "share_display": "0%",
+        }
+
+    result = {
+        "rows": out_rows[:15],
+        "count": len(out_rows),
+        "doc_count": sum(r["doc_count"] for r in out_rows),
+        "qty_total": total_qty,
+        "qty_display": _fmt_inv_qty(total_qty),
+        "waste_value": total_value,
+        "waste_value_display": _fmt_inv_money(total_value),
+        "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
+        "top_group": top_group,
+    }
+    _sales_cache_set(cache_key, result, ttl=300)
+    return result
+
+
 def _supplier_row(row: dict, *, source: str) -> dict:
     code = str(row.get("V_CODE") or "").strip()
     name = str(row.get("V_NAME") or row.get("V_A_NAME") or "").strip()
