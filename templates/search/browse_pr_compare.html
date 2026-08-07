@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="مقارنات طلب الشراء">
   <div class="dash-head-copy">
     <h2>مقارنات طلب الشراء</h2>
-    <p>اختر الفرع لعرض طلبات شراء اليوم، ثم افتح الطلب لمقارنة الكمية المطلوبة مع أرصدة المخازن المتوفرة فقط</p>
+    <p>حدد التاريخ والفرع والمقصد لعرض الطلبات، ثم افتح الطلب لمقارنة الكميات مع مخازن الفرع ذات الرصيد فقط</p>
   </div>
 </section>
 
@@ -19,70 +19,99 @@
   </div>
 {% endif %}
 
-<form method="get" action="{% url 'browse_pr_compare' %}" class="pr-compare-filter dash-panel-glass" role="search">
-  <div class="field">
-    <label for="pr-branch">الفرع</label>
-    <select id="pr-branch" name="branch" required onchange="this.form.warehouse.value=''; this.form.submit()">
-      <option value="">اختر الفرع</option>
-      {% for b in branches %}
-        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-      {% endfor %}
-    </select>
+<form method="get" action="{% url 'browse_pr_compare' %}" class="pr-compare-filter" role="search">
+  <div class="pr-compare-filter-grid">
+    <div class="field">
+      <label for="pr-date">التاريخ</label>
+      <input
+        id="pr-date"
+        type="date"
+        name="date"
+        value="{{ selected_date }}"
+        max="{{ today }}"
+        required
+      >
+    </div>
+    <div class="field">
+      <label for="pr-branch">الفرع</label>
+      <div class="pr-compare-select-wrap">
+        <select id="pr-branch" name="branch" required onchange="this.form.warehouse && (this.form.warehouse.value=''); this.form.submit()">
+          <option value="">اختر الفرع</option>
+          {% for b in branches %}
+            <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="pr-warehouse">المقصد</label>
+      <div class="pr-compare-select-wrap">
+        <select id="pr-warehouse" name="warehouse" {% if not selected_branch %}disabled{% endif %} onchange="this.form.submit()">
+          {% if not selected_branch %}
+            <option value="">اختر الفرع أولاً</option>
+          {% else %}
+            <option value="">كل المقاصد</option>
+            {% for w in warehouses %}
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
+            {% empty %}
+              <option value="">لا توجد مخازن لهذا الفرع</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+    </div>
+    <div class="field pr-compare-filter-actions">
+      <label class="sr-only" for="pr-compare-submit">عرض</label>
+      <button id="pr-compare-submit" type="submit" class="btn-primary pr-compare-submit">عرض الطلبات</button>
+    </div>
   </div>
-  <div class="field">
-    <label for="pr-warehouse">المخزن (اختياري)</label>
-    <select id="pr-warehouse" name="warehouse">
-      <option value="">كل المخازن ذات الرصيد</option>
-      {% for w in warehouses %}
-        <option value="{{ w.code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="pr-compare-filter-meta">
+    <span class="pr-compare-chip {% if is_today %}is-today{% endif %}">{{ period_label }}</span>
+    {% if selected_branch %}
+      <span class="pr-compare-chip-muted">{{ requests_today|length }} طلب</span>
+      <span class="pr-compare-chip-muted">{{ warehouses|length }} مخزن للفرع</span>
+    {% endif %}
+    {% if selected_warehouse_name %}
+      <span class="pr-compare-chip is-wh">المقصد: {{ selected_warehouse_name }}</span>
+    {% endif %}
   </div>
-  <div class="field pr-compare-filter-actions">
-    <label class="sr-only" for="pr-compare-submit">عرض</label>
-    <button id="pr-compare-submit" type="submit" class="sales-view-btn">عرض طلبات اليوم</button>
-  </div>
-  <p class="pr-compare-day mono">اليوم: {{ today }}</p>
 </form>
 
-<section class="dash-panel dash-panel-glass pr-compare-list-panel" aria-label="طلبات شراء اليوم">
+<section class="dash-panel dash-panel-glass pr-compare-list-panel" aria-label="طلبات الشراء">
   <div class="dash-panel-head">
-    <h3>طلبات شراء اليوم</h3>
+    <h3>طلبات الشراء — {{ period_label }}</h3>
     <span class="result-pill">{% if selected_branch %}{{ requests_today|length }}{% else %}—{% endif %}</span>
   </div>
 
   {% if not selected_branch %}
-    <p class="sales-empty">اختر الفرع أولاً لعرض طلبات شراء اليوم.</p>
+    <p class="sales-empty">اختر التاريخ والفرع لعرض الطلبات.</p>
   {% elif requests_today %}
-    <div class="table-wrap pr-compare-table-wrap">
-      <table class="data-table sales-table pr-compare-table">
+    <div class="table-wrap pr-compare-sheet-wrap">
+      <table class="pr-compare-sheet pr-compare-list-sheet">
         <thead>
           <tr>
-            <th>#</th>
-            <th>الطلب</th>
-            <th>الوقت</th>
-            <th>المستخدم</th>
-            <th>الأصناف</th>
-            <th>الكمية</th>
-            <th></th>
+            <th class="pr-compare-sheet-num">#</th>
+            <th class="pr-compare-list-col-req">رقم المستند</th>
+            <th class="pr-compare-list-col-when">التاريخ والوقت</th>
+            <th class="pr-compare-list-col-vendor">المورد</th>
+            <th class="pr-compare-list-col-user">المستخدم</th>
+            <th class="pr-compare-list-col-items">الأصناف</th>
+            <th class="pr-compare-list-col-action">إجراء</th>
           </tr>
         </thead>
         <tbody>
           {% for row in requests_today %}
             <tr>
-              <td class="mono">{{ forloop.counter }}</td>
-              <td class="pr-compare-req-id mono" title="{{ row.pr_type }}/{{ row.pr_no }}/{{ row.pr_ser }}">
-                {{ row.pr_ser }}
-                <small>#{{ row.pr_no }}</small>
-              </td>
-              <td class="mono">{{ row.date_label }}</td>
-              <td class="pr-compare-user" title="{{ row.user_name }} #{{ row.user_code }}">{{ row.user_name|default:row.user_code }}</td>
-              <td class="mono">{{ row.item_count }}</td>
-              <td class="mono pr-compare-qty">{{ row.qty_display }}</td>
-              <td>
+              <td class="pr-compare-sheet-num mono">{{ forloop.counter }}</td>
+              <td class="pr-compare-list-col-req mono" title="{{ row.pr_type }}/{{ row.pr_no }}/{{ row.pr_ser }}">{{ row.pr_no }}</td>
+              <td class="pr-compare-list-col-when mono">{{ row.date_label }}</td>
+              <td class="pr-compare-list-col-vendor" title="{{ row.vendor_name }} #{{ row.vendor_code }}">{{ row.vendor_name }}</td>
+              <td class="pr-compare-list-col-user" title="{{ row.user_name }} #{{ row.user_code }}">{{ row.user_name|default:row.user_code }}</td>
+              <td class="pr-compare-list-col-items mono">{{ row.item_count }}</td>
+              <td class="pr-compare-list-col-action">
                 <a
-                  class="sales-view-btn pr-compare-open"
-                  href="{% url 'browse_pr_compare_detail' %}?pr_type={{ row.pr_type|urlencode }}&amp;pr_no={{ row.pr_no|urlencode }}&amp;pr_ser={{ row.pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+                  class="pr-compare-sheet-link"
+                  href="{% url 'browse_pr_compare_detail' %}?pr_type={{ row.pr_type|urlencode }}&amp;pr_no={{ row.pr_no|urlencode }}&amp;pr_ser={{ row.pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date={{ selected_date|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
                 >مقارنة</a>
               </td>
             </tr>
@@ -91,7 +120,7 @@
       </table>
     </div>
   {% else %}
-    <p class="sales-empty">لا توجد طلبات شراء اليوم لهذا الفرع.</p>
+    <p class="sales-empty">لا توجد طلبات شراء في {{ period_label }} لهذا الفرع{% if selected_warehouse_name %} ومقصد {{ selected_warehouse_name }}{% endif %}.</p>
   {% endif %}
 </section>
 {% endblock %}

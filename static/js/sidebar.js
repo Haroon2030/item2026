@@ -85,4 +85,23 @@
   } else if (desktopMq.addListener) {
     desktopMq.addListener(onViewportChange);
   }
+
+  // أقسام فرعية في الشريط الجانبي
+  sidebar.querySelectorAll("[data-sidebar-group]").forEach(function (group) {
+    var toggle = group.querySelector(".sidebar-group-toggle");
+    if (!toggle) return;
+    toggle.addEventListener("click", function () {
+      // عند طي الشريط: افتح أول رابط فرعي بدلاً من الطي/الفتح
+      if (document.documentElement.classList.contains("sidebar-collapsed")) {
+        var first = group.querySelector(".sidebar-sublink");
+        if (first && first.href) {
+          window.location.href = first.href;
+        }
+        return;
+      }
+      var open = !group.classList.contains("is-open");
+      group.classList.toggle("is-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  });
 })();

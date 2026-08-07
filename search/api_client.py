@@ -636,7 +636,7 @@ def compare_item_across_warehouses(
     if not queried or not codes:
         return []
 
-    cache_key = f"item:compare:v9:{queried}:{','.join(codes)}"
+    cache_key = f"item:compare:v13:{queried}:{','.join(codes)}"
     cached = cache.get(cache_key)
     if isinstance(cached, list) and cached:
         return cached
@@ -664,6 +664,14 @@ def compare_item_across_warehouses(
         price_num = _to_float(row.get('price'))
         buy_num = _to_float(row.get('last_buy'))
         qty_num = _to_float(row.get('quantity'))
+        pending_num = _to_float(row.get('pending_qty')) or 0.0
+        expected_num = _to_float(row.get('expected_qty'))
+        if expected_num is None and qty_num is not None:
+            expected_num = round(qty_num - pending_num, 4)
+        elif expected_num is None and pending_num:
+            expected_num = round(0.0 - pending_num, 4)
+            if qty_num is None:
+                qty_num = 0.0
         price = _fmt_cost(price_num) if price_num is not None else (
             str(row.get('price') or '').strip()
         )
@@ -676,6 +684,8 @@ def compare_item_across_warehouses(
             quantity = _fmt_qty(qty_num)
         elif str(row.get('quantity') or '').strip():
             quantity = str(row.get('quantity')).strip()
+        expected = _fmt_qty(expected_num) if expected_num is not None else ''
+        pending = _fmt_qty(pending_num) if pending_num else ''
 
         unit = str(row.get('unit') or '').strip()
         out.append(
@@ -689,9 +699,28 @@ def compare_item_across_warehouses(
                 'last_buy_date': str(row.get('last_buy_date') or ''),
                 'avg_cost': avg_cost,
                 'quantity': quantity,
-                'ok': bool(price or avg_cost or quantity or last_buy or unit),
+                'pending_qty': pending,
+                'expected_qty': expected,
+                'expected_neg': False,
+                'expected_low': bool(
+                    expected_num is not None
+                    and qty_num is not None
+                    and expected_num < qty_num
+                ),
+                'ok': bool(
+                    price or avg_cost or quantity or expected or last_buy or unit
+                ),
             }
         )
+
+    # المخازن ذات الرصيد/المتوقع أولاً حتى لا يظهر صف فارغ في الأعلى
+    out.sort(
+        key=lambda r: (
+            0 if (r.get('quantity') or r.get('expected_qty')) else 1,
+            -(_to_float(r.get('quantity')) or 0),
+            str(r.get('name') or ''),
+        )
+    )
 
     try:
         cache.set(cache_key, out, int(cfg.get('COMPARE_CACHE_TTL', 90) or 90))

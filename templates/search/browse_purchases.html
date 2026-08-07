@@ -151,7 +151,7 @@
       </div>
     </section>
 
-    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="المشتريات حسب المجموعات">
+    <section class="dash-panel dash-panel-glass purchase-panel purchase-groups-panel" aria-label="المشتريات حسب المجموعات">
       <div class="dash-panel-head">
         <h3>المشتريات حسب المجموعات</h3>
         <span class="result-pill">{{ dashboard.by_group|length }}</span>
@@ -166,7 +166,7 @@
                 <td class="purchase-name" title="{{ row.name }}">{{ row.name }}</td>
                 <td class="mono">{{ row.item_count }}</td>
                 <td class="mono purchase-qty">{{ row.qty_display }}</td>
-                <td class="mono purchase-amount">{% money row.amount_display %}</td>
+                <td class="mono purchase-amount purchase-amount-red">{% money row.amount_display %}</td>
               </tr>
             {% empty %}
               <tr><td colspan="5" class="sales-empty">لا توجد مجموعات خلال الفترة.</td></tr>

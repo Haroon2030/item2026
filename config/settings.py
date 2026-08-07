@@ -158,6 +158,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+# كاش ملفات دائم للمبيعات/الفترات الطويلة (أطول عمراً من LocMem)
+_CACHE_DIR = BASE_DIR / '.cache' / 'django'
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': str(_CACHE_DIR),
+        'TIMEOUT': 300,
+        'OPTIONS': {'MAX_ENTRIES': 2000},
+    }
+}
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',

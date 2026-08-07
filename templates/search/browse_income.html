@@ -342,46 +342,57 @@
         </form>
         <span class="result-pill">{{ statement.top_accounts|length }}</span>
       </div>
-      <div class="table-wrap income-analyst-scroll">
-        <table class="data-table sales-table income-analyst-table income-top-table" aria-label="أعلى المصروفات">
-          <colgroup>
-            <col class="income-top-col-name">
-            <col class="income-top-col-num">
-            <col class="income-top-col-num">
-          </colgroup>
-          <thead>
-            <tr>
-              <th>الحساب</th>
-              <th>الصافي</th>
-              <th>الأثر</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in statement.top_accounts %}
-              <tr class="is-{{ row.net_kind }}">
-                <td class="income-top-name" title="{{ row.account_code }} — {{ row.account_name }}">{{ row.account_name }}</td>
-                <td class="mono income-top-net">{{ row.net_display }}</td>
-                <td class="income-top-impact-cell">
-                  <div class="income-top-impact">
-                    <span class="mono">{{ row.impact_display }}</span>
-                    <span class="income-top-bar" style="--bar-pct: {{ row.bar_pct }}%" aria-hidden="true"></span>
-                  </div>
-                </td>
+      <div class="income-top-shell">
+        <div class="table-wrap income-analyst-scroll income-top-scroll">
+          <table class="data-table sales-table income-analyst-table income-top-table" aria-label="أعلى المصروفات">
+            <colgroup>
+              <col class="income-top-col-name">
+              <col class="income-top-col-num">
+              <col class="income-top-col-num">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>الحساب</th>
+                <th>الصافي</th>
+                <th>الأثر</th>
               </tr>
-            {% empty %}
-              <tr><td colspan="3">لا مصروفات ضمن الفلتر</td></tr>
-            {% endfor %}
-          </tbody>
-          {% if statement.top_accounts %}
-            <tfoot>
-              <tr class="income-top-total">
-                <td>الإجمالي ({{ statement.top_accounts_totals.count }})</td>
-                <td class="mono income-top-net">{{ statement.top_accounts_totals.net_display }}</td>
-                <td class="mono">{{ statement.top_accounts_totals.impact_display }}</td>
-              </tr>
-            </tfoot>
-          {% endif %}
-        </table>
+            </thead>
+            <tbody>
+              {% for row in statement.top_accounts %}
+                <tr class="is-{{ row.net_kind }}">
+                  <td class="income-top-name" title="{{ row.account_code }} — {{ row.account_name }}">{{ row.account_name }}</td>
+                  <td class="mono income-top-net">{{ row.net_display }}</td>
+                  <td class="income-top-impact-cell">
+                    <div class="income-top-impact">
+                      <span class="mono">{{ row.impact_display }}</span>
+                      <span class="income-top-bar" style="--bar-pct: {{ row.bar_pct }}%" aria-hidden="true"></span>
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3">لا مصروفات ضمن الفلتر</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if statement.top_accounts %}
+          <div class="income-top-foot" aria-label="إجمالي أعلى المصروفات">
+            <table class="data-table sales-table income-analyst-table income-top-table income-top-foot-table">
+              <colgroup>
+                <col class="income-top-col-name">
+                <col class="income-top-col-num">
+                <col class="income-top-col-num">
+              </colgroup>
+              <tbody>
+                <tr class="income-top-total">
+                  <td>الإجمالي ({{ statement.top_accounts_totals.count }})</td>
+                  <td class="mono income-top-net">{{ statement.top_accounts_totals.net_display }}</td>
+                  <td class="mono">{{ statement.top_accounts_totals.impact_display }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
       </div>
     </section>
   </section>

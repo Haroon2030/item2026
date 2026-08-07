@@ -47,6 +47,91 @@ def _table_totals(rows: list[dict]) -> dict[str, Any]:
     }
 
 
+def _rank_group_sales(
+    by_group: list[dict],
+    sales_rows: list[dict],
+    *,
+    period_label: str,
+) -> tuple[list[dict], str, dict[str, float]]:
+    """يربط صفوف مبيعات المجموعات برصيد المخزون ويرتّب الأعلى مبيعاً."""
+    stock_map = {
+        str(r.get("code") or "").strip(): r
+        for r in by_group
+        if str(r.get("code") or "").strip()
+    }
+
+    sales_by_code: dict[str, dict[str, float]] = {}
+    name_map: dict[str, str] = {}
+    for row in sales_rows:
+        code = str(row.get("group_code") or "").strip() or "(بلا)"
+        bucket = sales_by_code.setdefault(code, {"sales_total": 0.0, "qty_total": 0.0})
+        bucket["sales_total"] = round(
+            bucket["sales_total"] + float(row.get("sales_total") or 0),
+            2,
+        )
+        bucket["qty_total"] = round(
+            bucket["qty_total"] + float(row.get("qty_total") or 0),
+            2,
+        )
+        name = str(row.get("group_name") or "").strip()
+        if name:
+            name_map[code] = name
+
+    total_sales = round(
+        sum(float(v.get("sales_total") or 0) for v in sales_by_code.values()),
+        2,
+    )
+    ranked: list[dict] = []
+    for code, totals in sales_by_code.items():
+        sales = round(float(totals.get("sales_total") or 0), 2)
+        qty = round(float(totals.get("qty_total") or 0), 2)
+        if sales <= 0 and qty <= 0:
+            continue
+        stock = stock_map.get(code) or {}
+        stock_val = float(stock.get("stock_value") or 0)
+        stock_qty = float(stock.get("qty_total") or 0)
+        turnover = (sales / stock_val) if stock_val > 0 else None
+        sales_share = (sales / total_sales * 100.0) if total_sales else 0.0
+        ranked.append(
+            {
+                "code": code,
+                "name": name_map.get(code) or str(stock.get("name") or code),
+                "sales_total": sales,
+                "sales_display": _money(sales),
+                "qty_total": qty,
+                "qty_display": _qty(qty),
+                "stock_value": stock_val,
+                "stock_value_display": _money(stock_val) if stock_val else "—",
+                "stock_qty": stock_qty,
+                "stock_qty_display": _qty(stock_qty) if stock_qty else "—",
+                "turnover": round(turnover, 2) if turnover is not None else None,
+                "turnover_display": (
+                    f"دوران {turnover:.2f}×" if turnover is not None else "بدون رصيد"
+                ),
+                "share_pct": round(sales_share, 1),
+                "share_display": f"{sales_share:.1f}%",
+                "bar_pct": 0.0,
+            }
+        )
+
+    ranked.sort(
+        key=lambda r: (
+            -float(r["sales_total"] or 0),
+            -float(r["qty_total"] or 0),
+            -(float(r["turnover"]) if r.get("turnover") is not None else -1.0),
+            str(r["name"] or ""),
+            str(r["code"] or ""),
+        )
+    )
+    peak = float(ranked[0]["sales_total"]) if ranked else 0.0
+    for row in ranked:
+        bar = (float(row["sales_total"]) / peak * 100.0) if peak else 0.0
+        row["bar_pct"] = round(bar, 1)
+    return ranked[:10], period_label, {
+        code: float(v.get("sales_total") or 0) for code, v in sales_by_code.items()
+    }
+
+
 def _build_group_sales_activity(
     by_group: list[dict],
     *,
@@ -54,7 +139,7 @@ def _build_group_sales_activity(
     group_code: str = "",
     branch_code: str = "",
 ) -> tuple[list[dict], str, dict[str, float]]:
-    """ترتيب المجموعات حسب دوران المخزون في المبيعات (آخر 7 أيام / نقاط البيع)."""
+    """ترتيب المجموعات من الأكبر مبيعات (مبلغ ثم كمية) مع دوران ومبلغ المخزون."""
     from datetime import date, timedelta
 
     from .oracle_stock import fetch_group_sales_totals
@@ -82,101 +167,42 @@ def _build_group_sales_activity(
         group_code=gcode,
         by_branch=False,
     )
-    stock_map = {
-        str(r.get("code") or "").strip(): r
-        for r in by_group
-        if str(r.get("code") or "").strip()
-    }
-
-    sales_by_code: dict[str, float] = {}
-    for row in sales_rows:
-        code = str(row.get("group_code") or "").strip() or "(بلا)"
-        sales_by_code[code] = round(
-            sales_by_code.get(code, 0.0) + float(row.get("sales_total") or 0),
-            2,
-        )
-
-    total_sales = round(sum(sales_by_code.values()), 2)
-    ranked: list[dict] = []
-    for row in sales_rows:
-        code = str(row.get("group_code") or "").strip() or "(بلا)"
-        sales = round(float(row.get("sales_total") or 0), 2)
-        if sales <= 0:
-            continue
-        stock = stock_map.get(code) or {}
-        stock_val = float(stock.get("stock_value") or 0)
-        turnover = (sales / stock_val) if stock_val > 0 else None
-        sales_share = (sales / total_sales * 100.0) if total_sales else 0.0
-        ranked.append(
-            {
-                "code": code,
-                "name": str(row.get("group_name") or stock.get("name") or code),
-                "sales_total": sales,
-                "sales_display": _money(sales),
-                "stock_value": stock_val,
-                "stock_value_display": _money(stock_val) if stock_val else "—",
-                "turnover": round(turnover, 2) if turnover is not None else None,
-                "turnover_display": (
-                    f"دوران {turnover:.2f}×" if turnover is not None else "بدون رصيد"
-                ),
-                "share_pct": round(sales_share, 1),
-                "share_display": f"{sales_share:.1f}%",
-                "bar_pct": 0.0,
-            }
-        )
-
-    ranked.sort(key=lambda r: (-r["sales_total"], r["name"], r["code"]))
-    peak = float(ranked[0]["sales_total"]) if ranked else 0.0
-    for row in ranked:
-        bar = (row["sales_total"] / peak * 100.0) if peak else 0.0
-        row["bar_pct"] = round(bar, 1)
-    return ranked[:12], period_label, sales_by_code
+    return _rank_group_sales(by_group, sales_rows, period_label=period_label)
 
 
-def _build_stagnant_groups(
-    by_group: list[dict],
-    sales_by_code: dict[str, float],
+def _build_stagnant_items(
+    rows: list[dict],
     *,
+    total_stock_qty: float,
     total_stock_value: float,
 ) -> dict[str, Any]:
-    """مجموعات لها رصيد ولا حركة مبيعات في الفترة — للرسم الدائري."""
-    stagnant: list[dict] = []
-    for row in by_group:
-        code = str(row.get("code") or "").strip()
-        if not code:
-            continue
-        stock_val = float(row.get("stock_value") or 0)
-        if stock_val <= 0:
-            continue
-        sales = float(sales_by_code.get(code) or 0)
-        if sales > 0:
-            continue
-        stagnant.append(
-            {
-                "code": code,
-                "name": str(row.get("name") or code),
-                "stock_value": stock_val,
-                "stock_value_display": _money(stock_val),
-                "qty_display": str(row.get("qty_display") or "0"),
-                "item_count_display": str(row.get("item_count_display") or "0"),
-            }
-        )
-    stagnant.sort(key=lambda r: (-r["stock_value"], r["name"], r["code"]))
-    stagnant_total = round(sum(r["stock_value"] for r in stagnant), 2)
+    """أصناف بأعلى كمية وأقل حركة — للرسم الدائري."""
+    stagnant = list(rows or [])
+    stagnant_qty = round(sum(float(r.get("qty_total") or 0) for r in stagnant), 2)
+    stagnant_value = round(sum(float(r.get("stock_value") or 0) for r in stagnant), 2)
     for row in stagnant:
-        share = (row["stock_value"] / stagnant_total * 100.0) if stagnant_total else 0.0
-        row["share_pct"] = round(share, 1)
-        row["share_display"] = f"{share:.1f}%"
+        # تأكد من حقول الدونات
+        if "qty_display" not in row:
+            row["qty_display"] = _qty(row.get("qty_total") or 0)
+        if "stock_value_display" not in row:
+            row["stock_value_display"] = _money(row.get("stock_value") or 0)
     of_all = (
-        (stagnant_total / total_stock_value * 100.0) if total_stock_value > 0 else 0.0
+        (stagnant_qty / total_stock_qty * 100.0) if total_stock_qty > 0 else 0.0
+    )
+    of_value = (
+        (stagnant_value / total_stock_value * 100.0) if total_stock_value > 0 else 0.0
     )
     return {
         "rows": stagnant[:15],
         "count": len(stagnant),
-        "stock_value": stagnant_total,
-        "stock_value_display": _money(stagnant_total),
+        "qty_total": stagnant_qty,
+        "qty_display": _qty(stagnant_qty),
+        "stock_value": stagnant_value,
+        "stock_value_display": _money(stagnant_value),
         "of_total_pct": round(of_all, 1),
         "of_total_display": f"{of_all:.1f}%",
+        "of_value_pct": round(of_value, 1),
+        "of_value_display": f"{of_value:.1f}%",
     }
 
 
@@ -186,35 +212,108 @@ def build_inventory_insights(
     group_code: str = "",
     branch_code: str = "",
 ) -> dict[str, Any]:
-    """يبني لوحة تحليل مخزون من أوراكل (قيمة بالتكلفة × الكمية المتاحة)."""
-    from datetime import date
+    """يبني لوحة تحليل مخزون من أوراكل (قيمة بعد خصم مبيعات POS غير المرحلة)."""
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import date, timedelta
 
     from .oracle_stock import (
         fetch_inventory_by_branch,
         fetch_inventory_by_group,
         fetch_inventory_by_warehouse,
         fetch_inventory_wastage,
+        fetch_stagnant_items,
+        oracle_session,
     )
 
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
+    activity_to = date.today()
+    activity_from_sales = activity_to - timedelta(days=6)
+    activity_from_ytd = activity_to.replace(month=1, day=1)
 
-    by_warehouse = fetch_inventory_by_warehouse(
-        warehouse=wh, group_code=gcode, branch_code=brn
-    )
-    by_group = fetch_inventory_by_group(
-        warehouse=wh, group_code=gcode, branch_code=brn
-    )
-    by_branch = fetch_inventory_by_branch(
-        warehouse=wh, group_code=gcode, branch_code=brn
+    def _by_wh():
+        with oracle_session():
+            return fetch_inventory_by_warehouse(
+                warehouse=wh, group_code=gcode, branch_code=brn
+            )
+
+    def _by_group():
+        with oracle_session():
+            return fetch_inventory_by_group(
+                warehouse=wh, group_code=gcode, branch_code=brn
+            )
+
+    def _by_brn():
+        with oracle_session():
+            return fetch_inventory_by_branch(
+                warehouse=wh, group_code=gcode, branch_code=brn
+            )
+
+    def _sales_raw():
+        with oracle_session():
+            from .oracle_stock import fetch_group_sales_totals, fetch_warehouse_options
+
+            sales_brn = brn
+            if wh and not sales_brn:
+                for w in fetch_warehouse_options(active_only=True):
+                    if str(w.get("code") or "") == wh:
+                        sales_brn = str(w.get("branch_code") or "").strip()
+                        break
+            return fetch_group_sales_totals(
+                activity_from_sales,
+                activity_to,
+                system="pos",
+                branch_code=sales_brn,
+                group_code=gcode,
+                by_branch=False,
+            )
+
+    def _stagnant():
+        with oracle_session():
+            return fetch_stagnant_items(
+                activity_from_sales,
+                activity_to,
+                warehouse=wh,
+                group_code=gcode,
+                branch_code=brn,
+                limit=15,
+            )
+
+    def _wastage():
+        with oracle_session():
+            return fetch_inventory_wastage(
+                activity_from_ytd,
+                activity_to,
+                warehouse=wh,
+                group_code=gcode,
+                branch_code=brn,
+            )
+
+    # موجة واحدة: كل الاستعلامات الثقيلة بالتوازي (جلسات مستقلة)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        f_wh = pool.submit(_by_wh)
+        f_group = pool.submit(_by_group)
+        f_brn = pool.submit(_by_brn)
+        f_sales = pool.submit(_sales_raw)
+        f_stagnant = pool.submit(_stagnant)
+        f_wastage = pool.submit(_wastage)
+        by_warehouse = f_wh.result()
+        by_group = f_group.result()
+        by_branch = f_brn.result()
+        sales_rows = f_sales.result()
+        stagnant_rows = f_stagnant.result()
+        wastage = f_wastage.result()
+
+    group_sales_rank, sales_period_label, sales_by_code = _rank_group_sales(
+        by_group,
+        sales_rows,
+        period_label=f"{activity_from_sales.isoformat()} → {activity_to.isoformat()}",
     )
 
     total_value = round(sum(float(r.get("stock_value") or 0) for r in by_warehouse), 2)
     total_qty = round(sum(float(r.get("qty_total") or 0) for r in by_warehouse), 2)
     total_rows = sum(int(r.get("row_count") or 0) for r in by_warehouse)
-    # أصناف مميزة عبر المجموعات أدق عند فلتر مخزن واحد؛ عند الكل قد يتكرر الصنف
-    # لذلك نعرض مجموع صفوف المخزون وعدد المخازن والمجموعات كمؤشرات منفصلة
     warehouse_count = len(by_warehouse)
     group_count = len(by_group)
     branch_count = len(by_branch)
@@ -223,32 +322,15 @@ def build_inventory_insights(
     warehouse_totals = _table_totals(by_warehouse)
     group_totals = _table_totals(by_group)
     branch_totals = _table_totals(by_branch)
-    # عدد المخازن في تذييل المجموعات = المخازن الفريدة ضمن الفلتر (لا مجموع الحصص)
     group_totals["warehouse_count"] = warehouse_count
     group_totals["warehouse_count_display"] = f"{warehouse_count:,}"
     branch_totals["warehouse_count"] = warehouse_count
     branch_totals["warehouse_count_display"] = f"{warehouse_count:,}"
 
-    group_sales_rank, sales_period_label, sales_by_code = _build_group_sales_activity(
-        by_group,
-        warehouse=wh,
-        group_code=gcode,
-        branch_code=brn,
-    )
-    stagnant = _build_stagnant_groups(
-        by_group,
-        sales_by_code,
+    stagnant = _build_stagnant_items(
+        stagnant_rows,
+        total_stock_qty=total_qty,
         total_stock_value=total_value,
-    )
-    activity_to = date.today()
-    # التوالف من بداية السنة حتى اليوم (ليست آخر 7 أيام)
-    activity_from = activity_to.replace(month=1, day=1)
-    wastage = fetch_inventory_wastage(
-        activity_from,
-        activity_to,
-        warehouse=wh,
-        group_code=gcode,
-        branch_code=brn,
     )
 
     top_wh = by_warehouse[0] if by_warehouse else None
@@ -310,17 +392,17 @@ def build_inventory_insights(
         alerts.append(
             {
                 "severity": "warn",
-                "title": "مخزون راكد بلا حركة مبيعات",
+                "title": "أصناف راكدة بكمية عالية",
                 "detail": (
-                    f"{stagnant['count']} مجموعة بقيمة {stagnant['stock_value_display']} "
-                    f"({stagnant['of_total_display']} من المخزون) بلا مبيعات خلال آخر 7 أيام."
+                    f"{stagnant['count']} صنفاً بكمية {stagnant['qty_display']} "
+                    f"({stagnant['of_total_display']} من الكمية) بلا مبيعات خلال آخر 7 أيام."
                 ),
             }
         )
         actions.append(
             {
                 "severity": "warn",
-                "text": "راجع المجموعات الراكدة: عروض، نقل مخزون، أو إعادة تسعير لتقليل الركود.",
+                "text": "راجع الأصناف الأعلى كمية والأقل حركة: عروض، نقل مخزون، أو إعادة تسعير.",
                 "from_alert": "مخزون راكد",
             }
         )

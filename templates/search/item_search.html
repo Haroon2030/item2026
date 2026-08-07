@@ -221,6 +221,7 @@
                     <th>آخر توريد</th>
                     <th>التكلفة</th>
                     <th>الكمية</th>
+                    <th>بعد الترحيل</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -233,11 +234,15 @@
                       <td class="mono price-cell">{{ row.price|default:"—" }}</td>
                       <td class="mono buy-cell" {% if row.last_buy_date %}title="تاريخ آخر فاتورة: {{ row.last_buy_date }}"{% endif %}>{{ row.last_buy|default:"—" }}</td>
                       <td class="mono cost-cell">{{ row.avg_cost|default:"—" }}</td>
-                      <td class="mono qty-cell">{{ row.quantity|default:"—" }}</td>
+                      <td class="mono qty-cell" {% if row.pending_qty %}title="غير مرحّل: {{ row.pending_qty }}"{% endif %}>{{ row.quantity|default:"—" }}</td>
+                      <td
+                        class="mono qty-cell expected-qty-cell{% if row.expected_neg %} is-neg{% elif row.expected_low %} is-low{% endif %}"
+                        {% if row.pending_qty %}title="رصيد حالي: {{ row.quantity|default:'—' }} — غير مرحّل: {{ row.pending_qty }} — بعد الترحيل"{% else %}title="الرصيد بعد ترحيل مبيعات نقاط البيع غير المرحلة"{% endif %}
+                      >{% if row.expected_qty != '' and row.expected_qty is not None %}{{ row.expected_qty }}{% else %}—{% endif %}</td>
                     </tr>
                   {% empty %}
                     <tr>
-                      <td colspan="6">تعذّر جلب مقارنة المخازن حالياً — أعد المحاولة بعد قليل.</td>
+                      <td colspan="7">تعذّر جلب مقارنة المخازن حالياً — أعد المحاولة بعد قليل.</td>
                     </tr>
                   {% endfor %}
                 </tbody>

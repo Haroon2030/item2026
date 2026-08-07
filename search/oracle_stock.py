@@ -3,6 +3,7 @@
 
 الجداول المستخدمة (قراءة):
 - IAS_ITM_WCODE   : الكمية/التكلفة حسب المخزن
+- المبيعات غير المرحلة (BILL_POST/POSTED=0) لحساب الرصيد المتوقع
 - IAS_ITM_MST     : اسم الصنف والمجموعة وحالة Inactive
 - IAS_ITM_DTL     : وحدات الصنف والعبوة والوحدة الرئيسية
 - IAS_ITEM_PRICE  : أسعار البيع حسب المخزن/الوحدة
@@ -400,17 +401,27 @@ def _date_span_days(date_from, date_to) -> int:
     return (_as_date(date_to) - _as_date(date_from)).days + 1
 
 
+# فترات ≥14 يوم: تأجيل لوحات ثقيلة في الواجهة فقط — الأرقام دائماً صافي بعد المرتجعات
+_LONG_RANGE_MIN_DAYS = 14
+
+
 def _use_fast_sales(date_from, date_to) -> bool:
-    """وضع التسريع معطّل دائماً — صحة الأرقام (خصم المرتجع) أولاً."""
+    """سابقاً: تخطّي مرتجعات. أُلغي — المالك يحتاج أرقاماً صافية دائماً."""
     return False
 
 
 def sales_fast_mode(date_from, date_to) -> bool:
-    return _use_fast_sales(date_from, date_to)
+    """لا يتخطى المرتجعات؛ للتوافق فقط (دائماً False)."""
+    return False
+
+
+def sales_long_range(date_from, date_to) -> bool:
+    """فترة طويلة → تحميل تصاعدي/مؤجّل في الواجهة مع الإبقاء على خصم المرتجعات."""
+    return _date_span_days(date_from, date_to) >= _LONG_RANGE_MIN_DAYS
 
 
 def _skip_mst_returns(date_from, date_to) -> bool:
-    """لا يُتخطى خصم المرتجعات — الأرقام دائماً بعد المرتجع."""
+    """لا يُتخطى خصم مرتجعات رأس الفاتورة أبداً."""
     return False
 
 
@@ -421,17 +432,75 @@ def _date_params(date_from, date_to) -> dict[str, date]:
     return {"d_from": d_from, "d_to_excl": d_to_excl}
 
 
+def _bind_brn(branch_code: str):
+    """يربط رقم الفرع كرقم إن أمكن — أفضل لاستخدام فهرس BRN_NO."""
+    s = str(branch_code or "").strip()
+    if not s:
+        return s
+    if s.isdigit():
+        try:
+            return int(s)
+        except ValueError:
+            return s
+    return s
+
+
+def _bind_gcode(group_code: str):
+    s = str(group_code or "").strip()
+    if not s:
+        return s
+    if s.isdigit():
+        try:
+            return int(s)
+        except ValueError:
+            return s
+    return s
+
+
 def _sales_cache_ttl(date_from=None, date_to=None) -> int:
     if date_from is None or date_to is None:
         return _SALES_CACHE_TTL
     days = _date_span_days(date_from, date_to)
     if days >= 180:
-        return 1800
+        return 6 * 3600
     if days >= 90:
-        return 1200
+        return 3 * 3600
     if days >= 31:
-        return 600
+        return 1800
+    if days >= 14:
+        return 900
     return _SALES_CACHE_TTL
+
+
+def _hung_ok(alias: str = "p") -> str:
+    """شرط مبيعات غير معلّقة — يفضّل الفهارس على NVL(col,0)."""
+    return f"({alias}.HUNG IS NULL OR {alias}.HUNG = 0)"
+
+
+def _pos_mst_ok(alias: str = "p") -> str:
+    """POS رأس فاتورة: غير معلّق + مبلغ منطقي (يستبعد بيانات تالفة)."""
+    return f"{_hung_ok(alias)} AND {_bill_amt_ok(alias, 'BILL_AMT')}"
+
+
+def _cncl_ok(alias: str = "b") -> str:
+    return f"({alias}.CNCL_FLG IS NULL OR {alias}.CNCL_FLG = 0)"
+
+
+# سقف منطقي لفاتورة واحدة — يستبعد بيانات تالفة (وُجدت فاتورة بـ ~18 تريليون)
+_MAX_SANE_BILL_AMT = 5_000_000.0
+
+
+def _bill_amt_ok(alias: str = "b", column: str = "BILL_AMT") -> str:
+    """يستبعد فواتير بمبالغ غير منطقية تفسد الإجماليات."""
+    return f"ABS(NVL({alias}.{column}, 0)) <= {_MAX_SANE_BILL_AMT}"
+
+
+def _bill_mst_ok(alias: str = "b") -> str:
+    return f"{_cncl_ok(alias)} AND {_bill_amt_ok(alias, 'BILL_AMT')}"
+
+
+def _rt_bill_mst_ok(alias: str = "r", amount_col: str = "BILL_AMT") -> str:
+    return f"{_cncl_ok(alias)} AND {_bill_amt_ok(alias, amount_col)}"
 
 
 def _django_lookup_get(key: str):
@@ -500,6 +569,11 @@ def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
         owned = True
     try:
         cur = conn.cursor()
+        # دفعات أكبر تقلّل round-trips لنتائج التجميع الكبيرة
+        try:
+            cur.arraysize = 2000
+        except Exception:
+            pass
         cur.execute(safe_sql, params or {})
         cols = [d[0].upper() for d in (cur.description or [])]
         rows = []
@@ -654,6 +728,55 @@ def fetch_warehouse_options(*, active_only: bool = True) -> list[dict]:
     return _django_lookup_set(cache_key, out)
 
 
+def _pending_pos_net_sql() -> str:
+    """جدول فرعي: صافي كمية POS غير المرحلة لكل صنف×مخزن (بوحدة المخزون)."""
+    pos = _pos_owner()
+    days = int(_PENDING_SALES_LOOKBACK_DAYS)
+    qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+    return f"""
+    (
+      SELECT I_CODE, W_CODE, ROUND(SUM(QTY), 4) AS QTY
+      FROM (
+        SELECT TO_CHAR(d.I_CODE) AS I_CODE,
+               TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
+               SUM({qty}) AS QTY
+        FROM {pos}.IAS_POS_BILL_DTL d
+        JOIN {pos}.IAS_POS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+         AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+        WHERE NVL(m.POSTED, 0) = 0
+          AND NVL(m.HUNG, 0) = 0
+          AND m.BILL_DATE >= TRUNC(SYSDATE) - {days}
+          AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+        UNION ALL
+        SELECT TO_CHAR(d.I_CODE) AS I_CODE,
+               TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
+               -SUM({qty}) AS QTY
+        FROM {pos}.IAS_POS_RT_BILL_DTL d
+        JOIN {pos}.IAS_POS_RT_BILL_MST m
+          ON m.RT_BILL_NO = d.RT_BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+        WHERE NVL(m.POSTED, 0) = 0
+          AND NVL(m.HUNG, 0) = 0
+          AND m.RT_BILL_DATE >= TRUNC(SYSDATE) - {days}
+          AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+      )
+      GROUP BY I_CODE, W_CODE
+    )
+    """
+
+
+def _inv_expected_qty_sql(alias_w: str = "w", alias_pend: str = "pend") -> str:
+    """كمية بعد خصم غير المرحّل: لا تقل عن صفر ولا تزيد عن الرصيد."""
+    return (
+        f"GREATEST(0, NVL({alias_w}.AVL_QTY, 0) - "
+        f"GREATEST(0, NVL({alias_pend}.QTY, 0)))"
+    )
+
+
 def _inventory_stock_filters(
     *,
     warehouse: str = "",
@@ -670,11 +793,11 @@ def _inventory_stock_filters(
         params["wh"] = wh
         filters.append("TO_CHAR(w.W_CODE) = :wh")
     if gcode:
-        params["gcode"] = gcode
-        filters.append("TO_CHAR(m.G_CODE) = :gcode")
+        params["gcode"] = _bind_gcode(gcode)
+        filters.append("m.G_CODE = :gcode")
     if brn:
-        params["brn"] = brn
-        filters.append("TO_CHAR(wh.CONN_BRN_NO) = :brn")
+        params["brn"] = _bind_brn(brn)
+        filters.append("wh.CONN_BRN_NO = :brn")
     return " AND ".join(filters), params
 
 
@@ -743,14 +866,14 @@ def fetch_inventory_by_warehouse(
     group_code: str = "",
     branch_code: str = "",
 ) -> list[dict]:
-    """إجماليات المخزون حسب المخزن — قيمة بالتكلفة × الكمية المتاحة."""
+    """إجماليات المخزون حسب المخزن — قيمة بعد خصم مبيعات POS غير المرحلة."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     schema = _schema()
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_wh:v1:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_wh:v3:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -758,6 +881,8 @@ def fetch_inventory_by_warehouse(
     where, params = _inventory_stock_filters(
         warehouse=wh, group_code=gcode, branch_code=brn
     )
+    qty_sql = _inv_expected_qty_sql()
+    pend_sql = _pending_pos_net_sql()
     rows = _fetch_all(
         f"""
         SELECT
@@ -766,17 +891,21 @@ def fetch_inventory_by_warehouse(
             TO_CHAR(MAX(wh.CONN_BRN_NO)) AS BRANCH_CODE,
             COUNT(*) AS ROW_COUNT,
             COUNT(DISTINCT w.I_CODE) AS ITEM_COUNT,
-            ROUND(SUM(NVL(w.AVL_QTY, 0)), 2) AS QTY_TOTAL,
+            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
             ROUND(
-              SUM(NVL(w.AVL_QTY, 0) * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
+              SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
               2
             ) AS STOCK_VALUE
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
           ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+        LEFT JOIN {pend_sql} pend
+          ON pend.I_CODE = TO_CHAR(w.I_CODE)
+         AND pend.W_CODE = TO_CHAR(w.W_CODE)
         WHERE {where}
         GROUP BY TO_CHAR(w.W_CODE)
+        HAVING ROUND(SUM({qty_sql}), 2) > 0
         """,
         params,
     )
@@ -794,7 +923,7 @@ def fetch_inventory_by_warehouse(
         brn_code = str(src.get("BRANCH_CODE") or "").strip()
         row["branch_code"] = brn_code
         row["branch_name"] = branch_names.get(brn_code) or brn_code or "—"
-    _sales_cache_set(cache_key, assembled, ttl=300)
+    _sales_cache_set(cache_key, assembled, ttl=600)
     return assembled
 
 
@@ -804,14 +933,14 @@ def fetch_inventory_by_group(
     group_code: str = "",
     branch_code: str = "",
 ) -> list[dict]:
-    """إجماليات المخزون حسب المجموعة."""
+    """إجماليات المخزون حسب المجموعة — بعد خصم مبيعات POS غير المرحلة."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     schema = _schema()
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_group:v1:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_group:v3:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -819,6 +948,8 @@ def fetch_inventory_by_group(
     where, params = _inventory_stock_filters(
         warehouse=wh, group_code=gcode, branch_code=brn
     )
+    qty_sql = _inv_expected_qty_sql()
+    pend_sql = _pending_pos_net_sql()
     rows = _fetch_all(
         f"""
         SELECT
@@ -826,17 +957,21 @@ def fetch_inventory_by_group(
             COUNT(*) AS ROW_COUNT,
             COUNT(DISTINCT w.I_CODE) AS ITEM_COUNT,
             COUNT(DISTINCT TO_CHAR(w.W_CODE)) AS WH_COUNT,
-            ROUND(SUM(NVL(w.AVL_QTY, 0)), 2) AS QTY_TOTAL,
+            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
             ROUND(
-              SUM(NVL(w.AVL_QTY, 0) * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
+              SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
               2
             ) AS STOCK_VALUE
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
           ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+        LEFT JOIN {pend_sql} pend
+          ON pend.I_CODE = TO_CHAR(w.I_CODE)
+         AND pend.W_CODE = TO_CHAR(w.W_CODE)
         WHERE {where}
         GROUP BY NVL(TO_CHAR(m.G_CODE), '(بلا)')
+        HAVING ROUND(SUM({qty_sql}), 2) > 0
         """,
         params,
     )
@@ -848,7 +983,7 @@ def fetch_inventory_by_group(
     assembled = _assemble_inventory_rows(
         rows, key_field="GROUP_CODE", name_lookup=group_names
     )
-    _sales_cache_set(cache_key, assembled, ttl=300)
+    _sales_cache_set(cache_key, assembled, ttl=600)
     return assembled
 
 
@@ -858,14 +993,14 @@ def fetch_inventory_by_branch(
     group_code: str = "",
     branch_code: str = "",
 ) -> list[dict]:
-    """إجماليات المخزون حسب الفرع عبر CONN_BRN_NO للمخزن."""
+    """إجماليات المخزون حسب الفرع — بعد خصم مبيعات POS غير المرحلة."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     schema = _schema()
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_brn:v1:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_brn:v3:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -873,6 +1008,8 @@ def fetch_inventory_by_branch(
     where, params = _inventory_stock_filters(
         warehouse=wh, group_code=gcode, branch_code=brn
     )
+    qty_sql = _inv_expected_qty_sql()
+    pend_sql = _pending_pos_net_sql()
     rows = _fetch_all(
         f"""
         SELECT
@@ -880,25 +1017,211 @@ def fetch_inventory_by_branch(
             COUNT(*) AS ROW_COUNT,
             COUNT(DISTINCT w.I_CODE) AS ITEM_COUNT,
             COUNT(DISTINCT TO_CHAR(w.W_CODE)) AS WH_COUNT,
-            ROUND(SUM(NVL(w.AVL_QTY, 0)), 2) AS QTY_TOTAL,
+            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
             ROUND(
-              SUM(NVL(w.AVL_QTY, 0) * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
+              SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
               2
             ) AS STOCK_VALUE
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
           ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+        LEFT JOIN {pend_sql} pend
+          ON pend.I_CODE = TO_CHAR(w.I_CODE)
+         AND pend.W_CODE = TO_CHAR(w.W_CODE)
         WHERE {where}
         GROUP BY NVL(TO_CHAR(wh.CONN_BRN_NO), '(بلا)')
+        HAVING ROUND(SUM({qty_sql}), 2) > 0
         """,
         params,
     )
     assembled = _assemble_inventory_rows(
         rows, key_field="BRANCH_CODE", name_lookup=_branch_names()
     )
-    _sales_cache_set(cache_key, assembled, ttl=300)
+    _sales_cache_set(cache_key, assembled, ttl=600)
     return assembled
+
+
+def fetch_stagnant_items(
+    date_from,
+    date_to,
+    *,
+    warehouse: str = "",
+    group_code: str = "",
+    branch_code: str = "",
+    limit: int = 15,
+) -> list[dict]:
+    """أصناف بأعلى كمية بعد الترحيل وأقل/بلا حركة مبيعات POS في الفترة."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+
+    schema = _schema()
+    pos = _pos_owner()
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    wh = str(warehouse or "").strip()
+    gcode = str(group_code or "").strip()
+    brn = str(branch_code or "").strip()
+    lim = max(1, min(int(limit or 15), 30))
+    cache_key = (
+        f"inv:stagnant_items:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"{wh}:{gcode}:{brn}:{lim}"
+    )
+    cached = _sales_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    where, params = _inventory_stock_filters(
+        warehouse=wh, group_code=gcode, branch_code=brn
+    )
+    qty_sql = _inv_expected_qty_sql()
+    pend_sql = _pending_pos_net_sql()
+    # مرشحون: أعلى كمية أولاً ثم نستبعد من لهم مبيعات
+    candidate_lim = max(lim * 12, 120)
+    stock_rows = _fetch_all(
+        f"""
+        SELECT * FROM (
+          SELECT
+              TO_CHAR(w.I_CODE) AS ITEM_CODE,
+              MAX(NVL(m.I_NAME, TO_CHAR(w.I_CODE))) AS ITEM_NAME,
+              ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
+              ROUND(
+                SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
+                2
+              ) AS STOCK_VALUE
+          FROM {schema}.IAS_ITM_WCODE w
+          JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
+          LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
+            ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+          LEFT JOIN {pend_sql} pend
+            ON pend.I_CODE = TO_CHAR(w.I_CODE)
+           AND pend.W_CODE = TO_CHAR(w.W_CODE)
+          WHERE {where}
+          GROUP BY TO_CHAR(w.I_CODE)
+          HAVING ROUND(SUM({qty_sql}), 2) > 0
+          ORDER BY QTY_TOTAL DESC, STOCK_VALUE DESC
+        ) WHERE ROWNUM <= :cand_lim
+        """,
+        {**params, "cand_lim": candidate_lim},
+    )
+    if not stock_rows:
+        _sales_cache_set(cache_key, [], ttl=600)
+        return []
+
+    item_codes = [
+        str(r.get("ITEM_CODE") or "").strip()
+        for r in stock_rows
+        if str(r.get("ITEM_CODE") or "").strip()
+    ]
+    sales_params: dict[str, Any] = {
+        "d_from": d_from,
+        "d_to_excl": d_to + timedelta(days=1),
+    }
+    sales_filters = [
+        "m.BILL_DATE >= :d_from",
+        "m.BILL_DATE < :d_to_excl",
+        "NVL(m.HUNG, 0) = 0",
+        "d.I_CODE IS NOT NULL",
+    ]
+    ret_filters = [
+        "m.RT_BILL_DATE >= :d_from",
+        "m.RT_BILL_DATE < :d_to_excl",
+        "NVL(m.HUNG, 0) = 0",
+        "d.I_CODE IS NOT NULL",
+    ]
+    if brn:
+        sales_params["brn"] = _bind_brn(brn)
+        sales_filters.append("m.BRN_NO = :brn")
+        ret_filters.append("m.BRN_NO = :brn")
+    if wh:
+        sales_params["wh"] = wh
+        sales_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
+        ret_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
+    item_filter = _item_in_filter("d.I_CODE", item_codes, sales_params)
+    qty_expr = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+
+    sales_qty: dict[str, float] = {}
+    for row in _fetch_all(
+        f"""
+        SELECT
+            TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            ROUND(SUM({qty_expr}), 4) AS SALES_QTY
+        FROM {pos}.IAS_POS_BILL_DTL d
+        JOIN {pos}.IAS_POS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+         AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+        WHERE {" AND ".join(sales_filters)}
+          {item_filter}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        sales_params,
+    ):
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if code:
+            sales_qty[code] = float(row.get("SALES_QTY") or 0)
+
+    ret_params = dict(sales_params)
+    ret_item_filter = _item_in_filter("d.I_CODE", item_codes, ret_params)
+    for row in _fetch_all(
+        f"""
+        SELECT
+            TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            ROUND(SUM({qty_expr}), 4) AS RET_QTY
+        FROM {pos}.IAS_POS_RT_BILL_DTL d
+        JOIN {pos}.IAS_POS_RT_BILL_MST m
+          ON m.RT_BILL_NO = d.RT_BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+        WHERE {" AND ".join(ret_filters)}
+          {ret_item_filter}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        ret_params,
+    ):
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if code:
+            sales_qty[code] = float(sales_qty.get(code, 0)) - float(
+                row.get("RET_QTY") or 0
+            )
+
+    out: list[dict] = []
+    for row in stock_rows:
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if not code:
+            continue
+        moved = float(sales_qty.get(code, 0) or 0)
+        # الأقل حركة: بلا صافي مبيعات خلال الفترة
+        if moved > 0:
+            continue
+        qty = round(float(row.get("QTY_TOTAL") or 0), 2)
+        value = round(float(row.get("STOCK_VALUE") or 0), 2)
+        if qty <= 0:
+            continue
+        out.append(
+            {
+                "code": code,
+                "name": str(row.get("ITEM_NAME") or "").strip() or code,
+                "qty_total": qty,
+                "qty_display": _fmt_inv_qty(qty),
+                "stock_value": value,
+                "stock_value_display": _fmt_inv_money(value),
+                "sales_qty": round(moved, 2),
+            }
+        )
+        if len(out) >= lim:
+            break
+
+    total_qty = round(sum(r["qty_total"] for r in out), 2)
+    for row in out:
+        share = (row["qty_total"] / total_qty * 100.0) if total_qty else 0.0
+        row["share_pct"] = round(share, 1)
+        row["share_display"] = f"{share:.1f}%"
+
+    _sales_cache_set(cache_key, out, ttl=600)
+    return out
 
 
 def fetch_inventory_wastage(
@@ -923,7 +1246,7 @@ def fetch_inventory_wastage(
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
     cache_key = (
-        f"inv:wastage:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"inv:wastage:v3:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{wh}:{gcode}:{brn}"
     )
     cached = _sales_cache_get(cache_key)
@@ -943,11 +1266,11 @@ def fetch_inventory_wastage(
         filters.append("TO_CHAR(m.W_CODE) = :wh")
         params["wh"] = wh
     if gcode:
-        filters.append("TO_CHAR(i.G_CODE) = :gcode")
-        params["gcode"] = gcode
+        filters.append("i.G_CODE = :gcode")
+        params["gcode"] = _bind_gcode(gcode)
     if brn:
-        filters.append("TO_CHAR(m.BRN_NO) = :brn")
-        params["brn"] = brn
+        filters.append("m.BRN_NO = :brn")
+        params["brn"] = _bind_brn(brn)
 
     rows = _fetch_all(
         f"""
@@ -1069,7 +1392,7 @@ def fetch_inventory_wastage(
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "top_group": top_group,
     }
-    _sales_cache_set(cache_key, result, ttl=300)
+    _sales_cache_set(cache_key, result, date_from=d_from, date_to=d_to)
     return result
 
 
@@ -1397,6 +1720,133 @@ def fetch_item_stock_by_warehouses(
     return out
 
 
+# نافذة احتياطية لمبيعات نقاط البيع غير المرحلة (أيام)
+_PENDING_SALES_LOOKBACK_DAYS = 400
+
+
+def fetch_pending_sales_qty_map(
+    item_codes: list[str],
+    *,
+    warehouse_codes: list[str] | None = None,
+    lookback_days: int | None = None,
+) -> dict[str, dict[str, float]]:
+    """
+    صافي كميات مبيعات نقاط البيع غير المرحلة لكل صنف×مخزن.
+
+    يعتمد تقرير أونكس «مبيعات الأصناف» غير المرحّل من POS فقط
+    (BILL_POST للآجل لا يُخصم هنا لأنه يضخّم الرصيد خطأ).
+
+    الناتج: {item_code: {warehouse_code: pending_qty}} بوحدة المخزون (P_QTY).
+    """
+    codes = [str(c).strip() for c in item_codes if str(c).strip()]
+    if not codes or not oracle_enabled():
+        return {}
+
+    days = int(lookback_days or _PENDING_SALES_LOOKBACK_DAYS)
+    if days < 1:
+        days = _PENDING_SALES_LOOKBACK_DAYS
+
+    wh_list = [str(w).strip() for w in (warehouse_codes or []) if str(w).strip()]
+    pos = _pos_owner()
+    params: dict[str, Any] = {"lookback_days": days}
+    code_keys = []
+    for i, code in enumerate(codes):
+        key = f"c{i}"
+        code_keys.append(f":{key}")
+        params[key] = code
+    code_in = ", ".join(code_keys)
+
+    wh_filter = ""
+    if wh_list:
+        wh_keys = []
+        for i, wh in enumerate(wh_list):
+            key = f"w{i}"
+            wh_keys.append(f":{key}")
+            params[key] = wh
+        wh_filter = f"AND TO_CHAR(NVL(d.W_CODE, m.W_CODE)) IN ({', '.join(wh_keys)})"
+
+    qty_expr = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+    pending: dict[str, dict[str, float]] = {code: {} for code in codes}
+
+    def _add(item: str, wh: str, qty: float) -> None:
+        item = str(item or "").strip()
+        wh = str(wh or "").strip()
+        if not item or not wh or abs(qty) < 1e-9:
+            return
+        bucket = pending.setdefault(item, {})
+        bucket[wh] = round(float(bucket.get(wh) or 0) + float(qty), 4)
+
+    # نقاط البيع غير المرحلة
+    try:
+        for row in _fetch_all(
+            f"""
+            SELECT TO_CHAR(d.I_CODE) AS ITEM_CODE,
+                   TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS WAREHOUSE_CODE,
+                   ROUND(SUM({qty_expr}), 4) AS QTY
+            FROM {pos}.IAS_POS_BILL_DTL d
+            JOIN {pos}.IAS_POS_BILL_MST m
+              ON m.BILL_NO = d.BILL_NO
+             AND m.BRN_NO = d.BRN_NO
+             AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+            WHERE TO_CHAR(d.I_CODE) IN ({code_in})
+              AND NVL(m.POSTED, 0) = 0
+              AND NVL(m.HUNG, 0) = 0
+              AND m.BILL_DATE >= TRUNC(SYSDATE) - :lookback_days
+              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+              {wh_filter}
+            GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+            """,
+            params,
+        ):
+            _add(row.get("ITEM_CODE"), row.get("WAREHOUSE_CODE"), float(row.get("QTY") or 0))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Unposted POS sales qty failed: %s", exc)
+
+    # مرتجعات نقاط البيع غير المرحلة
+    try:
+        for row in _fetch_all(
+            f"""
+            SELECT TO_CHAR(d.I_CODE) AS ITEM_CODE,
+                   TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS WAREHOUSE_CODE,
+                   ROUND(SUM({qty_expr}), 4) AS QTY
+            FROM {pos}.IAS_POS_RT_BILL_DTL d
+            JOIN {pos}.IAS_POS_RT_BILL_MST m
+              ON m.RT_BILL_NO = d.RT_BILL_NO
+             AND m.BRN_NO = d.BRN_NO
+            WHERE TO_CHAR(d.I_CODE) IN ({code_in})
+              AND NVL(m.POSTED, 0) = 0
+              AND NVL(m.HUNG, 0) = 0
+              AND m.RT_BILL_DATE >= TRUNC(SYSDATE) - :lookback_days
+              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+              {wh_filter}
+            GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+            """,
+            dict(params),
+        ):
+            _add(
+                row.get("ITEM_CODE"),
+                row.get("WAREHOUSE_CODE"),
+                -float(row.get("QTY") or 0),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Unposted POS return qty failed: %s", exc)
+
+    # لا نسمح بصافي سالب (لا يزيد الرصيد عن الحالي بسبب مرتجعات)
+    for item, by_wh in pending.items():
+        for wh, qty in list(by_wh.items()):
+            by_wh[wh] = round(max(0.0, float(qty or 0)), 4)
+            if by_wh[wh] <= 0:
+                by_wh.pop(wh, None)
+    return pending
+
+
+def expected_stock_qty(avl_qty: float, pending_qty: float) -> float:
+    """الرصيد الحقيقي المتوقع: لا يزيد عن الحالي ولا ينزل عن صفر."""
+    avl = max(0.0, float(avl_qty or 0))
+    pending = max(0.0, float(pending_qty or 0))
+    return round(max(0.0, avl - pending), 4)
+
+
 def fetch_item_compare_from_oracle(
     item_code: str,
     warehouses: list[str] | None = None,
@@ -1424,6 +1874,8 @@ def fetch_item_compare_from_oracle(
 
     buys, unit_packs, main_unit = fetch_last_purchase_by_warehouse(code, wh_list)
     stock = fetch_item_stock_by_warehouses(code, wh_list)
+    pending_map = fetch_pending_sales_qty_map([code], warehouse_codes=wh_list)
+    pending_by_wh = pending_map.get(code) or {}
 
     schema = _schema()
     params: dict[str, Any] = {"code": code, "lev": 1}
@@ -1545,10 +1997,23 @@ def fetch_item_compare_from_oracle(
             cost = str(st.get("avg_cost") or "").strip()
         price = _price_for(wh, unit) if unit else ""
         last_buy, last_date = _last_buy_for(wh, unit) if unit else ("", "")
+        try:
+            avl_num = float(str(qty).replace(",", "")) if qty not in ("", None) else None
+        except (TypeError, ValueError):
+            avl_num = None
+        pending_num = float(pending_by_wh.get(wh) or 0)
+        if avl_num is None and pending_num:
+            avl_num = 0.0
+            qty = "0"
+        expected_num = (
+            expected_stock_qty(avl_num, pending_num) if avl_num is not None else None
+        )
         rows_out[wh] = {
             "unit": unit,
             "price": price,
             "quantity": qty,
+            "pending_qty": pending_num,
+            "expected_qty": "" if expected_num is None else str(expected_num),
             "avg_cost": cost,
             "last_buy": last_buy,
             "last_buy_date": last_date,
@@ -1740,7 +2205,7 @@ def _fetch_bill_branch_totals(date_from, date_to, conf: dict) -> list[dict]:
         WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
           {doc_filter}
           {cash_filter}
-          AND NVL(b.CNCL_FLG, 0) = 0
+          AND {_bill_mst_ok("b")}
         GROUP BY TO_CHAR(b.BRN_NO)
         """,
         params,
@@ -1763,7 +2228,7 @@ def _fetch_bill_branch_totals(date_from, date_to, conf: dict) -> list[dict]:
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
               {ret_doc_filter}
               {ret_cash_filter}
-              AND NVL(r.CNCL_FLG, 0) = 0
+              AND {_rt_bill_mst_ok("r")}
             GROUP BY TO_CHAR(r.BRN_NO)
             """,
             ret_params,
@@ -1790,7 +2255,7 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:branches:v3:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v6:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not _skip_mst_returns(date_from, date_to))}"
     )
     cached = _sales_cache_get(cache_key)
@@ -1838,11 +2303,11 @@ def fetch_branch_return_totals(
         branch_filter = ""
         group_filter = ""
         if brn:
-            params["brn"] = brn
-            branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+            params["brn"] = _bind_brn(brn)
+            branch_filter = "AND m.BRN_NO = :brn"
         if gcode:
-            params["gcode"] = gcode
-            group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+            params["gcode"] = _bind_gcode(gcode)
+            group_filter = "AND i.G_CODE = :gcode"
             rows_raw = _fetch_all(
                 f"""
                 SELECT
@@ -1884,10 +2349,10 @@ def fetch_branch_return_totals(
         ret_cash = "AND r.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
         branch_filter = ""
         if brn:
-            params["brn"] = brn
-            branch_filter = "AND TO_CHAR(r.BRN_NO) = :brn"
+            params["brn"] = _bind_brn(brn)
+            branch_filter = "AND r.BRN_NO = :brn"
         if gcode:
-            params["gcode"] = gcode
+            params["gcode"] = _bind_gcode(gcode)
             rows_raw = _fetch_all(
                 f"""
                 SELECT
@@ -1901,11 +2366,11 @@ def fetch_branch_return_totals(
                  AND r.BRN_NO = d.BRN_NO
                 LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
                 WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                  AND NVL(r.CNCL_FLG, 0) = 0
+                  AND {_rt_bill_mst_ok("r")}
                   {ret_doc}
                   {ret_cash}
                   {branch_filter}
-                  AND TO_CHAR(i.G_CODE) = :gcode
+                  AND i.G_CODE = :gcode
                 GROUP BY TO_CHAR(r.BRN_NO)
                 """,
                 params,
@@ -1920,7 +2385,7 @@ def fetch_branch_return_totals(
                     ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
                 FROM {schema}.IAS_RT_BILL_MST r
                 WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                  AND NVL(r.CNCL_FLG, 0) = 0
+                  AND {_rt_bill_mst_ok("r")}
                   {ret_doc}
                   {ret_cash}
                   {branch_filter}
@@ -1989,15 +2454,15 @@ def fetch_group_return_totals(
     branch_filter = ""
     group_filter = ""
     if brn:
-        params["brn"] = brn
+        params["brn"] = _bind_brn(brn)
     if gcode:
-        params["gcode"] = gcode
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["gcode"] = _bind_gcode(gcode)
+        group_filter = "AND i.G_CODE = :gcode"
 
     if conf.get("source") == "pos":
         pos = _pos_owner()
         if brn:
-            branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+            branch_filter = "AND m.BRN_NO = :brn"
         rows_raw = _fetch_all(
             f"""
             SELECT
@@ -2022,7 +2487,7 @@ def fetch_group_return_totals(
         ret_doc = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", params)
         ret_cash = "AND r.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
         if brn:
-            branch_filter = "AND TO_CHAR(r.BRN_NO) = :brn"
+            branch_filter = "AND r.BRN_NO = :brn"
         rows_raw = _fetch_all(
             f"""
             SELECT
@@ -2036,7 +2501,7 @@ def fetch_group_return_totals(
              AND r.BRN_NO = d.BRN_NO
             LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-              AND NVL(r.CNCL_FLG, 0) = 0
+              AND {_rt_bill_mst_ok("r")}
               {ret_doc}
               {ret_cash}
               {branch_filter}
@@ -2085,12 +2550,14 @@ def fetch_sales_mst_bundle(
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     conf = _system_conf(system)
-    # light يقلّل تفاصيل البائعين فقط — المرتجع يُحسب دائماً
-    skip_ret = False
+    # light يقلّل تفاصيل البائعين؛ المرتجعات تُخصم دائماً من صافي الفروع
+    skip_ret = _skip_mst_returns(date_from, date_to)
+    # fast_split كان مرتبطاً بتخطي المرتجعات — أُلغي مع الإبقاء على الدقة
+    fast_split = False
     lim = max(1, min(int(top_users_limit or 8), 50))
     cache_key = (
-        f"sales:mst_bundle:v2:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:L{int(light)}:u{lim}:r{int(not skip_ret)}"
+        f"sales:mst_bundle:v8:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:L{int(light)}:u{lim}:r{int(not skip_ret)}:f{int(fast_split)}"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -2099,50 +2566,28 @@ def fetch_sales_mst_bundle(
     params = _date_params(date_from, date_to)
     if conf.get("source") == "pos":
         pos = _pos_owner()
-        if light:
-            sales_rows = _fetch_all(
-                f"""
-                SELECT
-                  CASE WHEN GROUPING(p.BRN_NO) = 0 THEN 'BRN' ELSE 'TOT' END AS KIND,
-                  TO_CHAR(p.BRN_NO) AS BRANCH_CODE,
-                  CAST(NULL AS VARCHAR2(40)) AS USER_CODE,
-                  COUNT(DISTINCT p.BILL_NO) AS INVOICE_COUNT,
-                  ROUND(SUM(NVL(p.BILL_AMT, 0)), 2) AS NET_TOTAL,
-                  ROUND(SUM(NVL(p.VAT_AMT, 0)), 2) AS VAT_TOTAL,
-                  ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS GROSS_TOTAL,
-                  COUNT(DISTINCT NVL(TO_CHAR(p.MACHINE_NO), TO_CHAR(p.CASH_NO))) AS DEVICE_COUNT,
-                  COUNT(DISTINCT p.AD_U_ID) AS SELLER_COUNT
-                FROM {pos}.IAS_POS_BILL_MST p
-                WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
-                  AND NVL(p.HUNG, 0) = 0
-                GROUP BY GROUPING SETS ((p.BRN_NO), ())
-                """,
-                params,
-            )
-        else:
-            sales_rows = _fetch_all(
-                f"""
-                SELECT
-                  CASE
-                    WHEN GROUPING(p.BRN_NO) = 0 THEN 'BRN'
-                    WHEN GROUPING(p.AD_U_ID) = 0 THEN 'USR'
-                    ELSE 'TOT'
-                  END AS KIND,
-                  TO_CHAR(p.BRN_NO) AS BRANCH_CODE,
-                  TO_CHAR(p.AD_U_ID) AS USER_CODE,
-                  COUNT(DISTINCT p.BILL_NO) AS INVOICE_COUNT,
-                  ROUND(SUM(NVL(p.BILL_AMT, 0)), 2) AS NET_TOTAL,
-                  ROUND(SUM(NVL(p.VAT_AMT, 0)), 2) AS VAT_TOTAL,
-                  ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS GROSS_TOTAL,
-                  COUNT(DISTINCT NVL(TO_CHAR(p.MACHINE_NO), TO_CHAR(p.CASH_NO))) AS DEVICE_COUNT,
-                  COUNT(DISTINCT p.AD_U_ID) AS SELLER_COUNT
-                FROM {pos}.IAS_POS_BILL_MST p
-                WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
-                  AND NVL(p.HUNG, 0) = 0
-                GROUP BY GROUPING SETS ((p.BRN_NO), (p.AD_U_ID), ())
-                """,
-                params,
-            )
+        hung = _pos_mst_ok("p")
+        # رأس الفاتورة صف واحد لكل فاتورة → COUNT(*) أدق وأسرع من COUNT(DISTINCT)
+        # بدون GROUPING للمستخدمين — البائعون عبر fetch_top_sales_users (صافي مرتجعات)
+        sales_rows = _fetch_all(
+            f"""
+            SELECT
+              CASE WHEN GROUPING(p.BRN_NO) = 0 THEN 'BRN' ELSE 'TOT' END AS KIND,
+              TO_CHAR(p.BRN_NO) AS BRANCH_CODE,
+              CAST(NULL AS VARCHAR2(40)) AS USER_CODE,
+              COUNT(*) AS INVOICE_COUNT,
+              ROUND(SUM(NVL(p.BILL_AMT, 0)), 2) AS NET_TOTAL,
+              ROUND(SUM(NVL(p.VAT_AMT, 0)), 2) AS VAT_TOTAL,
+              ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS GROSS_TOTAL,
+              COUNT(DISTINCT NVL(TO_CHAR(p.MACHINE_NO), TO_CHAR(p.CASH_NO))) AS DEVICE_COUNT,
+              COUNT(DISTINCT p.AD_U_ID) AS SELLER_COUNT
+            FROM {pos}.IAS_POS_BILL_MST p
+            WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
+              AND {hung}
+            GROUP BY GROUPING SETS ((p.BRN_NO), ())
+            """,
+            params,
+        )
         returns_by_brn: dict[str, tuple[int, float, float]] = {}
         if not skip_ret:
             try:
@@ -2150,12 +2595,13 @@ def fetch_sales_mst_bundle(
                     f"""
                     SELECT
                         TO_CHAR(r.BRN_NO) AS BRANCH_CODE,
-                        COUNT(DISTINCT r.RT_BILL_NO) AS RET_COUNT,
+                        COUNT(*) AS RET_COUNT,
                         ROUND(SUM(NVL(r.RT_BILL_AMT, 0)), 2) AS RET_NET,
                         ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
                     FROM {pos}.IAS_POS_RT_BILL_MST r
                     WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                      AND NVL(r.HUNG, 0) = 0
+                      AND {_hung_ok("r")}
+                      AND {_bill_amt_ok("r", "RT_BILL_AMT")}
                     GROUP BY TO_CHAR(r.BRN_NO)
                     """,
                     params,
@@ -2173,54 +2619,28 @@ def fetch_sales_mst_bundle(
         schema = _schema()
         doc_filter = _doc_type_filter(conf, "b", "BILL_DOC_TYPE", params)
         cash_filter = "AND b.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
-        if light:
-            sales_rows = _fetch_all(
-                f"""
-                SELECT
-                  CASE WHEN GROUPING(b.BRN_NO) = 0 THEN 'BRN' ELSE 'TOT' END AS KIND,
-                  TO_CHAR(b.BRN_NO) AS BRANCH_CODE,
-                  CAST(NULL AS VARCHAR2(40)) AS USER_CODE,
-                  COUNT(DISTINCT b.BILL_SER) AS INVOICE_COUNT,
-                  ROUND(SUM(NVL(b.BILL_AMT, 0)), 2) AS NET_TOTAL,
-                  ROUND(SUM(NVL(b.VAT_AMT, 0)), 2) AS VAT_TOTAL,
-                  ROUND(SUM(NVL(b.BILL_AMT, 0) + NVL(b.VAT_AMT, 0)), 2) AS GROSS_TOTAL,
-                  COUNT(DISTINCT TO_CHAR(b.CASH_NO)) AS DEVICE_COUNT,
-                  COUNT(DISTINCT b.AD_U_ID) AS SELLER_COUNT
-                FROM {schema}.IAS_BILL_MST b
-                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-                  AND NVL(b.CNCL_FLG, 0) = 0
-                  {doc_filter}
-                  {cash_filter}
-                GROUP BY GROUPING SETS ((b.BRN_NO), ())
-                """,
-                params,
-            )
-        else:
-            sales_rows = _fetch_all(
-                f"""
-                SELECT
-                  CASE
-                    WHEN GROUPING(b.BRN_NO) = 0 THEN 'BRN'
-                    WHEN GROUPING(b.AD_U_ID) = 0 THEN 'USR'
-                    ELSE 'TOT'
-                  END AS KIND,
-                  TO_CHAR(b.BRN_NO) AS BRANCH_CODE,
-                  TO_CHAR(b.AD_U_ID) AS USER_CODE,
-                  COUNT(DISTINCT b.BILL_SER) AS INVOICE_COUNT,
-                  ROUND(SUM(NVL(b.BILL_AMT, 0)), 2) AS NET_TOTAL,
-                  ROUND(SUM(NVL(b.VAT_AMT, 0)), 2) AS VAT_TOTAL,
-                  ROUND(SUM(NVL(b.BILL_AMT, 0) + NVL(b.VAT_AMT, 0)), 2) AS GROSS_TOTAL,
-                  COUNT(DISTINCT TO_CHAR(b.CASH_NO)) AS DEVICE_COUNT,
-                  COUNT(DISTINCT b.AD_U_ID) AS SELLER_COUNT
-                FROM {schema}.IAS_BILL_MST b
-                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-                  AND NVL(b.CNCL_FLG, 0) = 0
-                  {doc_filter}
-                  {cash_filter}
-                GROUP BY GROUPING SETS ((b.BRN_NO), (b.AD_U_ID), ())
-                """,
-                params,
-            )
+        cncl = _bill_mst_ok("b")
+        sales_rows = _fetch_all(
+            f"""
+            SELECT
+              CASE WHEN GROUPING(b.BRN_NO) = 0 THEN 'BRN' ELSE 'TOT' END AS KIND,
+              TO_CHAR(b.BRN_NO) AS BRANCH_CODE,
+              CAST(NULL AS VARCHAR2(40)) AS USER_CODE,
+              COUNT(DISTINCT b.BILL_SER) AS INVOICE_COUNT,
+              ROUND(SUM(NVL(b.BILL_AMT, 0)), 2) AS NET_TOTAL,
+              ROUND(SUM(NVL(b.VAT_AMT, 0)), 2) AS VAT_TOTAL,
+              ROUND(SUM(NVL(b.BILL_AMT, 0) + NVL(b.VAT_AMT, 0)), 2) AS GROSS_TOTAL,
+              COUNT(DISTINCT TO_CHAR(b.CASH_NO)) AS DEVICE_COUNT,
+              COUNT(DISTINCT b.AD_U_ID) AS SELLER_COUNT
+            FROM {schema}.IAS_BILL_MST b
+            WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+              AND {cncl}
+              {doc_filter}
+              {cash_filter}
+            GROUP BY GROUPING SETS ((b.BRN_NO), ())
+            """,
+            params,
+        )
         returns_by_brn = {}
         if not skip_ret:
             try:
@@ -2236,7 +2656,7 @@ def fetch_sales_mst_bundle(
                         ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
                     FROM {schema}.IAS_RT_BILL_MST r
                     WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                      AND NVL(r.CNCL_FLG, 0) = 0
+                      AND {_rt_bill_mst_ok("r")}
                       {ret_doc}
                       {ret_cash}
                     GROUP BY TO_CHAR(r.BRN_NO)
@@ -2254,23 +2674,18 @@ def fetch_sales_mst_bundle(
                 raise
 
     branch_sales = [r for r in sales_rows if str(r.get("KIND") or "") == "BRN"]
-    user_sales = [r for r in sales_rows if str(r.get("KIND") or "") == "USR"]
     tot_rows = [r for r in sales_rows if str(r.get("KIND") or "") == "TOT"]
     branches = _assemble_branch_rows(branch_sales, returns_by_brn)
-    # بائعون بدون خصم مرتجعات على مستوى المستخدم (توفير استعلام) — المبالغ من المبيعات
+    # البائعون تُحمَّل لاحقاً عبر API — لا نضاعف مسح المستخدمين هنا
     top_users: list[dict] = []
-    if not light:
-        top_users = _assemble_user_rows(user_sales, {}, lim)
     seller_count = int((tot_rows[0].get("SELLER_COUNT") if tot_rows else 0) or 0)
     device_count = int((tot_rows[0].get("DEVICE_COUNT") if tot_rows else 0) or 0)
-    if not seller_count and top_users:
-        seller_count = len(user_sales)
     if not device_count and conf.get("source") != "pos":
         device_count = 0
 
     # مزامنة كاش الفروع المنفصل لواجهات أخرى
     br_cache = (
-        f"sales:branches:v3:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v7:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not skip_ret)}"
     )
     _sales_cache_set(br_cache, branches, date_from=date_from, date_to=date_to)
@@ -2341,8 +2756,8 @@ def _fetch_pos_daily_totals(date_from, date_to, branch_code: str = "") -> list[d
     branch_filter = ""
     brn = str(branch_code or "").strip()
     if brn:
-        params["brn"] = brn
-        branch_filter = "AND TO_CHAR(p.BRN_NO) = :brn"
+        params["brn"] = _bind_brn(brn)
+        branch_filter = "AND p.BRN_NO = :brn"
     sales_rows = _fetch_all(
         f"""
         SELECT
@@ -2361,8 +2776,10 @@ def _fetch_pos_daily_totals(date_from, date_to, branch_code: str = "") -> list[d
         params,
     )
     returns_by_day: dict[str, tuple[int, float, float]] = {}
+    if _skip_mst_returns(date_from, date_to):
+        return _assemble_daily_rows(sales_rows, returns_by_day)
     try:
-        ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn" if brn else ""
+        ret_branch = "AND r.BRN_NO = :brn" if brn else ""
         for row in _fetch_all(
             f"""
             SELECT
@@ -2404,8 +2821,8 @@ def _fetch_bill_daily_totals(
     branch_filter = ""
     brn = str(branch_code or "").strip()
     if brn:
-        params["brn"] = brn
-        branch_filter = "AND TO_CHAR(b.BRN_NO) = :brn"
+        params["brn"] = _bind_brn(brn)
+        branch_filter = "AND b.BRN_NO = :brn"
     sales_rows = _fetch_all(
         f"""
         SELECT
@@ -2416,7 +2833,7 @@ def _fetch_bill_daily_totals(
             ROUND(SUM(NVL(b.BILL_AMT, 0) + NVL(b.VAT_AMT, 0)), 2) AS GROSS_TOTAL
         FROM {schema}.IAS_BILL_MST b
         WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-          AND NVL(b.CNCL_FLG, 0) = 0
+          AND {_bill_mst_ok("b")}
           {doc_filter}
           {cash_filter}
           {branch_filter}
@@ -2426,14 +2843,16 @@ def _fetch_bill_daily_totals(
         params,
     )
     returns_by_day: dict[str, tuple[int, float, float]] = {}
+    if _skip_mst_returns(date_from, date_to):
+        return _assemble_daily_rows(sales_rows, returns_by_day)
     try:
         ret_params: dict = _date_params(date_from, date_to)
         ret_doc_filter = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", ret_params)
         ret_cash_filter = "AND r.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
         ret_branch = ""
         if brn:
-            ret_params["brn"] = brn
-            ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn"
+            ret_params["brn"] = _bind_brn(brn)
+            ret_branch = "AND r.BRN_NO = :brn"
         for row in _fetch_all(
             f"""
             SELECT
@@ -2443,7 +2862,7 @@ def _fetch_bill_daily_totals(
                 ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
             FROM {schema}.IAS_RT_BILL_MST r
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-              AND NVL(r.CNCL_FLG, 0) = 0
+              AND {_rt_bill_mst_ok("r")}
               {ret_doc_filter}
               {ret_cash_filter}
               {ret_branch}
@@ -2495,9 +2914,10 @@ def fetch_daily_sales_totals(
         raise OracleStockError("أوراكل غير مفعّل.")
     conf = _system_conf(system)
     brn = str(branch_code or "").strip()
+    fast = _skip_mst_returns(date_from, date_to)
     cache_key = (
-        f"sales:daily:v1:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}"
+        f"sales:daily:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{'fast' if fast else 'net'}"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -2549,6 +2969,62 @@ def _group_name_lookup() -> dict[str, str]:
         for g in fetch_sales_group_options()
         if str(g.get("code") or "").strip()
     }
+
+
+def _item_group_code_map() -> dict[str, str]:
+    """خريطة I_CODE → G_CODE — تُحمَّل مرة وتُخزَّن لتفادي JOIN على تفاصيل الفواتير."""
+    hit, cached = _django_lookup_get("item_group_map:v1")
+    if hit and isinstance(cached, dict):
+        return cached
+    rows = _fetch_all(
+        f"""
+        SELECT TO_CHAR(I_CODE) AS ITEM_CODE,
+               NVL(TO_CHAR(G_CODE), '(بلا)') AS GROUP_CODE
+        FROM {_schema()}.IAS_ITM_MST
+        WHERE I_CODE IS NOT NULL
+        """,
+        {},
+    )
+    out: dict[str, str] = {}
+    for row in rows:
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if not code:
+            continue
+        out[code] = str(row.get("GROUP_CODE") or "").strip() or "(بلا)"
+    return _django_lookup_set("item_group_map:v1", out)
+
+
+def _month_spans(date_from, date_to) -> list[tuple[date, date]]:
+    """شرائح شهرية نصف مفتوحة زمنياً ضمن [from, to]."""
+    from calendar import monthrange
+
+    start = _as_date(date_from)
+    end = _as_date(date_to)
+    if end < start:
+        return []
+    cur = start.replace(day=1)
+    out: list[tuple[date, date]] = []
+    while cur <= end:
+        last = date(cur.year, cur.month, monthrange(cur.year, cur.month)[1])
+        chunk_from = max(cur, start)
+        chunk_to = min(last, end)
+        if chunk_from <= chunk_to:
+            out.append((chunk_from, chunk_to))
+        if cur.month == 12:
+            cur = date(cur.year + 1, 1, 1)
+        else:
+            cur = date(cur.year, cur.month + 1, 1)
+    return out
+
+
+def sales_group_chunks_newest_first(date_from, date_to) -> list[dict[str, str]]:
+    """شهور التحميل التصاعدي — الأحدث أولاً (الأسهل ثم الأصعب)."""
+    spans = _month_spans(date_from, date_to)
+    spans.reverse()
+    return [
+        {"date_from": a.isoformat(), "date_to": b.isoformat()}
+        for a, b in spans
+    ]
 
 
 def _assemble_group_rows(sales_rows, returns_by_key, *, by_branch: bool = True) -> list[dict]:
@@ -2629,10 +3105,10 @@ def _fetch_pos_group_totals(
     group_filter = ""
     if branch_code:
         params["brn"] = branch_code
-        branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+        branch_filter = "AND m.BRN_NO = :brn"
     if group_code:
-        params["gcode"] = group_code
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["gcode"] = _bind_gcode(group_code)
+        group_filter = "AND i.G_CODE = :gcode"
 
     if by_branch:
         outer_branch = "TO_CHAR(x.BRN_NO) AS BRANCH_CODE,"
@@ -2644,6 +3120,70 @@ def _fetch_pos_group_totals(
         outer_group = "NVL(TO_CHAR(x.G_CODE), '(بلا)')"
         ret_outer_branch = "CAST(NULL AS VARCHAR2(20)) AS BRANCH_CODE,"
         ret_outer_group = "NVL(TO_CHAR(x.G_CODE), '(بلا)')"
+
+    hung_m = _hung_ok("m")
+    if skip_returns:
+        # مسار سريع مع متوسط سلة صحيح:
+        # 1) تجميع فاتورة×صنف  2) طيّ إلى فاتورة×مجموعة  3) عدّ الفواتير + المبالغ
+        if by_branch:
+            outer_branch_sel = "TO_CHAR(y.BRN_NO) AS BRANCH_CODE,"
+            outer_group_by = "y.GROUP_CODE, y.BRN_NO"
+        else:
+            outer_branch_sel = "CAST(NULL AS VARCHAR2(20)) AS BRANCH_CODE,"
+            outer_group_by = "y.GROUP_CODE"
+
+        gcode_mid = ""
+        if group_code:
+            gcode_mid = "AND i.G_CODE = :gcode"
+
+        sales_rows = _fetch_all(
+            f"""
+            SELECT
+                y.GROUP_CODE AS GROUP_CODE,
+                {outer_branch_sel}
+                COUNT(*) AS INVOICE_COUNT,
+                ROUND(SUM(y.QTY_TOTAL), 2) AS QTY_TOTAL,
+                ROUND(SUM(y.NET_TOTAL), 2) AS NET_TOTAL,
+                ROUND(SUM(y.VAT_TOTAL), 2) AS VAT_TOTAL
+            FROM (
+                SELECT
+                    NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
+                    x.BRN_NO AS BRN_NO,
+                    x.BILL_NO AS BILL_NO,
+                    x.BILL_SRL AS BILL_SRL,
+                    SUM(x.QTY_TOTAL) AS QTY_TOTAL,
+                    SUM(x.NET_TOTAL) AS NET_TOTAL,
+                    SUM(x.VAT_TOTAL) AS VAT_TOTAL
+                FROM (
+                    SELECT
+                        d.I_CODE AS I_CODE,
+                        m.BRN_NO AS BRN_NO,
+                        m.BILL_NO AS BILL_NO,
+                        NVL(m.BILL_SRL, 0) AS BILL_SRL,
+                        SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+                        SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
+                        SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                    FROM {pos}.IAS_POS_BILL_MST m
+                    JOIN {pos}.IAS_POS_BILL_DTL d
+                      ON d.BILL_NO = m.BILL_NO
+                     AND d.BRN_NO = m.BRN_NO
+                     AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+                    WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                      AND {hung_m}
+                      AND d.I_CODE IS NOT NULL
+                      {branch_filter}
+                    GROUP BY d.I_CODE, m.BRN_NO, m.BILL_NO, NVL(m.BILL_SRL, 0)
+                ) x
+                LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = x.I_CODE
+                WHERE 1 = 1
+                  {gcode_mid}
+                GROUP BY NVL(TO_CHAR(i.G_CODE), '(بلا)'), x.BRN_NO, x.BILL_NO, x.BILL_SRL
+            ) y
+            GROUP BY {outer_group_by}
+            """,
+            params,
+        )
+        return _assemble_group_rows(sales_rows, {}, by_branch=by_branch)
 
     sales_sql = f"""
         SELECT
@@ -2669,7 +3209,7 @@ def _fetch_pos_group_totals(
              AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
             LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
             WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-              AND NVL(m.HUNG, 0) = 0
+              AND {hung_m}
               {branch_filter}
               {group_filter}
             GROUP BY i.G_CODE, m.BRN_NO, m.BILL_NO, NVL(m.BILL_SRL, 0)
@@ -2680,12 +3220,10 @@ def _fetch_pos_group_totals(
     sales_rows = _fetch_all(sales_sql, params)
 
     returns_by_key: dict[str, tuple[int, float, float, float]] = {}
-    if skip_returns:
-        return _assemble_group_rows(sales_rows, returns_by_key, by_branch=by_branch)
     try:
         ret_params = dict(params)
-        ret_branch = "AND TO_CHAR(m.BRN_NO) = :brn" if branch_code else ""
-        ret_group = "AND TO_CHAR(i.G_CODE) = :gcode" if group_code else ""
+        ret_branch = "AND m.BRN_NO = :brn" if branch_code else ""
+        ret_group = "AND i.G_CODE = :gcode" if group_code else ""
         for row in _fetch_all(
             f"""
             SELECT
@@ -2709,7 +3247,7 @@ def _fetch_pos_group_totals(
                  AND m.BRN_NO = d.BRN_NO
                 LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
                 WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
-                  AND NVL(m.HUNG, 0) = 0
+                  AND {_hung_ok("m")}
                   {ret_branch}
                   {ret_group}
                 GROUP BY i.G_CODE, m.BRN_NO, m.RT_BILL_NO
@@ -2750,10 +3288,10 @@ def _fetch_bill_group_totals(
     group_filter = ""
     if branch_code:
         params["brn"] = branch_code
-        branch_filter = "AND TO_CHAR(b.BRN_NO) = :brn"
+        branch_filter = "AND b.BRN_NO = :brn"
     if group_code:
-        params["gcode"] = group_code
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["gcode"] = _bind_gcode(group_code)
+        group_filter = "AND i.G_CODE = :gcode"
 
     if by_branch:
         outer_branch = "TO_CHAR(x.BRN_NO) AS BRANCH_CODE,"
@@ -2788,7 +3326,7 @@ def _fetch_bill_group_totals(
              AND b.BRN_NO = d.BRN_NO
             LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
             WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-              AND NVL(b.CNCL_FLG, 0) = 0
+              AND {_bill_mst_ok("b")}
               {doc_filter}
               {cash_filter}
               {branch_filter}
@@ -2809,11 +3347,11 @@ def _fetch_bill_group_totals(
         ret_branch = ""
         ret_group = ""
         if branch_code:
-            ret_params["brn"] = branch_code
-            ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn"
+            ret_params["brn"] = _bind_brn(branch_code)
+            ret_branch = "AND r.BRN_NO = :brn"
         if group_code:
-            ret_params["gcode"] = group_code
-            ret_group = "AND TO_CHAR(i.G_CODE) = :gcode"
+            ret_params["gcode"] = _bind_gcode(group_code)
+            ret_group = "AND i.G_CODE = :gcode"
         for row in _fetch_all(
             f"""
             SELECT
@@ -2837,7 +3375,7 @@ def _fetch_bill_group_totals(
                  AND r.BRN_NO = d.BRN_NO
                 LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
                 WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                  AND NVL(r.CNCL_FLG, 0) = 0
+                  AND {_rt_bill_mst_ok("r")}
                   {ret_doc}
                   {ret_cash}
                   {ret_branch}
@@ -2869,16 +3407,19 @@ def fetch_group_sales_totals(
     branch_code: str = "",
     group_code: str = "",
     by_branch: bool | None = None,
+    force_fast: bool | None = None,
 ) -> list[dict]:
-    """إجماليات المبيعات حسب المجموعة — صف لكل مجموعة (كل الفروع)، أو حسب الفروع عند اختيار مجموعة."""
+    """إجماليات المبيعات حسب المجموعة — دائماً صافي بعد خصم المرتجعات."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     conf = _system_conf(system)
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     split_by_branch = bool(by_branch) if by_branch is not None else bool(gcode)
+    # دائماً صافي بعد المرتجعات — لا مسار «fast» يتخطى الخصم
+    fast = False
     cache_key = (
-        f"sales:groups:v5:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:groups:v12:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:net"
     )
     cached = _sales_cache_get(cache_key)
@@ -2891,7 +3432,7 @@ def fetch_group_sales_totals(
             brn,
             gcode,
             by_branch=split_by_branch,
-            skip_returns=False,
+            skip_returns=fast,
         )
     else:
         rows = _fetch_bill_group_totals(
@@ -2901,7 +3442,7 @@ def fetch_group_sales_totals(
             brn,
             gcode,
             by_branch=split_by_branch,
-            skip_returns=False,
+            skip_returns=fast,
         )
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
@@ -2917,6 +3458,34 @@ def _item_in_filter(alias_col: str, codes: list[str], params: dict) -> str:
     if not keys:
         return "AND 1=0"
     return f"AND {alias_col} IN ({', '.join(keys)})"
+
+
+def _item_name_lookup(codes: list[str]) -> dict[str, str]:
+    """أسماء أصناف دفعة واحدة — بعد تجميع المبيعات بدون JOIN كتالوج."""
+    cleaned = [str(c or "").strip() for c in codes if str(c or "").strip()]
+    if not cleaned:
+        return {}
+    params: dict[str, Any] = {}
+    keys = []
+    for index, code in enumerate(cleaned[:80]):
+        key = f"nm_{index}"
+        params[key] = code
+        keys.append(f":{key}")
+    rows = _fetch_all(
+        f"""
+        SELECT TO_CHAR(I_CODE) AS ITEM_CODE, I_NAME
+        FROM {_schema()}.IAS_ITM_MST
+        WHERE I_CODE IN ({', '.join(keys)})
+        """,
+        params,
+    )
+    out: dict[str, str] = {}
+    for row in rows:
+        code = str(row.get("ITEM_CODE") or "").strip()
+        name = str(row.get("I_NAME") or "").strip()
+        if code and name:
+            out[code] = name
+    return out
 
 
 def _assemble_top_item_rows(
@@ -2991,30 +3560,39 @@ def _fetch_pos_top_items(
     group_filter = ""
     if branch_code:
         params["brn"] = branch_code
-        branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+        branch_filter = "AND m.BRN_NO = :brn"
     if group_code:
-        params["gcode"] = group_code
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["gcode"] = _bind_gcode(group_code)
+        group_filter = "AND i.G_CODE = :gcode"
     order_sql = _item_order_sql(order_by)
+    hung_m = _hung_ok("m")
+    need_item_join = bool(group_code)
+    if need_item_join:
+        item_join = f"LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE"
+        name_expr = "MAX(NVL(i.I_NAME, TO_CHAR(d.I_CODE)))"
+    else:
+        # للفترة الطويلة بدون فلتر مجموعة: بلا JOIN كتالوج على كامل المسح
+        item_join = ""
+        name_expr = "TO_CHAR(d.I_CODE)"
 
     sales_rows = _fetch_all(
         f"""
         SELECT * FROM (
           SELECT
               TO_CHAR(d.I_CODE) AS ITEM_CODE,
-              MAX(NVL(i.I_NAME, TO_CHAR(d.I_CODE))) AS ITEM_NAME,
+              {name_expr} AS ITEM_NAME,
               COUNT(*) AS INVOICE_COUNT,
               ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
               ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
               ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS VAT_TOTAL
-          FROM {pos}.IAS_POS_BILL_DTL d
-          JOIN {pos}.IAS_POS_BILL_MST m
-            ON m.BILL_NO = d.BILL_NO
-           AND m.BRN_NO = d.BRN_NO
-           AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
-          LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+          FROM {pos}.IAS_POS_BILL_MST m
+          JOIN {pos}.IAS_POS_BILL_DTL d
+            ON d.BILL_NO = m.BILL_NO
+           AND d.BRN_NO = m.BRN_NO
+           AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+          {item_join}
           WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-            AND NVL(m.HUNG, 0) = 0
+            AND {hung_m}
             AND d.I_CODE IS NOT NULL
             {branch_filter}
             {group_filter}
@@ -3024,6 +3602,18 @@ def _fetch_pos_top_items(
         """,
         {**params, "lim": max(int(limit or 8) * (2 if skip_returns else 3), 24)},
     )
+
+    if not need_item_join and sales_rows:
+        codes = [
+            str(r.get("ITEM_CODE") or "").strip()
+            for r in sales_rows
+            if str(r.get("ITEM_CODE") or "").strip()
+        ]
+        names = _item_name_lookup(codes)
+        for row in sales_rows:
+            code = str(row.get("ITEM_CODE") or "").strip()
+            if code and names.get(code):
+                row["ITEM_NAME"] = names[code]
 
     returns_by_item: dict[str, tuple[float, float, float]] = {}
     item_codes = [
@@ -3092,10 +3682,10 @@ def _fetch_bill_top_items(
     group_filter = ""
     if branch_code:
         params["brn"] = branch_code
-        branch_filter = "AND TO_CHAR(b.BRN_NO) = :brn"
+        branch_filter = "AND b.BRN_NO = :brn"
     if group_code:
-        params["gcode"] = group_code
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["gcode"] = _bind_gcode(group_code)
+        group_filter = "AND i.G_CODE = :gcode"
     order_sql = _item_order_sql(order_by)
 
     sales_rows = _fetch_all(
@@ -3114,7 +3704,7 @@ def _fetch_bill_top_items(
            AND b.BRN_NO = d.BRN_NO
           LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
           WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-            AND NVL(b.CNCL_FLG, 0) = 0
+            AND {_bill_mst_ok("b")}
             AND d.I_CODE IS NOT NULL
             {doc_filter}
             {cash_filter}
@@ -3144,11 +3734,11 @@ def _fetch_bill_top_items(
         ret_branch = ""
         ret_group = ""
         if branch_code:
-            ret_params["brn"] = branch_code
-            ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn"
+            ret_params["brn"] = _bind_brn(branch_code)
+            ret_branch = "AND r.BRN_NO = :brn"
         if group_code:
-            ret_params["gcode"] = group_code
-            ret_group = "AND TO_CHAR(i.G_CODE) = :gcode"
+            ret_params["gcode"] = _bind_gcode(group_code)
+            ret_group = "AND i.G_CODE = :gcode"
         item_filter = _item_in_filter("d.I_CODE", item_codes, ret_params)
         for row in _fetch_all(
             f"""
@@ -3163,7 +3753,7 @@ def _fetch_bill_top_items(
              AND r.BRN_NO = d.BRN_NO
             LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-              AND NVL(r.CNCL_FLG, 0) = 0
+              AND {_rt_bill_mst_ok("r")}
               AND d.I_CODE IS NOT NULL
               {ret_doc}
               {ret_cash}
@@ -3196,6 +3786,7 @@ def fetch_top_sales_items(
     group_code: str = "",
     limit: int = 8,
     order_by: str = "sales",
+    force_fast: bool | None = None,
 ) -> list[dict]:
     """أكثر الأصناف مبيعاً خلال الفترة — SELECT فقط."""
     if not oracle_enabled():
@@ -3203,8 +3794,10 @@ def fetch_top_sales_items(
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     order = "qty" if str(order_by or "sales").strip().lower() == "qty" else "sales"
+    # دائماً صافي بعد المرتجعات
+    fast = False
     cache_key = (
-        f"sales:items:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:items:v9:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:net:{order}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3218,7 +3811,7 @@ def fetch_top_sales_items(
             brn,
             gcode,
             limit,
-            skip_returns=False,
+            skip_returns=fast,
             order_by=order,
         )
     else:
@@ -3229,7 +3822,7 @@ def fetch_top_sales_items(
             brn,
             gcode,
             limit,
-            skip_returns=False,
+            skip_returns=fast,
             order_by=order,
         )
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
@@ -3268,35 +3861,53 @@ def fetch_sales_item_highlights(
     top_qty = None
     top_ret = None
     try:
-        amt_rows = fetch_top_sales_items(
-            date_from,
-            date_to,
-            system=sys,
-            branch_code=brn,
-            group_code=gcode,
-            limit=1,
-            order_by="sales",
-        )
-        top_amt = amt_rows[0] if amt_rows else None
-        qty_rows = fetch_top_sales_items(
-            date_from,
-            date_to,
-            system=sys,
-            branch_code=brn,
-            group_code=gcode,
-            limit=1,
-            order_by="qty",
-        )
-        top_qty = qty_rows[0] if qty_rows else None
-        ret_rows = fetch_top_returned_items(
-            date_from,
-            date_to,
-            system=sys,
-            branch_code=brn,
-            group_code=gcode,
-            limit=1,
-        )
-        top_ret = ret_rows[0] if ret_rows else None
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _amt():
+            with oracle_session():
+                rows = fetch_top_sales_items(
+                    date_from,
+                    date_to,
+                    system=sys,
+                    branch_code=brn,
+                    group_code=gcode,
+                    limit=1,
+                    order_by="sales",
+                )
+                return rows[0] if rows else None
+
+        def _qty():
+            with oracle_session():
+                rows = fetch_top_sales_items(
+                    date_from,
+                    date_to,
+                    system=sys,
+                    branch_code=brn,
+                    group_code=gcode,
+                    limit=1,
+                    order_by="qty",
+                )
+                return rows[0] if rows else None
+
+        def _ret():
+            with oracle_session():
+                rows = fetch_top_returned_items(
+                    date_from,
+                    date_to,
+                    system=sys,
+                    branch_code=brn,
+                    group_code=gcode,
+                    limit=1,
+                )
+                return rows[0] if rows else None
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_amt = pool.submit(_amt)
+            f_qty = pool.submit(_qty)
+            f_ret = pool.submit(_ret)
+            top_amt = f_amt.result()
+            top_qty = f_qty.result()
+            top_ret = f_ret.result()
     except Exception as exc:  # noqa: BLE001
         logger.warning("item highlights (%s) failed: %s", sys, exc)
         return empty
@@ -3381,11 +3992,11 @@ def fetch_top_returned_items(
         branch_filter = ""
         group_filter = ""
         if brn:
-            params["brn"] = brn
-            branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+            params["brn"] = _bind_brn(brn)
+            branch_filter = "AND m.BRN_NO = :brn"
         if gcode:
-            params["gcode"] = gcode
-            group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+            params["gcode"] = _bind_gcode(gcode)
+            group_filter = "AND i.G_CODE = :gcode"
         rows = _fetch_all(
             f"""
             SELECT * FROM (
@@ -3419,11 +4030,11 @@ def fetch_top_returned_items(
         branch_filter = ""
         group_filter = ""
         if brn:
-            params["brn"] = brn
-            branch_filter = "AND TO_CHAR(r.BRN_NO) = :brn"
+            params["brn"] = _bind_brn(brn)
+            branch_filter = "AND r.BRN_NO = :brn"
         if gcode:
-            params["gcode"] = gcode
-            group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+            params["gcode"] = _bind_gcode(gcode)
+            group_filter = "AND i.G_CODE = :gcode"
         rows = _fetch_all(
             f"""
             SELECT * FROM (
@@ -3440,7 +4051,7 @@ def fetch_top_returned_items(
                AND r.BRN_NO = d.BRN_NO
               LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
               WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                AND NVL(r.CNCL_FLG, 0) = 0
+                AND {_rt_bill_mst_ok("r")}
                 AND d.I_CODE IS NOT NULL
                 {doc_filter}
                 {cash_filter}
@@ -3548,7 +4159,7 @@ def fetch_active_sales_user_count(
             SELECT COUNT(DISTINCT TO_CHAR(b.AD_U_ID)) AS CNT
             FROM {schema}.IAS_BILL_MST b
             WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-              AND NVL(b.CNCL_FLG, 0) = 0
+              AND {_bill_mst_ok("b")}
               AND b.AD_U_ID IS NOT NULL
               {doc_filter}
               {cash_filter}
@@ -3598,7 +4209,7 @@ def fetch_active_sales_device_count(
             SELECT COUNT(DISTINCT TO_CHAR(b.CASH_NO)) AS CNT
             FROM {schema}.IAS_BILL_MST b
             WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-              AND NVL(b.CNCL_FLG, 0) = 0
+              AND {_bill_mst_ok("b")}
               AND b.CASH_NO IS NOT NULL
               {doc_filter}
               {cash_filter}
@@ -3624,7 +4235,7 @@ def fetch_top_sales_users(
     brn = str(branch_code or "").strip()
     lim = int(limit or 10)
     cache_key = (
-        f"sales:users:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:users:v3:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3635,8 +4246,8 @@ def fetch_top_sales_users(
     params: dict = _date_params(date_from, date_to)
     branch_filter = ""
     if brn:
-        params["brn"] = brn
-        branch_filter = "AND TO_CHAR(p.BRN_NO) = :brn"
+        params["brn"] = _bind_brn(brn)
+        branch_filter = "AND p.BRN_NO = :brn"
     returns_by_user: dict[str, tuple[int, float, float]] = {}
 
     if conf.get("source") == "pos":
@@ -3650,7 +4261,7 @@ def fetch_top_sales_users(
                 ROUND(SUM(NVL(p.VAT_AMT, 0)), 2) AS VAT_TOTAL
             FROM {pos}.IAS_POS_BILL_MST p
             WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
-              AND NVL(p.HUNG, 0) = 0
+              AND {_pos_mst_ok("p")}
               AND p.AD_U_ID IS NOT NULL
               {branch_filter}
             GROUP BY TO_CHAR(p.AD_U_ID)
@@ -3659,7 +4270,7 @@ def fetch_top_sales_users(
         )
         try:
             ret_params = dict(params)
-            ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn" if brn else ""
+            ret_branch = "AND r.BRN_NO = :brn" if brn else ""
             for row in _fetch_all(
                 f"""
                 SELECT
@@ -3669,7 +4280,8 @@ def fetch_top_sales_users(
                     ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
                 FROM {pos}.IAS_POS_RT_BILL_MST r
                 WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-                  AND NVL(r.HUNG, 0) = 0
+                  AND {_hung_ok("r")}
+                  AND {_bill_amt_ok("r", "RT_BILL_AMT")}
                   AND r.AD_U_ID IS NOT NULL
                   {ret_branch}
                 GROUP BY TO_CHAR(r.AD_U_ID)
@@ -3692,8 +4304,8 @@ def fetch_top_sales_users(
     schema = _schema()
     bill_branch = ""
     if brn:
-        params["brn"] = brn
-        bill_branch = "AND TO_CHAR(b.BRN_NO) = :brn"
+        params["brn"] = _bind_brn(brn)
+        bill_branch = "AND b.BRN_NO = :brn"
     doc_filter = _doc_type_filter(conf, "b", "BILL_DOC_TYPE", params)
     cash_filter = "AND b.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
     sales_rows = _fetch_all(
@@ -3708,7 +4320,7 @@ def fetch_top_sales_users(
           {doc_filter}
           {cash_filter}
           {bill_branch}
-          AND NVL(b.CNCL_FLG, 0) = 0
+          AND {_bill_mst_ok("b")}
           AND b.AD_U_ID IS NOT NULL
         GROUP BY TO_CHAR(b.AD_U_ID)
         """,
@@ -3717,10 +4329,10 @@ def fetch_top_sales_users(
     try:
         ret_params: dict = _date_params(date_from, date_to)
         if brn:
-            ret_params["brn"] = brn
+            ret_params["brn"] = _bind_brn(brn)
         ret_doc_filter = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", ret_params)
         ret_cash_filter = "AND r.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
-        ret_branch = "AND TO_CHAR(r.BRN_NO) = :brn" if brn else ""
+        ret_branch = "AND r.BRN_NO = :brn" if brn else ""
         for row in _fetch_all(
             f"""
             SELECT
@@ -3733,7 +4345,7 @@ def fetch_top_sales_users(
               {ret_doc_filter}
               {ret_cash_filter}
               {ret_branch}
-              AND NVL(r.CNCL_FLG, 0) = 0
+              AND {_rt_bill_mst_ok("r")}
               AND r.AD_U_ID IS NOT NULL
             GROUP BY TO_CHAR(r.AD_U_ID)
             """,
@@ -3809,7 +4421,7 @@ def fetch_user_invoice_details(
               AND b.AD_U_ID = :user_id
               {doc_filter}
               {cash_filter}
-              AND NVL(b.CNCL_FLG, 0) = 0
+              AND {_bill_mst_ok("b")}
             ORDER BY b.BRN_NO, b.CASH_NO, b.AD_TRMNL_NM, b.BILL_DATE, b.BILL_NO
             """,
             params,
@@ -3862,6 +4474,32 @@ def fetch_user_invoice_details(
         )
     )
     return out
+
+
+def _item_unit_cost_map() -> dict[str, float]:
+    """تكلفة وحدة تقريبية لكل صنف من IAS_ITM_WCODE — للكاش وتفادي JOIN ثقيل."""
+    hit, cached = _django_lookup_get("item_unit_cost_map:v1")
+    if hit and isinstance(cached, dict):
+        return cached
+    rows = _fetch_all(
+        f"""
+        SELECT TO_CHAR(w.I_CODE) AS ITEM_CODE,
+               ROUND(AVG(NVL(w.I_CWTAVG, w.PRIMARY_COST)), 6) AS UNIT_COST
+        FROM {_schema()}.IAS_ITM_WCODE w
+        WHERE NVL(w.I_CWTAVG, w.PRIMARY_COST) IS NOT NULL
+          AND NVL(w.I_CWTAVG, w.PRIMARY_COST) > 0
+          AND w.I_CODE IS NOT NULL
+        GROUP BY TO_CHAR(w.I_CODE)
+        """,
+        {},
+    )
+    out: dict[str, float] = {}
+    for row in rows:
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if not code:
+            continue
+        out[code] = float(row.get("UNIT_COST") or 0)
+    return _django_lookup_set("item_unit_cost_map:v1", out)
 
 
 def _simple_unit_cost_join_sql(schema: str) -> str:
@@ -3940,11 +4578,11 @@ def _fetch_bill_margin_ranks(
     group_filter = ""
     brn = str(branch_code or "").strip()
     if brn:
-        params["brn"] = brn
-        branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
+        params["brn"] = _bind_brn(brn)
+        branch_filter = "AND m.BRN_NO = :brn"
     if group_code:
-        params["gcode"] = group_code
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["gcode"] = _bind_gcode(group_code)
+        group_filter = "AND i.G_CODE = :gcode"
 
     rows = _fetch_all(
         f"""
@@ -3965,6 +4603,7 @@ def _fetch_bill_margin_ranks(
          AND NVL(m.BILL_SER, 0) = NVL(d.BILL_SER, 0)
         LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+          AND {_bill_mst_ok("m")}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
           {group_filter}
@@ -3999,6 +4638,79 @@ def _fetch_bill_margin_ranks(
                     "COST_TOTAL": row.get("COST_TOTAL"),
                 }
             )
+
+    # خصم مرتجعات الآجل من صافي/تكلفة الهامش
+    try:
+        ret_params = dict(params)
+        ret_rows = _fetch_all(
+            f"""
+            SELECT
+                CASE
+                  WHEN GROUPING(r.BRN_NO) = 0 THEN 'BRN'
+                  ELSE 'GRP'
+                END AS KIND,
+                TO_CHAR(r.BRN_NO) AS BRANCH_CODE,
+                NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
+                ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+                ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
+                ROUND(SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 2) AS COST_TOTAL
+            FROM {schema}.IAS_RT_BILL_DTL d
+            JOIN {schema}.IAS_RT_BILL_MST r
+              ON r.RT_BILL_SER = d.RT_BILL_SER
+             AND r.BRN_NO = d.BRN_NO
+            LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
+              AND {_rt_bill_mst_ok("r")}
+              AND d.I_CODE IS NOT NULL
+              {branch_filter.replace("m.BRN_NO", "r.BRN_NO") if branch_filter else ""}
+              {group_filter}
+            GROUP BY GROUPING SETS ((r.BRN_NO), (i.G_CODE))
+            """,
+            ret_params,
+        )
+        brn_map = {str(r.get("CODE") or "").strip(): r for r in branch_rows}
+        grp_map = {str(r.get("CODE") or "").strip(): r for r in group_rows}
+        for row in ret_rows:
+            kind = str(row.get("KIND") or "").strip()
+            if kind == "BRN":
+                code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
+                bucket = brn_map.get(code)
+                if bucket is None:
+                    bucket = {
+                        "CODE": code,
+                        "NAME": branch_names.get(code) or code,
+                        "QTY_TOTAL": 0.0,
+                        "NET_TOTAL": 0.0,
+                        "COST_TOTAL": 0.0,
+                    }
+                    branch_rows.append(bucket)
+                    brn_map[code] = bucket
+            else:
+                code = str(row.get("GROUP_CODE") or "").strip() or "(بلا)"
+                bucket = grp_map.get(code)
+                if bucket is None:
+                    bucket = {
+                        "CODE": code,
+                        "NAME": group_names.get(code) or code,
+                        "QTY_TOTAL": 0.0,
+                        "NET_TOTAL": 0.0,
+                        "COST_TOTAL": 0.0,
+                    }
+                    group_rows.append(bucket)
+                    grp_map[code] = bucket
+            bucket["QTY_TOTAL"] = float(bucket.get("QTY_TOTAL") or 0) - float(
+                row.get("QTY_TOTAL") or 0
+            )
+            bucket["NET_TOTAL"] = float(bucket.get("NET_TOTAL") or 0) - float(
+                row.get("NET_TOTAL") or 0
+            )
+            bucket["COST_TOTAL"] = float(bucket.get("COST_TOTAL") or 0) - float(
+                row.get("COST_TOTAL") or 0
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Bill margin returns failed: %s", exc)
+        raise
+
     return (
         _margin_rank_rows(
             branch_rows, code_key="branch_code", name_key="branch_name", names=branch_names
@@ -4014,21 +4726,109 @@ def _fetch_pos_margin_ranks(
     date_to,
     branch_code: str = "",
     group_code: str = "",
+    skip_returns: bool = False,
 ) -> tuple[list[dict], list[dict]]:
-    """هامش POS بمسح مبيعات + مرتجعات مجمّعين مباشرة (فرع/مجموعة)."""
+    """هامش POS — للفترة الطويلة: تجميع حسب الصنف ثم ربط التكلفة/المجموعة في بايثون."""
     pos = _pos_owner()
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
     branch_filter = ""
     group_filter = ""
     brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
     if brn:
-        params["brn"] = brn
-        branch_filter = "AND TO_CHAR(m.BRN_NO) = :brn"
-    if group_code:
-        params["gcode"] = group_code
-        group_filter = "AND TO_CHAR(i.G_CODE) = :gcode"
+        params["brn"] = _bind_brn(brn)
+        branch_filter = "AND m.BRN_NO = :brn"
+    if gcode:
+        params["gcode"] = _bind_gcode(gcode)
+        group_filter = "AND i.G_CODE = :gcode"
+    hung_m = _hung_ok("m")
+
+    if skip_returns:
+        item_rows = _fetch_all(
+            f"""
+            SELECT
+                TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+                TO_CHAR(d.I_CODE) AS ITEM_CODE,
+                SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+                SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL
+            FROM {pos}.IAS_POS_BILL_MST m
+            JOIN {pos}.IAS_POS_BILL_DTL d
+              ON d.BILL_NO = m.BILL_NO
+             AND d.BRN_NO = m.BRN_NO
+             AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+              AND {hung_m}
+              AND d.I_CODE IS NOT NULL
+              {branch_filter}
+            GROUP BY m.BRN_NO, d.I_CODE
+            """,
+            params,
+        )
+        gmap = _item_group_code_map()
+        cmap = _item_unit_cost_map()
+        brn_acc: dict[str, dict[str, float]] = {}
+        grp_acc: dict[str, dict[str, float]] = {}
+
+        def _add(bucket: dict[str, dict[str, float]], key: str, qty: float, net: float, cost: float) -> None:
+            if not key:
+                return
+            row = bucket.get(key)
+            if row is None:
+                row = {"qty": 0.0, "net": 0.0, "cost": 0.0}
+                bucket[key] = row
+            row["qty"] += qty
+            row["net"] += net
+            row["cost"] += cost
+
+        for row in item_rows:
+            item = str(row.get("ITEM_CODE") or "").strip()
+            if not item:
+                continue
+            g_code = gmap.get(item, "(بلا)")
+            if gcode and g_code != gcode:
+                continue
+            b_code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
+            qty = float(row.get("QTY_TOTAL") or 0)
+            net = float(row.get("NET_TOTAL") or 0)
+            cost = qty * float(cmap.get(item) or 0)
+            _add(brn_acc, b_code, qty, net, cost)
+            _add(grp_acc, g_code, qty, net, cost)
+
+        branch_names = _branch_names()
+        group_names = _group_name_lookup()
+        branch_rows = [
+            {
+                "CODE": code,
+                "NAME": branch_names.get(code) or code,
+                "QTY_TOTAL": vals["qty"],
+                "NET_TOTAL": vals["net"],
+                "COST_TOTAL": vals["cost"],
+            }
+            for code, vals in brn_acc.items()
+        ]
+        group_rows = [
+            {
+                "CODE": code,
+                "NAME": group_names.get(code) or code,
+                "QTY_TOTAL": vals["qty"],
+                "NET_TOTAL": vals["net"],
+                "COST_TOTAL": vals["cost"],
+            }
+            for code, vals in grp_acc.items()
+        ]
+        return (
+            _margin_rank_rows(
+                branch_rows, code_key="branch_code", name_key="branch_name", names=branch_names
+            ),
+            _margin_rank_rows(
+                group_rows, code_key="group_code", name_key="group_name", names=group_names
+            ),
+        )
+
     cost_join = _simple_unit_cost_join_sql(schema)
+    if gcode:
+        group_filter = "AND i.G_CODE = :gcode"
 
     sales_rows = _fetch_all(
         f"""
@@ -4050,7 +4850,7 @@ def _fetch_pos_margin_ranks(
         LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         {cost_join}
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-          AND NVL(m.HUNG, 0) = 0
+          AND {hung_m}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
           {group_filter}
@@ -4079,7 +4879,7 @@ def _fetch_pos_margin_ranks(
         LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         {cost_join}
         WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
-          AND NVL(m.HUNG, 0) = 0
+          AND {_hung_ok("m")}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
           {group_filter}
@@ -4159,6 +4959,7 @@ def fetch_margin_ranks(
     branch_code: str = "",
     group_code: str = "",
     limit: int = 15,
+    force_fast: bool | None = None,
 ) -> dict[str, list[dict]]:
     """هامش الربح كما تقرير النظام — تجميع مباشر وسريع للفروع والمجموعات.
 
@@ -4170,9 +4971,11 @@ def fetch_margin_ranks(
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     lim = max(1, int(limit or 15))
+    # دائماً صافي بعد المرتجعات
+    fast = False
     cache_key = (
-        f"sales:margin:v7:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
+        f"sales:margin:v10:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:net"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -4180,11 +4983,12 @@ def fetch_margin_ranks(
 
     conf = _system_conf(system)
     if conf.get("source") == "pos":
-        branches, groups = _fetch_pos_margin_ranks(date_from, date_to, brn, gcode)
+        branches, groups = _fetch_pos_margin_ranks(
+            date_from, date_to, brn, gcode, skip_returns=fast
+        )
     else:
         branches, groups = _fetch_bill_margin_ranks(date_from, date_to, brn, gcode)
 
-    # lim محفوظ للتوافق مع الـ API — حالياً نعيد الكل
     del lim
     payload = {"branches": branches, "groups": groups}
     _sales_cache_set(cache_key, payload, date_from=date_from, date_to=date_to)

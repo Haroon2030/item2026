@@ -35,7 +35,13 @@
 {% endif %}
 
 {% if browsed and kpi and active %}
-  <section class="dash-kpi" aria-label="ملخص الفترة">
+  <section
+    class="dash-kpi"
+    aria-label="ملخص الفترة"
+    {% if load_kpi_highlights %}
+    data-highlights-url="/sales/api/highlights/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
+    {% endif %}
+  >
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-pos">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
@@ -113,8 +119,8 @@
         </span>
         الصنف الأكثر مبيعاً
       </span>
-      <strong class="dash-kpi-value" title="{{ kpi.top_item_amount_code }}">{{ kpi.top_item_amount_name }}</strong>
-      <span class="dash-kpi-hint mono">{% money kpi.top_item_amount_value %} مبلغ</span>
+      <strong class="dash-kpi-value" id="kpi-item-amt-name" title="{{ kpi.top_item_amount_code }}">{{ kpi.top_item_amount_name }}</strong>
+      <span class="dash-kpi-hint mono" id="kpi-item-amt-hint">{% money kpi.top_item_amount_value %} مبلغ</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty">
       <span class="dash-kpi-label">
@@ -123,8 +129,8 @@
         </span>
         الصنف الأكثر سحباً
       </span>
-      <strong class="dash-kpi-value" title="{{ kpi.top_item_qty_code }}">{{ kpi.top_item_qty_name }}</strong>
-      <span class="dash-kpi-hint mono">{{ kpi.top_item_qty_value }} كمية</span>
+      <strong class="dash-kpi-value" id="kpi-item-qty-name" title="{{ kpi.top_item_qty_code }}">{{ kpi.top_item_qty_name }}</strong>
+      <span class="dash-kpi-hint mono" id="kpi-item-qty-hint">{{ kpi.top_item_qty_value }} كمية</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret">
       <span class="dash-kpi-label">
@@ -133,8 +139,8 @@
         </span>
         الصنف الأكثر إرجاعاً
       </span>
-      <strong class="dash-kpi-value" title="{{ kpi.top_item_return_code }}">{{ kpi.top_item_return_name }}</strong>
-      <span class="dash-kpi-hint mono">{% money kpi.top_item_return_value %} مبلغ مرتجع · {{ kpi.seller_system_label }}</span>
+      <strong class="dash-kpi-value" id="kpi-item-ret-name" title="{{ kpi.top_item_return_code }}">{{ kpi.top_item_return_name }}</strong>
+      <span class="dash-kpi-hint mono" id="kpi-item-ret-hint">{% money kpi.top_item_return_value %} مبلغ مرتجع · {{ kpi.seller_system_label }}</span>
     </article>
   </section>
 
@@ -256,7 +262,11 @@
       {% if group_panel %}
         <div class="dash-panel dash-groups dash-panel-glass" id="dash-groups" aria-label="المبيعات حسب المجموعة"
           {% if defer_heavy %}
+          data-groups-url="/sales/api/groups/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
           data-panels-url="/sales/api/panels/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
+          data-groups-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
+          data-date-from="{{ date_from }}"
+          data-date-to="{{ date_to }}"
           {% endif %}
         >
           <div class="dash-panel-head">
@@ -305,7 +315,7 @@
                     <th>فواتير المبيعات</th>
                     <th>إجمالي المبيعات</th>
                     <th>الصافي بعد المرتجع</th>
-                    <th>متوسط السلة</th>
+                    <th title="صافي مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
                     <th class="sales-col-extra">الكمية</th>
                     <th class="sales-col-extra">الصافي قبل الضريبة</th>
                     <th class="sales-col-extra">الضريبة</th>
@@ -328,7 +338,7 @@
                   <th>فواتير المبيعات</th>
                   <th>إجمالي المبيعات</th>
                   <th>الصافي بعد المرتجع</th>
-                  <th>متوسط السلة</th>
+                  <th title="صافي مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
                   <th class="sales-col-extra">الكمية</th>
                   <th class="sales-col-extra">الصافي قبل الضريبة</th>
                   <th class="sales-col-extra">الضريبة</th>
@@ -377,7 +387,7 @@
             </table>
             {% endif %}
           </div>
-          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">تنبيه: حساب مبسّط بدون مرتجعات (غير مستخدم حالياً).</p>
+          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">الأرقام صافي بعد خصم المرتجعات. «متوسط المجموعة» في الصف = صافي المجموعة ÷ فواتيرها. إجمالي الفواتير في التذييل من رأس الفاتورة (بدون مضاعفة بين المجموعات)، ومتوسط السلة في التذييل = إجمالي الصافي ÷ تلك الفواتير.</p>
         </div>
       {% endif %}
     </div>
@@ -389,6 +399,9 @@
         id="dash-top-items"
         data-items-url="/sales/api/items/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
         {% if defer_heavy %}
+        data-items-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
+        data-date-from="{{ date_from }}"
+        data-date-to="{{ date_to }}"
         data-panels-url="/sales/api/panels/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
         {% endif %}
       >
@@ -429,7 +442,7 @@
                   <span class="seller-name" title="{{ item.item_name }} — {{ item.item_code }}">{{ item.item_name }}</span>
                   <span class="seller-meta">
                     <span class="seller-meta-inv mono">{{ item.qty_total_display }} كمية</span>
-                    <span class="seller-meta-code mono">{{ item.invoice_count }} فاتورة</span>
+                    <span class="seller-meta-code mono">{{ item.invoice_count }} سطر</span>
                   </span>
                   <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
                 </span>
@@ -597,6 +610,11 @@
     id="dash-margins"
     aria-label="هامش الربح"
     data-margins-url="/sales/api/margins/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
+    {% if defer_heavy %}
+    data-margins-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
+    data-date-from="{{ date_from }}"
+    data-date-to="{{ date_to }}"
+    {% endif %}
   >
     <div class="dash-panel dash-panel-glass" aria-label="هامش ربح الفروع">
       <div class="dash-panel-head">
@@ -652,9 +670,9 @@
               </tr>
             </thead>
             <tbody id="margin-branches-body"></tbody>
+            <tfoot id="margin-branches-totals" aria-label="إجمالي الفروع" hidden></tfoot>
           </table>
         </div>
-        <div class="margin-totals" id="margin-branches-totals" aria-label="إجمالي الفروع"></div>
       </div>
       <p class="sales-empty" id="margin-branches-empty" hidden>لا بيانات هامش فروع لهذه الفترة.</p>
     </div>
@@ -713,9 +731,9 @@
               </tr>
             </thead>
             <tbody id="margin-groups-body"></tbody>
+            <tfoot id="margin-groups-totals" aria-label="إجمالي المجموعات" hidden></tfoot>
           </table>
         </div>
-        <div class="margin-totals" id="margin-groups-totals" aria-label="إجمالي المجموعات"></div>
       </div>
       <p class="sales-empty" id="margin-groups-empty" hidden>لا بيانات هامش مجموعات لهذه الفترة.</p>
     </div>
@@ -778,5 +796,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=27" defer></script>
+<script src="/static/js/sales-dash.js?v=39" defer></script>
 {% endblock %}

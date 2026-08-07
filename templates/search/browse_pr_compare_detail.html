@@ -8,11 +8,11 @@
 <section class="dash-head" aria-label="مقارنة طلب شراء">
   <div class="dash-head-copy">
     <h2>مقارنة طلب الشراء</h2>
-    <p>جدول مقارنة: الصف = صنف، الأعمدة = مطلوب + المخازن ذات الرصيد فقط</p>
+    <p>الأرقام في المخازن = الرصيد المتوقع بعد خصم المبيعات غير المرحلة (حقيقي بعد الترحيل)</p>
   </div>
   <a
     class="sales-view-btn pr-compare-back"
-    href="{% url 'browse_pr_compare' %}?branch={{ selected_branch|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+    href="{% url 'browse_pr_compare' %}?branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
   >رجوع للطلبات</a>
 </section>
 
@@ -27,15 +27,19 @@
   <section class="pr-compare-meta dash-panel-glass" aria-label="بيانات الطلب">
     <div>
       <span class="pr-compare-meta-label">الطلب</span>
-      <strong class="mono">{{ compare.header.pr_ser }} · #{{ compare.header.pr_no }}</strong>
+      <strong class="mono" title="{{ compare.header.pr_type }}/{{ compare.header.pr_ser }}">{{ compare.header.pr_no }}</strong>
     </div>
     <div>
       <span class="pr-compare-meta-label">الفرع</span>
       <strong>{{ compare.header.branch_name }}</strong>
     </div>
     <div>
-      <span class="pr-compare-meta-label">التاريخ</span>
+      <span class="pr-compare-meta-label">التاريخ والوقت</span>
       <strong class="mono">{{ compare.header.date_label }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">المورد</span>
+      <strong title="#{{ compare.header.vendor_code }}">{{ compare.header.vendor_name }}</strong>
     </div>
     <div>
       <span class="pr-compare-meta-label">المستخدم</span>
@@ -65,6 +69,7 @@
               <th class="pr-compare-sheet-sticky pr-compare-sheet-num">#</th>
               <th class="pr-compare-sheet-sticky pr-compare-sheet-name">الصنف</th>
               <th class="pr-compare-sheet-sticky pr-compare-sheet-code">الكود</th>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-unit">الوحدة</th>
               <th class="pr-compare-sheet-req">مطلوب</th>
               {% for wh in compare.warehouses %}
                 <th class="pr-compare-sheet-wh" title="{{ wh.name }} — {{ wh.branch_name }} (#{{ wh.code }})">
@@ -72,7 +77,7 @@
                   <span class="pr-compare-sheet-wh-branch">{{ wh.branch_name }}</span>
                 </th>
               {% endfor %}
-              <th class="pr-compare-sheet-total">إجمالي المتوفر</th>
+              <th class="pr-compare-sheet-total">إجمالي بعد الترحيل</th>
               <th class="pr-compare-sheet-count">عدد المخازن</th>
             </tr>
           </thead>
@@ -80,24 +85,28 @@
             {% for item in compare.items %}
               <tr class="{% if not item.has_stock %}is-empty{% endif %}">
                 <td class="pr-compare-sheet-sticky pr-compare-sheet-num mono">{{ forloop.counter }}</td>
-                <td class="pr-compare-sheet-sticky pr-compare-sheet-name" title="{{ item.name }}">{{ item.name }}</td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-name" title="{{ item.name }}"><strong>{{ item.name }}</strong></td>
                 <td class="pr-compare-sheet-sticky pr-compare-sheet-code mono">{{ item.code }}</td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-unit">{{ item.unit }}</td>
                 <td class="pr-compare-sheet-req mono">{{ item.req_display }}</td>
                 {% for cell in item.cells %}
                   {% if cell %}
-                    <td class="pr-compare-sheet-qty mono has-qty">{{ cell.qty_display }}</td>
+                    <td
+                      class="pr-compare-sheet-qty mono has-qty{% if cell.expected_neg %} is-neg{% elif cell.expected_low %} is-expected{% endif %}"
+                      title="رصيد حالي: {{ cell.qty_display }}{% if cell.pending_display %} — غير مرحّل: {{ cell.pending_display }}{% endif %} — متوقع: {{ cell.expected_display }}"
+                    >{{ cell.expected_display }}</td>
                   {% else %}
                     <td class="pr-compare-sheet-qty is-blank"></td>
                   {% endif %}
                 {% endfor %}
-                <td class="pr-compare-sheet-total mono">{% if item.has_stock %}{{ item.stock_total_display }}{% else %}—{% endif %}</td>
+                <td class="pr-compare-sheet-total mono" title="رصيد حالي إجمالي: {{ item.stock_total_display }}">{% if item.has_stock %}{{ item.expected_total_display }}{% else %}—{% endif %}</td>
                 <td class="pr-compare-sheet-count mono">{{ item.stock_count }}</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-      <p class="pr-compare-sheet-note">الخلية الفارغة = لا رصيد في هذا المخزن لهذا الصنف. تظهر فقط المخازن التي لديها كمية لصنف واحد على الأقل.</p>
+      <p class="pr-compare-sheet-note">الأرقام في المخازن = الرصيد الحقيقي المتوقع (رصيد أونكس − مبيعات نقاط البيع غير المرحلة، وبحد أدنى صفر). مرّر على الخلية لرؤية التفاصيل.</p>
     {% else %}
       <p class="sales-empty">لا توجد أصناف في هذا الطلب.</p>
     {% endif %}

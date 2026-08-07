@@ -20,6 +20,11 @@ urlpatterns = [
     path('sales/api/items/', views.browse_sales_items_api, name='browse_sales_items_api'),
     path('sales/api/users/', views.browse_sales_users_api, name='browse_sales_users_api'),
     path('sales/api/panels/', views.browse_sales_panels_api, name='browse_sales_panels_api'),
+    path(
+        'sales/api/highlights/',
+        views.browse_sales_highlights_api,
+        name='browse_sales_highlights_api',
+    ),
     path('sales/api/charts/', views.browse_sales_charts_api, name='browse_sales_charts_api'),
     path('sales/api/margins/', views.browse_sales_margins_api, name='browse_sales_margins_api'),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),

@@ -714,19 +714,17 @@ def _build_sales_system(
 
     _format_sales_metric_rows(rows)
     top_users: list[dict] = []
-    if not light:
-        if selected_branch:
-            from .oracle_stock import fetch_top_sales_users
+    # قائمة البائعين الثقيلة تُحمَّل عبر /sales/api/users إلا عند اختيار فرع/مستخدم
+    if not light and (selected_branch or requested_user):
+        from .oracle_stock import fetch_top_sales_users
 
-            top_users = fetch_top_sales_users(
-                date_from,
-                date_to,
-                system=key,
-                branch_code=selected_branch,
-                limit=8,
-            )
-        else:
-            top_users = list(bundle.get('top_users') or [])
+        top_users = fetch_top_sales_users(
+            date_from,
+            date_to,
+            system=key,
+            branch_code=selected_branch,
+            limit=8,
+        )
         for user in top_users:
             user['net_total_display'] = f"{float(user.get('net_total') or 0):,.2f}"
             user['sales_total_display'] = f"{float(user.get('sales_total') or 0):,.2f}"
@@ -854,6 +852,7 @@ def _empty_group_panel(selected_branch='', selected_group='', groups=None):
         'selected_group_name': '',
         'selected_branch': selected_branch,
         'by_branch': bool(selected_group),
+        'grand_invoices': 0,
         'grand_invoices_display': '0',
         'grand_qty_display': '0.00',
         'grand_sales': '0.00',
@@ -873,11 +872,11 @@ def _build_group_panel(
     branches,
     selected_group='',
     selected_branch='',
+    force_fast=None,
 ):
     from .oracle_stock import (
         fetch_group_sales_totals,
         fetch_sales_group_options,
-        sales_fast_mode,
     )
 
     group_options = fetch_sales_group_options()
@@ -885,6 +884,7 @@ def _build_group_panel(
     if selected_group and selected_group not in group_codes:
         selected_group = ''
     by_branch = bool(selected_group)
+    fast_mode = False
     group_rows = fetch_group_sales_totals(
         date_from,
         date_to,
@@ -892,6 +892,7 @@ def _build_group_panel(
         branch_code=selected_branch,
         group_code=selected_group,
         by_branch=by_branch,
+        force_fast=False,
     )
     _format_sales_metric_rows(group_rows)
     for row in group_rows:
@@ -912,9 +913,32 @@ def _build_group_panel(
     g_vat = sum(float(r.get('vat_total') or 0) for r in group_rows)
     g_sales = sum(float(r.get('sales_total') or 0) for r in group_rows)
     g_gross = sum(float(r.get('gross_total') or 0) for r in group_rows)
-    g_inv = sum(int(r.get('invoice_count') or 0) for r in group_rows)
     g_qty = sum(float(r.get('qty_total') or 0) for r in group_rows)
+    # فواتير حقيقية من رأس الفاتورة عند عرض كل المجموعات
+    # (مجموع فواتير صفوف المجموعات يضاعف الفاتورة المشتركة)
+    if by_branch:
+        g_inv = sum(int(r.get('invoice_count') or 0) for r in group_rows)
+    else:
+        from .oracle_stock import fetch_branch_sales_totals
+
+        branch_rows = fetch_branch_sales_totals(
+            date_from, date_to, system=active_system
+        )
+        if selected_branch:
+            match = next(
+                (
+                    r
+                    for r in branch_rows
+                    if str(r.get('branch_code') or '') == selected_branch
+                ),
+                None,
+            )
+            g_inv = int((match or {}).get('invoice_count') or 0)
+        else:
+            g_inv = sum(int(r.get('invoice_count') or 0) for r in branch_rows)
     g_avg = round(g_sales / g_inv, 2) if g_inv else 0.0
+    grand_inv_display = f'{g_inv:,}'
+    grand_avg_display = f'{g_avg:,.2f}'
     selected_group_name = ''
     if by_branch and group_rows:
         selected_group_name = str(group_rows[0].get('group_name') or selected_group)
@@ -930,14 +954,15 @@ def _build_group_panel(
         'selected_group_name': selected_group_name,
         'selected_branch': selected_branch,
         'by_branch': by_branch,
-        'grand_invoices_display': f'{g_inv:,}',
+        'grand_invoices': g_inv,
+        'grand_invoices_display': grand_inv_display,
         'grand_qty_display': f'{g_qty:,.2f}',
         'grand_sales': f'{g_sales:,.2f}',
         'grand_gross': f'{g_gross:,.2f}',
         'grand_net': f'{g_net:,.2f}',
         'grand_vat': f'{g_vat:,.2f}',
-        'grand_avg_basket': f'{g_avg:,.2f}',
-        'fast_mode': sales_fast_mode(date_from, date_to),
+        'grand_avg_basket': grand_avg_display,
+        'fast_mode': fast_mode,
         'loading': False,
     }
 
@@ -986,8 +1011,9 @@ def _build_top_items_list(
     selected_branch='',
     selected_group='',
     limit=20,
+    force_fast=None,
 ):
-    from .oracle_stock import fetch_top_sales_items, sales_fast_mode
+    from .oracle_stock import fetch_top_sales_items
 
     top_items = fetch_top_sales_items(
         date_from,
@@ -996,11 +1022,12 @@ def _build_top_items_list(
         branch_code=selected_branch,
         group_code=selected_group,
         limit=limit,
+        force_fast=False,
     )
     for item in top_items:
         item['sales_total_display'] = f"{float(item.get('sales_total') or 0):,.2f}"
         item['qty_total_display'] = f"{float(item.get('qty_total') or 0):,.2f}"
-    return top_items, sales_fast_mode(date_from, date_to)
+    return top_items, False
 
 
 def _build_top_users_list(
@@ -1202,22 +1229,25 @@ def browse_sales(request):
                     selected_group=selected_group,
                     groups=group_options,
                 )
-                with oracle_session():
-                    active['chart_branches'] = _build_chart_branches_list(
-                        date_from,
-                        date_to,
-                        active_system,
-                        limit=15,
-                    )
-                    from .oracle_stock import fetch_sales_item_highlights
+                # دائماً: أول رسم = MST فقط؛ الأثقال عبر API (مع الإبقاء على خصم المرتجعات)
+                from .oracle_stock import sales_long_range
 
-                    active['item_highlights'] = fetch_sales_item_highlights(
-                        date_from,
-                        date_to,
-                        branch_code=active.get('selected_branch') or '',
-                        group_code=selected_group,
-                        system=active_system,
-                    )
+                long_range = sales_long_range(date_from, date_to)
+                active['chart_branches'] = []
+                active['item_highlights'] = {
+                    'top_amount_name': '…',
+                    'top_amount_code': '',
+                    'top_amount_value': '—',
+                    'top_qty_name': '…',
+                    'top_qty_code': '',
+                    'top_qty_value': '—',
+                    'top_return_name': '…',
+                    'top_return_code': '',
+                    'top_return_value': '—',
+                }
+                active['load_kpi_highlights'] = True
+                active['sales_progressive'] = long_range
+                # لا تُجلب أبرز الأصناف/الرسوم على SSR — تُحمَّل بعد الصفحة
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales failed: %s', exc)
         error = f'تعذّر جلب المبيعات: {exc}'
@@ -1291,6 +1321,8 @@ def browse_sales(request):
             'group_panel': group_panel,
             'top_items': top_items,
             'defer_heavy': defer_heavy and bool(active) and not error,
+            'sales_progressive': bool((active or {}).get('sales_progressive')),
+            'load_kpi_highlights': bool((active or {}).get('load_kpi_highlights')),
             'kpi': kpi,
             'browsed': bool(systems) and not error,
             'error': error,
@@ -1300,11 +1332,21 @@ def browse_sales(request):
     )
 
 
+def _request_force_fast(request):
+    """fast=1 يفرض مسار الفترة الطويلة على الشريحة (للتحميل التصاعدي)."""
+    raw = str(request.GET.get('fast') or '').strip().lower()
+    if raw in ('1', 'true', 'yes'):
+        return True
+    if raw in ('0', 'false', 'no'):
+        return False
+    return None
+
+
 @login_required
 @require_GET
 @never_cache
 def browse_sales_groups_api(request):
-    """تحميل لاحق لجدول المجموعات (ثقيل على الفترات الطويلة)."""
+    """تحميل لاحق لجدول المجموعات (شريحة تاريخية واحدة — للتحميل التصاعدي شهراً بشهر)."""
     try:
         date_from, date_to = _parse_sales_dates(
             request.GET.get('date_from'),
@@ -1318,6 +1360,7 @@ def browse_sales_groups_api(request):
         active_system = 'pos'
     selected_group = str(request.GET.get('group') or '').strip()
     selected_branch = str(request.GET.get('branch') or '').strip()
+    force_fast = _request_force_fast(request)
     try:
         from .oracle_stock import oracle_enabled, oracle_session
 
@@ -1331,8 +1374,14 @@ def browse_sales_groups_api(request):
                 branches=[],
                 selected_group=selected_group,
                 selected_branch=selected_branch,
+                force_fast=False,
             )
-        return JsonResponse({'ok': True, 'panel': panel})
+        return JsonResponse({
+            'ok': True,
+            'panel': panel,
+            'chunk_from': date_from.isoformat(),
+            'chunk_to': date_to.isoformat(),
+        })
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_groups_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
@@ -1356,6 +1405,12 @@ def browse_sales_items_api(request):
         active_system = 'pos'
     selected_group = str(request.GET.get('group') or '').strip()
     selected_branch = str(request.GET.get('branch') or '').strip()
+    force_fast = _request_force_fast(request)
+    try:
+        limit = int(request.GET.get('limit') or 20)
+    except (TypeError, ValueError):
+        limit = 20
+    limit = max(1, min(limit, 80))
     try:
         from .oracle_stock import oracle_enabled, oracle_session
 
@@ -1368,7 +1423,8 @@ def browse_sales_items_api(request):
                 active_system,
                 selected_branch=selected_branch,
                 selected_group=selected_group,
-                limit=20,
+                limit=limit,
+                force_fast=False,
             )
         return JsonResponse({'ok': True, 'items': items, 'fast_mode': fast_mode})
     except Exception as exc:  # noqa: BLE001
@@ -1461,6 +1517,47 @@ def browse_sales_panels_api(request):
 @login_required
 @require_GET
 @never_cache
+def browse_sales_highlights_api(request):
+    """أبرز أصناف KPI (مبلغ / كمية / مرتجع) — للتحميل اللاحق في الفترات الطويلة."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import (
+            fetch_sales_item_highlights,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            highlights = fetch_sales_item_highlights(
+                date_from,
+                date_to,
+                branch_code=selected_branch,
+                group_code=selected_group,
+                system=active_system,
+            )
+        return JsonResponse({'ok': True, 'highlights': highlights})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_highlights_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_sales_charts_api(request):
     """رسوم الفروع + الأصناف الأكثر إرجاعاً مع فلتر فرع/مجموعة."""
     try:
@@ -1528,6 +1625,7 @@ def browse_sales_margins_api(request):
         active_system = 'pos'
     selected_group = str(request.GET.get('group') or '').strip()
     selected_branch = str(request.GET.get('branch') or '').strip()
+    force_fast = _request_force_fast(request)
     try:
         from .oracle_stock import fetch_margin_ranks, oracle_enabled, oracle_session
 
@@ -1541,6 +1639,7 @@ def browse_sales_margins_api(request):
                 branch_code=selected_branch,
                 group_code=selected_group,
                 limit=15,
+                force_fast=False,
             )
         branches = []
         for row in payload.get('branches') or []:
@@ -1794,13 +1893,14 @@ def browse_inventory(request):
                         not in {w['code'] for w in warehouse_choices}
                     ):
                         selected_warehouse = ''
-
-                insights = build_inventory_insights(
-                    warehouse=selected_warehouse,
-                    group_code=selected_group,
-                    branch_code=selected_branch,
-                )
                 warehouses = warehouse_choices
+
+            # خارج الجلسة: الاستعلامات الثقيلة تعمل بالتوازي بجلسات مستقلة
+            insights = build_inventory_insights(
+                warehouse=selected_warehouse,
+                group_code=selected_group,
+                branch_code=selected_branch,
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_inventory failed: %s', exc)
         error = f'تعذّر تحليل المخزون: {exc}'
@@ -1926,52 +2026,146 @@ def browse_purchases(request):
 @require_GET
 @never_cache
 def browse_pr_compare(request):
-    """قائمة طلبات شراء اليوم لمقارنة الأرصدة حسب الفرع/المخزن."""
-    from datetime import date
+    """قائمة طلبات الشراء حسب التاريخ لمقارنة الأرصدة حسب الفرع/المخزن."""
+    from datetime import date, datetime
 
     today = date.today()
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    date_raw = str(request.GET.get('date') or '').strip()[:10]
+    selected_date = today
+    if date_raw:
+        try:
+            selected_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = today
     requests_today: list[dict] = []
     branches: list[dict] = []
     warehouses: list[dict] = []
+    selected_warehouse_name = ''
     error = ''
 
     try:
-        from .oracle_income import fetch_income_branches
         from .oracle_pr_compare import (
+            _norm_code,
             fetch_today_purchase_requests,
-            fetch_warehouses_for_branch,
         )
-        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_stock import (
+            _branch_names,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن مقارنة طلبات الشراء.'
         else:
             with oracle_session():
-                branches = fetch_income_branches()
-                if selected_branch not in {row['code'] for row in branches}:
-                    selected_branch = ''
-                warehouses = fetch_warehouses_for_branch(selected_branch)
-                if selected_warehouse not in {row['code'] for row in warehouses}:
+                # الفروع من ربط المخازن (CONN_BRN_NO) لضمان تطابق قائمة المخازن
+                all_warehouses = fetch_warehouse_options(active_only=True)
+                branch_name_map = _branch_names()
+
+                def _branch_label(code: str, fallback: str = '') -> str:
+                    raw = str(code or '').strip()
+                    if not raw:
+                        return fallback or '—'
+                    if raw in branch_name_map:
+                        return branch_name_map[raw]
+                    norm = _norm_code(raw)
+                    for key, label in branch_name_map.items():
+                        if _norm_code(key) == norm:
+                            return label
+                    return str(fallback or raw).strip() or raw
+
+                branch_map: dict[str, str] = {}
+                for row in all_warehouses:
+                    brn = str(row.get('branch_code') or '').strip()
+                    if not brn:
+                        continue
+                    branch_map[brn] = _branch_label(brn, row.get('branch_name') or '')
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda item: (item[1], item[0])
+                    )
+                ]
+                if selected_branch and selected_branch not in branch_map:
+                    # احتياطي للترميز الرقمي
+                    matched = next(
+                        (
+                            code
+                            for code in branch_map
+                            if _norm_code(code) == _norm_code(selected_branch)
+                        ),
+                        '',
+                    )
+                    selected_branch = matched
+
+                warehouses = (
+                    [
+                        row
+                        for row in all_warehouses
+                        if str(row.get('branch_code') or '').strip() == selected_branch
+                        or _norm_code(row.get('branch_code'))
+                        == _norm_code(selected_branch)
+                    ]
+                    if selected_branch
+                    else []
+                )
+                # فضّل التطابق الحرفي أولاً
+                exact = [
+                    row
+                    for row in warehouses
+                    if str(row.get('branch_code') or '').strip() == selected_branch
+                ]
+                if exact:
+                    warehouses = exact
+
+                warehouses = sorted(
+                    warehouses,
+                    key=lambda row: (
+                        str(row.get('name') or '').strip(),
+                        str(row.get('code') or '').strip(),
+                    ),
+                )
+
+                wh_codes = {str(row.get('code') or '').strip() for row in warehouses}
+                if selected_warehouse and selected_warehouse not in wh_codes:
                     selected_warehouse = ''
+                if selected_warehouse:
+                    selected_warehouse_name = next(
+                        (
+                            str(row.get('name') or selected_warehouse)
+                            for row in warehouses
+                            if str(row.get('code') or '').strip() == selected_warehouse
+                        ),
+                        selected_warehouse,
+                    )
                 if selected_branch:
                     requests_today = fetch_today_purchase_requests(
                         branch_code=selected_branch,
-                        day=today,
+                        day=selected_date,
+                        warehouse_code=selected_warehouse,
                     )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_pr_compare failed: %s', exc)
         error = f'تعذّر تحميل طلبات الشراء: {exc}'
         requests_today = []
 
+    is_today = selected_date == today
+    period_label = 'اليوم' if is_today else selected_date.isoformat()
+
     return render(
         request,
         'search/browse_pr_compare.html',
         {
             'today': today.isoformat(),
+            'selected_date': selected_date.isoformat(),
+            'period_label': period_label,
+            'is_today': is_today,
             'selected_branch': selected_branch,
             'selected_warehouse': selected_warehouse,
+            'selected_warehouse_name': selected_warehouse_name,
             'branches': branches,
             'warehouses': warehouses,
             'requests_today': requests_today,
@@ -1990,6 +2184,7 @@ def browse_pr_compare_detail(request):
     pr_ser = str(request.GET.get('pr_ser') or '').strip()
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_date = str(request.GET.get('date') or '').strip()[:10]
     compare = None
     error = ''
 
@@ -1997,19 +2192,32 @@ def browse_pr_compare_detail(request):
         error = 'معرّف طلب الشراء غير مكتمل.'
     else:
         try:
-            from .oracle_pr_compare import build_purchase_request_compare
+            from .oracle_pr_compare import (
+                build_purchase_request_compare,
+                fetch_warehouses_for_branch,
+            )
             from .oracle_stock import oracle_enabled, oracle_session
 
             if not oracle_enabled():
                 error = 'أوراكل غير مفعّل — لا يمكن مقارنة الطلب.'
             else:
-                wh_filter = [selected_warehouse] if selected_warehouse else None
+                wh_filter = None
                 with oracle_session():
+                    if selected_warehouse:
+                        branch_wh = {
+                            str(row.get("code") or "").strip()
+                            for row in fetch_warehouses_for_branch(selected_branch)
+                        }
+                        if selected_branch and selected_warehouse not in branch_wh:
+                            selected_warehouse = ""
+                        if selected_warehouse:
+                            wh_filter = [selected_warehouse]
                     compare = build_purchase_request_compare(
                         pr_type=pr_type,
                         pr_no=pr_no,
                         pr_ser=pr_ser,
                         warehouse_codes=wh_filter,
+                        branch_code="" if wh_filter else selected_branch,
                     )
                 if compare is None:
                     error = 'طلب الشراء غير موجود أو غير نشط.'
@@ -2027,6 +2235,7 @@ def browse_pr_compare_detail(request):
             'pr_ser': pr_ser,
             'selected_branch': selected_branch,
             'selected_warehouse': selected_warehouse,
+            'selected_date': selected_date,
             'compare': compare,
             'error': error,
         },
