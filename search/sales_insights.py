@@ -32,6 +32,45 @@ def _fmt_pct(value: float | None) -> str:
     return f'{sign}{value:.1f}%'
 
 
+def _metric_tone(delta: float | None, *, invert: bool = False) -> str:
+    """لون المقياس: ارتفاع المبيعات جيد؛ ارتفاع المرتجع سيء."""
+    if delta is None:
+        return 'flat'
+    d = float(delta)
+    if abs(d) < 0.05:
+        return 'flat'
+    good = d > 0
+    if invert:
+        good = not good
+    return 'good' if good else 'bad'
+
+
+def _metric_arc_pct(delta: float | None) -> str:
+    """شدة القوس 0–100 بتنسيق CSS (نقطة عشرية)."""
+    if delta is None:
+        return '0.0'
+    return f'{min(100.0, abs(float(delta))):.1f}'
+
+
+def _compare_metric(
+    metric: str,
+    a: str,
+    b: str,
+    delta: float | None,
+    *,
+    invert: bool = False,
+) -> dict[str, Any]:
+    return {
+        'metric': metric,
+        'a': a,
+        'b': b,
+        'delta': _fmt_pct(delta),
+        'delta_num': delta,
+        'tone': _metric_tone(delta, invert=invert),
+        'arc_pct': _metric_arc_pct(delta),
+    }
+
+
 def _fmt_int(value: int) -> str:
     return f'{int(value or 0):,}'
 
@@ -50,24 +89,7 @@ def _branch_table_totals(rows: list[dict]) -> dict[str, Any]:
     sales_a, sales_b, sales_delta = _sum_pair(rows, 'sales_a', 'sales_b')
     inv_a = sum(int(r.get('inv_a') or 0) for r in rows)
     inv_b = sum(int(r.get('inv_b') or 0) for r in rows)
-    ret_a = round(sum(float(r.get('ret_a') or 0) for r in rows), 2)
-    rate = round((ret_a / sales_a) * 100.0, 1) if sales_a else 0.0
-    return {
-        'sales_a_display': _fmt_money(sales_a),
-        'sales_b_display': _fmt_money(sales_b),
-        'sales_delta': sales_delta,
-        'sales_delta_display': _fmt_pct(sales_delta),
-        'inv_a_display': _fmt_int(inv_a),
-        'inv_b_display': _fmt_int(inv_b),
-        'ret_a_display': _fmt_money(ret_a),
-        'return_rate_a_display': f'{rate:.1f}%',
-    }
-
-
-def _group_table_totals(rows: list[dict]) -> dict[str, Any]:
-    sales_a, sales_b, sales_delta = _sum_pair(rows, 'sales_a', 'sales_b')
-    inv_a = sum(int(r.get('inv_a') or 0) for r in rows)
-    inv_b = sum(int(r.get('inv_b') or 0) for r in rows)
+    inv_delta = _pct_change(float(inv_a), float(inv_b))
     ret_a = round(sum(float(r.get('ret_a') or 0) for r in rows), 2)
     rate = round((ret_a / sales_a) * 100.0, 1) if sales_a else 0.0
     avg_a = round(sales_a / inv_a, 2) if inv_a else 0.0
@@ -78,6 +100,31 @@ def _group_table_totals(rows: list[dict]) -> dict[str, Any]:
         'sales_delta_display': _fmt_pct(sales_delta),
         'inv_a_display': _fmt_int(inv_a),
         'inv_b_display': _fmt_int(inv_b),
+        'inv_delta': inv_delta,
+        'inv_delta_display': _fmt_pct(inv_delta),
+        'avg_a_display': _fmt_money(avg_a),
+        'ret_a_display': _fmt_money(ret_a),
+        'return_rate_a_display': f'{rate:.1f}%',
+    }
+
+
+def _group_table_totals(rows: list[dict]) -> dict[str, Any]:
+    sales_a, sales_b, sales_delta = _sum_pair(rows, 'sales_a', 'sales_b')
+    inv_a = sum(int(r.get('inv_a') or 0) for r in rows)
+    inv_b = sum(int(r.get('inv_b') or 0) for r in rows)
+    inv_delta = _pct_change(float(inv_a), float(inv_b))
+    ret_a = round(sum(float(r.get('ret_a') or 0) for r in rows), 2)
+    rate = round((ret_a / sales_a) * 100.0, 1) if sales_a else 0.0
+    avg_a = round(sales_a / inv_a, 2) if inv_a else 0.0
+    return {
+        'sales_a_display': _fmt_money(sales_a),
+        'sales_b_display': _fmt_money(sales_b),
+        'sales_delta': sales_delta,
+        'sales_delta_display': _fmt_pct(sales_delta),
+        'inv_a_display': _fmt_int(inv_a),
+        'inv_b_display': _fmt_int(inv_b),
+        'inv_delta': inv_delta,
+        'inv_delta_display': _fmt_pct(inv_delta),
         'avg_a_display': _fmt_money(avg_a),
         'ret_a_display': _fmt_money(ret_a),
         'return_rate_a_display': f'{rate:.1f}%',
@@ -312,6 +359,9 @@ def _build_compare_table(
             or code
         )
         cur_rate = round((cur_ret / cur_sales) * 100.0, 2) if cur_sales else 0.0
+        inv_delta = _pct_change(float(cur_inv), float(prev_inv))
+        avg_a = round(cur_sales / cur_inv, 2) if cur_inv else 0.0
+        bar_max = max(cur_inv, prev_inv, 1)
         out.append(
             {
                 'branch_code': code,
@@ -326,7 +376,12 @@ def _build_compare_table(
                 'inv_a_display': _fmt_int(cur_inv),
                 'inv_b': prev_inv,
                 'inv_b_display': _fmt_int(prev_inv),
-                'inv_delta_display': _fmt_pct(_pct_change(float(cur_inv), float(prev_inv))),
+                'inv_delta': inv_delta,
+                'inv_delta_display': _fmt_pct(inv_delta),
+                # CSS width needs ASCII dot (not locale comma like 52,1)
+                'inv_bar_a_pct': f'{(cur_inv / bar_max) * 100.0:.1f}',
+                'inv_bar_b_pct': f'{(prev_inv / bar_max) * 100.0:.1f}',
+                'avg_a_display': _fmt_money(avg_a),
                 'ret_a': cur_ret,
                 'ret_a_display': _fmt_money(cur_ret),
                 'ret_b': prev_ret,
@@ -385,6 +440,8 @@ def _build_group_compare_table(
         )
         cur_rate = round((cur_ret / cur_sales) * 100.0, 2) if cur_sales else 0.0
         avg_a = round(cur_sales / cur_inv, 2) if cur_inv else 0.0
+        inv_delta = _pct_change(float(cur_inv), float(prev_inv))
+        bar_max = max(cur_inv, prev_inv, 1)
         out.append(
             {
                 'group_code': code,
@@ -399,7 +456,10 @@ def _build_group_compare_table(
                 'inv_a_display': _fmt_int(cur_inv),
                 'inv_b': prev_inv,
                 'inv_b_display': _fmt_int(prev_inv),
-                'inv_delta_display': _fmt_pct(_pct_change(float(cur_inv), float(prev_inv))),
+                'inv_delta': inv_delta,
+                'inv_delta_display': _fmt_pct(inv_delta),
+                'inv_bar_a_pct': f'{(cur_inv / bar_max) * 100.0:.1f}',
+                'inv_bar_b_pct': f'{(prev_inv / bar_max) * 100.0:.1f}',
                 'ret_a': cur_ret,
                 'ret_a_display': _fmt_money(cur_ret),
                 'return_rate_a': cur_rate,
@@ -830,41 +890,38 @@ def build_performance_insights(
             'top_share_display': f'{top_share:.0f}%',
         },
         'compare_summary': [
-            {
-                'metric': 'المبيعات',
-                'a': _fmt_money(cur_sales),
-                'b': _fmt_money(prior_sales),
-                'delta': _fmt_pct(sales_delta),
-                'delta_num': sales_delta,
-            },
-            {
-                'metric': 'الفواتير',
-                'a': _fmt_int(cur_inv),
-                'b': _fmt_int(prior_inv),
-                'delta': _fmt_pct(inv_delta),
-                'delta_num': inv_delta,
-            },
-            {
-                'metric': 'المرتجع',
-                'a': _fmt_money(cur_ret_amt),
-                'b': _fmt_money(prior_ret_amt),
-                'delta': _fmt_pct(ret_delta),
-                'delta_num': ret_delta,
-            },
-            {
-                'metric': 'نسبة المرتجع',
-                'a': f'{return_rate:.1f}%',
-                'b': f'{prior_return_rate:.1f}%',
-                'delta': _fmt_pct(_pct_change(return_rate, prior_return_rate)),
-                'delta_num': _pct_change(return_rate, prior_return_rate),
-            },
-            {
-                'metric': 'متوسط السلة',
-                'a': _fmt_money(avg_basket),
-                'b': _fmt_money(prior['avg_basket']),
-                'delta': _fmt_pct(basket_delta),
-                'delta_num': basket_delta,
-            },
+            _compare_metric(
+                'المبيعات',
+                _fmt_money(cur_sales),
+                _fmt_money(prior_sales),
+                sales_delta,
+            ),
+            _compare_metric(
+                'الفواتير',
+                _fmt_int(cur_inv),
+                _fmt_int(prior_inv),
+                inv_delta,
+            ),
+            _compare_metric(
+                'المرتجع',
+                _fmt_money(cur_ret_amt),
+                _fmt_money(prior_ret_amt),
+                ret_delta,
+                invert=True,
+            ),
+            _compare_metric(
+                'نسبة المرتجع',
+                f'{return_rate:.1f}%',
+                f'{prior_return_rate:.1f}%',
+                _pct_change(return_rate, prior_return_rate),
+                invert=True,
+            ),
+            _compare_metric(
+                'متوسط السلة',
+                _fmt_money(avg_basket),
+                _fmt_money(prior['avg_basket']),
+                basket_delta,
+            ),
         ],
         'compare_table': compare_table[:25],
         'compare_totals': _branch_table_totals(compare_table[:25]),

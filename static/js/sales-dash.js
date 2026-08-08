@@ -99,6 +99,85 @@
     return '<td class="' + cls + '">' + moneyHtml(amount) + "</td>";
   }
 
+  function renderGroupReturns(panelData) {
+    var loading = document.getElementById("group-returns-loading");
+    var table = document.getElementById("sales-group-returns-table");
+    var tbody = document.getElementById("sales-group-returns-tbody");
+    var tfoot = document.getElementById("sales-group-returns-tfoot");
+    var pill = document.getElementById("group-returns-pill");
+    var data = panelData || {};
+    var rows = data.rows || [];
+    if (loading) {
+      clearDashLoadProgress(loading);
+      loading.hidden = true;
+    }
+    if (table) table.hidden = false;
+    if (pill) {
+      pill.textContent = rows.length
+        ? rows.length + " مجموعة · " + (data.grand_count_display || "0") + " فاتورة مرتجع"
+        : "لا مرتجعات";
+    }
+    if (!tbody) return;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="sales-empty">لا توجد مرتجعات مجموعات في هذه الفترة.</td></tr>';
+      if (tfoot) tfoot.hidden = true;
+      return;
+    }
+    var html = "";
+    rows.forEach(function (row, i) {
+      html +=
+        "<tr>" +
+        '<td class="mono">' + (i + 1) + "</td>" +
+        "<td>" + esc(row.group_name) + "</td>" +
+        '<td class="mono">' + esc(row.return_count_display || row.return_count || "0") + "</td>" +
+        moneyCell(row.return_total_display || fmtMoneyNum(row.return_total), "sales-amt-net") +
+        '<td class="mono sales-col-extra">' + esc(row.return_qty_display || fmtMoneyNum(row.return_qty)) + "</td>" +
+        moneyCell(row.net_total_display || fmtMoneyNum(row.net_total), "sales-col-extra") +
+        moneyCell(row.vat_total_display || fmtMoneyNum(row.vat_total), "sales-col-extra") +
+        "</tr>";
+    });
+    tbody.innerHTML = html;
+    if (tfoot) {
+      tfoot.hidden = false;
+      tfoot.innerHTML =
+        '<tr class="sales-grand-row">' +
+        "<td colspan=\"2\">الإجمالي</td>" +
+        '<td class="mono">' + esc(data.grand_count_display || "0") + "</td>" +
+        moneyCell(data.grand_returns || "0.00", "sales-amt-net") +
+        '<td class="mono sales-col-extra">' + esc(data.grand_qty_display || "0.00") + "</td>" +
+        moneyCell(data.grand_net || "0.00", "sales-col-extra") +
+        moneyCell(data.grand_vat || "0.00", "sales-col-extra") +
+        "</tr>";
+    }
+  }
+
+  function failGroupReturns(err) {
+    var loading = document.getElementById("group-returns-loading");
+    if (loading) {
+      loading.hidden = false;
+      loading.classList.remove("dash-load-progress");
+      loading.textContent = "تعذّر تحميل مرتجعات المجموعات: " + ((err && err.message) || err);
+    }
+  }
+
+  function loadGroupReturns() {
+    var box = document.getElementById("dash-group-returns");
+    var url = box && box.dataset.returnsUrl;
+    if (!url) return Promise.resolve();
+    var loading = document.getElementById("group-returns-loading");
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = "جاري تحميل مرتجعات المجموعات…";
+    }
+    return fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderGroupReturns(data.panel || {});
+      })
+      .catch(failGroupReturns);
+  }
+
   function renderGroups(dataPanel) {
     var loading = document.getElementById("groups-loading");
     var table = document.getElementById("sales-groups-table");
@@ -123,7 +202,11 @@
       if (panelData.progressive_pill) invPart += " · " + panelData.progressive_pill;
       pill.textContent = invPart;
     }
-    if (note) note.hidden = false;
+    if (note) {
+      note.hidden = false;
+      note.textContent =
+        "مبيعات المجموعات بدون خصم المرتجعات. المرتجعات في الجدول أسفل. «متوسط المجموعة» = مبيعات المجموعة ÷ فواتيرها.";
+    }
     if (!tbody) return;
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="10" class="sales-empty">لا توجد مبيعات مجموعات في هذه الفترة.</td></tr>';
@@ -265,8 +348,15 @@
           if (timer) clearTimeout(timer);
         })
         .catch(function (err) {
-          if (n >= attempts) throw err;
-          return delayMs(700 * n).then(once);
+          if (n >= attempts) {
+            var e = err || new Error("فشل التحميل");
+            if (e.name === "AbortError") e = new Error("انتهت مهلة الطلب");
+            else if (String(e.message || "") === "Failed to fetch") {
+              e = new Error("Failed to fetch");
+            }
+            throw e;
+          }
+          return delayMs(900 * n).then(once);
         });
     }
     return once();
@@ -365,7 +455,7 @@
       var u = new URL(baseUrl, window.location.origin);
       u.searchParams.set("date_from", chunk.date_from);
       u.searchParams.set("date_to", chunk.date_to);
-      // دائماً صافي بعد المرتجعات — لا fast=1
+      // مبيعات مجموعات بدون خصم مرتجع — لا تحتاج fast=
       u.searchParams.delete("fast");
       return u.pathname + u.search;
     } catch (e) {
@@ -379,19 +469,31 @@
     }
   }
 
+  function friendlyFetchError(err) {
+    if (!err) return "فشل التحميل";
+    if (err.name === "AbortError") return "انتهت مهلة الطلب — أُعيدت المحاولة أو تُكمَّل الشرائح الأخرى";
+    var msg = String(err.message || err);
+    if (msg === "Failed to fetch" || /NetworkError|network/i.test(msg)) {
+      return "انقطع الاتصال بالخادم (مهلة/شبكة) — جرّب تحديث الصفحة";
+    }
+    if (/^HTTP 50/.test(msg)) return "خطأ في الخادم (" + msg + ")";
+    if (/^HTTP 504/.test(msg) || /gateway/i.test(msg)) return "انتهت مهلة البوابة — الفترة طويلة جداً";
+    return msg;
+  }
+
   function loadGroupsProgressive(baseUrl, dateFrom, dateTo) {
-    var chunks = monthChunksNewestFirst(dateFrom, dateTo);
+    // شرائح نصف شهر للفترات الطويلة — أقل عرضة لـ Failed to fetch / timeout
+    var chunks = marginChunksNewestFirst(dateFrom, dateTo);
+    var loading = document.getElementById("groups-loading");
     if (!chunks.length) {
-      return fetch(baseUrl, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      return fetchJsonRetry(baseUrl, { attempts: 3, timeoutMs: 150000 })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderGroups(data.panel || {});
         });
     }
     if (chunks.length === 1) {
-      return fetch(groupsChunkUrl(baseUrl, chunks[0]), { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunks[0]), { attempts: 3, timeoutMs: 150000 })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderGroups(data.panel || {});
@@ -400,7 +502,7 @@
 
     var merged = {
       rows: [],
-      fast_mode: false,
+      fast_mode: true,
       by_branch: false,
       grand_invoices: 0,
       grand_invoices_display: "0",
@@ -411,50 +513,74 @@
       grand_vat: "0.00",
       grand_avg_basket: "0.00"
     };
-    var idx = 0;
-    var loading = document.getElementById("groups-loading");
+    var total = chunks.length;
+    var done = 0;
+    var failed = 0;
+    var nextIdx = 0;
+    var CONCURRENCY = 1; // تسلسلي في الإنتاج — يتجنب ضغط العمال والبوابة
 
-    function step() {
-      if (idx >= chunks.length) {
-        merged.progressive_done = true;
-        merged.progressive_pill = "اكتمل";
-        renderGroups(merged);
-        clearDashLoadProgress(loading);
-        return Promise.resolve();
-      }
-      var chunk = chunks[idx];
-      var n = idx + 1;
-      var total = chunks.length;
+    function chunkLabel(chunk) {
+      return chunk.date_from.slice(0, 7) +
+        (chunk.date_from.slice(8) !== "01" || chunk.date_to.slice(8) < "28"
+          ? (" " + chunk.date_from.slice(8) + "–" + chunk.date_to.slice(8))
+          : "");
+    }
+
+    function worker() {
+      if (nextIdx >= chunks.length) return Promise.resolve();
+      var i = nextIdx;
+      nextIdx += 1;
+      var chunk = chunks[i];
+      var n = i + 1;
       setDashLoadProgress(
         loading,
-        Math.max(0, n - 1),
+        done,
         total,
-        "جاري تحميل المجموعات… شهر " + n + " من " + total +
-          " (" + chunk.date_from.slice(0, 7) + ") — الأحدث أولاً"
+        "جاري تحميل المجموعات… شريحة " + n + " من " + total +
+          " (" + chunkLabel(chunk) + ") — الأحدث أولاً"
       );
-      return fetch(groupsChunkUrl(baseUrl, chunk), { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunk), { attempts: 3, timeoutMs: 150000 })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           merged = mergeGroupPanels(merged, data.panel || {});
-          merged.progressive_done = n < total ? false : true;
-          merged.progressive_pill = n + "/" + total;
-          renderGroups(merged);
-          if (n < total) {
-            setDashLoadProgress(
-              loading,
-              n,
-              total,
-              "تم " + n + " من " + total + " — يُكمَّل الباقي…"
-            );
-          } else {
-            clearDashLoadProgress(loading);
+        })
+        .catch(function () {
+          failed += 1;
+        })
+        .then(function () {
+          done += 1;
+          var still = done < total;
+          merged.progressive_done = !still;
+          merged.progressive_pill = done + "/" + total;
+          if (merged.rows && merged.rows.length) renderGroups(merged);
+          if (still) {
+            var msg = failed
+              ? ("تم " + (done - failed) + " من " + total + " — تعذّر " + failed + " — يُكمَّل…")
+              : ("تم " + done + " من " + total + " — يُكمَّل الباقي…");
+            setDashLoadProgress(loading, done, total, msg);
           }
-          idx += 1;
-          return step();
+          return worker();
         });
     }
-    return step();
+
+    var workers = [];
+    for (var w = 0; w < CONCURRENCY; w += 1) workers.push(worker());
+    return Promise.all(workers).then(function () {
+      merged.progressive_done = true;
+      merged.progressive_pill = failed ? ("جزئي · فشل " + failed) : "اكتمل";
+      if (merged.rows && merged.rows.length) {
+        renderGroups(merged);
+        clearDashLoadProgress(loading);
+        if (failed && loading) {
+          loading.hidden = false;
+          loading.classList.remove("dash-load-progress");
+          loading.textContent =
+            "اكتمل جزئياً — تعذّر " + failed + " من " + total + " شرائح (حدّث لإعادة المحاولة).";
+        }
+        return;
+      }
+      throw new Error("انقطع الاتصال بالخادم — تعذّر كل شرائح المجموعات");
+    });
   }
 
   function ensureBoard(id, className) {
@@ -597,7 +723,10 @@
   function renderReturnItems(items) {
     var chartLoading = document.getElementById("chart-items-loading");
     var pill = document.getElementById("chart-returns-pill");
-    var chartBoard = ensureBoard("chart-items-board", "branch-chart top20-chart");
+    var chartBoard = ensureBoard(
+      "chart-items-board",
+      "seller-board top20-chart perf-inv-chart is-scroll"
+    );
     var list = items || [];
     if (chartLoading) chartLoading.hidden = true;
     if (pill) pill.textContent = "أعلى " + list.length;
@@ -607,20 +736,52 @@
       chartBoard.innerHTML = '<p class="sales-empty">لا توجد مرتجعات لهذه الفلترة.</p>';
       return;
     }
+    var maxAmt = 0;
+    var maxQty = 0;
+    list.forEach(function (item) {
+      var amt = Number(item.return_total != null ? item.return_total : item.sales_total) || 0;
+      var qty = Number(item.qty_total) || 0;
+      if (amt > maxAmt) maxAmt = amt;
+      if (qty > maxQty) maxQty = qty;
+    });
+    if (maxAmt <= 0) maxAmt = 1;
+    if (maxQty <= 0) maxQty = 1;
+
     var chartHtml = "";
     list.forEach(function (item, i) {
-      var amt = item.return_total_display || item.sales_total_display;
+      var amt = Number(item.return_total != null ? item.return_total : item.sales_total) || 0;
+      var qty = Number(item.qty_total) || 0;
+      var amtPct = ((amt / maxAmt) * 100).toFixed(1);
+      var qtyPct = ((qty / maxQty) * 100).toFixed(1);
+      var share = item.share_pct != null ? String(item.share_pct) : amtPct;
+      var amtDisp = item.return_total_display || item.sales_total_display || "0";
+      var qtyDisp = item.qty_total_display || "0";
       chartHtml +=
-        '<div class="branch-chart-row is-return" role="listitem" style="--bar-pct: ' +
-        esc(item.share_pct) + '%; --i: ' + i + '" title="' +
-        esc(item.item_name) + " — " + esc(amt) + '">' +
-        '<span class="branch-chart-rank mono" aria-hidden="true">' + (i + 1) + "</span>" +
-        '<span class="branch-chart-name">' + esc(item.item_name) + "</span>" +
-        '<span class="branch-chart-track" aria-hidden="true"><span class="branch-chart-fill"></span></span>' +
-        '<span class="branch-chart-meta">' +
-        '<span class="branch-chart-amt mono">' + moneyHtml(amt) + "</span>" +
-        '<span class="branch-chart-inv mono">' + esc(item.qty_total_display) + " كمية مرتجعة</span>" +
-        "</span></div>";
+        '<article class="perf-inv-row is-return" role="listitem" style="--i: ' + i + '" title="' +
+        esc(item.item_name) + " — " + esc(amtDisp) + '">' +
+        '<div class="perf-inv-head">' +
+        '<div class="perf-inv-name" title="' + esc(item.item_name) + '">' +
+        '<span class="perf-inv-rank mono" aria-hidden="true">' + (i + 1) + "</span>" +
+        esc(item.item_name) +
+        "</div>" +
+        '<span class="perf-inv-delta mono is-down">' + esc(share) + "%</span>" +
+        "</div>" +
+        '<div class="perf-inv-bars">' +
+        '<div class="perf-inv-bar-line">' +
+        '<span class="perf-inv-tag">ق</span>' +
+        '<span class="perf-inv-track">' +
+        '<span class="perf-inv-fill is-low" style="width: ' + amtPct + '%;"></span>' +
+        "</span>" +
+        '<span class="mono perf-inv-val is-low">' + moneyHtml(amtDisp) + "</span>" +
+        "</div>" +
+        '<div class="perf-inv-bar-line">' +
+        '<span class="perf-inv-tag">ك</span>' +
+        '<span class="perf-inv-track">' +
+        '<span class="perf-inv-fill is-qty" style="width: ' + qtyPct + '%;"></span>' +
+        "</span>" +
+        '<span class="mono perf-inv-val is-qty">' + esc(qtyDisp) + "</span>" +
+        "</div>" +
+        "</div></article>";
     });
     chartBoard.innerHTML = chartHtml;
   }
@@ -884,7 +1045,11 @@
 
   function failGroups(err) {
     var loading = document.getElementById("groups-loading");
-    if (loading) loading.textContent = "تعذّر تحميل المجموعات: " + (err.message || err);
+    if (loading) {
+      loading.hidden = false;
+      loading.classList.remove("dash-load-progress");
+      loading.textContent = "تعذّر تحميل المجموعات: " + friendlyFetchError(err);
+    }
   }
 
   function failItems(err) {
@@ -972,13 +1137,14 @@
       var dTo = (groupsBox && groupsBox.dataset.dateTo) || "";
       var groupsPromise = progressive && dFrom && dTo
         ? loadGroupsProgressive(groupsUrl, dFrom, dTo)
-        : fetch(groupsUrl, { credentials: "same-origin" })
-            .then(function (r) { return r.json(); })
+        : fetchJsonRetry(groupsUrl, { attempts: 3, timeoutMs: 150000 })
             .then(function (data) {
               if (!data.ok) throw new Error(data.error || "فشل التحميل");
               renderGroups(data.panel || {});
             });
       groupsPromise.catch(failGroups);
+      // مرتجعات المجموعات بعد بدء المبيعات بقليل — يقلل ضغط الطلبات المتزامنة
+      setTimeout(function () { loadGroupReturns(); }, 400);
 
       if (itemsUrl) {
         var itemsProgressive = itemsBox && itemsBox.dataset.itemsProgressive === "1";
@@ -1009,6 +1175,8 @@
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderGroups(data.panel || {});
+        if (data.returns_panel) renderGroupReturns(data.returns_panel);
+        else loadGroupReturns();
         renderItems(data.items || []);
         renderReturnItems(data.return_items || []);
       })
@@ -1239,7 +1407,8 @@
     var done = 0;
     var failed = 0;
     var nextIdx = 0;
-    var CONCURRENCY = Math.min(2, total);
+    // تسلسلي مثل المجموعات — يقلل ضغط Oracle/البوابة وFailed to fetch
+    var CONCURRENCY = 1;
 
     function setLoading(doneN, totalN, label) {
       setDashLoadProgress(loadingBranches, doneN, totalN, label);
@@ -1333,27 +1502,16 @@
     var loading = document.getElementById("margin-branches-loading");
     if (loading) {
       loading.hidden = false;
-      loading.textContent = "جاري تحميل هامش الفروع…";
+      loading.textContent = "جاري جلب هامش الفروع للفترة كاملة…";
     }
-    var progressive = box && box.dataset.marginsProgressive === "1";
-    var dFrom = (box && box.dataset.dateFrom) || "";
-    var dTo = (box && box.dataset.dateTo) || "";
-    var p;
-    if (progressive && dFrom && dTo) {
-      p = loadMarginsProgressive(url, dFrom, dTo).then(function () {
-        /* groups also filled */
+    fetchJsonRetry(url, { attempts: 3, timeoutMs: 240000 })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderMarginBranches(data.branches || []);
+      })
+      .catch(function (err) {
+        if (loading) loading.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
       });
-    } else {
-      p = fetch(url, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (!data.ok) throw new Error(data.error || "فشل التحميل");
-          renderMarginBranches(data.branches || []);
-        });
-    }
-    p.catch(function (err) {
-      if (loading) loading.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
-    });
   }
 
   function loadMarginGroups() {
@@ -1366,20 +1524,9 @@
     var loading = document.getElementById("margin-groups-loading");
     if (loading) {
       loading.hidden = false;
-      loading.textContent = "جاري تحميل هامش المجموعات…";
+      loading.textContent = "جاري جلب هامش المجموعات للفترة كاملة…";
     }
-    var progressive = box && box.dataset.marginsProgressive === "1";
-    var dFrom = (box && box.dataset.dateFrom) || "";
-    var dTo = (box && box.dataset.dateTo) || "";
-    // عند التحميل التصاعدي يُحدَّث الطرفان معاً من loadMargins / loadMarginBranches
-    if (progressive && dFrom && dTo) {
-      loadMarginsProgressive(url, dFrom, dTo).catch(function (err) {
-        if (loading) loading.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
-      });
-      return;
-    }
-    fetch(url, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    fetchJsonRetry(url, { attempts: 3, timeoutMs: 240000 })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderMarginGroups(data.groups || []);
@@ -1399,9 +1546,6 @@
     var sameFilters =
       (!brSel || !grSel || brSel.value === grSel.value) &&
       (!brGrp || !grGrp || brGrp.value === grGrp.value);
-    var progressive = box.dataset.marginsProgressive === "1";
-    var dFrom = box.dataset.dateFrom || "";
-    var dTo = box.dataset.dateTo || "";
     if (sameFilters) {
       var url = marginsUrl(brSel || grSel, brGrp || grGrp);
       if (!url) return;
@@ -1409,25 +1553,22 @@
       var loadingGroups = document.getElementById("margin-groups-loading");
       if (loadingBranches) {
         loadingBranches.hidden = false;
-        loadingBranches.textContent = "جاري تحميل هامش الفروع…";
+        loadingBranches.textContent = "جاري جلب هامش الفروع للفترة كاملة…";
       }
       if (loadingGroups) {
         loadingGroups.hidden = false;
-        loadingGroups.textContent = "جاري تحميل هامش المجموعات…";
+        loadingGroups.textContent = "جاري جلب هامش المجموعات للفترة كاملة…";
       }
-      var p = progressive && dFrom && dTo
-        ? loadMarginsProgressive(url, dFrom, dTo)
-        : fetch(url, { credentials: "same-origin" })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-              if (!data.ok) throw new Error(data.error || "فشل التحميل");
-              renderMarginBranches(data.branches || []);
-              renderMarginGroups(data.groups || []);
-            });
-      p.catch(function (err) {
-        if (loadingBranches) loadingBranches.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
-        if (loadingGroups) loadingGroups.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
-      });
+      fetchJsonRetry(url, { attempts: 3, timeoutMs: 240000 })
+        .then(function (data) {
+          if (!data.ok) throw new Error(data.error || "فشل التحميل");
+          renderMarginBranches(data.branches || []);
+          renderMarginGroups(data.groups || []);
+        })
+        .catch(function (err) {
+          if (loadingBranches) loadingBranches.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
+          if (loadingGroups) loadingGroups.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
+        });
       return;
     }
     loadMarginBranches();

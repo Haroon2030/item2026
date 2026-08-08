@@ -22,8 +22,8 @@ from .oracle_stock import (
 
 logger = logging.getLogger(__name__)
 
-_INCOME_CACHE_TTL = 180
-_LOOKUP_TTL = 3600
+_INCOME_CACHE_TTL = 1800
+_LOOKUP_TTL = 1800
 
 
 def _f(value: Any) -> float:
@@ -910,7 +910,7 @@ def build_income_statement(
     }
     try:
         span = (d_to - d_from).days + 1
-        ttl = 120 if span > 120 else _INCOME_CACHE_TTL
+        ttl = _INCOME_CACHE_TTL
         cache.set(key, result, ttl)
     except Exception:
         pass

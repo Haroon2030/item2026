@@ -17,7 +17,7 @@ from .oracle_stock import (
     oracle_enabled,
 )
 
-_CACHE_TTL = 180
+_CACHE_TTL = 1800
 
 
 def _money(value: Any) -> str:

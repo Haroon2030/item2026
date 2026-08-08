@@ -1,90 +1,72 @@
 {% extends "base.html" %}
 
-{% block page_class %}{% if searched and not error %}{% if items or prices or selected_price or warehouse_compare %}results-focus search-keep-form{% endif %}{% endif %}{% endblock %}
+{% block title %}بحث الأصناف{% endblock %}
+{% block page_class %}ss-page item-search-page{% endblock %}
 
 {% block content %}
-<section class="search-box" aria-label="بحث الأصناف">
-  <div class="search-head">
-    <span class="panel-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-    </span>
-    <div>
+<section class="ss-shell" aria-label="بحث الأصناف">
+  <header class="ss-head">
+    <div class="ss-head-copy">
       <h2>بحث الأصناف</h2>
-      <p>ابحث بالباركود أو رقم الصنف أو اسم الصنف</p>
+      <p>ابحث بالباركود أو رقم الصنف أو الاسم — مخزن واحد أو مقارنة المخازن</p>
     </div>
-  </div>
+  </header>
 
-  <form method="get" action="{% url 'item_search' %}" class="search-form" role="search" id="item-search-form">
-    <div class="field scope-field" role="radiogroup" aria-label="نطاق البحث">
-      <span class="scope-field-label">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
-        النطاق
-      </span>
-      <div class="scope-toggle">
-        <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
-          <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
-          <span>مخزن واحد</span>
-        </label>
-        <label class="scope-option {% if compare_mode %}is-active{% endif %}">
-          <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
-          <span>كل المخازن المختارة</span>
-        </label>
+  <form method="get" action="{% url 'item_search' %}" class="ss-toolbar" role="search" id="item-search-form">
+    <div class="ss-toolbar-grid is-item">
+      <div class="field scope-field ss-scope" role="radiogroup" aria-label="نطاق البحث">
+        <span class="scope-field-label">النطاق</span>
+        <div class="scope-toggle">
+          <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
+            <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
+            <span>مخزن واحد</span>
+          </label>
+          <label class="scope-option {% if compare_mode %}is-active{% endif %}">
+            <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
+            <span>كل المخازن المختارة</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
+        <label for="warehouse">المخزن</label>
+        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+          {% for wh in warehouses %}
+            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field query-field ss-query">
+        <label for="q">الباركود / رقم الصنف / الاسم</label>
+        <div class="query-row">
+          <input id="q" type="search" name="q" value="{{ query }}" placeholder="ابحث ثم Enter…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
+          <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا" aria-label="مسح الباركود بالكاميرا">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ss-actions">
+        <button type="submit" class="btn-primary">بحث</button>
+      </div>
+
+      <div class="ss-sync">
+        {% if sync_secret_required %}
+          <input form="sync-form" id="sync_secret" type="password" name="sync_secret" placeholder="رمز المزامنة" autocomplete="off" class="sync-secret-input" required>
+        {% endif %}
+        <button type="submit" form="sync-form" class="btn-ghost" id="sync-btn">مزامنة</button>
+        <p class="cache-meta {% if cache_count %}is-ready{% else %}is-empty{% endif %}" id="cache-meta">
+          {% if cache_count %}{{ cache_count|floatformat:0 }} باركود{% else %}فهرس فارغ{% endif %}
+        </p>
       </div>
     </div>
-
-    <div class="field warehouse-field" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
-      <label for="warehouse">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg>
-        المخزن
-      </label>
-      <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
-        {% for wh in warehouses %}
-          <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="field query-field">
-      <label for="q">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM7 7V5h10v2M8 12h2M12 12h4"/></svg>
-        الباركود / رقم الصنف / الاسم
-      </label>
-      <div class="query-row">
-        <input id="q" type="search" name="q" value="{{ query }}" placeholder="باركود أو رقم أو اسم الصنف…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
-        <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا احترافي" aria-label="مسح الباركود بالكاميرا">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <button type="submit" class="btn-primary">
-      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      بحث
-    </button>
   </form>
-
-  <div class="toolbar">
-    <form method="post" action="{% url 'sync_barcodes' %}" class="sync-form" id="sync-form">
-      {% csrf_token %}
-      {% if sync_secret_required %}
-        <input id="sync_secret" type="password" name="sync_secret" placeholder="رمز المزامنة" autocomplete="off" class="sync-secret-input" required>
-      {% endif %}
-      <button type="submit" class="btn-ghost" id="sync-btn">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
-        مزامنة
-      </button>
-    </form>
-    <p class="cache-meta {% if cache_count %}is-ready{% else %}is-empty{% endif %}" id="cache-meta">
-      {% if cache_count %}
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
-        {{ cache_count|floatformat:0 }} باركود جاهز
-      {% else %}
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
-        الفهرس فارغ — زامِن أولاً
-      {% endif %}
-    </p>
-  </div>
 </section>
+
+<form method="post" action="{% url 'sync_barcodes' %}" class="sync-form" id="sync-form" hidden>
+  {% csrf_token %}
+</form>
 
 <div id="sync-progress" class="sync-progress" hidden role="dialog" aria-modal="true" aria-labelledby="sync-progress-title" aria-valuemin="1" aria-valuemax="100" aria-valuenow="1">
   <div class="sync-progress-card">
@@ -124,7 +106,7 @@
         <span class="zebra-laser zebra-laser-v zebra-laser-v2"></span>
       </div>
     </div>
-    <p class="zebra-hint">ضع الباركود داخل المربع الكبير — الليزر من كل الجهات يساعد على الالتقاط</p>
+    <p class="zebra-hint">ضع الباركود داخل المربع الكبير</p>
   </div>
 </div>
 
@@ -148,219 +130,212 @@
   </div>
 {% endif %}
 
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
 {% if searched and not error %}
-  <section class="results">
-    {% if items or prices or warehouse_compare %}
-      <div class="results-topbar">
-        <span class="results-topbar-title">
-          {% if match_type == 'name_list' %}نتائج الاسم ({{ items|length }}){% elif compare_mode %}مقارنة المخازن{% else %}نتيجة البحث{% endif %}
-        </span>
-        <a class="btn-new-search" href="{% url 'item_search' %}?scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse }}">بحث جديد</a>
+  {% if match_type == 'name_list' %}
+    <section class="ss-sheet-panel" aria-label="اختيار الصنف">
+      <div class="ss-sheet-bar">
+        <strong>نتائج الاسم ({{ items|length }})</strong>
+        <span class="ss-sheet-sub">اختر صنفاً لعرض التفاصيل</span>
+      </div>
+      <div class="ss-sheet-wrap">
+        <table class="ss-sheet" aria-label="قائمة الأصناف">
+          <thead>
+            <tr>
+              <th class="ss-col-num">#</th>
+              <th class="ss-col-code">الكود</th>
+              <th class="ss-col-name">الصنف</th>
+              <th class="ss-col-unit">الوحدة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                <td class="ss-col-code mono">
+                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}">{{ item.code }}</a>
+                </td>
+                <td class="ss-col-name">
+                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}">{{ item.name }}</a>
+                </td>
+                <td class="ss-col-unit">{{ item.unit|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% elif selected_price or warehouse_compare or compare_mode %}
+    <section class="ss-sheet-panel" aria-label="نتيجة الصنف">
+      <div class="ss-sheet-bar">
+        <div class="ss-sheet-meta">
+          <span class="ss-meta-pill">الصنف</span>
+          {% if items %}
+            <strong class="mono">{{ items.0.code }}</strong>
+            <span class="ss-meta-name">{{ items.0.name }}</span>
+          {% elif prices %}
+            <strong class="mono">{{ prices.0.code }}</strong>
+            <span class="ss-meta-name">{{ prices.0.name }}</span>
+          {% elif warehouse_compare %}
+            <strong class="mono">{{ warehouse_compare.0.code }}</strong>
+            <span class="ss-meta-name">مقارنة عبر المخازن</span>
+          {% endif %}
+        </div>
+        <div class="ss-sheet-meta is-end">
+          {% if compare_mode %}
+            <span class="result-pill">كل المخازن</span>
+          {% else %}
+            <span class="result-pill">مخزن {{ warehouse }}</span>
+          {% endif %}
+          {% if query %}<span class="result-pill mono">{{ query }}</span>{% endif %}
+        </div>
       </div>
 
-      {% if match_type == 'name_list' %}
-        <div class="panel panel-blue name-results">
-          <div class="panel-head">
-            <span class="panel-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-            </span>
-            <div>
-              <h3>اختر الصنف</h3>
-              <p class="panel-sub">تم العثور على أكثر من صنف للاسم «{{ query }}»</p>
-            </div>
-          </div>
-          <ul class="name-result-list">
-            {% for item in items %}
-              <li>
-                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse|urlencode }}">
-                  <span class="name-result-code mono">{{ item.code }}</span>
-                  <span class="name-result-name">{{ item.name }}</span>
-                  {% if item.unit %}<span class="name-result-unit">{{ item.unit }}</span>{% endif %}
-                </a>
-              </li>
-            {% endfor %}
-          </ul>
+      {% if compare_mode %}
+        <div class="ss-sheet-wrap">
+          <table class="ss-sheet" aria-label="مقارنة السعر والتكلفة بين المخازن">
+            <thead>
+              <tr>
+                <th class="ss-col-num">#</th>
+                <th class="ss-col-wh-code">رقم</th>
+                <th class="ss-col-wh sticky-col">المخزن</th>
+                <th class="ss-col-unit">الوحدة</th>
+                <th class="ss-col-money is-total">سعر البيع</th>
+                <th class="ss-col-money">آخر توريد</th>
+                <th class="ss-col-money">التكلفة</th>
+                <th class="ss-col-numish">الكمية</th>
+                <th class="ss-col-numish is-total">بعد الترحيل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in warehouse_compare %}
+                <tr class="{% if not row.ok %}is-empty{% endif %}">
+                  <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                  <td class="ss-col-wh-code mono">{{ row.warehouse }}</td>
+                  <td class="ss-col-wh sticky-col" title="{{ row.warehouse }} — {{ row.name }}">{{ row.name }}</td>
+                  <td class="ss-col-unit">{{ row.unit|default:"—" }}</td>
+                  <td class="ss-col-money mono is-total">{{ row.price|default:"—" }}</td>
+                  <td class="ss-col-money mono" {% if row.last_buy_date %}title="تاريخ آخر فاتورة: {{ row.last_buy_date }}"{% endif %}>{{ row.last_buy|default:"—" }}</td>
+                  <td class="ss-col-money mono">{{ row.avg_cost|default:"—" }}</td>
+                  <td class="ss-col-numish mono" {% if row.pending_qty %}title="غير مرحّل: {{ row.pending_qty }}"{% endif %}>{{ row.quantity|default:"—" }}</td>
+                  <td
+                    class="ss-col-numish mono is-total{% if row.expected_neg %} is-ret{% endif %}"
+                    {% if row.pending_qty %}title="رصيد حالي: {{ row.quantity|default:'—' }} — غير مرحّل: {{ row.pending_qty }} — بعد الترحيل"{% else %}title="الرصيد بعد ترحيل مبيعات نقاط البيع غير المرحلة"{% endif %}
+                  >{% if row.expected_qty != '' and row.expected_qty is not None %}{{ row.expected_qty }}{% else %}—{% endif %}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="9" class="sales-empty">تعذّر جلب مقارنة المخازن حالياً.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
-      {% elif selected_price or warehouse_compare or compare_mode %}
-        <div class="panel panel-blue result-prices">
-          <div class="panel-head result-combined-head">
-            <span class="panel-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            </span>
-            <div class="result-combined-copy">
-              <span class="result-combined-label">معلومات الصنف المطلوب</span>
-              {% if items %}
-                <strong class="result-combined-code mono">{{ items.0.code }}</strong>
-                <span class="result-combined-name">{{ items.0.name }}</span>
-              {% elif prices %}
-                <strong class="result-combined-code mono">{{ prices.0.code }}</strong>
-                <span class="result-combined-name">{{ prices.0.name }}</span>
-              {% elif warehouse_compare %}
-                <strong class="result-combined-code mono">{{ warehouse_compare.0.code }}</strong>
-                <span class="result-combined-name">مقارنة عبر المخازن</span>
-              {% endif %}
-            </div>
-            <div class="result-hero-side">
-              {% if compare_mode %}
-                <span class="result-pill">كل المخازن</span>
-              {% else %}
-                <span class="result-pill">مخزن {{ warehouse }}</span>
-              {% endif %}
-              {% if query %}<span class="result-pill mono">{{ query }}</span>{% endif %}
-            </div>
-          </div>
+      {% elif selected_price %}
+        <div class="ss-sheet-wrap">
+          <table class="ss-sheet" aria-label="تفاصيل الوحدة المطلوبة">
+            <thead>
+              <tr>
+                <th class="ss-col-unit">الوحدة</th>
+                <th class="ss-col-code">الباركود</th>
+                <th class="ss-col-numish">العبوة</th>
+                <th class="ss-col-money is-total">السعر</th>
+                <th class="ss-col-money">التكلفة</th>
+                <th class="ss-col-numish">الكمية</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="ss-col-unit"><strong>{{ selected_price.unit }}</strong></td>
+                <td class="ss-col-code mono">{{ selected_price.barcode|default:query }}</td>
+                <td class="ss-col-numish mono">{{ selected_price.pack_size|default:"—" }}</td>
+                <td class="ss-col-money mono is-total">{{ selected_price.price|default:"—" }}</td>
+                <td class="ss-col-money mono">{{ selected_price.avg_cost|default:"—" }}</td>
+                <td class="ss-col-numish mono">{{ selected_price.quantity|default:"—" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
 
-          {% if compare_mode %}
-            <div class="table-wrap">
-              <table class="data-table price-table warehouse-compare-table" aria-label="مقارنة السعر والتكلفة بين المخازن">
-                <thead>
-                  <tr>
-                    <th>المخزن</th>
-                    <th>الوحدة</th>
-                    <th>سعر البيع</th>
-                    <th>آخر توريد</th>
-                    <th>التكلفة</th>
-                    <th>الكمية</th>
-                    <th>بعد الترحيل</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in warehouse_compare %}
-                    <tr class="{% if row.ok %}is-ok{% else %}is-empty{% endif %}">
-                      <td class="warehouse-compare-wh" title="{{ row.warehouse }} — {{ row.name }}">
-                        <span class="warehouse-compare-name">{{ row.name }}</span><span class="mono warehouse-compare-code">{{ row.warehouse }}</span>
-                      </td>
-                      <td class="unit-cell">{{ row.unit|default:"—" }}</td>
-                      <td class="mono price-cell">{{ row.price|default:"—" }}</td>
-                      <td class="mono buy-cell" {% if row.last_buy_date %}title="تاريخ آخر فاتورة: {{ row.last_buy_date }}"{% endif %}>{{ row.last_buy|default:"—" }}</td>
-                      <td class="mono cost-cell">{{ row.avg_cost|default:"—" }}</td>
-                      <td class="mono qty-cell" {% if row.pending_qty %}title="غير مرحّل: {{ row.pending_qty }}"{% endif %}>{{ row.quantity|default:"—" }}</td>
-                      <td
-                        class="mono qty-cell expected-qty-cell{% if row.expected_neg %} is-neg{% elif row.expected_low %} is-low{% endif %}"
-                        {% if row.pending_qty %}title="رصيد حالي: {{ row.quantity|default:'—' }} — غير مرحّل: {{ row.pending_qty }} — بعد الترحيل"{% else %}title="الرصيد بعد ترحيل مبيعات نقاط البيع غير المرحلة"{% endif %}
-                      >{% if row.expected_qty != '' and row.expected_qty is not None %}{{ row.expected_qty }}{% else %}—{% endif %}</td>
-                    </tr>
-                  {% empty %}
-                    <tr>
-                      <td colspan="7">تعذّر جلب مقارنة المخازن حالياً — أعد المحاولة بعد قليل.</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% elif selected_price %}
-          <div class="table-wrap">
-            <table class="data-table price-table">
+      {% if suppliers %}
+        <div class="ss-suppliers">
+          <div class="ss-sheet-bar">
+            <strong>الموردون</strong>
+            <span class="result-pill">{{ suppliers|length }}</span>
+          </div>
+          <div class="ss-sheet-wrap">
+            <table class="ss-sheet" aria-label="موردو الصنف">
               <thead>
                 <tr>
-                  <th>الوحدة</th>
-                  <th>الباركود</th>
-                  <th>العبوة</th>
-                  <th>السعر</th>
-                  <th>التكلفة</th>
-                  <th>الكمية</th>
+                  <th class="ss-col-num">#</th>
+                  <th class="ss-col-name">المورد</th>
+                  <th class="ss-col-code">الكود</th>
+                  <th class="ss-col-unit">آخر توريد</th>
+                  <th class="ss-col-unit">النوع</th>
                 </tr>
               </thead>
               <tbody>
-                <tr class="is-matched-row">
-                  <td>
-                    <span class="chip chip-matched">{{ selected_price.unit }}</span>
-                    <span class="row-tag">المطلوب</span>
-                  </td>
-                  <td class="mono">{{ selected_price.barcode|default:query }}</td>
-                  <td class="mono">{{ selected_price.pack_size|default:"—" }}</td>
-                  <td class="mono price-cell">
-                    {% if selected_price.price %}
-                      <span class="money">
-                        <span class="money-value">{{ selected_price.price }}</span>
-                        <svg class="sar-symbol" viewBox="0 0 1124.14 1256.39" aria-label="ريال سعودي" role="img" focusable="false">
-                          <path fill="currentColor" d="M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z"/>
-                          <path fill="currentColor" d="M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-123.31,26.15V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.83c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-50.9l36.68-30.52v92.57l-123.31,26.15v-92.57l36.68,30.52c17.06,26.5,43.3,44.55,73.83,50.9l375.04,79.7Z"/>
-                        </svg>
-                      </span>
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                  <td class="mono cost-cell">{{ selected_price.avg_cost|default:"—" }}</td>
-                  <td class="mono qty-cell">{{ selected_price.quantity|default:"—" }}</td>
-                </tr>
+                {% for s in suppliers %}
+                  <tr>
+                    <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                    <td class="ss-col-name">{{ s.name }}</td>
+                    <td class="ss-col-code mono">{{ s.code|default:"—" }}</td>
+                    <td class="ss-col-unit mono">{{ s.last_date|default:"—" }}</td>
+                    <td class="ss-col-unit">{% if s.main %}رئيسي{% else %}—{% endif %}</td>
+                  </tr>
+                {% endfor %}
               </tbody>
             </table>
           </div>
-          {% endif %}
-          {% if suppliers %}
-            <div class="item-suppliers" aria-label="موردو الصنف">
-              <div class="item-suppliers-head">
-                <span class="item-suppliers-title">الموردون الذين نُزّل منهم</span>
-                <span class="item-suppliers-count">{{ suppliers|length }}</span>
-              </div>
-              <ul class="item-suppliers-list">
-                {% for s in suppliers %}
-                  <li>
-                    <span class="item-supplier-name">{{ s.name }}</span>
-                    {% if s.code %}<span class="item-supplier-code mono">{{ s.code }}</span>{% endif %}
-                    {% if s.last_date %}<span class="item-supplier-date">آخر توريد {{ s.last_date }}</span>{% endif %}
-                    {% if s.main %}<span class="item-supplier-main">رئيسي</span>{% endif %}
-                  </li>
-                {% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-        </div>
-      {% elif items %}
-        <div class="panel panel-blue name-results">
-          <div class="panel-head">
-            <span class="panel-ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-            </span>
-            <div>
-              <h3>{{ items.0.name }}</h3>
-              <p class="panel-sub mono">رقم الصنف: {{ items.0.code }}</p>
-            </div>
-          </div>
-          {% if suppliers %}
-            <div class="item-suppliers item-suppliers-inline" aria-label="موردو الصنف">
-              <div class="item-suppliers-head">
-                <span class="item-suppliers-title">الموردون الذين نُزّل منهم</span>
-                <span class="item-suppliers-count">{{ suppliers|length }}</span>
-              </div>
-              <ul class="item-suppliers-list">
-                {% for s in suppliers %}
-                  <li>
-                    <span class="item-supplier-name">{{ s.name }}</span>
-                    {% if s.code %}<span class="item-supplier-code mono">{{ s.code }}</span>{% endif %}
-                    {% if s.last_date %}<span class="item-supplier-date">آخر توريد {{ s.last_date }}</span>{% endif %}
-                  </li>
-                {% endfor %}
-              </ul>
-            </div>
-          {% endif %}
-          <ul class="name-result-list">
-            {% for item in items %}
-              <li>
-                <a class="name-result-link" href="{% url 'item_search' %}?q={{ item.code|urlencode }}&scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse|urlencode }}">
-                  <span class="name-result-code mono">{{ item.code }}</span>
-                  <span class="name-result-name">{{ item.name }}{% if item.unit %} — {{ item.unit }}{% endif %}</span>
-                  {% if item.barcode %}<span class="name-result-unit mono">{{ item.barcode }}</span>{% endif %}
-                </a>
-              </li>
-            {% endfor %}
-          </ul>
         </div>
       {% endif %}
-    {% else %}
-      <div class="results-topbar">
-        <span class="results-topbar-title">لا نتائج</span>
-        <a class="btn-new-search" href="{% url 'item_search' %}?scope={% if compare_mode %}compare{% else %}one{% endif %}&warehouse={{ warehouse }}">بحث جديد</a>
+      <p class="ss-note">ورقة إكسل: السعر والتكلفة والكمية{% if compare_mode %} عبر المخازن المختارة{% else %} للمخزن المحدد{% endif %}.</p>
+    </section>
+  {% elif items %}
+    <section class="ss-sheet-panel" aria-label="نتائج الأصناف">
+      <div class="ss-sheet-bar">
+        <div class="ss-sheet-meta">
+          <strong class="mono">{{ items.0.code }}</strong>
+          <span class="ss-meta-name">{{ items.0.name }}</span>
+        </div>
       </div>
-      <div class="empty-state">
-        <svg class="ico lg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/></svg>
-        <p class="empty-title">لا نتائج</p>
-        <p>لا يوجد صنف مطابق لـ «{{ query }}»</p>
+      <div class="ss-sheet-wrap">
+        <table class="ss-sheet" aria-label="وحدات الصنف">
+          <thead>
+            <tr>
+              <th class="ss-col-num">#</th>
+              <th class="ss-col-code">الكود</th>
+              <th class="ss-col-name">الصنف / الوحدة</th>
+              <th class="ss-col-code">الباركود</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                <td class="ss-col-code mono">
+                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}">{{ item.code }}</a>
+                </td>
+                <td class="ss-col-name">{{ item.name }}{% if item.unit %} — {{ item.unit }}{% endif %}</td>
+                <td class="ss-col-code mono">{{ item.barcode|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
-    {% endif %}
-  </section>
+    </section>
+  {% else %}
+    <div class="empty-state">
+      <svg class="ico lg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/></svg>
+      <p class="empty-title">لا نتائج</p>
+      <p>لا يوجد صنف مطابق لـ «{{ query }}»</p>
+    </div>
+  {% endif %}
 {% endif %}
 {% endblock %}
 
@@ -372,24 +347,38 @@
 <script src="/static/js/inv-select.js?v=2" defer></script>
 <script>
 (function () {
-  var form = document.getElementById('item-search-form');
+  var form = document.getElementById("item-search-form");
   if (!form) return;
-  var field = document.getElementById('warehouse-field');
+  var field = document.getElementById("warehouse-field");
+  var toggle = form.querySelector(".scope-toggle");
   var radios = form.querySelectorAll('input[name="scope"]');
 
   function sync() {
     var compare = false;
     radios.forEach(function (r) {
       var on = !!r.checked;
-      if (r.value === 'compare' && on) compare = true;
-      var label = r.closest('.scope-option');
-      if (label) label.classList.toggle('is-active', on);
+      if (r.value === "compare" && on) compare = true;
+      var label = r.closest(".scope-option");
+      if (label) {
+        if (on) label.classList.add("is-active");
+        else label.classList.remove("is-active");
+      }
     });
     if (field) field.hidden = compare;
   }
 
+  if (toggle) {
+    toggle.addEventListener("click", function (e) {
+      var label = e.target.closest(".scope-option");
+      if (!label || !toggle.contains(label)) return;
+      var radio = label.querySelector('input[name="scope"]');
+      if (!radio) return;
+      radio.checked = true;
+      sync();
+    });
+  }
   radios.forEach(function (r) {
-    r.addEventListener('change', sync);
+    r.addEventListener("change", sync);
   });
   sync();
 })();

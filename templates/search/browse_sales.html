@@ -52,6 +52,16 @@
       <strong class="dash-kpi-value mono">{% money kpi.pos_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ kpi.pos_invoices }} فاتورة</span>
     </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v5l3 2"/></svg>
+        </span>
+        إجمالي المرتجع
+      </span>
+      <strong class="dash-kpi-value mono">{% money kpi.pos_returns %}</strong>
+      <span class="dash-kpi-hint mono">{{ kpi.pos_return_bills }} فاتورة مرتجع · نقاط البيع</span>
+    </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
@@ -318,8 +328,8 @@
                     <th id="groups-branch-th">{% if group_panel.by_branch %}الفرع{% else %}الفروع{% endif %}</th>
                     <th>فواتير المبيعات</th>
                     <th>إجمالي المبيعات</th>
-                    <th>الصافي بعد المرتجع</th>
-                    <th title="صافي مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
+                    <th>المبيعات (بدون خصم مرتجع)</th>
+                    <th title="مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
                     <th class="sales-col-extra">الكمية</th>
                     <th class="sales-col-extra">الصافي قبل الضريبة</th>
                     <th class="sales-col-extra">الضريبة</th>
@@ -341,8 +351,8 @@
                   {% endif %}
                   <th>فواتير المبيعات</th>
                   <th>إجمالي المبيعات</th>
-                  <th>الصافي بعد المرتجع</th>
-                  <th title="صافي مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
+                  <th>المبيعات (بدون خصم مرتجع)</th>
+                  <th title="مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
                   <th class="sales-col-extra">الكمية</th>
                   <th class="sales-col-extra">الصافي قبل الضريبة</th>
                   <th class="sales-col-extra">الضريبة</th>
@@ -391,7 +401,7 @@
             </table>
             {% endif %}
           </div>
-          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">الأرقام صافي بعد خصم المرتجعات. «متوسط المجموعة» في الصف = صافي المجموعة ÷ فواتيرها. إجمالي الفواتير في التذييل من رأس الفاتورة (بدون مضاعفة بين المجموعات)، ومتوسط السلة في التذييل = إجمالي الصافي ÷ تلك الفواتير.</p>
+          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">مبيعات المجموعات بدون خصم المرتجعات. المرتجعات في الجدول أسفل. «متوسط المجموعة» = مبيعات المجموعة ÷ فواتيرها. إجمالي الفواتير في التذييل من رأس الفاتورة (بدون مضاعفة بين المجموعات).</p>
         </div>
       {% endif %}
     </div>
@@ -433,7 +443,7 @@
           </div>
         </div>
         <p class="sales-empty dash-loading" id="items-loading"{% if not defer_heavy and top_items %} hidden{% endif %}>{% if defer_heavy or not top_items %}جاري تحميل الأصناف…{% endif %}</p>
-        <div class="seller-board" id="items-board" role="list"{% if defer_heavy or not top_items %} hidden{% endif %}>
+        <div class="seller-board" id="items-board" role="list">
           {% if not defer_heavy and top_items %}
             {% for item in top_items %}
               <div
@@ -524,12 +534,91 @@
   </section>
 
   <section
-    class="dash-charts"
-    id="dash-charts"
-    aria-label="الفروع الأكثر إرجاعاً والأصناف الأكثر إرجاعاً"
-    data-charts-url="/sales/api/charts/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
+    class="dash-returns-pair"
+    id="dash-returns-pair"
+    aria-label="مرتجعات المجموعات والأصناف"
   >
-    <div class="dash-panel dash-branch-chart dash-panel-glass" aria-label="الفروع الأكثر إرجاعاً">
+    {% if group_panel %}
+    <div class="dash-panel dash-group-returns dash-panel-glass" id="dash-group-returns" aria-label="مرتجعات المجموعات"
+      data-returns-url="/sales/api/group-returns/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
+    >
+      <div class="dash-panel-head">
+        <div class="dash-branches-title">
+          <h3>مرتجعات المجموعات{% if active %} — {{ active.label }}{% endif %}</h3>
+        </div>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill mono" id="group-returns-pill">…</span>
+        </div>
+      </div>
+      <div class="table-wrap dash-returns-body">
+        <p class="sales-empty dash-loading" id="group-returns-loading">جاري تحميل مرتجعات المجموعات…</p>
+        <table class="data-table sales-table" id="sales-group-returns-table" aria-label="مرتجعات المجموعات" hidden>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>المجموعة</th>
+              <th>فواتير المرتجع</th>
+              <th>إجمالي المرتجع</th>
+              <th class="sales-col-extra">الكمية</th>
+              <th class="sales-col-extra">الصافي قبل الضريبة</th>
+              <th class="sales-col-extra">الضريبة</th>
+            </tr>
+          </thead>
+          <tbody id="sales-group-returns-tbody"></tbody>
+          <tfoot id="sales-group-returns-tfoot" hidden></tfoot>
+        </table>
+      </div>
+      <p class="dash-branches-sub" style="padding:0.35rem 0.85rem 0.7rem">جدول مستقل لمرتجعات كل مجموعة — لا يُخصم من جدول المبيعات أعلاه.</p>
+    </div>
+    {% endif %}
+
+    <div class="dash-panel dash-chart-items dash-panel-glass" aria-label="الأصناف الأكثر إرجاعاً">
+      <div class="dash-panel-head">
+        <div class="dash-sellers-title">
+          <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg>
+          </span>
+          <div>
+            <h3>الأصناف الأكثر إرجاعاً</h3>
+          </div>
+        </div>
+        <div class="dash-panel-head-actions">
+          <div class="dash-branch-filter" data-chart-filter="returns">
+            <label class="sr-only" for="chart-ret-branch">الفرع</label>
+            <select id="chart-ret-branch">
+              <option value="">كل الفروع</option>
+              {% for b in active.branches %}
+                <option value="{{ b.code }}">{{ b.name }}</option>
+              {% endfor %}
+            </select>
+            <label class="sr-only" for="chart-ret-group">المجموعة</label>
+            <select id="chart-ret-group">
+              <option value="">كل المجموعات</option>
+              {% for g in group_panel.groups %}
+                <option value="{{ g.code }}">{{ g.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="sales-view-btn" data-chart-apply="returns">عرض</button>
+          </div>
+          <span class="result-pill" id="chart-returns-pill">أعلى 20</span>
+        </div>
+      </div>
+      <p class="sales-empty dash-loading" id="chart-items-loading"{% if not defer_heavy %} hidden{% endif %}>{% if defer_heavy %}جاري تحميل المرتجعات…{% endif %}</p>
+      <div class="seller-board top20-chart perf-inv-chart is-scroll" id="chart-items-board" role="list"></div>
+    </div>
+  </section>
+
+  <section
+    class="dash-branch-margin-pair"
+    id="dash-branch-margin-pair"
+    aria-label="مرتجعات الفروع وهامش ربح الفروع"
+  >
+    <div
+      class="dash-panel dash-branch-chart dash-panel-glass"
+      id="dash-charts"
+      aria-label="الفروع الأكثر إرجاعاً"
+      data-charts-url="/sales/api/charts/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
+    >
       <div class="dash-panel-head">
         <div class="dash-sellers-title">
           <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
@@ -568,59 +657,17 @@
       {% endif %}
     </div>
 
-    <div class="dash-panel dash-chart-items dash-panel-glass" aria-label="الأصناف الأكثر إرجاعاً">
-      <div class="dash-panel-head">
-        <div class="dash-sellers-title">
-          <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg>
-          </span>
-          <div>
-            <h3>الأصناف الأكثر إرجاعاً</h3>
-          </div>
-        </div>
-        <div class="dash-panel-head-actions">
-          <div class="dash-branch-filter" data-chart-filter="returns">
-            <label class="sr-only" for="chart-ret-branch">الفرع</label>
-            <select id="chart-ret-branch">
-              <option value="">كل الفروع</option>
-              {% for b in active.branches %}
-                <option value="{{ b.code }}">{{ b.name }}</option>
-              {% endfor %}
-            </select>
-            <label class="sr-only" for="chart-ret-group">المجموعة</label>
-            <select id="chart-ret-group">
-              <option value="">كل المجموعات</option>
-              {% for g in group_panel.groups %}
-                <option value="{{ g.code }}">{{ g.name }}</option>
-              {% endfor %}
-            </select>
-            <button type="button" class="sales-view-btn" data-chart-apply="returns">عرض</button>
-          </div>
-          <span class="result-pill" id="chart-returns-pill">أعلى 20</span>
-        </div>
-      </div>
+    <div
+      class="dash-panel dash-panel-glass dash-margins dash-margins-branches"
+      aria-label="هامش ربح الفروع"
+      id="dash-margins"
+      data-margins-url="/sales/api/margins/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
       {% if defer_heavy %}
-        <p class="sales-empty dash-loading" id="chart-items-loading">جاري تحميل المرتجعات…</p>
-        <div class="branch-chart top20-chart" id="chart-items-board" role="list" hidden></div>
-      {% else %}
-        <p class="sales-empty dash-loading" id="chart-items-loading" hidden></p>
-        <div class="branch-chart top20-chart" id="chart-items-board" role="list"></div>
+      data-margins-progressive="0"
+      data-date-from="{{ date_from }}"
+      data-date-to="{{ date_to }}"
       {% endif %}
-    </div>
-  </section>
-
-  <section
-    class="dash-margins"
-    id="dash-margins"
-    aria-label="هامش الربح"
-    data-margins-url="/sales/api/margins/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
-    {% if defer_heavy %}
-    data-margins-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
-    data-date-from="{{ date_from }}"
-    data-date-to="{{ date_to }}"
-    {% endif %}
-  >
-    <div class="dash-panel dash-panel-glass" aria-label="هامش ربح الفروع">
+    >
       <div class="dash-panel-head">
         <div class="dash-sellers-title">
           <span class="dash-sellers-mark" aria-hidden="true">
@@ -680,8 +727,14 @@
       </div>
       <p class="sales-empty" id="margin-branches-empty" hidden>لا بيانات هامش فروع لهذه الفترة.</p>
     </div>
+  </section>
 
-    <div class="dash-panel dash-panel-glass" aria-label="هامش ربح المجموعات">
+  <section
+    class="dash-margins dash-margins-groups-only"
+    id="dash-margins-groups"
+    aria-label="هامش ربح المجموعات"
+  >
+    <div class="dash-panel dash-panel-glass dash-margins-groups" aria-label="هامش ربح المجموعات">
       <div class="dash-panel-head">
         <div class="dash-sellers-title">
           <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
@@ -800,5 +853,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=40" defer></script>
+<script src="/static/js/sales-dash.js?v=46" defer></script>
 {% endblock %}

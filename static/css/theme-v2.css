@@ -490,6 +490,7 @@ select:focus {
 }
 
 .dash-kpi-glass-pos::before { background: var(--brand-mid); }
+.dash-kpi-glass-returns::before { background: #dc2626; }
 .dash-kpi-glass-wholesale::before { background: #64748b; }
 .dash-kpi-glass-total::before,
 .dash-kpi-accent::before { background: var(--accent); }
@@ -531,6 +532,7 @@ select:focus {
 }
 
 .dash-kpi-ico-pos { background: var(--brand) !important; }
+.dash-kpi-ico-returns { background: #dc2626 !important; }
 .dash-kpi-ico-wholesale { background: #475569 !important; }
 .dash-kpi-ico-total { background: var(--accent) !important; }
 .dash-kpi-ico-sellers { background: #1d4ed8 !important; }
@@ -563,6 +565,15 @@ select:focus {
 .page.sales-dash .dash-kpi-glass-pos .dash-kpi-value { color: #0a3d5c !important; }
 .page.sales-dash .dash-kpi-glass-pos .dash-kpi-hint { color: #1a6fa0 !important; }
 .page.sales-dash .dash-kpi-glass-pos .dash-kpi-ico { color: #0e5a87 !important; }
+
+.page.sales-dash .dash-kpi-glass-returns {
+  background: linear-gradient(155deg, #fde8e8 0%, #f9cfcf 100%) !important;
+  border-color: #ef9a9a !important;
+}
+.page.sales-dash .dash-kpi-glass-returns .dash-kpi-label { color: #b91c1c !important; }
+.page.sales-dash .dash-kpi-glass-returns .dash-kpi-value { color: #991b1b !important; }
+.page.sales-dash .dash-kpi-glass-returns .dash-kpi-hint { color: #c0392b !important; }
+.page.sales-dash .dash-kpi-glass-returns .dash-kpi-ico { color: #b91c1c !important; }
 
 .page.sales-dash .dash-kpi-glass-wholesale {
   background: linear-gradient(155deg, #e4e9f0 0%, #cfd8e3 100%) !important;
@@ -937,6 +948,22 @@ select:focus {
   color: #ecfdf5 !important;
 }
 
+/* نفس أبعاد لوحة البائعين */
+.page.sales-dash .dash-top-items .seller-board,
+.page.sales-dash .dash-sellers .seller-board {
+  width: 100% !important;
+  min-height: 32rem !important;
+  max-height: 32rem !important;
+  padding: 0.7rem 0.75rem 0.85rem !important;
+  gap: 0.5rem !important;
+  box-sizing: border-box !important;
+}
+
+.page.sales-dash .dash-top-items .seller-card {
+  padding: 0.75rem 0.85rem !important;
+  border-radius: 14px !important;
+}
+
 .page.sales-dash .dash-sellers {
   background: linear-gradient(165deg, #e8eefb 0%, #d2ddf5 100%) !important;
   border: 1px solid #8eace6 !important;
@@ -982,6 +1009,19 @@ select:focus {
   color: #fef2f2 !important;
 }
 
+.page.sales-dash .dash-returns-pair .dash-group-returns {
+  background: linear-gradient(165deg, #fdeeee 0%, #f8d4d4 100%) !important;
+  border: 1px solid #ef9a9a !important;
+}
+
+.page.sales-dash .dash-returns-pair #chart-items-board {
+  min-height: 32rem !important;
+  max-height: 32rem !important;
+  width: 100% !important;
+  padding: 0.7rem 0.75rem 0.85rem !important;
+  gap: 0.5rem !important;
+}
+
 .page.sales-dash .dash-margins > .dash-panel:first-child {
   background: linear-gradient(165deg, #e6f7f5 0%, #c5ebe6 100%) !important;
   border: 1px solid #74c7ba !important;
@@ -997,6 +1037,21 @@ select:focus {
   color: #f0fdfa !important;
 }
 
+.page.sales-dash .dash-margins-branches {
+  background: linear-gradient(165deg, #e6f7f5 0%, #c5ebe6 100%) !important;
+  border: 1px solid #74c7ba !important;
+}
+.page.sales-dash .dash-margins-branches .dash-panel-head {
+  background: rgba(15, 118, 110, 0.1);
+  border-bottom-color: #8fd4cb;
+}
+.page.sales-dash .dash-margins-branches .dash-panel-head h3 { color: #115e59 !important; }
+.page.sales-dash .dash-margins-branches .result-pill {
+  background: #0f766e !important;
+  border-color: #115e59 !important;
+  color: #f0fdfa !important;
+}
+
 .page.sales-dash .dash-margins > .dash-panel:last-child {
   background: linear-gradient(165deg, #f3eef8 0%, #e0d4ef 100%) !important;
   border: 1px solid #b9a3d4 !important;
@@ -1007,6 +1062,21 @@ select:focus {
 }
 .page.sales-dash .dash-margins > .dash-panel:last-child .dash-panel-head h3 { color: #5b21b6 !important; }
 .page.sales-dash .dash-margins > .dash-panel:last-child .result-pill {
+  background: #6d28d9 !important;
+  border-color: #5b21b6 !important;
+  color: #f5f3ff !important;
+}
+
+.page.sales-dash .dash-margins-groups {
+  background: linear-gradient(165deg, #f3eef8 0%, #e0d4ef 100%) !important;
+  border: 1px solid #b9a3d4 !important;
+}
+.page.sales-dash .dash-margins-groups .dash-panel-head {
+  background: rgba(91, 33, 182, 0.08);
+  border-bottom-color: #cbb8e0;
+}
+.page.sales-dash .dash-margins-groups .dash-panel-head h3 { color: #5b21b6 !important; }
+.page.sales-dash .dash-margins-groups .result-pill {
   background: #6d28d9 !important;
   border-color: #5b21b6 !important;
   color: #f5f3ff !important;

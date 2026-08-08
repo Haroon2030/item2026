@@ -165,7 +165,7 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': str(_CACHE_DIR),
-        'TIMEOUT': 300,
+        'TIMEOUT': 1800,
         'OPTIONS': {'MAX_ENTRIES': 2000},
     }
 }
@@ -280,7 +280,7 @@ EXTERNAL_API = {
     'TIMEOUT': int(_env('ONYX_TIMEOUT', '60') or '60'),
     'QTY_TIMEOUT': int(_env('ONYX_QTY_TIMEOUT', '45') or '45'),
     'COMPARE_TIMEOUT': int(_env('ONYX_COMPARE_TIMEOUT', '8') or '8'),
-    'COMPARE_CACHE_TTL': int(_env('ONYX_COMPARE_CACHE_TTL', '90') or '90'),
+    'COMPARE_CACHE_TTL': int(_env('ONYX_COMPARE_CACHE_TTL', '1800') or '1800'),
     'RETRIES': int(_env('ONYX_RETRIES', '1') or '1'),
     'ITEMS_TIMEOUT': int(_env('ONYX_ITEMS_TIMEOUT', '180') or '180'),
     'ITEMS_PARAMS': {

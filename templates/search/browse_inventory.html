@@ -158,8 +158,7 @@
         <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المخزن">
           <thead>
             <tr>
-              <th>رقم</th>
-              <th>المخزن</th>
+              <th class="inv-col-sticky">رقم</th>
               <th>الفرع</th>
               <th>أصناف</th>
               <th>بعد الترحيل</th>
@@ -170,8 +169,7 @@
           <tbody>
             {% for row in insights.by_warehouse %}
               <tr>
-                <td class="mono">{{ row.code }}</td>
-                <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
+                <td class="mono inv-col-sticky">{{ row.code }}</td>
                 <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
                 <td class="mono">{{ row.item_count_display }}</td>
                 <td class="mono">{{ row.qty_display }}</td>
@@ -179,13 +177,13 @@
                 <td class="mono inv-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="7" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
+              <tr><td colspan="6" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
             {% endfor %}
           </tbody>
           {% if insights.by_warehouse %}
             <tfoot>
               <tr class="sales-grand-row">
-                <td colspan="3">الإجمالي</td>
+                <td class="inv-col-sticky" colspan="2">الإجمالي</td>
                 <td class="mono">{{ insights.warehouse_totals.item_count_display }}</td>
                 <td class="mono">{{ insights.warehouse_totals.qty_display }}</td>
                 <td class="mono inv-value">{{ insights.warehouse_totals.stock_value_display }}</td>

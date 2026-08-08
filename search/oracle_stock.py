@@ -44,8 +44,8 @@ _WRITE_KW = re.compile(
 _client_ready = False
 _client_lock = threading.Lock()
 _tls = threading.local()
-_SALES_CACHE_TTL = 300  # 5 دقائق للفترة القصيرة
-_LOOKUP_CACHE_TTL = 3600  # ساعة لأسماء الفروع/المستخدمين/مالك POS
+_SALES_CACHE_TTL = 1800  # 30 دقيقة لكل الموقع
+_LOOKUP_CACHE_TTL = 1800  # 30 دقيقة
 _pool = None
 _pool_lock = threading.Lock()
 _pool_dsn = None
@@ -55,6 +55,27 @@ _pool_opts = None
 
 class OracleStockError(Exception):
     """فشل قراءة المخزون من أوراكل."""
+
+
+def _run_parallel(jobs: list, *, max_workers: int = 2) -> list:
+    """يشغّل دوال بلا وسيط متوازياً؛ عند إيقاف المفسّر (إعادة تحميل runserver) يعود تسلسلياً."""
+    if not jobs:
+        return []
+    if len(jobs) == 1:
+        return [jobs[0]()]
+    workers = max(1, min(int(max_workers or 1), len(jobs)))
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(fn) for fn in jobs]
+            return [f.result() for f in futs]
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        if "interpreter shutdown" in msg or "cannot schedule" in msg:
+            logger.warning("Parallel jobs fell back to serial: %s", exc)
+            return [fn() for fn in jobs]
+        raise
 
 
 def _is_connect_timeout(exc: BaseException) -> bool:
@@ -458,17 +479,6 @@ def _bind_gcode(group_code: str):
 
 
 def _sales_cache_ttl(date_from=None, date_to=None) -> int:
-    if date_from is None or date_to is None:
-        return _SALES_CACHE_TTL
-    days = _date_span_days(date_from, date_to)
-    if days >= 180:
-        return 6 * 3600
-    if days >= 90:
-        return 3 * 3600
-    if days >= 31:
-        return 1800
-    if days >= 14:
-        return 900
     return _SALES_CACHE_TTL
 
 
@@ -923,7 +933,7 @@ def fetch_inventory_by_warehouse(
         brn_code = str(src.get("BRANCH_CODE") or "").strip()
         row["branch_code"] = brn_code
         row["branch_name"] = branch_names.get(brn_code) or brn_code or "—"
-    _sales_cache_set(cache_key, assembled, ttl=600)
+    _sales_cache_set(cache_key, assembled, ttl=1800)
     return assembled
 
 
@@ -983,7 +993,7 @@ def fetch_inventory_by_group(
     assembled = _assemble_inventory_rows(
         rows, key_field="GROUP_CODE", name_lookup=group_names
     )
-    _sales_cache_set(cache_key, assembled, ttl=600)
+    _sales_cache_set(cache_key, assembled, ttl=1800)
     return assembled
 
 
@@ -1038,7 +1048,7 @@ def fetch_inventory_by_branch(
     assembled = _assemble_inventory_rows(
         rows, key_field="BRANCH_CODE", name_lookup=_branch_names()
     )
-    _sales_cache_set(cache_key, assembled, ttl=600)
+    _sales_cache_set(cache_key, assembled, ttl=1800)
     return assembled
 
 
@@ -1108,7 +1118,7 @@ def fetch_stagnant_items(
         {**params, "cand_lim": candidate_lim},
     )
     if not stock_rows:
-        _sales_cache_set(cache_key, [], ttl=600)
+        _sales_cache_set(cache_key, [], ttl=1800)
         return []
 
     item_codes = [
@@ -1220,7 +1230,7 @@ def fetch_stagnant_items(
         row["share_pct"] = round(share, 1)
         row["share_display"] = f"{share:.1f}%"
 
-    _sales_cache_set(cache_key, out, ttl=600)
+    _sales_cache_set(cache_key, out, ttl=1800)
     return out
 
 
@@ -1847,6 +1857,227 @@ def expected_stock_qty(avl_qty: float, pending_qty: float) -> float:
     return round(max(0.0, avl - pending), 4)
 
 
+def fetch_posted_item_sales_by_warehouses(
+    item_code: str,
+    warehouses: list[str],
+    date_from,
+    date_to,
+    *,
+    warehouse_names: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """
+    مبيعات نقاط البيع المرحلة (POSTED<>0) لصنف واحد عبر مخازن محددة.
+
+    يعيد صفاً لكل مخزن مطلوب حتى بلا حركة، مع إجماليات صافية بعد المرتجع.
+    """
+    code = str(item_code or "").strip()
+    wh_list = [str(w).strip() for w in (warehouses or []) if str(w).strip()]
+    empty = {
+        "item_code": code,
+        "item_name": "",
+        "rows": [],
+        "totals": {
+            "qty": 0.0,
+            "qty_display": "0",
+            "net_total": 0.0,
+            "net_total_display": "0.00",
+            "vat_total": 0.0,
+            "vat_total_display": "0.00",
+            "sales_total": 0.0,
+            "sales_total_display": "0.00",
+            "invoice_count": 0,
+            "invoice_count_display": "0",
+            "return_qty": 0.0,
+            "return_qty_display": "0",
+            "return_total": 0.0,
+            "return_total_display": "0.00",
+        },
+    }
+    if not code or not wh_list or not oracle_enabled():
+        return empty
+
+    pos = _pos_owner()
+    schema = _schema()
+    params: dict[str, Any] = {
+        **_date_params(date_from, date_to),
+        "code": code,
+    }
+    wh_keys = []
+    for i, wh in enumerate(wh_list):
+        key = f"w{i}"
+        wh_keys.append(f":{key}")
+        params[key] = wh
+    wh_in = ", ".join(wh_keys)
+    hung_m = _hung_ok("m")
+    posted_ok = "NVL(m.POSTED, 0) <> 0"
+    wh_expr = "TO_CHAR(NVL(d.W_CODE, m.W_CODE))"
+
+    sales_by_wh: dict[str, dict[str, float]] = {}
+    try:
+        for row in _fetch_all(
+            f"""
+            SELECT {wh_expr} AS WAREHOUSE_CODE,
+                   COUNT(
+                     DISTINCT TO_CHAR(m.BILL_NO) || ':' || TO_CHAR(m.BRN_NO)
+                     || ':' || TO_CHAR(NVL(m.BILL_SRL, 0))
+                   ) AS INVOICE_COUNT,
+                   ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+                   ROUND(
+                     SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
+                     2
+                   ) AS NET_TOTAL,
+                   ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS VAT_TOTAL
+            FROM {pos}.IAS_POS_BILL_MST m
+            JOIN {pos}.IAS_POS_BILL_DTL d
+              ON d.BILL_NO = m.BILL_NO
+             AND d.BRN_NO = m.BRN_NO
+             AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+            WHERE TO_CHAR(d.I_CODE) = :code
+              AND m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+              AND {hung_m}
+              AND {posted_ok}
+              AND {wh_expr} IN ({wh_in})
+            GROUP BY {wh_expr}
+            """,
+            params,
+        ):
+            wh = str(row.get("WAREHOUSE_CODE") or "").strip()
+            if not wh:
+                continue
+            sales_by_wh[wh] = {
+                "invoice_count": float(row.get("INVOICE_COUNT") or 0),
+                "qty": float(row.get("QTY_TOTAL") or 0),
+                "net": float(row.get("NET_TOTAL") or 0),
+                "vat": float(row.get("VAT_TOTAL") or 0),
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Posted item sales by warehouse failed: %s", exc)
+        raise OracleStockError("تعذر جلب مبيعات الصنف المرحلة حسب المخزن.") from exc
+
+    returns_by_wh: dict[str, dict[str, float]] = {}
+    try:
+        for row in _fetch_all(
+            f"""
+            SELECT {wh_expr} AS WAREHOUSE_CODE,
+                   ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS RET_QTY,
+                   ROUND(
+                     SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
+                     2
+                   ) AS RET_NET,
+                   ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
+            FROM {pos}.IAS_POS_RT_BILL_MST m
+            JOIN {pos}.IAS_POS_RT_BILL_DTL d
+              ON d.RT_BILL_NO = m.RT_BILL_NO
+             AND d.BRN_NO = m.BRN_NO
+            WHERE TO_CHAR(d.I_CODE) = :code
+              AND m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+              AND NVL(m.HUNG, 0) = 0
+              AND {posted_ok}
+              AND {wh_expr} IN ({wh_in})
+            GROUP BY {wh_expr}
+            """,
+            dict(params),
+        ):
+            wh = str(row.get("WAREHOUSE_CODE") or "").strip()
+            if not wh:
+                continue
+            returns_by_wh[wh] = {
+                "qty": float(row.get("RET_QTY") or 0),
+                "net": float(row.get("RET_NET") or 0),
+                "vat": float(row.get("RET_VAT") or 0),
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Posted item returns by warehouse failed: %s", exc)
+        # المرتجع اختياري — نكمل بالمبيعات فقط
+
+    item_name = ""
+    try:
+        name_rows = _fetch_all(
+            f"""
+            SELECT NVL(I_NAME, TO_CHAR(I_CODE)) AS ITEM_NAME
+            FROM {schema}.IAS_ITM_MST
+            WHERE TO_CHAR(I_CODE) = :code
+            """,
+            {"code": code},
+        )
+        if name_rows:
+            item_name = str(name_rows[0].get("ITEM_NAME") or "").strip()
+    except Exception:  # noqa: BLE001
+        item_name = ""
+
+    names = {str(k).strip(): str(v).strip() for k, v in (warehouse_names or {}).items()}
+    rows_out: list[dict] = []
+    tot_qty = tot_net = tot_vat = tot_ret_qty = tot_ret = 0.0
+    tot_inv = 0
+    for wh in wh_list:
+        sale = sales_by_wh.get(wh) or {}
+        ret = returns_by_wh.get(wh) or {}
+        qty = round(float(sale.get("qty") or 0) - float(ret.get("qty") or 0), 2)
+        net = round(float(sale.get("net") or 0) - float(ret.get("net") or 0), 2)
+        vat = round(float(sale.get("vat") or 0) - float(ret.get("vat") or 0), 2)
+        sales_total = round(net + vat, 2)
+        inv_count = int(sale.get("invoice_count") or 0)
+        ret_qty = round(float(ret.get("qty") or 0), 2)
+        ret_total = round(float(ret.get("net") or 0) + float(ret.get("vat") or 0), 2)
+        label = names.get(wh) or f"مخزن {wh}"
+        for suffix in (f" - {wh}", f"-{wh}", f"({wh})"):
+            if label.endswith(suffix):
+                label = label[: -len(suffix)].strip()
+                break
+        rows_out.append(
+            {
+                "warehouse_code": wh,
+                "warehouse_name": label or f"مخزن {wh}",
+                "qty": qty,
+                "qty_display": _fmt_inv_qty(qty),
+                "net_total": net,
+                "net_total_display": _fmt_inv_money(net),
+                "vat_total": vat,
+                "vat_total_display": _fmt_inv_money(vat),
+                "sales_total": sales_total,
+                "sales_total_display": _fmt_inv_money(sales_total),
+                "invoice_count": inv_count,
+                "invoice_count_display": f"{inv_count:,}",
+                "return_qty": ret_qty,
+                "return_qty_display": _fmt_inv_qty(ret_qty),
+                "return_total": ret_total,
+                "return_total_display": _fmt_inv_money(ret_total),
+                "has_sales": abs(float(sale.get("qty") or 0)) > 1e-9
+                or abs(float(ret.get("qty") or 0)) > 1e-9
+                or inv_count > 0,
+            }
+        )
+        tot_qty += qty
+        tot_net += net
+        tot_vat += vat
+        tot_inv += inv_count
+        tot_ret_qty += ret_qty
+        tot_ret += ret_total
+
+    tot_sales = round(tot_net + tot_vat, 2)
+    return {
+        "item_code": code,
+        "item_name": item_name or code,
+        "rows": rows_out,
+        "totals": {
+            "qty": round(tot_qty, 2),
+            "qty_display": _fmt_inv_qty(tot_qty),
+            "net_total": round(tot_net, 2),
+            "net_total_display": _fmt_inv_money(tot_net),
+            "vat_total": round(tot_vat, 2),
+            "vat_total_display": _fmt_inv_money(tot_vat),
+            "sales_total": tot_sales,
+            "sales_total_display": _fmt_inv_money(tot_sales),
+            "invoice_count": tot_inv,
+            "invoice_count_display": f"{tot_inv:,}",
+            "return_qty": round(tot_ret_qty, 2),
+            "return_qty_display": _fmt_inv_qty(tot_ret_qty),
+            "return_total": round(tot_ret, 2),
+            "return_total_display": _fmt_inv_money(tot_ret),
+        },
+    }
+
+
 def fetch_item_compare_from_oracle(
     item_code: str,
     warehouses: list[str] | None = None,
@@ -2434,9 +2665,9 @@ def fetch_group_return_totals(
         raise OracleStockError("أوراكل غير مفعّل.")
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
-    lim = max(1, min(int(limit or 40), 80))
+    lim = max(1, min(int(limit or 40), 200))
     cache_key = (
-        f"sales:ret_groups:v1:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:ret_groups:v2:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -2468,6 +2699,7 @@ def fetch_group_return_totals(
             SELECT
                 NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
                 COUNT(DISTINCT m.RT_BILL_NO) AS RETURN_COUNT,
+                ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS RET_QTY,
                 ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET,
                 ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
             FROM {pos}.IAS_POS_RT_BILL_DTL d
@@ -2493,6 +2725,7 @@ def fetch_group_return_totals(
             SELECT
                 NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
                 COUNT(DISTINCT r.RT_BILL_SER) AS RETURN_COUNT,
+                ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS RET_QTY,
                 ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET,
                 ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
             FROM {schema}.IAS_RT_BILL_DTL d
@@ -2524,6 +2757,9 @@ def fetch_group_return_totals(
                 "group_code": code,
                 "group_name": group_names.get(code) or code,
                 "return_count": int(row.get("RETURN_COUNT") or 0),
+                "return_qty": round(float(row.get("RET_QTY") or 0), 2),
+                "net_total": round(ret_net, 2),
+                "vat_total": round(ret_vat, 2),
                 "return_total": total,
                 "sales_total": total,
                 "invoice_count": int(row.get("RETURN_COUNT") or 0),
@@ -3409,18 +3645,19 @@ def fetch_group_sales_totals(
     by_branch: bool | None = None,
     force_fast: bool | None = None,
 ) -> list[dict]:
-    """إجماليات المبيعات حسب المجموعة — دائماً صافي بعد خصم المرتجعات."""
+    """إجماليات المبيعات حسب المجموعة — بدون خصم المرتجعات (المرتجع يُعرض في جدول مستقل)."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     conf = _system_conf(system)
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     split_by_branch = bool(by_branch) if by_branch is not None else bool(gcode)
-    # دائماً صافي بعد المرتجعات — لا مسار «fast» يتخطى الخصم
-    fast = False
+    # مبيعات المجموعات بدون خصم المرتجع — أسرع وأوضح مع جدول مرتجعات منفصل
+    fast = True
+    del force_fast  # للتوافق مع المستدعين القدامى
     cache_key = (
-        f"sales:groups:v12:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:net"
+        f"sales:groups:v13:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:gross"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -3861,8 +4098,6 @@ def fetch_sales_item_highlights(
     top_qty = None
     top_ret = None
     try:
-        from concurrent.futures import ThreadPoolExecutor
-
         def _amt():
             with oracle_session():
                 rows = fetch_top_sales_items(
@@ -3901,13 +4136,7 @@ def fetch_sales_item_highlights(
                 )
                 return rows[0] if rows else None
 
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            f_amt = pool.submit(_amt)
-            f_qty = pool.submit(_qty)
-            f_ret = pool.submit(_ret)
-            top_amt = f_amt.result()
-            top_qty = f_qty.result()
-            top_ret = f_ret.result()
+        top_amt, top_qty, top_ret = _run_parallel([_amt, _qty, _ret], max_workers=3)
     except Exception as exc:  # noqa: BLE001
         logger.warning("item highlights (%s) failed: %s", sys, exc)
         return empty
@@ -4502,6 +4731,41 @@ def _item_unit_cost_map() -> dict[str, float]:
     return _django_lookup_set("item_unit_cost_map:v1", out)
 
 
+def _item_wh_unit_cost_map() -> dict[str, dict[str, float]]:
+    """تكلفة وحدة لكل صنف+مخزن — كاش طويل لتفادي إعادة مسح IAS_ITM_WCODE."""
+    hit, cached = _django_lookup_get("item_wh_unit_cost_map:v2")
+    if hit and isinstance(cached, dict):
+        out: dict[str, dict[str, float]] = {}
+        for item, wh_map in cached.items():
+            if isinstance(wh_map, dict):
+                out[str(item)] = {
+                    str(wh): float(cost or 0) for wh, cost in wh_map.items()
+                }
+        return out
+    rows = _fetch_all(
+        f"""
+        SELECT w.I_CODE AS ITEM_CODE,
+               w.W_CODE AS W_CODE,
+               ROUND(AVG(NVL(w.I_CWTAVG, w.PRIMARY_COST)), 6) AS UNIT_COST
+        FROM {_schema()}.IAS_ITM_WCODE w
+        WHERE NVL(w.I_CWTAVG, w.PRIMARY_COST) IS NOT NULL
+          AND NVL(w.I_CWTAVG, w.PRIMARY_COST) > 0
+          AND w.I_CODE IS NOT NULL
+          AND w.W_CODE IS NOT NULL
+        GROUP BY w.I_CODE, w.W_CODE
+        """,
+        {},
+    )
+    out: dict[str, dict[str, float]] = {}
+    for row in rows:
+        item = str(row.get("ITEM_CODE") or "").strip()
+        wh = str(row.get("W_CODE") or "").strip()
+        if not item or not wh:
+            continue
+        out.setdefault(item, {})[wh] = float(row.get("UNIT_COST") or 0)
+    return _django_lookup_set("item_wh_unit_cost_map:v2", out)
+
+
 def _simple_unit_cost_join_sql(schema: str) -> str:
     """JOIN تكلفة خفيف: متوسط I_CWTAVG/PRIMARY_COST بدون TO_CHAR."""
     return f"""
@@ -4728,9 +4992,7 @@ def _fetch_pos_margin_ranks(
     group_code: str = "",
     skip_returns: bool = False,
 ) -> tuple[list[dict], list[dict]]:
-    """هامش POS — تجميع خفيف حسب الصنف ثم التكلفة/المجموعة في بايثون (صافي بعد المرتجعات)."""
-    from concurrent.futures import ThreadPoolExecutor
-
+    """هامش POS — تجميع صنف×مخزن في SQL ثم تكلفة من كاش (بدون مسح WCODE في كل طلب)."""
     pos = _pos_owner()
     params: dict = _date_params(date_from, date_to)
     branch_filter = ""
@@ -4740,12 +5002,15 @@ def _fetch_pos_margin_ranks(
         params["brn"] = _bind_brn(brn)
         branch_filter = "AND m.BRN_NO = :brn"
     hung_m = _hung_ok("m")
+    stock_qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
 
     sales_sql = f"""
         SELECT
             TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
             TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
             SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+            SUM({stock_qty}) AS STOCK_QTY,
             SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL
         FROM {pos}.IAS_POS_BILL_MST m
         JOIN {pos}.IAS_POS_BILL_DTL d
@@ -4756,13 +5021,15 @@ def _fetch_pos_margin_ranks(
           AND {hung_m}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
-        GROUP BY m.BRN_NO, d.I_CODE
+        GROUP BY m.BRN_NO, d.I_CODE, NVL(d.W_CODE, m.W_CODE)
     """
     returns_sql = f"""
         SELECT
             TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
             TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
             SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+            SUM({stock_qty}) AS STOCK_QTY,
             SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL
         FROM {pos}.IAS_POS_RT_BILL_MST m
         JOIN {pos}.IAS_POS_RT_BILL_DTL d
@@ -4772,15 +5039,24 @@ def _fetch_pos_margin_ranks(
           AND {_hung_ok("m")}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
-        GROUP BY m.BRN_NO, d.I_CODE
+        GROUP BY m.BRN_NO, d.I_CODE, NVL(d.W_CODE, m.W_CODE)
     """
 
-    # خرائط التكلفة/المجموعة من الكاش أو اتصال الجلسة الحالية قبل الاستعلامات الثقيلة
     gmap = _item_group_code_map()
     cmap = _item_unit_cost_map()
+    wh_cmap = _item_wh_unit_cost_map()
+
+    def _unit_cost(item: str, wh: str) -> float:
+        by_wh = wh_cmap.get(item)
+        if by_wh:
+            if wh and wh in by_wh:
+                return float(by_wh[wh] or 0)
+            for val in by_wh.values():
+                if val:
+                    return float(val)
+        return float(cmap.get(item) or 0)
 
     def _run_sql(sql: str, bind: dict) -> list[dict]:
-        # اتصال مستقل لكل خيط — لا يشارك _tls مع الخيط الأب
         with oracle_session():
             return _fetch_all(sql, bind)
 
@@ -4788,23 +5064,26 @@ def _fetch_pos_margin_ranks(
         item_rows = _fetch_all(sales_sql, params)
         returns_rows: list[dict] = []
     else:
-        ret_params = dict(params)
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            fut_sales = pool.submit(_run_sql, sales_sql, dict(params))
-            fut_ret = pool.submit(_run_sql, returns_sql, ret_params)
-            item_rows = fut_sales.result()
-            returns_rows = fut_ret.result()
+        item_rows, returns_rows = _run_parallel(
+            [
+                (lambda sql=sales_sql, bind=dict(params): _run_sql(sql, bind)),
+                (lambda sql=returns_sql, bind=dict(params): _run_sql(sql, bind)),
+            ],
+            max_workers=2,
+        )
 
-    # مفتاح فرع+صنف → صافي الكمية/المبلغ بعد خصم المرتجعات
-    item_acc: dict[tuple[str, str], dict[str, float]] = {}
+    item_acc: dict[tuple[str, str, str], dict[str, float]] = {}
 
-    def _touch(branch: str, item: str, qty: float, net: float) -> None:
-        key = (branch, item)
+    def _touch(
+        branch: str, item: str, wh: str, qty: float, stock_qty_v: float, net: float
+    ) -> None:
+        key = (branch, item, wh)
         row = item_acc.get(key)
         if row is None:
-            row = {"qty": 0.0, "net": 0.0}
+            row = {"qty": 0.0, "stock_qty": 0.0, "net": 0.0}
             item_acc[key] = row
         row["qty"] += qty
+        row["stock_qty"] += stock_qty_v
         row["net"] += net
 
     for row in item_rows:
@@ -4812,24 +5091,37 @@ def _fetch_pos_margin_ranks(
         if not item:
             continue
         b_code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
-        _touch(b_code, item, float(row.get("QTY_TOTAL") or 0), float(row.get("NET_TOTAL") or 0))
+        wh = str(row.get("W_CODE") or "").strip()
+        _touch(
+            b_code,
+            item,
+            wh,
+            float(row.get("QTY_TOTAL") or 0),
+            float(row.get("STOCK_QTY") or 0),
+            float(row.get("NET_TOTAL") or 0),
+        )
 
     for row in returns_rows:
         item = str(row.get("ITEM_CODE") or "").strip()
         if not item:
             continue
         b_code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
+        wh = str(row.get("W_CODE") or "").strip()
         _touch(
             b_code,
             item,
+            wh,
             -float(row.get("QTY_TOTAL") or 0),
+            -float(row.get("STOCK_QTY") or 0),
             -float(row.get("NET_TOTAL") or 0),
         )
 
     brn_acc: dict[str, dict[str, float]] = {}
     grp_acc: dict[str, dict[str, float]] = {}
 
-    def _add(bucket: dict[str, dict[str, float]], key: str, qty: float, net: float, cost: float) -> None:
+    def _add(
+        bucket: dict[str, dict[str, float]], key: str, qty: float, net: float, cost: float
+    ) -> None:
         if not key:
             return
         row = bucket.get(key)
@@ -4840,13 +5132,13 @@ def _fetch_pos_margin_ranks(
         row["net"] += net
         row["cost"] += cost
 
-    for (b_code, item), vals in item_acc.items():
+    for (b_code, item, wh), vals in item_acc.items():
         g_code = gmap.get(item, "(بلا)")
         if gcode and g_code != gcode:
             continue
         qty = float(vals["qty"])
         net = float(vals["net"])
-        cost = qty * float(cmap.get(item) or 0)
+        cost = float(vals["stock_qty"]) * _unit_cost(item, wh)
         _add(brn_acc, b_code, qty, net, cost)
         _add(grp_acc, g_code, qty, net, cost)
 
@@ -4882,6 +5174,7 @@ def _fetch_pos_margin_ranks(
     )
 
 
+
 def fetch_margin_ranks(
     date_from,
     date_to,
@@ -4894,7 +5187,7 @@ def fetch_margin_ranks(
     """هامش الربح كما تقرير النظام — تجميع مباشر وسريع للفروع والمجموعات.
 
     الآجل: STK_COST × الكمية من IAS_BILL_DTL.
-    نقاط البيع: تقدير من متوسط I_CWTAVG/PRIMARY_COST.
+    نقاط البيع: I_CWTAVG لمخزن السطر × كمية المخزون (P_QTY / I_QTY×P_SIZE).
     """
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
@@ -4904,7 +5197,7 @@ def fetch_margin_ranks(
     # دائماً صافي بعد المرتجعات
     fast = False
     cache_key = (
-        f"sales:margin:v11:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:margin:v15:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:net"
     )
     cached = _sales_cache_get(cache_key)

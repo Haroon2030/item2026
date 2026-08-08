@@ -723,7 +723,7 @@ def compare_item_across_warehouses(
     )
 
     try:
-        cache.set(cache_key, out, int(cfg.get('COMPARE_CACHE_TTL', 90) or 90))
+        cache.set(cache_key, out, int(cfg.get('COMPARE_CACHE_TTL', 1800) or 1800))
     except Exception:  # noqa: BLE001
         pass
     return out
@@ -1339,9 +1339,9 @@ def fetch_warehouse_stock(
         _stock_circuit_note_success()
         if not qtys:
             # فارغ مؤكد من استجابة ناجحة — كاش متوسط (لا 30 دقيقة حتى لا تتجمد أخطاء عابرة)
-            django_cache.set(cache_key, CACHE_EMPTY, 300)
+            django_cache.set(cache_key, CACHE_EMPTY, 1800)
             return code, _zero_row(code), 'empty'
-        django_cache.set(cache_key, qtys, 900)
+        django_cache.set(cache_key, qtys, 1800)
         return code, _from_qtys(code, qtys), 'ok'
 
     pending = list(codes)

@@ -402,6 +402,167 @@ def item_search(request):
     )
 
 
+def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
+    """قائمة مخازن المقارنة من الإعدادات مع الإبقاء على الموجود فعلياً."""
+    cfg = settings.EXTERNAL_API or {}
+    raw = [
+        str(c).strip()
+        for c in (cfg.get('COMPARE_WAREHOUSES') or [])
+        if str(c).strip()
+    ]
+    if not raw:
+        raw = ['1201', '1', '30', '1901', '2001', '1801', '60', '701']
+    known = {str(w.get('code') or '').strip() for w in warehouses}
+    if known:
+        filtered = [c for c in raw if c in known]
+        if filtered:
+            return filtered
+    return raw
+
+
+@login_required
+@require_GET
+@never_cache
+def sales_search(request):
+    """البحث عن مبيعات صنف مرحلة حسب مخزن واحد أو مخازن المقارنة."""
+    from .oracle_stock import (
+        OracleStockError,
+        fetch_posted_item_sales_by_warehouses,
+        oracle_enabled,
+    )
+
+    raw_query = request.GET.get('q')
+    items: list[dict] = []
+    error = ''
+    searched = False
+    match_type = ''
+    sales_bundle: dict | None = None
+    warehouses = _warehouses()
+    default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
+    scope_raw = str(request.GET.get('scope') or 'one').strip().lower()
+    raw_wh = str(request.GET.get('warehouse') or '').strip()
+    compare_mode = scope_raw in ('compare', 'all') or raw_wh == 'all'
+    if raw_wh == 'all':
+        raw_wh = ''
+
+    try:
+        query = sanitize_search_query(raw_query)
+        warehouse = resolve_warehouse(
+            raw_wh or None,
+            warehouses,
+            default_wh,
+        )
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        query = (raw_query or '').strip()[:64]
+        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else '60'
+        from datetime import date as date_cls
+
+        today = date_cls.today()
+        date_from, date_to = today.replace(day=1), today
+        searched = bool(query)
+        error = str(exc)
+        return render(
+            request,
+            'search/sales_search.html',
+            {
+                'query': query,
+                'items': [],
+                'error': error,
+                'searched': searched,
+                'match_type': '',
+                'warehouses': warehouses,
+                'warehouse': warehouse,
+                'compare_mode': compare_mode,
+                'date_from': date_from.isoformat(),
+                'date_to': date_to.isoformat(),
+                'sales_bundle': None,
+                'compare_warehouses': _compare_warehouse_codes(warehouses),
+            },
+        )
+
+    item_code = ''
+    if query:
+        searched = True
+        try:
+            barcode_hits = lookup_by_barcode(query)
+            code_hits = [] if barcode_hits else lookup_by_item_code(query)
+            name_hits = [] if barcode_hits or code_hits else lookup_by_name(query)
+
+            if barcode_hits:
+                match_type = 'barcode'
+                item_code = str(barcode_hits[0].get('code') or '').strip()
+                items = lookup_by_item_code(item_code) or barcode_hits
+            elif code_hits:
+                match_type = 'code'
+                item_code = str(code_hits[0].get('code') or '').strip()
+                items = code_hits
+            elif len(name_hits) == 1:
+                match_type = 'name'
+                item_code = str(name_hits[0].get('code') or '').strip()
+                items = lookup_by_item_code(item_code) or name_hits
+            elif len(name_hits) > 1:
+                match_type = 'name_list'
+                items = name_hits
+            elif looks_like_item_code(query):
+                match_type = 'code'
+                item_code = query
+                items = lookup_by_item_code(item_code) or [
+                    {'code': item_code, 'name': '', 'barcode': '', 'unit': ''}
+                ]
+            else:
+                error = 'لا يوجد صنف مطابق.'
+        except ApiClientError as exc:
+            error = str(exc)
+
+    if searched and not error and match_type != 'name_list' and item_code:
+        if not oracle_enabled():
+            error = 'اتصال أوراكل غير مفعّل.'
+        else:
+            name_map = {str(w['code']): str(w['name']) for w in warehouses}
+            if compare_mode:
+                wh_codes = _compare_warehouse_codes(warehouses)
+            else:
+                wh_codes = [warehouse]
+            try:
+                sales_bundle = fetch_posted_item_sales_by_warehouses(
+                    item_code,
+                    wh_codes,
+                    date_from,
+                    date_to,
+                    warehouse_names=name_map,
+                )
+                if not sales_bundle.get('item_name') and items:
+                    sales_bundle['item_name'] = str(items[0].get('name') or item_code)
+            except OracleStockError as exc:
+                error = str(exc)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception('sales_search failed: %s', exc)
+                error = 'تعذر جلب مبيعات الصنف.'
+
+    return render(
+        request,
+        'search/sales_search.html',
+        {
+            'query': query,
+            'items': items,
+            'error': error,
+            'searched': searched,
+            'match_type': match_type,
+            'warehouses': warehouses,
+            'warehouse': warehouse,
+            'compare_mode': compare_mode,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'sales_bundle': sales_bundle,
+            'compare_warehouses': _compare_warehouse_codes(warehouses),
+        },
+    )
+
+
 @login_required
 @require_POST
 def sync_barcodes(request):
@@ -482,7 +643,7 @@ def _priced_items_for_group(
         if counts.get('complete') and (
             counts.get('stocked_count', 0) > 0 or counts.get('zero_count', 0) > 0
         ):
-            cache.set(cache_key, {'stocked': stocked, 'counts': counts}, 900)
+            cache.set(cache_key, {'stocked': stocked, 'counts': counts}, 1800)
         elif counts.get('fetch_failed', 0) > 0:
             error = (
                 f'الجلب غير مكتمل: تعذّر {counts["fetch_failed"]} صنف — '
@@ -756,6 +917,9 @@ def _build_sales_system(
     grand_gross = sum(float(r.get('gross_total') or 0) for r in rows)
     grand_invoices = sum(int(r.get('invoice_count') or 0) for r in rows)
     grand_returns = sum(int(r.get('return_count') or 0) for r in rows)
+    # مبلغ المرتجع من إجمالي الفروع (وليس صفوف اليومي فقط)
+    grand_return_total = sum(float(r.get('return_total') or 0) for r in branch_rows)
+    grand_return_bills = sum(int(r.get('return_count') or 0) for r in branch_rows)
     grand_avg = round(grand_sales / grand_invoices, 2) if grand_invoices else 0.0
 
     top_visit_branch = ''
@@ -830,6 +994,10 @@ def _build_sales_system(
         'grand_returns': grand_returns,
         'grand_invoices_display': f'{grand_invoices:,}',
         'grand_returns_display': f'{grand_returns:,}',
+        'grand_return_total': f'{grand_return_total:,.2f}',
+        'grand_return_total_num': grand_return_total,
+        'grand_return_bills': grand_return_bills,
+        'grand_return_bills_display': f'{grand_return_bills:,}',
         'grand_gross': f'{grand_gross:,.2f}',
         'grand_net': f'{grand_net:,.2f}',
         'grand_vat': f'{grand_vat:,.2f}',
@@ -862,6 +1030,7 @@ def _empty_group_panel(selected_branch='', selected_group='', groups=None):
         'grand_avg_basket': '0.00',
         'fast_mode': False,
         'loading': True,
+        'returns_deducted': False,
     }
 
 
@@ -884,7 +1053,7 @@ def _build_group_panel(
     if selected_group and selected_group not in group_codes:
         selected_group = ''
     by_branch = bool(selected_group)
-    fast_mode = False
+    fast_mode = True  # مبيعات مجموعات بدون خصم مرتجع
     group_rows = fetch_group_sales_totals(
         date_from,
         date_to,
@@ -892,7 +1061,7 @@ def _build_group_panel(
         branch_code=selected_branch,
         group_code=selected_group,
         by_branch=by_branch,
-        force_fast=False,
+        force_fast=True,
     )
     _format_sales_metric_rows(group_rows)
     for row in group_rows:
@@ -964,6 +1133,65 @@ def _build_group_panel(
         'grand_avg_basket': grand_avg_display,
         'fast_mode': fast_mode,
         'loading': False,
+        'returns_deducted': False,
+    }
+
+
+def _empty_group_returns_panel(selected_branch='', selected_group=''):
+    return {
+        'rows': [],
+        'selected_branch': selected_branch,
+        'selected_group': selected_group,
+        'grand_returns': '0.00',
+        'grand_net': '0.00',
+        'grand_vat': '0.00',
+        'grand_count': 0,
+        'grand_count_display': '0',
+        'grand_qty_display': '0.00',
+        'loading': True,
+    }
+
+
+def _build_group_returns_panel(
+    date_from,
+    date_to,
+    active_system,
+    selected_group='',
+    selected_branch='',
+    limit=80,
+):
+    from .oracle_stock import fetch_group_return_totals
+
+    rows = fetch_group_return_totals(
+        date_from,
+        date_to,
+        system=active_system,
+        branch_code=selected_branch,
+        group_code=selected_group,
+        limit=limit,
+    )
+    for row in rows:
+        row['return_count_display'] = f"{int(row.get('return_count') or 0):,}"
+        row['return_qty_display'] = f"{float(row.get('return_qty') or 0):,.2f}"
+        row['return_total_display'] = f"{float(row.get('return_total') or 0):,.2f}"
+        row['net_total_display'] = f"{float(row.get('net_total') or 0):,.2f}"
+        row['vat_total_display'] = f"{float(row.get('vat_total') or 0):,.2f}"
+    g_total = sum(float(r.get('return_total') or 0) for r in rows)
+    g_net = sum(float(r.get('net_total') or 0) for r in rows)
+    g_vat = sum(float(r.get('vat_total') or 0) for r in rows)
+    g_qty = sum(float(r.get('return_qty') or 0) for r in rows)
+    g_count = sum(int(r.get('return_count') or 0) for r in rows)
+    return {
+        'rows': rows,
+        'selected_branch': selected_branch,
+        'selected_group': selected_group,
+        'grand_returns': f'{g_total:,.2f}',
+        'grand_net': f'{g_net:,.2f}',
+        'grand_vat': f'{g_vat:,.2f}',
+        'grand_count': g_count,
+        'grand_count_display': f'{g_count:,}',
+        'grand_qty_display': f'{g_qty:,.2f}',
+        'loading': False,
     }
 
 
@@ -975,7 +1203,7 @@ def _build_sales_panels_payload(
     selected_branch='',
     item_limit=20,
 ):
-    """مجموعات + أصناف مبيعات + أصناف مرتجعة في جلسة أوراكل واحدة."""
+    """مجموعات (بدون خصم مرتجع) + مرتجعات مجموعات + أصناف."""
     panel = _build_group_panel(
         date_from,
         date_to,
@@ -985,6 +1213,13 @@ def _build_sales_panels_payload(
         selected_branch=selected_branch,
     )
     gcode = panel.get('selected_group') or ''
+    returns_panel = _build_group_returns_panel(
+        date_from,
+        date_to,
+        active_system,
+        selected_group=gcode,
+        selected_branch=selected_branch,
+    )
     items, fast_mode = _build_top_items_list(
         date_from,
         date_to,
@@ -1001,7 +1236,7 @@ def _build_sales_panels_payload(
         selected_group=gcode,
         limit=item_limit,
     )
-    return panel, items, return_items, fast_mode
+    return panel, returns_panel, items, return_items, fast_mode
 
 
 def _build_top_items_list(
@@ -1168,6 +1403,7 @@ def browse_sales(request):
     systems_by_key: dict = {}
     top_items: list[dict] = []
     group_panel = _empty_group_panel()
+    group_returns_panel = _empty_group_returns_panel()
     defer_heavy = True
     try:
         from .oracle_stock import (
@@ -1193,22 +1429,32 @@ def browse_sales(request):
                         light=not is_active,
                     )
 
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                futures = {
-                    pool.submit(
-                        _job_system,
-                        key,
-                        conf['label'],
-                        key == active_system,
-                    ): key
+            built = {}
+            try:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    futures = {
+                        pool.submit(
+                            _job_system,
+                            key,
+                            conf['label'],
+                            key == active_system,
+                        ): key
+                        for key, conf in SALES_SYSTEMS.items()
+                    }
+                    for fut in as_completed(futures):
+                        built[futures[fut]] = fut.result()
+            except RuntimeError as parallel_exc:
+                msg = str(parallel_exc).lower()
+                if 'interpreter shutdown' not in msg and 'cannot schedule' not in msg:
+                    raise
+                # بعد إعادة تحميل runserver يتعذّر إنشاء خيوط — نحمّل تسلسلياً
+                built = {
+                    key: _job_system(key, conf['label'], key == active_system)
                     for key, conf in SALES_SYSTEMS.items()
                 }
-                built = {}
-                for fut in as_completed(futures):
-                    built[futures[fut]] = fut.result()
-                systems = [
-                    built[key] for key in SALES_SYSTEMS.keys() if key in built
-                ]
+            systems = [
+                built[key] for key in SALES_SYSTEMS.keys() if key in built
+            ]
 
             systems_by_key = {s['key']: s for s in systems}
             active = systems_by_key.get(active_system) or (
@@ -1229,7 +1475,11 @@ def browse_sales(request):
                     selected_group=selected_group,
                     groups=group_options,
                 )
-                # دائماً: أول رسم = MST فقط؛ الأثقال عبر API (مع الإبقاء على خصم المرتجعات)
+                group_returns_panel = _empty_group_returns_panel(
+                    selected_branch=active.get('selected_branch') or '',
+                    selected_group=selected_group,
+                )
+                # دائماً: أول رسم = MST فقط؛ المجموعات/المرتجعات عبر API
                 from .oracle_stock import sales_long_range
 
                 long_range = sales_long_range(date_from, date_to)
@@ -1273,10 +1523,16 @@ def browse_sales(request):
         kpi = {
             'pos_sales': pos.get('grand_sales') or '0.00',
             'pos_invoices': pos.get('grand_invoices_display') or '0',
+            'pos_returns': pos.get('grand_return_total') or '0.00',
+            'pos_return_bills': pos.get('grand_return_bills_display') or '0',
             'wholesale_sales': wholesale.get('grand_sales') or '0.00',
             'wholesale_invoices': wholesale.get('grand_invoices_display') or '0',
+            'wholesale_returns': wholesale.get('grand_return_total') or '0.00',
+            'wholesale_return_bills': wholesale.get('grand_return_bills_display') or '0',
             'total_sales': f'{total_sales:,.2f}',
             'total_invoices': f'{total_invoices:,}',
+            'total_returns': f'{float(pos.get("grand_return_total_num") or 0) + float(wholesale.get("grand_return_total_num") or 0):,.2f}',
+            'total_return_bills': f'{int(pos.get("grand_return_bills") or 0) + int(wholesale.get("grand_return_bills") or 0):,}',
             'branch_count': max(
                 int(pos.get('branch_count') or 0),
                 int(wholesale.get('branch_count') or 0),
@@ -1319,6 +1575,7 @@ def browse_sales(request):
             'selected_branch': (active or {}).get('selected_branch') or '',
             'selected_group': selected_group,
             'group_panel': group_panel,
+            'group_returns_panel': group_returns_panel,
             'top_items': top_items,
             'defer_heavy': defer_heavy and bool(active) and not error,
             'sales_progressive': bool((active or {}).get('sales_progressive')),
@@ -1374,7 +1631,7 @@ def browse_sales_groups_api(request):
                 branches=[],
                 selected_group=selected_group,
                 selected_branch=selected_branch,
-                force_fast=False,
+                force_fast=True,
             )
         return JsonResponse({
             'ok': True,
@@ -1384,6 +1641,44 @@ def browse_sales_groups_api(request):
         })
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_groups_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_group_returns_api(request):
+    """مرتجعات المجموعات — جدول مستقل بدون خصم من مبيعات المجموعات."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
+    if active_system not in ('pos', 'wholesale'):
+        active_system = 'pos'
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            panel = _build_group_returns_panel(
+                date_from,
+                date_to,
+                active_system,
+                selected_group=selected_group,
+                selected_branch=selected_branch,
+                limit=80,
+            )
+        return JsonResponse({'ok': True, 'panel': panel})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_group_returns_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
 
@@ -1492,7 +1787,7 @@ def browse_sales_panels_api(request):
         if not oracle_enabled():
             return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
         with oracle_session():
-            panel, items, return_items, fast_mode = _build_sales_panels_payload(
+            panel, returns_panel, items, return_items, fast_mode = _build_sales_panels_payload(
                 date_from,
                 date_to,
                 active_system,
@@ -1504,6 +1799,7 @@ def browse_sales_panels_api(request):
             {
                 'ok': True,
                 'panel': panel,
+                'returns_panel': returns_panel,
                 'items': items,
                 'return_items': return_items,
                 'fast_mode': fast_mode,

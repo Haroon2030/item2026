@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}البحث عن المبيعات{% endblock %}
+{% block page_class %}ss-page sales-search-page{% endblock %}
+
+{% block content %}
+<section class="ss-shell" aria-label="البحث عن المبيعات">
+  <header class="ss-head">
+    <div class="ss-head-copy">
+      <h2>البحث عن المبيعات</h2>
+      <p>مبيعات نقاط البيع المرحلة بعد الترحيل — حسب المخزن والفترة</p>
+    </div>
+  </header>
+
+  <form method="get" action="{% url 'sales_search' %}" class="ss-toolbar" role="search" id="sales-search-form">
+    <div class="ss-toolbar-grid">
+      <div class="field scope-field ss-scope" role="radiogroup" aria-label="نطاق البحث">
+        <span class="scope-field-label">النطاق</span>
+        <div class="scope-toggle">
+          <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
+            <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
+            <span>مخزن واحد</span>
+          </label>
+          <label class="scope-option {% if compare_mode %}is-active{% endif %}">
+            <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
+            <span>كل المخازن المختارة</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
+        <label for="warehouse">المخزن</label>
+        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+          {% for wh in warehouses %}
+            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field date-field ss-date">
+        <label for="date_from">من</label>
+        <input id="date_from" type="date" name="date_from" value="{{ date_from }}" required>
+      </div>
+
+      <div class="field date-field ss-date">
+        <label for="date_to">إلى</label>
+        <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
+      </div>
+
+      <div class="field query-field ss-query">
+        <label for="q">الباركود / رقم الصنف / الاسم</label>
+        <div class="query-row">
+          <input id="q" type="search" name="q" value="{{ query }}" placeholder="ابحث ثم Enter…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
+          <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا" aria-label="مسح الباركود بالكاميرا">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ss-actions">
+        <button type="submit" class="btn-primary">بحث</button>
+      </div>
+    </div>
+    {% if compare_mode %}
+      <p class="ss-hint">مخازن المقارنة: {% for c in compare_warehouses %}<span class="mono">{{ c }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+  </form>
+</section>
+
+<div id="barcode-scanner" class="barcode-scanner" hidden role="dialog" aria-modal="true" aria-labelledby="barcode-scanner-title">
+  <div class="barcode-scanner-card">
+    <div class="barcode-scanner-head">
+      <h3 id="barcode-scanner-title">ماسح الباركود</h3>
+      <div class="barcode-scanner-actions">
+        <button type="button" class="barcode-scanner-torch" id="barcode-scanner-torch" hidden aria-label="الإضاءة" title="الإضاءة">ضوء</button>
+        <button type="button" class="btn-ghost" id="barcode-scanner-close" aria-label="إغلاق">إغلاق</button>
+      </div>
+    </div>
+    <p id="barcode-scanner-status" class="barcode-scanner-status">مرّر الباركود على الخط الأحمر…</p>
+    <div class="barcode-scanner-viewport zebra-viewport">
+      <video id="barcode-scanner-video" class="zebra-video" playsinline muted autoplay></video>
+      <div class="zebra-guide" aria-hidden="true">
+        <span class="zebra-corner zebra-corner-tl"></span>
+        <span class="zebra-corner zebra-corner-tr"></span>
+        <span class="zebra-corner zebra-corner-bl"></span>
+        <span class="zebra-corner zebra-corner-br"></span>
+        <span class="zebra-laser zebra-laser-h zebra-laser-h1"></span>
+        <span class="zebra-laser zebra-laser-h zebra-laser-h2"></span>
+        <span class="zebra-laser zebra-laser-v zebra-laser-v1"></span>
+        <span class="zebra-laser zebra-laser-v zebra-laser-v2"></span>
+      </div>
+    </div>
+    <p class="zebra-hint">ضع الباركود داخل المربع الكبير</p>
+  </div>
+</div>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if searched and not error %}
+  {% if match_type == 'name_list' %}
+    <section class="ss-sheet-panel" aria-label="اختيار الصنف">
+      <div class="ss-sheet-bar">
+        <strong>نتائج الاسم ({{ items|length }})</strong>
+        <span class="ss-sheet-sub">اختر صنفاً لعرض المبيعات</span>
+      </div>
+      <div class="ss-sheet-wrap">
+        <table class="ss-sheet" aria-label="قائمة الأصناف">
+          <thead>
+            <tr>
+              <th class="ss-col-num">#</th>
+              <th class="ss-col-code">الكود</th>
+              <th class="ss-col-name">الصنف</th>
+              <th class="ss-col-unit">الوحدة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                <td class="ss-col-code mono">
+                  <a href="{% url 'sales_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}">{{ item.code }}</a>
+                </td>
+                <td class="ss-col-name">
+                  <a href="{% url 'sales_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}">{{ item.name }}</a>
+                </td>
+                <td class="ss-col-unit">{{ item.unit|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% elif sales_bundle %}
+    <section class="ss-sheet-panel" aria-label="ورقة المبيعات">
+      <div class="ss-sheet-bar">
+        <div class="ss-sheet-meta">
+          <span class="ss-meta-pill">الصنف</span>
+          <strong class="mono">{{ sales_bundle.item_code }}</strong>
+          <span class="ss-meta-name">{{ sales_bundle.item_name }}</span>
+        </div>
+        <div class="ss-sheet-meta is-end">
+          <span class="mono">{{ date_from }} → {{ date_to }}</span>
+          <span class="result-pill">{% if compare_mode %}{{ sales_bundle.rows|length }} مخزن{% else %}مخزن واحد{% endif %}</span>
+          <span class="result-pill is-ok">مرحلة</span>
+        </div>
+      </div>
+
+      <div class="ss-sheet-wrap">
+        <table class="ss-sheet" aria-label="مبيعات الصنف حسب المخزن">
+          <thead>
+            <tr>
+              <th class="ss-col-num">#</th>
+              <th class="ss-col-wh-code">رقم</th>
+              <th class="ss-col-wh sticky-col">المخزن</th>
+              <th class="ss-col-numish">الفواتير</th>
+              <th class="ss-col-numish">الكمية</th>
+              <th class="ss-col-money">الصافي</th>
+              <th class="ss-col-money">الضريبة</th>
+              <th class="ss-col-money is-total">الإجمالي</th>
+              <th class="ss-col-numish is-ret">مرتجع كمية</th>
+              <th class="ss-col-money is-ret">مرتجع قيمة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in sales_bundle.rows %}
+              <tr class="{% if not row.has_sales %}is-empty{% endif %}">
+                <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                <td class="ss-col-wh-code mono">{{ row.warehouse_code }}</td>
+                <td class="ss-col-wh sticky-col" title="#{{ row.warehouse_code }}">{{ row.warehouse_name }}</td>
+                <td class="ss-col-numish mono">{{ row.invoice_count_display }}</td>
+                <td class="ss-col-numish mono">{{ row.qty_display }}</td>
+                <td class="ss-col-money mono">{{ row.net_total_display }}</td>
+                <td class="ss-col-money mono">{{ row.vat_total_display }}</td>
+                <td class="ss-col-money mono is-total">{{ row.sales_total_display }}</td>
+                <td class="ss-col-numish mono is-ret">{{ row.return_qty_display }}</td>
+                <td class="ss-col-money mono is-ret">{{ row.return_total_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="10" class="sales-empty">لا توجد مخازن في النطاق.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if sales_bundle.rows %}
+            <tfoot>
+              <tr class="ss-total-row">
+                <td class="ss-col-num"></td>
+                <td class="ss-col-wh-code"></td>
+                <td class="ss-col-wh sticky-col">الإجمالي</td>
+                <td class="ss-col-numish mono">{{ sales_bundle.totals.invoice_count_display }}</td>
+                <td class="ss-col-numish mono">{{ sales_bundle.totals.qty_display }}</td>
+                <td class="ss-col-money mono">{{ sales_bundle.totals.net_total_display }}</td>
+                <td class="ss-col-money mono">{{ sales_bundle.totals.vat_total_display }}</td>
+                <td class="ss-col-money mono is-total">{{ sales_bundle.totals.sales_total_display }}</td>
+                <td class="ss-col-numish mono is-ret">{{ sales_bundle.totals.return_qty_display }}</td>
+                <td class="ss-col-money mono is-ret">{{ sales_bundle.totals.return_total_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+      <p class="ss-note">ورقة إكسل: مبيعات نقاط البيع بعد الترحيل ناقص المرتجع المرحّل، حسب مخزن السطر.</p>
+    </section>
+  {% else %}
+    <div class="empty-state">
+      <svg class="ico lg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M8 11h6"/></svg>
+      <p class="empty-title">لا نتائج</p>
+      <p>لا يوجد صنف مطابق لـ «{{ query }}»</p>
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/vendor/zxing.min.js" defer></script>
+<script src="/static/js/vendor/zxing-browser.min.js" defer></script>
+<script src="/static/js/barcode-scanner.js" defer></script>
+<script src="/static/js/inv-select.js?v=2" defer></script>
+<script>
+(function () {
+  var form = document.getElementById("sales-search-form");
+  if (!form) return;
+  var field = document.getElementById("warehouse-field");
+  var toggle = form.querySelector(".scope-toggle");
+  var radios = form.querySelectorAll('input[name="scope"]');
+
+  function sync() {
+    var compare = false;
+    radios.forEach(function (r) {
+      var on = !!r.checked;
+      if (r.value === "compare" && on) compare = true;
+      var label = r.closest(".scope-option");
+      if (label) {
+        if (on) label.classList.add("is-active");
+        else label.classList.remove("is-active");
+      }
+    });
+    if (field) field.hidden = compare;
+  }
+
+  if (toggle) {
+    toggle.addEventListener("click", function (e) {
+      var label = e.target.closest(".scope-option");
+      if (!label || !toggle.contains(label)) return;
+      var radio = label.querySelector('input[name="scope"]');
+      if (!radio) return;
+      radio.checked = true;
+      sync();
+    });
+  }
+  radios.forEach(function (r) {
+    r.addEventListener("change", sync);
+  });
+  sync();
+})();
+</script>
+{% endblock %}
