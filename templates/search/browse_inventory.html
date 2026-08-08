@@ -161,6 +161,8 @@
               <th class="inv-col-sticky">رقم</th>
               <th>الفرع</th>
               <th>أصناف</th>
+              <th title="رصيد الجدول قبل خصم غير المرحّل">قبل الترحيل</th>
+              <th title="تكلفة الكمية غير المرحلة المخصومة من الرصيد">غير مرحّل تكلفة</th>
               <th>بعد الترحيل</th>
               <th class="inv-value">القيمة</th>
               <th class="inv-share">الحصة</th>
@@ -172,12 +174,14 @@
                 <td class="mono inv-col-sticky">{{ row.code }}</td>
                 <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
                 <td class="mono">{{ row.item_count_display }}</td>
+                <td class="mono">{{ row.stock_before_display }}</td>
+                <td class="mono">{{ row.pending_cost_display }}</td>
                 <td class="mono">{{ row.qty_display }}</td>
                 <td class="mono inv-value">{{ row.stock_value_display }}</td>
                 <td class="mono inv-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
+              <tr><td colspan="8" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
             {% endfor %}
           </tbody>
           {% if insights.by_warehouse %}
@@ -185,6 +189,8 @@
               <tr class="sales-grand-row">
                 <td class="inv-col-sticky" colspan="2">الإجمالي</td>
                 <td class="mono">{{ insights.warehouse_totals.item_count_display }}</td>
+                <td class="mono">{{ insights.warehouse_totals.stock_before_display }}</td>
+                <td class="mono">{{ insights.warehouse_totals.pending_cost_display }}</td>
                 <td class="mono">{{ insights.warehouse_totals.qty_display }}</td>
                 <td class="mono inv-value">{{ insights.warehouse_totals.stock_value_display }}</td>
                 <td class="mono inv-share">{{ insights.warehouse_totals.share_display }}</td>
@@ -200,6 +206,7 @@
         <h3>حسب المجموعات</h3>
         <span class="result-pill">{{ insights.by_group|length }}</span>
       </div>
+      <p class="inv-match-hint">القيمة بعد الترحيل = قبل الترحيل − تكلفة غير المرحّل.</p>
       <div class="table-wrap inv-table-scroll">
         <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المجموعة">
           <thead>
@@ -207,6 +214,8 @@
               <th>المجموعة</th>
               <th>مخازن</th>
               <th>أصناف</th>
+              <th title="رصيد الجدول قبل خصم غير المرحّل">قبل الترحيل</th>
+              <th title="تكلفة الكمية غير المرحلة المخصومة من الرصيد">غير مرحّل تكلفة</th>
               <th>بعد الترحيل</th>
               <th class="inv-value">القيمة</th>
               <th class="inv-share">الحصة</th>
@@ -218,12 +227,14 @@
                 <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
                 <td class="mono">{{ row.warehouse_count }}</td>
                 <td class="mono">{{ row.item_count_display }}</td>
+                <td class="mono">{{ row.stock_before_display }}</td>
+                <td class="mono">{{ row.pending_cost_display }}</td>
                 <td class="mono">{{ row.qty_display }}</td>
                 <td class="mono inv-value">{{ row.stock_value_display }}</td>
                 <td class="mono inv-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="sales-empty">لا مجموعات ضمن هذا الفلتر.</td></tr>
+              <tr><td colspan="8" class="sales-empty">لا مجموعات ضمن هذا الفلتر.</td></tr>
             {% endfor %}
           </tbody>
           {% if insights.by_group %}
@@ -232,6 +243,8 @@
                 <td>الإجمالي</td>
                 <td class="mono">{{ insights.group_totals.warehouse_count_display }}</td>
                 <td class="mono">{{ insights.group_totals.item_count_display }}</td>
+                <td class="mono">{{ insights.group_totals.stock_before_display }}</td>
+                <td class="mono">{{ insights.group_totals.pending_cost_display }}</td>
                 <td class="mono">{{ insights.group_totals.qty_display }}</td>
                 <td class="mono inv-value">{{ insights.group_totals.stock_value_display }}</td>
                 <td class="mono inv-share">{{ insights.group_totals.share_display }}</td>
@@ -257,6 +270,8 @@
                 <th>الفرع</th>
                 <th>مخازن</th>
                 <th>أصناف</th>
+                <th>قبل الترحيل</th>
+                <th>غير مرحّل تكلفة</th>
                 <th>بعد الترحيل</th>
                 <th class="inv-value">القيمة</th>
                 <th class="inv-share">الحصة</th>
@@ -268,12 +283,14 @@
                   <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
                   <td class="mono">{{ row.warehouse_count }}</td>
                   <td class="mono">{{ row.item_count_display }}</td>
+                  <td class="mono">{{ row.stock_before_display }}</td>
+                  <td class="mono">{{ row.pending_cost_display }}</td>
                   <td class="mono">{{ row.qty_display }}</td>
                   <td class="mono inv-value">{{ row.stock_value_display }}</td>
                   <td class="mono inv-share">{{ row.share_display }}</td>
                 </tr>
               {% empty %}
-                <tr><td colspan="6" class="sales-empty">لا فروع ضمن هذا الفلتر.</td></tr>
+                <tr><td colspan="8" class="sales-empty">لا فروع ضمن هذا الفلتر.</td></tr>
               {% endfor %}
             </tbody>
             {% if insights.by_branch %}
@@ -282,6 +299,8 @@
                   <td>الإجمالي</td>
                   <td class="mono">{{ insights.branch_totals.warehouse_count_display }}</td>
                   <td class="mono">{{ insights.branch_totals.item_count_display }}</td>
+                  <td class="mono">{{ insights.branch_totals.stock_before_display }}</td>
+                  <td class="mono">{{ insights.branch_totals.pending_cost_display }}</td>
                   <td class="mono">{{ insights.branch_totals.qty_display }}</td>
                   <td class="mono inv-value">{{ insights.branch_totals.stock_value_display }}</td>
                   <td class="mono inv-share">{{ insights.branch_totals.share_display }}</td>

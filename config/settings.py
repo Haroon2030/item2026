@@ -348,6 +348,10 @@ ORACLE = {
     'RETRY_DELAY': int(_env('ORACLE_RETRY_DELAY', '2') or '2'),
     # دقائق: فحص الاتصالات الخاملة في المجمع
     'POOL_EXPIRE_TIME': int(_env('ORACLE_POOL_EXPIRE_TIME', '4') or '4'),
+    # سقف اتصالات المجمّع (تحليل المخزون يحتاج عدة جلسات متوازية)
+    'POOL_MAX': int(_env('ORACLE_POOL_MAX', '12') or '12'),
+    # ثوانٍ: فحص حياة الاتصال الخامل قبل إعادة استخدامه
+    'POOL_PING_INTERVAL': int(_env('ORACLE_POOL_PING_INTERVAL', '30') or '30'),
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()

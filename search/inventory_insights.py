@@ -33,12 +33,21 @@ def _table_totals(rows: list[dict]) -> dict[str, Any]:
     qty = round(sum(float(r.get("qty_total") or 0) for r in rows), 2)
     items = sum(int(r.get("item_count") or 0) for r in rows)
     warehouses = sum(int(r.get("warehouse_count") or 0) for r in rows)
+    stock_before = round(sum(float(r.get("stock_before") or 0) for r in rows), 2)
+    pending_cost = round(sum(float(r.get("pending_cost") or 0) for r in rows), 2)
+    pending_qty = round(sum(float(r.get("pending_qty") or 0) for r in rows), 2)
     return {
         "stock_value": value,
         "qty_total": qty,
         "item_count": items,
         "warehouse_count": warehouses,
+        "stock_before": stock_before,
+        "pending_cost": pending_cost,
+        "pending_qty": pending_qty,
         "stock_value_display": _money(value),
+        "stock_before_display": _money(stock_before),
+        "pending_cost_display": _money(pending_cost),
+        "pending_qty_display": _qty(pending_qty),
         "qty_display": _qty(qty),
         "item_count_display": f"{items:,}",
         "warehouse_count_display": f"{warehouses:,}",
@@ -290,8 +299,8 @@ def build_inventory_insights(
                 branch_code=brn,
             )
 
-    # موجة واحدة: كل الاستعلامات الثقيلة بالتوازي (جلسات مستقلة)
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    # موجة واحدة: استعلامات ثقيلة بالتوازي — عمال أقل من سقف المجمّع لتجنب استنزاف الاتصالات
+    with ThreadPoolExecutor(max_workers=4) as pool:
         f_wh = pool.submit(_by_wh)
         f_group = pool.submit(_by_group)
         f_brn = pool.submit(_by_brn)

@@ -8,15 +8,29 @@
   <header class="ss-head">
     <div class="ss-head-copy">
       <h2>البحث عن المبيعات</h2>
-      <p>مبيعات نقاط البيع غير المعلّقة — حسب المخزن والفترة</p>
+      <p>فواتير أونكس (مبيعات الأصناف) أو نقاط البيع — حسب المخزن والفترة</p>
     </div>
   </header>
 
   <form method="get" action="{% url 'sales_search' %}" class="ss-toolbar" role="search" id="sales-search-form">
     <div class="ss-toolbar-grid">
+      <div class="field scope-field ss-scope" role="radiogroup" aria-label="مصدر المبيعات">
+        <span class="scope-field-label">المصدر</span>
+        <div class="scope-toggle" data-sync-group="sys">
+          <label class="scope-option {% if active_system != 'pos' %}is-active{% endif %}">
+            <input type="radio" name="sys" value="bill" {% if active_system != 'pos' %}checked{% endif %}>
+            <span>فواتير (أونكس)</span>
+          </label>
+          <label class="scope-option {% if active_system == 'pos' %}is-active{% endif %}">
+            <input type="radio" name="sys" value="pos" {% if active_system == 'pos' %}checked{% endif %}>
+            <span>نقاط البيع</span>
+          </label>
+        </div>
+      </div>
+
       <div class="field scope-field ss-scope" role="radiogroup" aria-label="نطاق البحث">
         <span class="scope-field-label">النطاق</span>
-        <div class="scope-toggle">
+        <div class="scope-toggle" data-sync-group="scope">
           <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
             <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
             <span>مخزن واحد</span>
@@ -123,10 +137,10 @@
               <tr>
                 <td class="ss-col-num mono">{{ forloop.counter }}</td>
                 <td class="ss-col-code mono">
-                  <a href="{% url 'sales_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}">{{ item.code }}</a>
+                  <a href="{% url 'sales_search' %}?q={{ item.code|urlencode }}&amp;sys={{ active_system }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}">{{ item.code }}</a>
                 </td>
                 <td class="ss-col-name">
-                  <a href="{% url 'sales_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}">{{ item.name }}</a>
+                  <a href="{% url 'sales_search' %}?q={{ item.code|urlencode }}&amp;sys={{ active_system }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}">{{ item.name }}</a>
                 </td>
                 <td class="ss-col-unit">{{ item.unit|default:"—" }}</td>
               </tr>
@@ -146,7 +160,7 @@
         <div class="ss-sheet-meta is-end">
           <span class="mono">{{ date_from }} → {{ date_to }}</span>
           <span class="result-pill">{% if compare_mode %}{{ sales_bundle.rows|length }} مخزن{% else %}مخزن واحد{% endif %}</span>
-          <span class="result-pill is-ok">غير معلّقة</span>
+          <span class="result-pill is-ok">{% if active_system == 'pos' %}نقاط البيع{% else %}فواتير أونكس{% endif %}</span>
         </div>
       </div>
 
@@ -159,7 +173,7 @@
               <th class="ss-col-wh sticky-col">المخزن</th>
               <th class="ss-col-numish">الفواتير</th>
               <th class="ss-col-numish">الكمية</th>
-              <th class="ss-col-money">الصافي</th>
+              <th class="ss-col-money">متوسط التكلفة</th>
               <th class="ss-col-money">الضريبة</th>
               <th class="ss-col-money is-total">الإجمالي</th>
               <th class="ss-col-numish is-ret">مرتجع كمية</th>
@@ -174,7 +188,7 @@
                 <td class="ss-col-wh sticky-col" title="#{{ row.warehouse_code }}">{{ row.warehouse_name }}</td>
                 <td class="ss-col-numish mono">{{ row.invoice_count_display }}</td>
                 <td class="ss-col-numish mono">{{ row.qty_display }}</td>
-                <td class="ss-col-money mono">{{ row.net_total_display }}</td>
+                <td class="ss-col-money mono">{{ row.avg_cost_display }}</td>
                 <td class="ss-col-money mono">{{ row.vat_total_display }}</td>
                 <td class="ss-col-money mono is-total">{{ row.sales_total_display }}</td>
                 <td class="ss-col-numish mono is-ret">{{ row.return_qty_display }}</td>
@@ -192,7 +206,7 @@
                 <td class="ss-col-wh sticky-col">الإجمالي</td>
                 <td class="ss-col-numish mono">{{ sales_bundle.totals.invoice_count_display }}</td>
                 <td class="ss-col-numish mono">{{ sales_bundle.totals.qty_display }}</td>
-                <td class="ss-col-money mono">{{ sales_bundle.totals.net_total_display }}</td>
+                <td class="ss-col-money mono">{{ sales_bundle.totals.avg_cost_display }}</td>
                 <td class="ss-col-money mono">{{ sales_bundle.totals.vat_total_display }}</td>
                 <td class="ss-col-money mono is-total">{{ sales_bundle.totals.sales_total_display }}</td>
                 <td class="ss-col-numish mono is-ret">{{ sales_bundle.totals.return_qty_display }}</td>
@@ -202,7 +216,7 @@
           {% endif %}
         </table>
       </div>
-      <p class="ss-note">ورقة إكسل: مبيعات نقاط البيع بعد الترحيل ناقص المرتجع المرحّل، حسب مخزن السطر.</p>
+      <p class="ss-note">{% if active_system == 'pos' %}نقاط البيع غير المعلّقة.{% else %}فواتير IAS_BILL (أنواع 1 و5) مطابقة لتقرير مبيعات الأصناف في أونكس.{% endif %} الكمية بوحدة المخزون (P_QTY). متوسط التكلفة من رصيد المخزن. القيم صافي بعد خصم المرتجع.</p>
     </section>
   {% else %}
     <div class="empty-state">
@@ -224,37 +238,37 @@
   var form = document.getElementById("sales-search-form");
   if (!form) return;
   var field = document.getElementById("warehouse-field");
-  var toggle = form.querySelector(".scope-toggle");
-  var radios = form.querySelectorAll('input[name="scope"]');
 
-  function sync() {
+  function syncGroup(name) {
+    var radios = form.querySelectorAll('input[name="' + name + '"]');
     var compare = false;
     radios.forEach(function (r) {
       var on = !!r.checked;
-      if (r.value === "compare" && on) compare = true;
+      if (name === "scope" && r.value === "compare" && on) compare = true;
       var label = r.closest(".scope-option");
       if (label) {
         if (on) label.classList.add("is-active");
         else label.classList.remove("is-active");
       }
     });
-    if (field) field.hidden = compare;
+    if (name === "scope" && field) field.hidden = compare;
   }
 
-  if (toggle) {
+  form.querySelectorAll(".scope-toggle").forEach(function (toggle) {
+    var name = toggle.getAttribute("data-sync-group") || "scope";
     toggle.addEventListener("click", function (e) {
       var label = e.target.closest(".scope-option");
       if (!label || !toggle.contains(label)) return;
-      var radio = label.querySelector('input[name="scope"]');
+      var radio = label.querySelector('input[name="' + name + '"]');
       if (!radio) return;
       radio.checked = true;
-      sync();
+      syncGroup(name);
     });
-  }
-  radios.forEach(function (r) {
-    r.addEventListener("change", sync);
+    form.querySelectorAll('input[name="' + name + '"]').forEach(function (r) {
+      r.addEventListener("change", function () { syncGroup(name); });
+    });
+    syncGroup(name);
   });
-  sync();
 })();
 </script>
 {% endblock %}

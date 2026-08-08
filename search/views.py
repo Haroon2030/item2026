@@ -424,7 +424,7 @@ def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
 @require_GET
 @never_cache
 def sales_search(request):
-    """البحث عن مبيعات صنف (غير معلّقة) حسب مخزن واحد أو مخازن المقارنة."""
+    """البحث عن مبيعات صنف حسب مخزن واحد أو مخازن المقارنة (فواتير أونكس أو نقاط البيع)."""
     from .oracle_stock import (
         OracleStockError,
         fetch_posted_item_sales_by_warehouses,
@@ -444,6 +444,9 @@ def sales_search(request):
     compare_mode = scope_raw in ('compare', 'all') or raw_wh == 'all'
     if raw_wh == 'all':
         raw_wh = ''
+    active_system = str(request.GET.get('sys') or 'bill').strip().lower()
+    if active_system not in ('bill', 'pos'):
+        active_system = 'bill'
 
     try:
         query = sanitize_search_query(raw_query)
@@ -477,6 +480,7 @@ def sales_search(request):
                 'warehouses': warehouses,
                 'warehouse': warehouse,
                 'compare_mode': compare_mode,
+                'active_system': active_system,
                 'date_from': date_from.isoformat(),
                 'date_to': date_to.isoformat(),
                 'sales_bundle': None,
@@ -534,6 +538,7 @@ def sales_search(request):
                     date_from,
                     date_to,
                     warehouse_names=name_map,
+                    system=active_system,
                 )
                 if not sales_bundle.get('item_name') and items:
                     sales_bundle['item_name'] = str(items[0].get('name') or item_code)
@@ -555,6 +560,7 @@ def sales_search(request):
             'warehouses': warehouses,
             'warehouse': warehouse,
             'compare_mode': compare_mode,
+            'active_system': active_system,
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
             'sales_bundle': sales_bundle,

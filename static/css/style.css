@@ -7529,6 +7529,13 @@ html.users-modal-open {
   font-size: 0.9rem;
 }
 
+.inv-dash .inv-match-hint {
+  margin: 0 0.75rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #5a6b7d;
+}
+
 .inv-dash .inv-table-compact {
   width: 100%;
   table-layout: auto;
@@ -10273,7 +10280,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 
 .ss-page .ss-toolbar-grid {
   display: grid;
-  grid-template-columns: auto minmax(12rem, 1.2fr) 8.5rem 8.5rem minmax(14rem, 1.6fr) auto;
+  grid-template-columns: auto auto minmax(12rem, 1.2fr) 8.5rem 8.5rem minmax(14rem, 1.6fr) auto;
   gap: 0.55rem 0.65rem;
   align-items: end;
 }

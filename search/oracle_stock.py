@@ -99,7 +99,29 @@ def _is_connect_timeout(exc: BaseException) -> bool:
     )
 
 
+def _is_disconnect_error(exc: BaseException) -> bool:
+    text = str(exc or "").upper()
+    return any(
+        token in text
+        for token in (
+            "DPY-1001",
+            "DPI-1010",
+            "DPI-1080",
+            "ORA-03113",
+            "ORA-03114",
+            "ORA-03135",
+            "ORA-00028",
+            "ORA-01012",
+            "NOT CONNECTED",
+            "CONNECTION WAS CLOSED",
+            "NOT LOGGED ON",
+        )
+    )
+
+
 def _friendly_connect_error(exc: BaseException) -> str:
+    if _is_disconnect_error(exc):
+        return "انقطع الاتصال بأوراكل مؤقتاً. أعد المحاولة بعد لحظات."
     if _is_connect_timeout(exc):
         return (
             "تعذّر الاتصال بأوراكل (انتهت مهلة الشبكة). "
@@ -109,15 +131,13 @@ def _friendly_connect_error(exc: BaseException) -> str:
 
 
 def _connect_kwargs() -> dict:
-    """خيارات اتصال مشتركة للمجمّع والاتصال المباشر."""
+    """خيارات اتصال مشتركة للمجمّع والاتصال المباشر — بلا إعادة محاولة لتفادي البطء."""
     cfg = _cfg()
     tcp_timeout = max(5, int(cfg.get("TCP_CONNECT_TIMEOUT") or 60))
-    retry_count = max(0, int(cfg.get("RETRY_COUNT") or 3))
-    retry_delay = max(0, int(cfg.get("RETRY_DELAY") or 2))
     return {
         "tcp_connect_timeout": tcp_timeout,
-        "retry_count": retry_count,
-        "retry_delay": retry_delay,
+        "retry_count": 0,
+        "retry_delay": 0,
     }
 
 
@@ -262,13 +282,37 @@ def _reset_pool() -> None:
         logger.warning("Oracle connection pool reset")
 
 
+def _drop_conn(conn) -> None:
+    """يتخلّص من اتصال ميت — لا يعيده للمجمّع كاتصال صالح."""
+    if conn is None:
+        return
+    pool = getattr(conn, "_pool_ref", None)
+    if pool is not None:
+        try:
+            pool.drop(conn)
+            return
+        except Exception:
+            pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
 def _get_pool():
     """مجمع اتصالات أوراكل مشترك — يقلّل زمن فتح الاتصال."""
     global _pool, _pool_dsn, _pool_user, _pool_opts
     user, password, dsn = _oracle_dsn()
     opts = _connect_kwargs()
     expire_time = max(1, int(_cfg().get("POOL_EXPIRE_TIME") or 4))
-    opts_key = (opts.get("tcp_connect_timeout"), opts.get("retry_count"), opts.get("retry_delay"), expire_time)
+    pool_max = max(8, int(_cfg().get("POOL_MAX") or 12))
+    ping_interval = int(_cfg().get("POOL_PING_INTERVAL") or 30)
+    opts_key = (
+        opts.get("tcp_connect_timeout"),
+        expire_time,
+        pool_max,
+        ping_interval,
+    )
     with _pool_lock:
         if (
             _pool is not None
@@ -286,27 +330,34 @@ def _get_pool():
                 pass
             _pool = None
         try:
-            _pool = oracledb.create_pool(
-                user=user,
-                password=password,
-                dsn=dsn,
-                min=0,
-                max=8,
-                increment=1,
-                getmode=oracledb.POOL_GETMODE_WAIT,
-                wait_timeout=30_000,
-                expire_time=expire_time,
-                tcp_connect_timeout=opts["tcp_connect_timeout"],
-                retry_count=opts["retry_count"],
-                retry_delay=opts["retry_delay"],
-            )
+            pool_kwargs: dict[str, Any] = {
+                "user": user,
+                "password": password,
+                "dsn": dsn,
+                "min": 0,
+                "max": pool_max,
+                "increment": 1,
+                "getmode": oracledb.POOL_GETMODE_WAIT,
+                "wait_timeout": 30_000,
+                "expire_time": expire_time,
+                "tcp_connect_timeout": opts["tcp_connect_timeout"],
+                "retry_count": 0,
+                "retry_delay": 0,
+                "ping_interval": ping_interval,
+            }
+            try:
+                _pool = oracledb.create_pool(**pool_kwargs)
+            except TypeError:
+                pool_kwargs.pop("ping_interval", None)
+                _pool = oracledb.create_pool(**pool_kwargs)
             _pool_dsn = dsn
             _pool_user = user
             _pool_opts = opts_key
             logger.info(
-                "Oracle connection pool ready (max=8, tcp=%ss, retry=%s)",
+                "Oracle connection pool ready (max=%s, tcp=%ss, ping=%ss)",
+                pool_max,
                 opts["tcp_connect_timeout"],
-                opts["retry_count"],
+                ping_interval,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Oracle pool create failed: %s", exc)
@@ -317,7 +368,8 @@ def _get_pool():
         return _pool
 
 
-def _connect_once():
+def _connect():
+    """اتصال أوراكل مرة واحدة — بلا حلقات إعادة محاولة."""
     import oracledb
 
     opts = _connect_kwargs()
@@ -325,76 +377,44 @@ def _connect_once():
     if pool is not None:
         try:
             conn = pool.acquire()
-            # تأكد أن الاتصال حيّ قبل الاستخدام
-            try:
-                conn.ping()
-            except Exception:
-                try:
-                    pool.drop(conn)
-                except Exception:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-                raise
             setattr(conn, "_from_pool", True)
+            setattr(conn, "_pool_ref", pool)
             return conn
         except Exception as exc:  # noqa: BLE001
             logger.warning("Oracle pool acquire failed: %s", exc)
             if _is_connect_timeout(exc):
                 _reset_pool()
-    user, password, dsn = _oracle_dsn()
-    conn = oracledb.connect(
-        user=user,
-        password=password,
-        dsn=dsn,
-        tcp_connect_timeout=opts["tcp_connect_timeout"],
-        retry_count=opts["retry_count"],
-        retry_delay=opts["retry_delay"],
-    )
-    setattr(conn, "_from_pool", False)
-    return conn
-
-
-def _connect():
-    """اتصال أوراكل مع إعادة محاولة عند انتهاء مهلة الشبكة."""
-    import time
-
-    cfg = _cfg()
-    attempts = max(1, int(cfg.get("RETRY_COUNT") or 3) + 1)
-    delay = max(0, int(cfg.get("RETRY_DELAY") or 2))
-    last_exc: BaseException | None = None
-    for attempt in range(1, attempts + 1):
-        try:
-            return _connect_once()
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            logger.warning(
-                "Oracle connect attempt %s/%s failed: %s",
-                attempt,
-                attempts,
-                exc,
-            )
-            if not _is_connect_timeout(exc) or attempt >= attempts:
-                break
-            _reset_pool()
-            if delay > 0:
-                time.sleep(delay * attempt)
-    raise OracleStockError(_friendly_connect_error(last_exc or Exception("unknown"))) from last_exc
+    try:
+        user, password, dsn = _oracle_dsn()
+        conn = oracledb.connect(
+            user=user,
+            password=password,
+            dsn=dsn,
+            tcp_connect_timeout=opts["tcp_connect_timeout"],
+            retry_count=0,
+            retry_delay=0,
+        )
+        setattr(conn, "_from_pool", False)
+        setattr(conn, "_pool_ref", None)
+        return conn
+    except Exception as exc:  # noqa: BLE001
+        raise OracleStockError(_friendly_connect_error(exc)) from exc
 
 
 def _release_conn(conn) -> None:
     if conn is None:
         return
-    from_pool = bool(getattr(conn, "_from_pool", False))
-    if from_pool:
+    pool = getattr(conn, "_pool_ref", None)
+    if pool is not None:
         try:
-            pool = _get_pool()
-            if pool is not None:
-                pool.release(conn)
-                return
+            pool.release(conn)
+            return
         except Exception:
-            pass
+            try:
+                pool.drop(conn)
+                return
+            except Exception:
+                pass
     try:
         conn.close()
     except Exception:
@@ -576,10 +596,12 @@ def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
     conn = getattr(_tls, "conn", None)
     if conn is None:
         conn = _connect()
-        owned = True
+        if int(getattr(_tls, "depth", 0) or 0) > 0:
+            _tls.conn = conn
+        else:
+            owned = True
     try:
         cur = conn.cursor()
-        # دفعات أكبر تقلّل round-trips لنتائج التجميع الكبيرة
         try:
             cur.arraysize = 2000
         except Exception:
@@ -590,6 +612,15 @@ def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
         for tup in cur:
             rows.append({cols[i]: tup[i] for i in range(len(cols))})
         return rows
+    except Exception as exc:  # noqa: BLE001
+        if owned:
+            _drop_conn(conn)
+            owned = False
+        elif _is_disconnect_error(exc):
+            dead = getattr(_tls, "conn", None)
+            _tls.conn = None
+            _drop_conn(dead)
+        raise
     finally:
         if owned:
             _release_conn(conn)
@@ -739,13 +770,17 @@ def fetch_warehouse_options(*, active_only: bool = True) -> list[dict]:
 
 
 def _pending_pos_net_sql() -> str:
-    """جدول فرعي: صافي كمية POS غير المرحلة لكل صنف×مخزن (بوحدة المخزون)."""
+    """
+    جدول فرعي لكل صنف×مخزن:
+    - QTY: صافي كمية غير مرحلة بوحدة المخزون (مبيعات − مرتجع)
+    """
     pos = _pos_owner()
     days = int(_PENDING_SALES_LOOKBACK_DAYS)
     qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
     return f"""
     (
-      SELECT I_CODE, W_CODE, ROUND(SUM(QTY), 4) AS QTY
+      SELECT I_CODE, W_CODE,
+             ROUND(SUM(QTY), 4) AS QTY
       FROM (
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
                TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
@@ -839,6 +874,9 @@ def _assemble_inventory_rows(
         items = int(row.get("ITEM_COUNT") or 0)
         stock_rows = int(row.get("ROW_COUNT") or 0)
         wh_count = int(row.get("WH_COUNT") or 0)
+        stock_before = round(float(row.get("STOCK_BEFORE") or 0), 2)
+        pending_cost = round(float(row.get("PENDING_COST") or 0), 2)
+        pending_qty = round(float(row.get("PENDING_QTY") or 0), 2)
         name = ""
         if extra_name_field:
             name = str(row.get(extra_name_field) or "").strip()
@@ -856,7 +894,13 @@ def _assemble_inventory_rows(
                 "item_count": items,
                 "row_count": stock_rows,
                 "warehouse_count": wh_count,
+                "stock_before": stock_before,
+                "pending_cost": pending_cost,
+                "pending_qty": pending_qty,
                 "stock_value_display": _fmt_inv_money(value),
+                "stock_before_display": _fmt_inv_money(stock_before),
+                "pending_cost_display": _fmt_inv_money(pending_cost),
+                "pending_qty_display": _fmt_inv_qty(pending_qty),
                 "qty_display": _fmt_inv_qty(qty),
                 "item_count_display": f"{items:,}",
                 "row_count_display": f"{stock_rows:,}",
@@ -868,6 +912,21 @@ def _assemble_inventory_rows(
         row["share_pct"] = round(share, 1)
         row["share_display"] = f"{share:.1f}%"
     return out
+
+
+def _inventory_value_select_sql(qty_sql: str) -> str:
+    """أعمدة قيمة قبل/بعد الترحيل + غير المرحّل (تكلفة وكمية)."""
+    cost = "NVL(w.I_CWTAVG, w.PRIMARY_COST)"
+    return f"""
+            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
+            ROUND(SUM({qty_sql} * {cost}), 2) AS STOCK_VALUE,
+            ROUND(SUM(NVL(w.AVL_QTY, 0) * {cost}), 2) AS STOCK_BEFORE,
+            ROUND(
+              SUM(GREATEST(0, NVL(pend.QTY, 0)) * {cost}),
+              2
+            ) AS PENDING_COST,
+            ROUND(SUM(GREATEST(0, NVL(pend.QTY, 0))), 2) AS PENDING_QTY
+    """
 
 
 def fetch_inventory_by_warehouse(
@@ -883,7 +942,7 @@ def fetch_inventory_by_warehouse(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_wh:v3:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_wh:v6:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -893,6 +952,7 @@ def fetch_inventory_by_warehouse(
     )
     qty_sql = _inv_expected_qty_sql()
     pend_sql = _pending_pos_net_sql()
+    value_cols = _inventory_value_select_sql(qty_sql)
     rows = _fetch_all(
         f"""
         SELECT
@@ -901,11 +961,7 @@ def fetch_inventory_by_warehouse(
             TO_CHAR(MAX(wh.CONN_BRN_NO)) AS BRANCH_CODE,
             COUNT(*) AS ROW_COUNT,
             COUNT(DISTINCT w.I_CODE) AS ITEM_COUNT,
-            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
-            ROUND(
-              SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
-              2
-            ) AS STOCK_VALUE
+            {value_cols}
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
@@ -920,17 +976,17 @@ def fetch_inventory_by_warehouse(
         params,
     )
     branch_names = _branch_names()
+    branch_by_wh = {
+        str(r.get("WAREHOUSE_CODE") or "").strip(): str(r.get("BRANCH_CODE") or "").strip()
+        for r in rows
+    }
     assembled = _assemble_inventory_rows(
         rows,
         key_field="WAREHOUSE_CODE",
         extra_name_field="WAREHOUSE_NAME",
     )
     for row in assembled:
-        src = next(
-            (r for r in rows if str(r.get("WAREHOUSE_CODE") or "").strip() == row["code"]),
-            {},
-        )
-        brn_code = str(src.get("BRANCH_CODE") or "").strip()
+        brn_code = branch_by_wh.get(row["code"], "")
         row["branch_code"] = brn_code
         row["branch_name"] = branch_names.get(brn_code) or brn_code or "—"
     _sales_cache_set(cache_key, assembled, ttl=1800)
@@ -950,7 +1006,7 @@ def fetch_inventory_by_group(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_group:v3:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_group:v6:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -960,6 +1016,7 @@ def fetch_inventory_by_group(
     )
     qty_sql = _inv_expected_qty_sql()
     pend_sql = _pending_pos_net_sql()
+    value_cols = _inventory_value_select_sql(qty_sql)
     rows = _fetch_all(
         f"""
         SELECT
@@ -967,11 +1024,7 @@ def fetch_inventory_by_group(
             COUNT(*) AS ROW_COUNT,
             COUNT(DISTINCT w.I_CODE) AS ITEM_COUNT,
             COUNT(DISTINCT TO_CHAR(w.W_CODE)) AS WH_COUNT,
-            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
-            ROUND(
-              SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
-              2
-            ) AS STOCK_VALUE
+            {value_cols}
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
@@ -1010,7 +1063,7 @@ def fetch_inventory_by_branch(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_brn:v3:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_brn:v6:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -1020,6 +1073,7 @@ def fetch_inventory_by_branch(
     )
     qty_sql = _inv_expected_qty_sql()
     pend_sql = _pending_pos_net_sql()
+    value_cols = _inventory_value_select_sql(qty_sql)
     rows = _fetch_all(
         f"""
         SELECT
@@ -1027,11 +1081,7 @@ def fetch_inventory_by_branch(
             COUNT(*) AS ROW_COUNT,
             COUNT(DISTINCT w.I_CODE) AS ITEM_COUNT,
             COUNT(DISTINCT TO_CHAR(w.W_CODE)) AS WH_COUNT,
-            ROUND(SUM({qty_sql}), 2) AS QTY_TOTAL,
-            ROUND(
-              SUM({qty_sql} * NVL(w.I_CWTAVG, w.PRIMARY_COST)),
-              2
-            ) AS STOCK_VALUE
+            {value_cols}
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
@@ -1857,6 +1907,10 @@ def expected_stock_qty(avl_qty: float, pending_qty: float) -> float:
     return round(max(0.0, avl - pending), 4)
 
 
+# أنواع مستندات IAS_BILL التي يطابق مجموعها تقرير «مبيعات الأصناف» في أونكس
+_ONIX_ITEM_SALES_DOC_TYPES = (1, 5)
+
+
 def fetch_posted_item_sales_by_warehouses(
     item_code: str,
     warehouses: list[str],
@@ -1864,23 +1918,30 @@ def fetch_posted_item_sales_by_warehouses(
     date_to,
     *,
     warehouse_names: dict[str, str] | None = None,
+    system: str = "bill",
 ) -> dict[str, Any]:
     """
-    مبيعات نقاط البيع لصنف واحد عبر مخازن محددة (غير معلّقة — مثل لوحة المبيعات).
+    مبيعات صنف واحد عبر مخازن محددة، صافي بعد المرتجع.
 
-    يعيد صفاً لكل مخزن مطلوب حتى بلا حركة، مع إجماليات صافية بعد المرتجع.
+    system:
+      - bill: فواتير IAS_BILL (أنواع 1 و5) — مطابقة تقرير أونكس «مبيعات الأصناف»
+      - pos: نقاط البيع غير المعلّقة
     """
     code = str(item_code or "").strip()
     wh_list = [str(w).strip() for w in (warehouses or []) if str(w).strip()]
+    sys = str(system or "bill").strip().lower()
+    if sys not in ("pos", "bill"):
+        sys = "bill"
     empty = {
         "item_code": code,
         "item_name": "",
+        "system": sys,
         "rows": [],
         "totals": {
             "qty": 0.0,
             "qty_display": "0",
-            "net_total": 0.0,
-            "net_total_display": "0.00",
+            "avg_cost": None,
+            "avg_cost_display": "—",
             "vat_total": 0.0,
             "vat_total_display": "0.00",
             "sales_total": 0.0,
@@ -1907,7 +1968,6 @@ def fetch_posted_item_sales_by_warehouses(
                 return s
         return s
 
-    pos = _pos_owner()
     schema = _schema()
     params: dict[str, Any] = {
         **_date_params(date_from, date_to),
@@ -1920,90 +1980,186 @@ def fetch_posted_item_sales_by_warehouses(
         wh_keys.append(f":{key}")
         params[key] = wh
     wh_in = ", ".join(wh_keys)
-    hung_m = _hung_ok("m")
-    # مطابقة مرنة لأرقام المخزن (60 / 060 / 60.0) — بلا فلتر ترحيل مثل لوحة المبيعات
-    wh_expr = "TRIM(TO_CHAR(NVL(d.W_CODE, m.W_CODE)))"
-    wh_match_sql = (
-        f"NVL(NULLIF(LTRIM(REGEXP_REPLACE({wh_expr}, '\\.0+$', ''), '0'), ''), '0')"
+    # كمية بوحدة المخزون (مثل تقرير أونكس) — ليست I_QTY وحدة البيع
+    qty_expr = (
+        "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(NULLIF(d.P_SIZE, 0), 1))"
     )
 
     sales_by_wh: dict[str, dict[str, float]] = {}
-    try:
-        for row in _fetch_all(
-            f"""
-            SELECT {wh_match_sql} AS WAREHOUSE_CODE,
-                   COUNT(
-                     DISTINCT TO_CHAR(m.BILL_NO) || ':' || TO_CHAR(m.BRN_NO)
-                     || ':' || TO_CHAR(NVL(m.BILL_SRL, 0))
-                   ) AS INVOICE_COUNT,
-                   ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
-                   ROUND(
-                     SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
-                     2
-                   ) AS NET_TOTAL,
-                   ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS VAT_TOTAL
-            FROM {pos}.IAS_POS_BILL_MST m
-            JOIN {pos}.IAS_POS_BILL_DTL d
-              ON d.BILL_NO = m.BILL_NO
-             AND d.BRN_NO = m.BRN_NO
-             AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
-            WHERE TO_CHAR(d.I_CODE) = :code
-              AND m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-              AND {hung_m}
-              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
-              AND {wh_match_sql} IN ({wh_in})
-            GROUP BY {wh_match_sql}
-            """,
-            params,
-        ):
-            wh = _norm_wh(row.get("WAREHOUSE_CODE"))
-            if not wh:
-                continue
-            sales_by_wh[wh] = {
-                "invoice_count": float(row.get("INVOICE_COUNT") or 0),
-                "qty": float(row.get("QTY_TOTAL") or 0),
-                "net": float(row.get("NET_TOTAL") or 0),
-                "vat": float(row.get("VAT_TOTAL") or 0),
-            }
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Item sales by warehouse failed: %s", exc)
-        raise OracleStockError("تعذر جلب مبيعات الصنف حسب المخزن.") from exc
-
     returns_by_wh: dict[str, dict[str, float]] = {}
-    try:
-        for row in _fetch_all(
-            f"""
-            SELECT {wh_match_sql} AS WAREHOUSE_CODE,
-                   ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS RET_QTY,
-                   ROUND(
-                     SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
-                     2
-                   ) AS RET_NET,
-                   ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
-            FROM {pos}.IAS_POS_RT_BILL_MST m
-            JOIN {pos}.IAS_POS_RT_BILL_DTL d
-              ON d.RT_BILL_NO = m.RT_BILL_NO
-             AND d.BRN_NO = m.BRN_NO
-            WHERE TO_CHAR(d.I_CODE) = :code
-              AND m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
-              AND NVL(m.HUNG, 0) = 0
-              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
-              AND {wh_match_sql} IN ({wh_in})
-            GROUP BY {wh_match_sql}
-            """,
-            dict(params),
-        ):
-            wh = _norm_wh(row.get("WAREHOUSE_CODE"))
-            if not wh:
-                continue
-            returns_by_wh[wh] = {
-                "qty": float(row.get("RET_QTY") or 0),
-                "net": float(row.get("RET_NET") or 0),
-                "vat": float(row.get("RET_VAT") or 0),
-            }
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Item returns by warehouse failed: %s", exc)
-        # المرتجع اختياري — نكمل بالمبيعات فقط
+
+    if sys == "pos":
+        pos = _pos_owner()
+        hung_m = _hung_ok("m")
+        wh_expr = "TRIM(TO_CHAR(NVL(d.W_CODE, m.W_CODE)))"
+        wh_match_sql = (
+            f"NVL(NULLIF(LTRIM(REGEXP_REPLACE({wh_expr}, '\\.0+$', ''), '0'), ''), '0')"
+        )
+        try:
+            for row in _fetch_all(
+                f"""
+                SELECT {wh_match_sql} AS WAREHOUSE_CODE,
+                       COUNT(
+                         DISTINCT TO_CHAR(m.BILL_NO) || ':' || TO_CHAR(m.BRN_NO)
+                         || ':' || TO_CHAR(NVL(m.BILL_SRL, 0))
+                       ) AS INVOICE_COUNT,
+                       ROUND(SUM({qty_expr}), 2) AS QTY_TOTAL,
+                       ROUND(
+                         SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
+                         2
+                       ) AS NET_TOTAL,
+                       ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS VAT_TOTAL
+                FROM {pos}.IAS_POS_BILL_MST m
+                JOIN {pos}.IAS_POS_BILL_DTL d
+                  ON d.BILL_NO = m.BILL_NO
+                 AND d.BRN_NO = m.BRN_NO
+                 AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+                WHERE TO_CHAR(d.I_CODE) = :code
+                  AND m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                  AND {hung_m}
+                  AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+                  AND {wh_match_sql} IN ({wh_in})
+                GROUP BY {wh_match_sql}
+                """,
+                params,
+            ):
+                wh = _norm_wh(row.get("WAREHOUSE_CODE"))
+                if not wh:
+                    continue
+                sales_by_wh[wh] = {
+                    "invoice_count": float(row.get("INVOICE_COUNT") or 0),
+                    "qty": float(row.get("QTY_TOTAL") or 0),
+                    "net": float(row.get("NET_TOTAL") or 0),
+                    "vat": float(row.get("VAT_TOTAL") or 0),
+                }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Item POS sales by warehouse failed: %s", exc)
+            raise OracleStockError("تعذر جلب مبيعات الصنف حسب المخزن.") from exc
+
+        try:
+            for row in _fetch_all(
+                f"""
+                SELECT {wh_match_sql} AS WAREHOUSE_CODE,
+                       ROUND(SUM({qty_expr}), 2) AS RET_QTY,
+                       ROUND(
+                         SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
+                         2
+                       ) AS RET_NET,
+                       ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
+                FROM {pos}.IAS_POS_RT_BILL_MST m
+                JOIN {pos}.IAS_POS_RT_BILL_DTL d
+                  ON d.RT_BILL_NO = m.RT_BILL_NO
+                 AND d.BRN_NO = m.BRN_NO
+                WHERE TO_CHAR(d.I_CODE) = :code
+                  AND m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+                  AND NVL(m.HUNG, 0) = 0
+                  AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+                  AND {wh_match_sql} IN ({wh_in})
+                GROUP BY {wh_match_sql}
+                """,
+                dict(params),
+            ):
+                wh = _norm_wh(row.get("WAREHOUSE_CODE"))
+                if not wh:
+                    continue
+                returns_by_wh[wh] = {
+                    "qty": float(row.get("RET_QTY") or 0),
+                    "net": float(row.get("RET_NET") or 0),
+                    "vat": float(row.get("RET_VAT") or 0),
+                }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Item POS returns by warehouse failed: %s", exc)
+    else:
+        # فواتير أونكس (IAS_BILL) — أنواع 1 و5 كما في تقرير مبيعات الأصناف
+        bill_wh_expr = "TRIM(TO_CHAR(NVL(d.W_CODE, b.W_CODE)))"
+        bill_wh_match = (
+            "NVL(NULLIF(LTRIM(REGEXP_REPLACE("
+            f"{bill_wh_expr}, '\\.0+$', ''), '0'), ''), '0')"
+        )
+        bill_conf = {"doc_types": _ONIX_ITEM_SALES_DOC_TYPES}
+        doc_filter = _doc_type_filter(bill_conf, "b", "BILL_DOC_TYPE", params)
+        try:
+            for row in _fetch_all(
+                f"""
+                SELECT {bill_wh_match} AS WAREHOUSE_CODE,
+                       COUNT(DISTINCT b.BILL_SER) AS INVOICE_COUNT,
+                       ROUND(SUM({qty_expr}), 2) AS QTY_TOTAL,
+                       ROUND(
+                         SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
+                         2
+                       ) AS NET_TOTAL,
+                       ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS VAT_TOTAL
+                FROM {schema}.IAS_BILL_DTL d
+                JOIN {schema}.IAS_BILL_MST b
+                  ON b.BILL_NO = d.BILL_NO
+                 AND b.BILL_SER = d.BILL_SER
+                 AND b.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+                WHERE TO_CHAR(d.I_CODE) = :code
+                  AND b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+                  AND {_bill_mst_ok("b")}
+                  {doc_filter}
+                  AND NVL(d.W_CODE, b.W_CODE) IS NOT NULL
+                  AND {bill_wh_match} IN ({wh_in})
+                GROUP BY {bill_wh_match}
+                """,
+                params,
+            ):
+                wh = _norm_wh(row.get("WAREHOUSE_CODE"))
+                if not wh:
+                    continue
+                sales_by_wh[wh] = {
+                    "invoice_count": float(row.get("INVOICE_COUNT") or 0),
+                    "qty": float(row.get("QTY_TOTAL") or 0),
+                    "net": float(row.get("NET_TOTAL") or 0),
+                    "vat": float(row.get("VAT_TOTAL") or 0),
+                }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Item bill sales by warehouse failed: %s", exc)
+            raise OracleStockError("تعذر جلب مبيعات الصنف حسب المخزن.") from exc
+
+        try:
+            ret_params = dict(params)
+            ret_wh_expr = "TRIM(TO_CHAR(NVL(d.W_CODE, r.W_CODE)))"
+            ret_wh_match = (
+                "NVL(NULLIF(LTRIM(REGEXP_REPLACE("
+                f"{ret_wh_expr}, '\\.0+$', ''), '0'), ''), '0')"
+            )
+            ret_doc = _doc_type_filter(
+                bill_conf, "r", "RT_BILL_DOC_TYPE", ret_params
+            )
+            for row in _fetch_all(
+                f"""
+                SELECT {ret_wh_match} AS WAREHOUSE_CODE,
+                       ROUND(SUM({qty_expr}), 2) AS RET_QTY,
+                       ROUND(
+                         SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
+                         2
+                       ) AS RET_NET,
+                       ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS RET_VAT
+                FROM {schema}.IAS_RT_BILL_DTL d
+                JOIN {schema}.IAS_RT_BILL_MST r
+                  ON r.RT_BILL_SER = d.RT_BILL_SER
+                 AND r.BRN_NO = d.BRN_NO
+                WHERE TO_CHAR(d.I_CODE) = :code
+                  AND r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
+                  AND {_rt_bill_mst_ok("r")}
+                  {ret_doc}
+                  AND NVL(d.W_CODE, r.W_CODE) IS NOT NULL
+                  AND {ret_wh_match} IN ({wh_in})
+                GROUP BY {ret_wh_match}
+                """,
+                ret_params,
+            ):
+                wh = _norm_wh(row.get("WAREHOUSE_CODE"))
+                if not wh:
+                    continue
+                returns_by_wh[wh] = {
+                    "qty": float(row.get("RET_QTY") or 0),
+                    "net": float(row.get("RET_NET") or 0),
+                    "vat": float(row.get("RET_VAT") or 0),
+                }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Item bill returns by warehouse failed: %s", exc)
 
     item_name = ""
     try:
@@ -2025,9 +2181,18 @@ def fetch_posted_item_sales_by_warehouses(
     }
     for k, v in (warehouse_names or {}).items():
         names.setdefault(str(k).strip(), str(v).strip())
+
+    stock_raw = fetch_item_stock_by_warehouses(code, wh_list)
+    stock_by_wh: dict[str, dict] = {}
+    for k, v in stock_raw.items():
+        stock_by_wh[_norm_wh(k)] = v
+        stock_by_wh.setdefault(str(k).strip(), v)
+
     rows_out: list[dict] = []
     tot_qty = tot_net = tot_vat = tot_ret_qty = tot_ret = 0.0
     tot_inv = 0
+    cost_weight = 0.0
+    cost_sum = 0.0
     for wh_raw, wh in zip(wh_list, wh_norm_list):
         sale = sales_by_wh.get(wh) or {}
         ret = returns_by_wh.get(wh) or {}
@@ -2038,6 +2203,14 @@ def fetch_posted_item_sales_by_warehouses(
         inv_count = int(sale.get("invoice_count") or 0)
         ret_qty = round(float(ret.get("qty") or 0), 2)
         ret_total = round(float(ret.get("net") or 0) + float(ret.get("vat") or 0), 2)
+        st = stock_by_wh.get(wh) or stock_by_wh.get(str(wh_raw).strip()) or {}
+        avg_cost = None
+        raw_cost = str(st.get("avg_cost") or "").strip().replace(",", "")
+        if raw_cost:
+            try:
+                avg_cost = round(float(raw_cost), 4)
+            except (TypeError, ValueError):
+                avg_cost = None
         label = names.get(wh) or names.get(str(wh_raw).strip()) or f"مخزن {wh_raw}"
         for suffix in (
             f" - {wh_raw}",
@@ -2055,8 +2228,10 @@ def fetch_posted_item_sales_by_warehouses(
                 "warehouse_name": label or f"مخزن {wh_raw}",
                 "qty": qty,
                 "qty_display": _fmt_inv_qty(qty),
-                "net_total": net,
-                "net_total_display": _fmt_inv_money(net),
+                "avg_cost": avg_cost,
+                "avg_cost_display": (
+                    _fmt_inv_money(avg_cost) if avg_cost is not None else "—"
+                ),
                 "vat_total": vat,
                 "vat_total_display": _fmt_inv_money(vat),
                 "sales_total": sales_total,
@@ -2078,17 +2253,25 @@ def fetch_posted_item_sales_by_warehouses(
         tot_inv += inv_count
         tot_ret_qty += ret_qty
         tot_ret += ret_total
+        if avg_cost is not None:
+            w = abs(float(qty)) if abs(float(qty)) > 1e-9 else 1.0
+            cost_weight += w
+            cost_sum += avg_cost * w
 
     tot_sales = round(tot_net + tot_vat, 2)
+    tot_avg = round(cost_sum / cost_weight, 4) if cost_weight > 1e-9 else None
     return {
         "item_code": code,
         "item_name": item_name or code,
+        "system": sys,
         "rows": rows_out,
         "totals": {
             "qty": round(tot_qty, 2),
             "qty_display": _fmt_inv_qty(tot_qty),
-            "net_total": round(tot_net, 2),
-            "net_total_display": _fmt_inv_money(tot_net),
+            "avg_cost": tot_avg,
+            "avg_cost_display": (
+                _fmt_inv_money(tot_avg) if tot_avg is not None else "—"
+            ),
             "vat_total": round(tot_vat, 2),
             "vat_total_display": _fmt_inv_money(tot_vat),
             "sales_total": tot_sales,
