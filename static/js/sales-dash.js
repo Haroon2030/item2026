@@ -322,9 +322,9 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
-  // مهلات العميل أقل من gunicorn/nginx (1800s) بهامش أمان
-  var FETCH_CHUNK_MS = 600000; // 10 دقائق لكل شريحة
-  var FETCH_FULL_MS = 900000;  // 15 دقيقة للطلب الكامل
+  // مهلات العميل أقل قليلاً من gunicorn/nginx (1800s)
+  var FETCH_CHUNK_MS = 1500000; // 25 دقيقة لكل شريحة
+  var FETCH_FULL_MS = 1700000;  // ~28 دقيقة للطلب الكامل
   var FETCH_ATTEMPTS = 2;
 
   /** جلب JSON مع مهلة وإعادة محاولة واحدة — يقلل فشل اللوحات الثقيلة في الإنتاج. */
