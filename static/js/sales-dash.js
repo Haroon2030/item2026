@@ -169,8 +169,7 @@
       loading.hidden = false;
       loading.textContent = "جاري تحميل مرتجعات المجموعات…";
     }
-    return fetch(url, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    return fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderGroupReturns(data.panel || {});
@@ -323,11 +322,16 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
-  /** جلب JSON مع مهلة وإعادة محاولة — يقلل فشل الشهور الثقيلة في الإنتاج. */
+  // مهلات العميل أقل من gunicorn/nginx (1800s) بهامش أمان
+  var FETCH_CHUNK_MS = 600000; // 10 دقائق لكل شريحة
+  var FETCH_FULL_MS = 900000;  // 15 دقيقة للطلب الكامل
+  var FETCH_ATTEMPTS = 2;
+
+  /** جلب JSON مع مهلة وإعادة محاولة واحدة — يقلل فشل اللوحات الثقيلة في الإنتاج. */
   function fetchJsonRetry(url, opts) {
     opts = opts || {};
-    var attempts = opts.attempts == null ? 3 : opts.attempts;
-    var timeoutMs = opts.timeoutMs == null ? 150000 : opts.timeoutMs;
+    var attempts = opts.attempts == null ? FETCH_ATTEMPTS : opts.attempts;
+    var timeoutMs = opts.timeoutMs == null ? FETCH_FULL_MS : opts.timeoutMs;
     var n = 0;
     function once() {
       n += 1;
@@ -356,7 +360,7 @@
             }
             throw e;
           }
-          return delayMs(900 * n).then(once);
+          return delayMs(1200 * n).then(once);
         });
     }
     return once();
@@ -486,14 +490,14 @@
     var chunks = marginChunksNewestFirst(dateFrom, dateTo);
     var loading = document.getElementById("groups-loading");
     if (!chunks.length) {
-      return fetchJsonRetry(baseUrl, { attempts: 3, timeoutMs: 150000 })
+      return fetchJsonRetry(baseUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderGroups(data.panel || {});
         });
     }
     if (chunks.length === 1) {
-      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunks[0]), { attempts: 3, timeoutMs: 150000 })
+      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunks[0]), { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderGroups(data.panel || {});
@@ -539,7 +543,7 @@
         "جاري تحميل المجموعات… شريحة " + n + " من " + total +
           " (" + chunkLabel(chunk) + ") — الأحدث أولاً"
       );
-      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunk), { attempts: 3, timeoutMs: 150000 })
+      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunk), { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           merged = mergeGroupPanels(merged, data.panel || {});
@@ -877,8 +881,7 @@
     var chunks = monthChunksNewestFirst(dateFrom, dateTo);
     var limit = 20;
     if (!chunks.length) {
-      return fetch(baseUrl, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      return fetchJsonRetry(baseUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderItems(data.items || []);
@@ -886,11 +889,20 @@
     }
     var map = {};
     var idx = 0;
+    var failed = 0;
     var loading = document.getElementById("items-loading");
     function step() {
       if (idx >= chunks.length) {
         renderItems(finalizeTopItems(map, limit));
         clearDashLoadProgress(loading);
+        if (failed && loading && !Object.keys(map).length) {
+          loading.hidden = false;
+          loading.textContent = "تعذّر تحميل الأصناف (" + failed + "/" + chunks.length + ")";
+        } else if (failed && loading) {
+          loading.hidden = false;
+          loading.classList.remove("dash-load-progress");
+          loading.textContent = "اكتمل جزئياً — تعذّر " + failed + " من " + chunks.length + " شهور.";
+        }
         return Promise.resolve();
       }
       var chunk = chunks[idx];
@@ -907,18 +919,24 @@
       if (url.indexOf("limit=") < 0) {
         url += (url.indexOf("?") >= 0 ? "&" : "?") + "limit=40";
       }
-      return fetch(url, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      return fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           mergeItemMaps(map, data.items || []);
           renderItems(finalizeTopItems(map, limit), n < total);
+        })
+        .catch(function () {
+          failed += 1;
+        })
+        .then(function () {
           if (n < total) {
             setDashLoadProgress(
               loading,
               n,
               total,
-              "تم " + n + " من " + total + " — يُكمَّل الباقي…"
+              failed
+                ? ("تم " + (n - failed) + " من " + total + " — تعذّر " + failed + " — يُكمَّل…")
+                : ("تم " + n + " من " + total + " — يُكمَّل الباقي…")
             );
           } else {
             clearDashLoadProgress(loading);
@@ -1013,8 +1031,7 @@
     var dTo = (box && box.dataset.dateTo) || "";
     var p = progressive && dFrom && dTo
       ? loadItemsProgressive(url, dFrom, dTo)
-      : fetch(url, { credentials: "same-origin" })
-          .then(function (r) { return r.json(); })
+      : fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
           .then(function (data) {
             if (!data.ok) throw new Error(data.error || "فشل التحميل");
             renderItems(data.items || []);
@@ -1032,8 +1049,7 @@
       loading.hidden = false;
       loading.textContent = "جاري تحميل البائعين…";
     }
-    fetch(url, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderSellers(data.users || []);
@@ -1085,8 +1101,7 @@
       loadingIt.hidden = false;
       loadingIt.textContent = "جاري تحديث المرتجعات…";
     }
-    fetch(url, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderChartBranches(data.chart_branches || []);
@@ -1109,8 +1124,7 @@
       loadingIt.hidden = false;
       loadingIt.textContent = "جاري تحديث المرتجعات…";
     }
-    fetch(url, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderReturnItems(data.return_items || []);
@@ -1137,14 +1151,14 @@
       var dTo = (groupsBox && groupsBox.dataset.dateTo) || "";
       var groupsPromise = progressive && dFrom && dTo
         ? loadGroupsProgressive(groupsUrl, dFrom, dTo)
-        : fetchJsonRetry(groupsUrl, { attempts: 3, timeoutMs: 150000 })
+        : fetchJsonRetry(groupsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
             .then(function (data) {
               if (!data.ok) throw new Error(data.error || "فشل التحميل");
               renderGroups(data.panel || {});
             });
       groupsPromise.catch(failGroups);
       // مرتجعات المجموعات بعد بدء المبيعات بقليل — يقلل ضغط الطلبات المتزامنة
-      setTimeout(function () { loadGroupReturns(); }, 400);
+      setTimeout(function () { loadGroupReturns(); }, 1500);
 
       if (itemsUrl) {
         var itemsProgressive = itemsBox && itemsBox.dataset.itemsProgressive === "1";
@@ -1152,8 +1166,7 @@
         var iTo = (itemsBox && itemsBox.dataset.dateTo) || "";
         var itemsPromise = itemsProgressive && iFrom && iTo
           ? loadItemsProgressive(itemsUrl, iFrom, iTo)
-          : fetch(itemsUrl, { credentials: "same-origin" })
-              .then(function (r) { return r.json(); })
+          : fetchJsonRetry(itemsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
               .then(function (data) {
                 if (!data.ok) throw new Error(data.error || "فشل التحميل");
                 renderItems(data.items || []);
@@ -1449,7 +1462,7 @@
         "جاري تحميل الهامش… شريحة " + n + " من " + total +
           " (" + chunkLabel(chunk) + ") — الأحدث أولاً"
       );
-      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunk), { attempts: 3, timeoutMs: 150000 })
+      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunk), { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           mergeMarginMaps(brMap, data.branches || [], "branch_code", "branch_name");
@@ -1504,7 +1517,7 @@
       loading.hidden = false;
       loading.textContent = "جاري جلب هامش الفروع للفترة كاملة…";
     }
-    fetchJsonRetry(url, { attempts: 3, timeoutMs: 240000 })
+    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderMarginBranches(data.branches || []);
@@ -1526,7 +1539,7 @@
       loading.hidden = false;
       loading.textContent = "جاري جلب هامش المجموعات للفترة كاملة…";
     }
-    fetchJsonRetry(url, { attempts: 3, timeoutMs: 240000 })
+    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderMarginGroups(data.groups || []);
@@ -1551,6 +1564,24 @@
       if (!url) return;
       var loadingBranches = document.getElementById("margin-branches-loading");
       var loadingGroups = document.getElementById("margin-groups-loading");
+      var progressive = box.dataset.marginsProgressive === "1";
+      var dFrom = box.dataset.dateFrom || "";
+      var dTo = box.dataset.dateTo || "";
+      if (progressive && dFrom && dTo) {
+        if (loadingBranches) {
+          loadingBranches.hidden = false;
+          loadingBranches.textContent = "جاري تحميل الهامش على شرائح…";
+        }
+        if (loadingGroups) {
+          loadingGroups.hidden = false;
+          loadingGroups.textContent = "جاري تحميل الهامش على شرائح…";
+        }
+        loadMarginsProgressive(url, dFrom, dTo).catch(function (err) {
+          if (loadingBranches) loadingBranches.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
+          if (loadingGroups) loadingGroups.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
+        });
+        return;
+      }
       if (loadingBranches) {
         loadingBranches.hidden = false;
         loadingBranches.textContent = "جاري جلب هامش الفروع للفترة كاملة…";
@@ -1559,7 +1590,7 @@
         loadingGroups.hidden = false;
         loadingGroups.textContent = "جاري جلب هامش المجموعات للفترة كاملة…";
       }
-      fetchJsonRetry(url, { attempts: 3, timeoutMs: 240000 })
+      fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderMarginBranches(data.branches || []);
@@ -1637,8 +1668,7 @@
   function loadKpiHighlights() {
     var box = document.querySelector(".dash-kpi[data-highlights-url]");
     if (!box || !box.dataset.highlightsUrl) return;
-    fetch(box.dataset.highlightsUrl, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    fetchJsonRetry(box.dataset.highlightsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         applyKpiHighlights(data.highlights || {});
@@ -1663,18 +1693,17 @@
   }
 
   loadKpiHighlights();
-  // البائعون + الهامش بعد أول رسم حتى لا يزاحموا أوراكل مع المجموعات
+  // تسلسل أخف على أوراكل: مجموعات أولاً، ثم باقي اللوحات
   setTimeout(function () {
     var sellersBoard = document.getElementById("sellers-board");
     var hasSellerCards = sellersBoard && sellersBoard.querySelector(".seller-card");
     if (!hasSellerCards) loadSideSellers();
-  }, 250);
-  setTimeout(function () { loadMargins(); }, 450);
+  }, 800);
+  setTimeout(function () { loadMargins(); }, 1200);
   if (!loadPanels()) {
     var box = document.getElementById("dash-groups");
     if (box && box.dataset.groupsUrl) {
-      fetch(box.dataset.groupsUrl, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      fetchJsonRetry(box.dataset.groupsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderGroups(data.panel || {});
@@ -1683,8 +1712,7 @@
     }
     var itemsBox = document.getElementById("dash-top-items");
     if (itemsBox && itemsBox.dataset.itemsUrl) {
-      fetch(itemsBox.dataset.itemsUrl, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      fetchJsonRetry(itemsBox.dataset.itemsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderItems(data.items || []);

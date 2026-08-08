@@ -663,7 +663,7 @@
       id="dash-margins"
       data-margins-url="/sales/api/margins/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
       {% if defer_heavy %}
-      data-margins-progressive="0"
+      data-margins-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
       data-date-from="{{ date_from }}"
       data-date-to="{{ date_to }}"
       {% endif %}
@@ -853,5 +853,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=46" defer></script>
+<script src="/static/js/sales-dash.js?v=47" defer></script>
 {% endblock %}
