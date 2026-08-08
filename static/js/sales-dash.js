@@ -198,6 +198,80 @@
     return chunks;
   }
 
+  /** شرائح هامش: أشهر حديثة أولاً؛ للفترات الطويلة تُقسَم الأشهر الثقيلة إلى نصفين. */
+  function marginChunksNewestFirst(fromStr, toStr) {
+    var months = monthChunksNewestFirst(fromStr, toStr);
+    if (months.length < 2) return months;
+    function pad(n) { return n < 10 ? "0" + n : String(n); }
+    function parseIso(s) {
+      var p = String(s || "").split("-");
+      return { y: +p[0], m: +p[1], d: +p[2] };
+    }
+    function toIso(o) { return o.y + "-" + pad(o.m) + "-" + pad(o.d); }
+    function daysIn(a, b) {
+      var A = parseIso(a), B = parseIso(b);
+      var t0 = Date.UTC(A.y, A.m - 1, A.d);
+      var t1 = Date.UTC(B.y, B.m - 1, B.d);
+      return Math.round((t1 - t0) / 86400000) + 1;
+    }
+    function addDays(isoStr, n) {
+      var A = parseIso(isoStr);
+      var dt = new Date(Date.UTC(A.y, A.m - 1, A.d));
+      dt.setUTCDate(dt.getUTCDate() + n);
+      return toIso({ y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() });
+    }
+    var out = [];
+    months.forEach(function (ch) {
+      var span = daysIn(ch.date_from, ch.date_to);
+      if (span <= 16) {
+        out.push(ch);
+        return;
+      }
+      var midEnd = addDays(ch.date_from, Math.ceil(span / 2) - 1);
+      var midStart = addDays(midEnd, 1);
+      // الأحدث أولاً داخل الشهر
+      out.push({ date_from: midStart, date_to: ch.date_to });
+      out.push({ date_from: ch.date_from, date_to: midEnd });
+    });
+    return out;
+  }
+
+  function delayMs(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  /** جلب JSON مع مهلة وإعادة محاولة — يقلل فشل الشهور الثقيلة في الإنتاج. */
+  function fetchJsonRetry(url, opts) {
+    opts = opts || {};
+    var attempts = opts.attempts == null ? 3 : opts.attempts;
+    var timeoutMs = opts.timeoutMs == null ? 150000 : opts.timeoutMs;
+    var n = 0;
+    function once() {
+      n += 1;
+      var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var timer = null;
+      if (ctrl) {
+        timer = setTimeout(function () { try { ctrl.abort(); } catch (e) { /* ignore */ } }, timeoutMs);
+      }
+      return fetch(url, {
+        credentials: "same-origin",
+        signal: ctrl ? ctrl.signal : undefined
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        })
+        .finally(function () {
+          if (timer) clearTimeout(timer);
+        })
+        .catch(function (err) {
+          if (n >= attempts) throw err;
+          return delayMs(700 * n).then(once);
+        });
+    }
+    return once();
+  }
+
   function groupRowKey(row, byBranch) {
     return String(row.group_code || "") + "|" + (byBranch ? String(row.branch_code || "") : "");
   }
@@ -1140,64 +1214,113 @@
     return map;
   }
 
+  var marginsProgByUrl = {};
+
   function loadMarginsProgressive(baseUrl, dateFrom, dateTo) {
-    var chunks = monthChunksNewestFirst(dateFrom, dateTo);
+    var dedupeKey = String(baseUrl || "") + "|" + dateFrom + "|" + dateTo;
+    if (marginsProgByUrl[dedupeKey]) return marginsProgByUrl[dedupeKey];
+
+    var chunks = marginChunksNewestFirst(dateFrom, dateTo);
     var loadingBranches = document.getElementById("margin-branches-loading");
     var loadingGroups = document.getElementById("margin-groups-loading");
     if (!chunks.length) {
-      return fetch(baseUrl, { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (!data.ok) throw new Error(data.error || "فشل التحميل");
-          renderMarginBranches(data.branches || []);
-          renderMarginGroups(data.groups || []);
-        });
+      var p0 = fetchJsonRetry(baseUrl).then(function (data) {
+        if (!data.ok) throw new Error(data.error || "فشل التحميل");
+        renderMarginBranches(data.branches || []);
+        renderMarginGroups(data.groups || []);
+      });
+      marginsProgByUrl[dedupeKey] = p0.finally(function () { delete marginsProgByUrl[dedupeKey]; });
+      return marginsProgByUrl[dedupeKey];
     }
+
     var brMap = {};
     var grMap = {};
-    var idx = 0;
-    function setLoading(done, total, label) {
-      setDashLoadProgress(loadingBranches, done, total, label);
-      setDashLoadProgress(loadingGroups, done, total, label);
+    var total = chunks.length;
+    var done = 0;
+    var failed = 0;
+    var nextIdx = 0;
+    var CONCURRENCY = Math.min(2, total);
+
+    function setLoading(doneN, totalN, label) {
+      setDashLoadProgress(loadingBranches, doneN, totalN, label);
+      setDashLoadProgress(loadingGroups, doneN, totalN, label);
     }
-    function step() {
-      if (idx >= chunks.length) {
-        renderMarginBranches(formatMarginRows(Object.keys(brMap).map(function (k) { return brMap[k]; }), "branch_code", "branch_name"));
-        renderMarginGroups(formatMarginRows(Object.keys(grMap).map(function (k) { return grMap[k]; }), "group_code", "group_name"));
-        clearDashLoadProgress(loadingBranches);
-        clearDashLoadProgress(loadingGroups);
-        return Promise.resolve();
-      }
-      var chunk = chunks[idx];
-      var n = idx + 1;
-      var total = chunks.length;
-      setLoading(
-        Math.max(0, n - 1),
-        total,
-        "جاري تحميل الهامش… شهر " + n + " من " + total +
-          " (" + chunk.date_from.slice(0, 7) + ") — الأحدث أولاً"
+
+    function paint(stillLoading) {
+      var brRows = formatMarginRows(
+        Object.keys(brMap).map(function (k) { return brMap[k]; }),
+        "branch_code",
+        "branch_name"
       );
-      return fetch(groupsChunkUrl(baseUrl, chunk), { credentials: "same-origin" })
-        .then(function (r) { return r.json(); })
+      var grRows = formatMarginRows(
+        Object.keys(grMap).map(function (k) { return grMap[k]; }),
+        "group_code",
+        "group_name"
+      );
+      renderMarginBranches(brRows, stillLoading);
+      renderMarginGroups(grRows, stillLoading);
+    }
+
+    function chunkLabel(chunk) {
+      return chunk.date_from.slice(0, 7) +
+        (chunk.date_from.slice(8) !== "01" || chunk.date_to.slice(8) < "28"
+          ? (" " + chunk.date_from.slice(8) + "–" + chunk.date_to.slice(8))
+          : "");
+    }
+
+    function worker() {
+      if (nextIdx >= chunks.length) return Promise.resolve();
+      var i = nextIdx;
+      nextIdx += 1;
+      var chunk = chunks[i];
+      var n = i + 1;
+      setLoading(
+        done,
+        total,
+        "جاري تحميل الهامش… شريحة " + n + " من " + total +
+          " (" + chunkLabel(chunk) + ") — الأحدث أولاً"
+      );
+      return fetchJsonRetry(groupsChunkUrl(baseUrl, chunk), { attempts: 3, timeoutMs: 150000 })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           mergeMarginMaps(brMap, data.branches || [], "branch_code", "branch_name");
           mergeMarginMaps(grMap, data.groups || [], "group_code", "group_name");
-          var brRows = formatMarginRows(Object.keys(brMap).map(function (k) { return brMap[k]; }), "branch_code", "branch_name");
-          var grRows = formatMarginRows(Object.keys(grMap).map(function (k) { return grMap[k]; }), "group_code", "group_name");
-          renderMarginBranches(brRows, n < total);
-          renderMarginGroups(grRows, n < total);
-          if (n < total) {
-            setLoading(n, total, "تم " + n + " من " + total + " — يُكمَّل الباقي…");
-          } else {
-            clearDashLoadProgress(loadingBranches);
-            clearDashLoadProgress(loadingGroups);
+        })
+        .catch(function () {
+          failed += 1;
+        })
+        .then(function () {
+          done += 1;
+          var still = done < total;
+          paint(still);
+          if (still) {
+            var msg = failed
+              ? ("تم " + (done - failed) + " من " + total + " — تعذّر " + failed + " — يُكمَّل…")
+              : ("تم " + done + " من " + total + " — يُكمَّل الباقي…");
+            setLoading(done, total, msg);
           }
-          idx += 1;
-          return step();
+          return worker();
         });
     }
-    return step();
+
+    var workers = [];
+    for (var w = 0; w < CONCURRENCY; w += 1) workers.push(worker());
+    var p = Promise.all(workers).then(function () {
+      paint(false);
+      clearDashLoadProgress(loadingBranches);
+      clearDashLoadProgress(loadingGroups);
+      if (failed && !Object.keys(brMap).length && !Object.keys(grMap).length) {
+        throw new Error("تعذّر تحميل شرائح الهامش (" + failed + "/" + total + ")");
+      }
+      if (failed && loadingBranches) {
+        loadingBranches.hidden = false;
+        loadingBranches.classList.remove("dash-load-progress");
+        loadingBranches.textContent =
+          "اكتمل جزئياً — تعذّر " + failed + " من " + total + " شرائح (صافي بعد المرتجعات).";
+      }
+    });
+    marginsProgByUrl[dedupeKey] = p.finally(function () { delete marginsProgByUrl[dedupeKey]; });
+    return marginsProgByUrl[dedupeKey];
   }
 
   function loadMarginBranches() {

@@ -4728,197 +4728,127 @@ def _fetch_pos_margin_ranks(
     group_code: str = "",
     skip_returns: bool = False,
 ) -> tuple[list[dict], list[dict]]:
-    """هامش POS — للفترة الطويلة: تجميع حسب الصنف ثم ربط التكلفة/المجموعة في بايثون."""
+    """هامش POS — تجميع خفيف حسب الصنف ثم التكلفة/المجموعة في بايثون (صافي بعد المرتجعات)."""
+    from concurrent.futures import ThreadPoolExecutor
+
     pos = _pos_owner()
-    schema = _schema()
     params: dict = _date_params(date_from, date_to)
     branch_filter = ""
-    group_filter = ""
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     if brn:
         params["brn"] = _bind_brn(brn)
         branch_filter = "AND m.BRN_NO = :brn"
-    if gcode:
-        params["gcode"] = _bind_gcode(gcode)
-        group_filter = "AND i.G_CODE = :gcode"
     hung_m = _hung_ok("m")
 
-    if skip_returns:
-        item_rows = _fetch_all(
-            f"""
-            SELECT
-                TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
-                TO_CHAR(d.I_CODE) AS ITEM_CODE,
-                SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
-                SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL
-            FROM {pos}.IAS_POS_BILL_MST m
-            JOIN {pos}.IAS_POS_BILL_DTL d
-              ON d.BILL_NO = m.BILL_NO
-             AND d.BRN_NO = m.BRN_NO
-             AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
-            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-              AND {hung_m}
-              AND d.I_CODE IS NOT NULL
-              {branch_filter}
-            GROUP BY m.BRN_NO, d.I_CODE
-            """,
-            params,
-        )
-        gmap = _item_group_code_map()
-        cmap = _item_unit_cost_map()
-        brn_acc: dict[str, dict[str, float]] = {}
-        grp_acc: dict[str, dict[str, float]] = {}
-
-        def _add(bucket: dict[str, dict[str, float]], key: str, qty: float, net: float, cost: float) -> None:
-            if not key:
-                return
-            row = bucket.get(key)
-            if row is None:
-                row = {"qty": 0.0, "net": 0.0, "cost": 0.0}
-                bucket[key] = row
-            row["qty"] += qty
-            row["net"] += net
-            row["cost"] += cost
-
-        for row in item_rows:
-            item = str(row.get("ITEM_CODE") or "").strip()
-            if not item:
-                continue
-            g_code = gmap.get(item, "(بلا)")
-            if gcode and g_code != gcode:
-                continue
-            b_code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
-            qty = float(row.get("QTY_TOTAL") or 0)
-            net = float(row.get("NET_TOTAL") or 0)
-            cost = qty * float(cmap.get(item) or 0)
-            _add(brn_acc, b_code, qty, net, cost)
-            _add(grp_acc, g_code, qty, net, cost)
-
-        branch_names = _branch_names()
-        group_names = _group_name_lookup()
-        branch_rows = [
-            {
-                "CODE": code,
-                "NAME": branch_names.get(code) or code,
-                "QTY_TOTAL": vals["qty"],
-                "NET_TOTAL": vals["net"],
-                "COST_TOTAL": vals["cost"],
-            }
-            for code, vals in brn_acc.items()
-        ]
-        group_rows = [
-            {
-                "CODE": code,
-                "NAME": group_names.get(code) or code,
-                "QTY_TOTAL": vals["qty"],
-                "NET_TOTAL": vals["net"],
-                "COST_TOTAL": vals["cost"],
-            }
-            for code, vals in grp_acc.items()
-        ]
-        return (
-            _margin_rank_rows(
-                branch_rows, code_key="branch_code", name_key="branch_name", names=branch_names
-            ),
-            _margin_rank_rows(
-                group_rows, code_key="group_code", name_key="group_name", names=group_names
-            ),
-        )
-
-    cost_join = _simple_unit_cost_join_sql(schema)
-    if gcode:
-        group_filter = "AND i.G_CODE = :gcode"
-
-    sales_rows = _fetch_all(
-        f"""
+    sales_sql = f"""
         SELECT
-            CASE
-              WHEN GROUPING(m.BRN_NO) = 0 THEN 'BRN'
-              ELSE 'GRP'
-            END AS KIND,
             TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
-            NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
-            ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
-            ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
-            ROUND(SUM(NVL(d.I_QTY, 0) * NVL(uc.UNIT_COST, 0)), 2) AS COST_TOTAL
-        FROM {pos}.IAS_POS_BILL_DTL d
-        JOIN {pos}.IAS_POS_BILL_MST m
-          ON m.BILL_NO = d.BILL_NO
-         AND m.BRN_NO = d.BRN_NO
-         AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
-        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-        {cost_join}
+            TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+            SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL
+        FROM {pos}.IAS_POS_BILL_MST m
+        JOIN {pos}.IAS_POS_BILL_DTL d
+          ON d.BILL_NO = m.BILL_NO
+         AND d.BRN_NO = m.BRN_NO
+         AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
           AND {hung_m}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
-          {group_filter}
-        GROUP BY GROUPING SETS ((m.BRN_NO), (i.G_CODE))
-        """,
-        params,
-    )
-
-    ret_params = dict(params)
-    returns_rows = _fetch_all(
-        f"""
+        GROUP BY m.BRN_NO, d.I_CODE
+    """
+    returns_sql = f"""
         SELECT
-            CASE
-              WHEN GROUPING(m.BRN_NO) = 0 THEN 'BRN'
-              ELSE 'GRP'
-            END AS KIND,
             TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
-            NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
-            ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
-            ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
-            ROUND(SUM(NVL(d.I_QTY, 0) * NVL(uc.UNIT_COST, 0)), 2) AS COST_TOTAL
-        FROM {pos}.IAS_POS_RT_BILL_DTL d
-        JOIN {pos}.IAS_POS_RT_BILL_MST m
-          ON m.RT_BILL_NO = d.RT_BILL_NO
-         AND m.BRN_NO = d.BRN_NO
-        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-        {cost_join}
+            TO_CHAR(d.I_CODE) AS ITEM_CODE,
+            SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+            SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL
+        FROM {pos}.IAS_POS_RT_BILL_MST m
+        JOIN {pos}.IAS_POS_RT_BILL_DTL d
+          ON d.RT_BILL_NO = m.RT_BILL_NO
+         AND d.BRN_NO = m.BRN_NO
         WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
           AND {_hung_ok("m")}
           AND d.I_CODE IS NOT NULL
           {branch_filter}
-          {group_filter}
-        GROUP BY GROUPING SETS ((m.BRN_NO), (i.G_CODE))
-        """,
-        ret_params,
-    )
+        GROUP BY m.BRN_NO, d.I_CODE
+    """
 
-    def _acc_key(kind: str, row: dict) -> str:
-        if kind == "BRN":
-            return str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
-        return str(row.get("GROUP_CODE") or "").strip() or "(بلا)"
+    # خرائط التكلفة/المجموعة من الكاش أو اتصال الجلسة الحالية قبل الاستعلامات الثقيلة
+    gmap = _item_group_code_map()
+    cmap = _item_unit_cost_map()
 
-    acc: dict[str, dict[str, dict]] = {"BRN": {}, "GRP": {}}
-    for row in sales_rows:
-        kind = str(row.get("KIND") or "").strip()
-        if kind not in acc:
+    def _run_sql(sql: str, bind: dict) -> list[dict]:
+        # اتصال مستقل لكل خيط — لا يشارك _tls مع الخيط الأب
+        with oracle_session():
+            return _fetch_all(sql, bind)
+
+    if skip_returns:
+        item_rows = _fetch_all(sales_sql, params)
+        returns_rows: list[dict] = []
+    else:
+        ret_params = dict(params)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_sales = pool.submit(_run_sql, sales_sql, dict(params))
+            fut_ret = pool.submit(_run_sql, returns_sql, ret_params)
+            item_rows = fut_sales.result()
+            returns_rows = fut_ret.result()
+
+    # مفتاح فرع+صنف → صافي الكمية/المبلغ بعد خصم المرتجعات
+    item_acc: dict[tuple[str, str], dict[str, float]] = {}
+
+    def _touch(branch: str, item: str, qty: float, net: float) -> None:
+        key = (branch, item)
+        row = item_acc.get(key)
+        if row is None:
+            row = {"qty": 0.0, "net": 0.0}
+            item_acc[key] = row
+        row["qty"] += qty
+        row["net"] += net
+
+    for row in item_rows:
+        item = str(row.get("ITEM_CODE") or "").strip()
+        if not item:
             continue
-        key = _acc_key(kind, row)
-        bucket = acc[kind].setdefault(
-            key,
-            {"qty": 0.0, "net": 0.0, "cost": 0.0},
-        )
-        bucket["qty"] += float(row.get("QTY_TOTAL") or 0)
-        bucket["net"] += float(row.get("NET_TOTAL") or 0)
-        bucket["cost"] += float(row.get("COST_TOTAL") or 0)
+        b_code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
+        _touch(b_code, item, float(row.get("QTY_TOTAL") or 0), float(row.get("NET_TOTAL") or 0))
 
     for row in returns_rows:
-        kind = str(row.get("KIND") or "").strip()
-        if kind not in acc:
+        item = str(row.get("ITEM_CODE") or "").strip()
+        if not item:
             continue
-        key = _acc_key(kind, row)
-        bucket = acc[kind].setdefault(
-            key,
-            {"qty": 0.0, "net": 0.0, "cost": 0.0},
+        b_code = str(row.get("BRANCH_CODE") or "").strip() or "(بلا)"
+        _touch(
+            b_code,
+            item,
+            -float(row.get("QTY_TOTAL") or 0),
+            -float(row.get("NET_TOTAL") or 0),
         )
-        bucket["qty"] -= float(row.get("QTY_TOTAL") or 0)
-        bucket["net"] -= float(row.get("NET_TOTAL") or 0)
-        bucket["cost"] -= float(row.get("COST_TOTAL") or 0)
+
+    brn_acc: dict[str, dict[str, float]] = {}
+    grp_acc: dict[str, dict[str, float]] = {}
+
+    def _add(bucket: dict[str, dict[str, float]], key: str, qty: float, net: float, cost: float) -> None:
+        if not key:
+            return
+        row = bucket.get(key)
+        if row is None:
+            row = {"qty": 0.0, "net": 0.0, "cost": 0.0}
+            bucket[key] = row
+        row["qty"] += qty
+        row["net"] += net
+        row["cost"] += cost
+
+    for (b_code, item), vals in item_acc.items():
+        g_code = gmap.get(item, "(بلا)")
+        if gcode and g_code != gcode:
+            continue
+        qty = float(vals["qty"])
+        net = float(vals["net"])
+        cost = qty * float(cmap.get(item) or 0)
+        _add(brn_acc, b_code, qty, net, cost)
+        _add(grp_acc, g_code, qty, net, cost)
 
     branch_names = _branch_names()
     group_names = _group_name_lookup()
@@ -4930,7 +4860,7 @@ def _fetch_pos_margin_ranks(
             "NET_TOTAL": vals["net"],
             "COST_TOTAL": vals["cost"],
         }
-        for code, vals in acc["BRN"].items()
+        for code, vals in brn_acc.items()
     ]
     group_rows = [
         {
@@ -4940,7 +4870,7 @@ def _fetch_pos_margin_ranks(
             "NET_TOTAL": vals["net"],
             "COST_TOTAL": vals["cost"],
         }
-        for code, vals in acc["GRP"].items()
+        for code, vals in grp_acc.items()
     ]
     return (
         _margin_rank_rows(
@@ -4974,7 +4904,7 @@ def fetch_margin_ranks(
     # دائماً صافي بعد المرتجعات
     fast = False
     cache_key = (
-        f"sales:margin:v10:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:margin:v11:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:net"
     )
     cached = _sales_cache_get(cache_key)

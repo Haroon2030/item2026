@@ -650,6 +650,26 @@ select:focus {
 .page.sales-dash .dash-kpi-glass-item-ret .dash-kpi-hint { color: #c0392b !important; }
 .page.sales-dash .dash-kpi-glass-item-ret .dash-kpi-ico { color: #b91c1c !important; }
 
+/* بطاقات الترتيب: النص كامل داخل البطاقة + شارة المرتبة */
+.page.sales-dash .dash-kpi > .dash-kpi-card.dash-kpi-ranked {
+  overflow: visible !important;
+  height: auto !important;
+}
+
+.page.sales-dash .dash-kpi-ranked .dash-kpi-value,
+.page.sales-dash .dash-kpi-ranked .dash-kpi-hint,
+.page.sales-dash .dash-kpi-ranked .dash-kpi-label-text {
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.page.sales-dash .dash-kpi-ranked .dash-kpi-rank {
+  color: #fff !important;
+}
+
 .page.sales-dash .dash-kpi > .dash-kpi-card:hover {
   filter: saturate(1.06);
 }

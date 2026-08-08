@@ -102,42 +102,46 @@
       <strong class="dash-kpi-value mono">{{ kpi.branch_count }}</strong>
       <span class="dash-kpi-hint">{{ date_from }} → {{ date_to }}</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-visit">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-visit dash-kpi-ranked">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-visit" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.2-6.5-10A6.5 6.5 0 0 1 12 4.5 6.5 6.5 0 0 1 18.5 11c0 4.8-6.5 10-6.5 10z"/><circle cx="12" cy="11" r="2.2"/></svg>
         </span>
-        الفرع الأكثر زيارة
+        <span class="dash-kpi-label-text">الفرع الأكثر زيارة</span>
+        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
       </span>
       <strong class="dash-kpi-value">{{ kpi.top_visit_branch }}</strong>
       <span class="dash-kpi-hint mono">{{ kpi.top_visit_invoices }} زيارة · نقاط البيع</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-amt">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-amt dash-kpi-ranked">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-item-amt" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M7 8h7.5a2.5 2.5 0 0 1 0 5H9a2.5 2.5 0 0 0 0 5H17"/></svg>
         </span>
-        الصنف الأكثر مبيعاً
+        <span class="dash-kpi-label-text">الصنف الأكثر مبيعاً</span>
+        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
       </span>
       <strong class="dash-kpi-value" id="kpi-item-amt-name" title="{{ kpi.top_item_amount_code }}">{{ kpi.top_item_amount_name }}</strong>
       <span class="dash-kpi-hint mono" id="kpi-item-amt-hint">{% money kpi.top_item_amount_value %} مبلغ</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty dash-kpi-ranked">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-item-qty" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
         </span>
-        الصنف الأكثر سحباً
+        <span class="dash-kpi-label-text">الصنف الأكثر سحباً</span>
+        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
       </span>
       <strong class="dash-kpi-value" id="kpi-item-qty-name" title="{{ kpi.top_item_qty_code }}">{{ kpi.top_item_qty_name }}</strong>
       <span class="dash-kpi-hint mono" id="kpi-item-qty-hint">{{ kpi.top_item_qty_value }} كمية</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret dash-kpi-ranked">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-item-ret" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v5l3 2"/></svg>
         </span>
-        الصنف الأكثر إرجاعاً
+        <span class="dash-kpi-label-text">الصنف الأكثر إرجاعاً</span>
+        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
       </span>
       <strong class="dash-kpi-value" id="kpi-item-ret-name" title="{{ kpi.top_item_return_code }}">{{ kpi.top_item_return_name }}</strong>
       <span class="dash-kpi-hint mono" id="kpi-item-ret-hint">{% money kpi.top_item_return_value %} مبلغ مرتجع · {{ kpi.seller_system_label }}</span>
@@ -796,5 +800,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=39" defer></script>
+<script src="/static/js/sales-dash.js?v=40" defer></script>
 {% endblock %}
