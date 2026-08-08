@@ -462,7 +462,7 @@ def sales_search(request):
         from datetime import date as date_cls
 
         today = date_cls.today()
-        date_from, date_to = today.replace(day=1), today
+        date_from, date_to = today, today
         searched = bool(query)
         error = str(exc)
         return render(
@@ -786,11 +786,10 @@ def browse_groups(request):
 
 
 def _parse_sales_dates(raw_from: str | None, raw_to: str | None):
-    """يحوّل تواريخ النموذج إلى date؛ الافتراضي الشهر الحالي."""
+    """يحوّل تواريخ النموذج إلى date؛ الافتراضي يوم اليوم (من وإلى)."""
     from datetime import date, datetime
 
     today = date.today()
-    month_start = today.replace(day=1)
 
     def parse_one(raw: str | None, fallback: date) -> date:
         text = (raw or '').strip()
@@ -801,7 +800,7 @@ def _parse_sales_dates(raw_from: str | None, raw_to: str | None):
         except ValueError as exc:
             raise ValidationError('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.') from exc
 
-    d_from = parse_one(raw_from, month_start)
+    d_from = parse_one(raw_from, today)
     d_to = parse_one(raw_to, today)
     if d_from > d_to:
         raise ValidationError('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.')
@@ -1393,7 +1392,7 @@ def browse_sales(request):
                 'kpi': None,
                 'browsed': False,
                 'error': str(exc),
-                'default_from': today.replace(day=1).isoformat(),
+                'default_from': today.isoformat(),
                 'default_to': today.isoformat(),
             },
         )
@@ -2018,7 +2017,7 @@ def browse_performance(request):
                 'date_to': (request.GET.get('date_to') or '')[:10],
                 'compare_from': (request.GET.get('compare_from') or '')[:10],
                 'compare_to': (request.GET.get('compare_to') or '')[:10],
-                'default_from': today.replace(day=1).isoformat(),
+                'default_from': today.isoformat(),
                 'default_to': today.isoformat(),
                 'active_system': active_system,
                 'selected_branch': selected_branch,
