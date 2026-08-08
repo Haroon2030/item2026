@@ -1866,7 +1866,7 @@ def fetch_posted_item_sales_by_warehouses(
     warehouse_names: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
-    مبيعات نقاط البيع المرحلة (POSTED<>0) لصنف واحد عبر مخازن محددة.
+    مبيعات نقاط البيع لصنف واحد عبر مخازن محددة (غير معلّقة — مثل لوحة المبيعات).
 
     يعيد صفاً لكل مخزن مطلوب حتى بلا حركة، مع إجماليات صافية بعد المرتجع.
     """
@@ -1896,27 +1896,42 @@ def fetch_posted_item_sales_by_warehouses(
     if not code or not wh_list or not oracle_enabled():
         return empty
 
+    def _norm_wh(raw: object) -> str:
+        s = str(raw or "").strip()
+        if s.endswith(".0") and s[:-2].replace("-", "", 1).isdigit():
+            s = s[:-2]
+        if s.isdigit():
+            try:
+                return str(int(s))
+            except ValueError:
+                return s
+        return s
+
     pos = _pos_owner()
     schema = _schema()
     params: dict[str, Any] = {
         **_date_params(date_from, date_to),
         "code": code,
     }
+    wh_norm_list = [_norm_wh(w) for w in wh_list]
     wh_keys = []
-    for i, wh in enumerate(wh_list):
+    for i, wh in enumerate(wh_norm_list):
         key = f"w{i}"
         wh_keys.append(f":{key}")
         params[key] = wh
     wh_in = ", ".join(wh_keys)
     hung_m = _hung_ok("m")
-    posted_ok = "NVL(m.POSTED, 0) <> 0"
-    wh_expr = "TO_CHAR(NVL(d.W_CODE, m.W_CODE))"
+    # مطابقة مرنة لأرقام المخزن (60 / 060 / 60.0) — بلا فلتر ترحيل مثل لوحة المبيعات
+    wh_expr = "TRIM(TO_CHAR(NVL(d.W_CODE, m.W_CODE)))"
+    wh_match_sql = (
+        f"NVL(NULLIF(LTRIM(REGEXP_REPLACE({wh_expr}, '\\.0+$', ''), '0'), ''), '0')"
+    )
 
     sales_by_wh: dict[str, dict[str, float]] = {}
     try:
         for row in _fetch_all(
             f"""
-            SELECT {wh_expr} AS WAREHOUSE_CODE,
+            SELECT {wh_match_sql} AS WAREHOUSE_CODE,
                    COUNT(
                      DISTINCT TO_CHAR(m.BILL_NO) || ':' || TO_CHAR(m.BRN_NO)
                      || ':' || TO_CHAR(NVL(m.BILL_SRL, 0))
@@ -1935,13 +1950,13 @@ def fetch_posted_item_sales_by_warehouses(
             WHERE TO_CHAR(d.I_CODE) = :code
               AND m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
               AND {hung_m}
-              AND {posted_ok}
-              AND {wh_expr} IN ({wh_in})
-            GROUP BY {wh_expr}
+              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+              AND {wh_match_sql} IN ({wh_in})
+            GROUP BY {wh_match_sql}
             """,
             params,
         ):
-            wh = str(row.get("WAREHOUSE_CODE") or "").strip()
+            wh = _norm_wh(row.get("WAREHOUSE_CODE"))
             if not wh:
                 continue
             sales_by_wh[wh] = {
@@ -1951,14 +1966,14 @@ def fetch_posted_item_sales_by_warehouses(
                 "vat": float(row.get("VAT_TOTAL") or 0),
             }
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Posted item sales by warehouse failed: %s", exc)
-        raise OracleStockError("تعذر جلب مبيعات الصنف المرحلة حسب المخزن.") from exc
+        logger.warning("Item sales by warehouse failed: %s", exc)
+        raise OracleStockError("تعذر جلب مبيعات الصنف حسب المخزن.") from exc
 
     returns_by_wh: dict[str, dict[str, float]] = {}
     try:
         for row in _fetch_all(
             f"""
-            SELECT {wh_expr} AS WAREHOUSE_CODE,
+            SELECT {wh_match_sql} AS WAREHOUSE_CODE,
                    ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS RET_QTY,
                    ROUND(
                      SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)),
@@ -1972,13 +1987,13 @@ def fetch_posted_item_sales_by_warehouses(
             WHERE TO_CHAR(d.I_CODE) = :code
               AND m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
               AND NVL(m.HUNG, 0) = 0
-              AND {posted_ok}
-              AND {wh_expr} IN ({wh_in})
-            GROUP BY {wh_expr}
+              AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+              AND {wh_match_sql} IN ({wh_in})
+            GROUP BY {wh_match_sql}
             """,
             dict(params),
         ):
-            wh = str(row.get("WAREHOUSE_CODE") or "").strip()
+            wh = _norm_wh(row.get("WAREHOUSE_CODE"))
             if not wh:
                 continue
             returns_by_wh[wh] = {
@@ -1987,7 +2002,7 @@ def fetch_posted_item_sales_by_warehouses(
                 "vat": float(row.get("RET_VAT") or 0),
             }
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Posted item returns by warehouse failed: %s", exc)
+        logger.warning("Item returns by warehouse failed: %s", exc)
         # المرتجع اختياري — نكمل بالمبيعات فقط
 
     item_name = ""
@@ -2005,11 +2020,15 @@ def fetch_posted_item_sales_by_warehouses(
     except Exception:  # noqa: BLE001
         item_name = ""
 
-    names = {str(k).strip(): str(v).strip() for k, v in (warehouse_names or {}).items()}
+    names = {
+        _norm_wh(k): str(v).strip() for k, v in (warehouse_names or {}).items()
+    }
+    for k, v in (warehouse_names or {}).items():
+        names.setdefault(str(k).strip(), str(v).strip())
     rows_out: list[dict] = []
     tot_qty = tot_net = tot_vat = tot_ret_qty = tot_ret = 0.0
     tot_inv = 0
-    for wh in wh_list:
+    for wh_raw, wh in zip(wh_list, wh_norm_list):
         sale = sales_by_wh.get(wh) or {}
         ret = returns_by_wh.get(wh) or {}
         qty = round(float(sale.get("qty") or 0) - float(ret.get("qty") or 0), 2)
@@ -2019,15 +2038,21 @@ def fetch_posted_item_sales_by_warehouses(
         inv_count = int(sale.get("invoice_count") or 0)
         ret_qty = round(float(ret.get("qty") or 0), 2)
         ret_total = round(float(ret.get("net") or 0) + float(ret.get("vat") or 0), 2)
-        label = names.get(wh) or f"مخزن {wh}"
-        for suffix in (f" - {wh}", f"-{wh}", f"({wh})"):
+        label = names.get(wh) or names.get(str(wh_raw).strip()) or f"مخزن {wh_raw}"
+        for suffix in (
+            f" - {wh_raw}",
+            f"-{wh_raw}",
+            f"({wh_raw})",
+            f" - {wh}",
+            f"-{wh}",
+        ):
             if label.endswith(suffix):
                 label = label[: -len(suffix)].strip()
                 break
         rows_out.append(
             {
-                "warehouse_code": wh,
-                "warehouse_name": label or f"مخزن {wh}",
+                "warehouse_code": wh_raw,
+                "warehouse_name": label or f"مخزن {wh_raw}",
                 "qty": qty,
                 "qty_display": _fmt_inv_qty(qty),
                 "net_total": net,

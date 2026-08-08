@@ -424,7 +424,7 @@ def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
 @require_GET
 @never_cache
 def sales_search(request):
-    """البحث عن مبيعات صنف مرحلة حسب مخزن واحد أو مخازن المقارنة."""
+    """البحث عن مبيعات صنف (غير معلّقة) حسب مخزن واحد أو مخازن المقارنة."""
     from .oracle_stock import (
         OracleStockError,
         fetch_posted_item_sales_by_warehouses,
