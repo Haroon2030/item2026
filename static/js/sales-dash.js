@@ -204,7 +204,7 @@
     if (note) {
       note.hidden = false;
       note.textContent =
-        "مبيعات المجموعات بدون خصم المرتجعات. المرتجعات في الجدول أسفل. «متوسط المجموعة» = مبيعات المجموعة ÷ فواتيرها.";
+        "صفوف المجموعات من تفاصيل الأصناف. إجمالي التذييل من رأس الفاتورة مثل جدول الفروع وأونكس. المرتجعات في الجدول أسفل. «متوسط المجموعة» = مبيعات المجموعة ÷ فواتيرها.";
     }
     if (!tbody) return;
     if (!rows.length) {
@@ -429,11 +429,25 @@
       gNet += r.net_total;
       gVat += r.vat_total;
     });
-    // فواتير فريدة من رأس الفاتورة (من السيرفر) — لا نجمع صفوف المجموعات
+    // فواتير + مبالغ التذييل من رأس الفاتورة (مثل أونكس / جدول الفروع)
+    var fromHeader =
+      !!(basePanel.totals_from_header || nextPanel.totals_from_header) && !byBranch;
     var uniqInv =
       (Number(basePanel.grand_invoices) || 0) + (Number(nextPanel.grand_invoices) || 0);
+    var headerGross =
+      (Number(basePanel.grand_gross_num) || 0) + (Number(nextPanel.grand_gross_num) || 0);
+    var headerNet =
+      (Number(basePanel.grand_net_num) || 0) + (Number(nextPanel.grand_net_num) || 0);
+    var headerVat =
+      (Number(basePanel.grand_vat_num) || 0) + (Number(nextPanel.grand_vat_num) || 0);
+    var headerSales =
+      (Number(basePanel.grand_sales_num) || 0) + (Number(nextPanel.grand_sales_num) || 0);
     var footerInv = byBranch ? gInv : uniqInv;
-    var grandAvg = footerInv ? fmtMoneyNum(gSales / footerInv) : "0.00";
+    var footerGross = fromHeader ? headerGross : gGross;
+    var footerNet = fromHeader ? headerNet : gNet;
+    var footerVat = fromHeader ? headerVat : gVat;
+    var footerSales = fromHeader ? headerSales : gSales;
+    var grandAvg = footerInv ? fmtMoneyNum(footerSales / footerInv) : "0.00";
     return {
       rows: rows,
       groups: nextPanel.groups || basePanel.groups || [],
@@ -441,13 +455,18 @@
       selected_group_name: nextPanel.selected_group_name || basePanel.selected_group_name || "",
       selected_branch: nextPanel.selected_branch || basePanel.selected_branch || "",
       by_branch: byBranch,
+      totals_from_header: fromHeader,
       grand_invoices: footerInv,
       grand_invoices_display: String(footerInv),
       grand_qty_display: fmtMoneyNum(gQty),
-      grand_sales: fmtMoneyNum(gSales),
-      grand_gross: fmtMoneyNum(gGross),
-      grand_net: fmtMoneyNum(gNet),
-      grand_vat: fmtMoneyNum(gVat),
+      grand_sales: fmtMoneyNum(footerSales),
+      grand_gross: fmtMoneyNum(footerGross),
+      grand_net: fmtMoneyNum(footerNet),
+      grand_vat: fmtMoneyNum(footerVat),
+      grand_sales_num: footerSales,
+      grand_gross_num: footerGross,
+      grand_net_num: footerNet,
+      grand_vat_num: footerVat,
       grand_avg_basket: grandAvg,
       fast_mode: !!(basePanel.fast_mode || nextPanel.fast_mode),
       loading: false
@@ -1017,7 +1036,7 @@
 
   function loadSideItems() {
     var url = sideItemsUrl();
-    if (!url) return;
+    if (!url) return Promise.resolve();
     var box = document.getElementById("dash-top-items");
     var loading = document.getElementById("items-loading");
     var board = document.getElementById("items-board");
@@ -1036,20 +1055,20 @@
             if (!data.ok) throw new Error(data.error || "فشل التحميل");
             renderItems(data.items || []);
           });
-    p.catch(function (err) {
+    return p.catch(function (err) {
       if (loading) loading.textContent = "تعذّر تحميل الأصناف: " + (err.message || err);
     });
   }
 
   function loadSideSellers() {
     var url = sideUsersUrl();
-    if (!url) return;
+    if (!url) return Promise.resolve();
     var loading = document.getElementById("sellers-loading");
     if (loading) {
       loading.hidden = false;
       loading.textContent = "جاري تحميل البائعين…";
     }
-    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
+    return fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderSellers(data.users || []);
@@ -1090,7 +1109,7 @@
       document.getElementById("chart-br-branch"),
       document.getElementById("chart-br-group")
     );
-    if (!url) return;
+    if (!url) return Promise.resolve();
     var loadingBr = document.getElementById("chart-branches-loading");
     var loadingIt = document.getElementById("chart-items-loading");
     if (loadingBr) {
@@ -1101,7 +1120,7 @@
       loadingIt.hidden = false;
       loadingIt.textContent = "جاري تحديث المرتجعات…";
     }
-    fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
+    return fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderChartBranches(data.chart_branches || []);
@@ -1144,60 +1163,63 @@
       "";
     var itemsUrl = itemsBox && itemsBox.dataset.itemsUrl;
 
-    // الفترات الطويلة: مجموعات شهراً بشهر (الأحدث أولاً) ثم الأصناف/المرتجعات
-    if (groupsUrl) {
+    function loadGroupsOnly() {
+      if (!groupsUrl) return Promise.resolve();
       var progressive = groupsBox && groupsBox.dataset.groupsProgressive === "1";
       var dFrom = (groupsBox && groupsBox.dataset.dateFrom) || "";
       var dTo = (groupsBox && groupsBox.dataset.dateTo) || "";
-      var groupsPromise = progressive && dFrom && dTo
-        ? loadGroupsProgressive(groupsUrl, dFrom, dTo)
-        : fetchJsonRetry(groupsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
-            .then(function (data) {
-              if (!data.ok) throw new Error(data.error || "فشل التحميل");
-              renderGroups(data.panel || {});
-            });
-      groupsPromise.catch(failGroups);
-      // مرتجعات المجموعات بعد بدء المبيعات بقليل — يقلل ضغط الطلبات المتزامنة
-      setTimeout(function () { loadGroupReturns(); }, 1500);
-
-      if (itemsUrl) {
-        var itemsProgressive = itemsBox && itemsBox.dataset.itemsProgressive === "1";
-        var iFrom = (itemsBox && itemsBox.dataset.dateFrom) || "";
-        var iTo = (itemsBox && itemsBox.dataset.dateTo) || "";
-        var itemsPromise = itemsProgressive && iFrom && iTo
-          ? loadItemsProgressive(itemsUrl, iFrom, iTo)
-          : fetchJsonRetry(itemsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
-              .then(function (data) {
-                if (!data.ok) throw new Error(data.error || "فشل التحميل");
-                renderItems(data.items || []);
-              });
-        itemsPromise.catch(failItems);
+      if (progressive && dFrom && dTo) {
+        return loadGroupsProgressive(groupsUrl, dFrom, dTo);
       }
-
-      setTimeout(function () {
-        // طلب واحد يحدّث رسم الفروع + أصناف المرتجعات (بدون تكرار)
-        loadBranchChart();
-      }, 120);
-      return true;
+      return fetchJsonRetry(groupsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_CHUNK_MS })
+        .then(function (data) {
+          if (!data.ok) throw new Error(data.error || "فشل التحميل");
+          renderGroups(data.panel || {});
+        });
     }
 
-    if (!panelsUrl) return false;
+    function loadItemsOnly() {
+      if (!itemsUrl) return Promise.resolve();
+      var itemsProgressive = itemsBox && itemsBox.dataset.itemsProgressive === "1";
+      var iFrom = (itemsBox && itemsBox.dataset.dateFrom) || "";
+      var iTo = (itemsBox && itemsBox.dataset.dateTo) || "";
+      if (itemsProgressive && iFrom && iTo) {
+        return loadItemsProgressive(itemsUrl, iFrom, iTo);
+      }
+      return fetchJsonRetry(itemsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
+        .then(function (data) {
+          if (!data.ok) throw new Error(data.error || "فشل التحميل");
+          renderItems(data.items || []);
+        });
+    }
 
-    fetch(panelsUrl, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
+    // تسلسلي بالكامل — يمنع 502 عند عمال gunicorn القليلة في الإنتاج
+    if (groupsUrl) {
+      return loadGroupsOnly()
+        .catch(failGroups)
+        .then(function () { return loadGroupReturns(); })
+        .catch(function () { /* المرتجعات اختيارية */ })
+        .then(function () { return loadItemsOnly(); })
+        .catch(failItems)
+        .then(function () { return true; });
+    }
+
+    if (!panelsUrl) return Promise.resolve(false);
+
+    return fetchJsonRetry(panelsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         renderGroups(data.panel || {});
         if (data.returns_panel) renderGroupReturns(data.returns_panel);
-        else loadGroupReturns();
         renderItems(data.items || []);
         renderReturnItems(data.return_items || []);
+        return true;
       })
       .catch(function (err) {
         failGroups(err);
         failItems(err);
+        return true;
       });
-    return true;
   }
 
   function marginTone(pct) {
@@ -1551,7 +1573,7 @@
 
   function loadMargins() {
     var box = document.getElementById("dash-margins");
-    if (!box || !box.dataset.marginsUrl) return;
+    if (!box || !box.dataset.marginsUrl) return Promise.resolve();
     var brSel = document.getElementById("margin-br-branch");
     var brGrp = document.getElementById("margin-br-group");
     var grSel = document.getElementById("margin-gr-branch");
@@ -1561,7 +1583,7 @@
       (!brGrp || !grGrp || brGrp.value === grGrp.value);
     if (sameFilters) {
       var url = marginsUrl(brSel || grSel, brGrp || grGrp);
-      if (!url) return;
+      if (!url) return Promise.resolve();
       var loadingBranches = document.getElementById("margin-branches-loading");
       var loadingGroups = document.getElementById("margin-groups-loading");
       var progressive = box.dataset.marginsProgressive === "1";
@@ -1576,11 +1598,10 @@
           loadingGroups.hidden = false;
           loadingGroups.textContent = "جاري تحميل الهامش على شرائح…";
         }
-        loadMarginsProgressive(url, dFrom, dTo).catch(function (err) {
+        return loadMarginsProgressive(url, dFrom, dTo).catch(function (err) {
           if (loadingBranches) loadingBranches.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
           if (loadingGroups) loadingGroups.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
         });
-        return;
       }
       if (loadingBranches) {
         loadingBranches.hidden = false;
@@ -1590,7 +1611,7 @@
         loadingGroups.hidden = false;
         loadingGroups.textContent = "جاري جلب هامش المجموعات للفترة كاملة…";
       }
-      fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
+      return fetchJsonRetry(url, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || "فشل التحميل");
           renderMarginBranches(data.branches || []);
@@ -1600,10 +1621,10 @@
           if (loadingBranches) loadingBranches.textContent = "تعذّر تحميل هامش الفروع: " + (err.message || err);
           if (loadingGroups) loadingGroups.textContent = "تعذّر تحميل هامش المجموعات: " + (err.message || err);
         });
-      return;
     }
     loadMarginBranches();
     loadMarginGroups();
+    return Promise.resolve();
   }
 
   document.querySelectorAll("[data-chart-apply]").forEach(function (btn) {
@@ -1667,8 +1688,8 @@
 
   function loadKpiHighlights() {
     var box = document.querySelector(".dash-kpi[data-highlights-url]");
-    if (!box || !box.dataset.highlightsUrl) return;
-    fetchJsonRetry(box.dataset.highlightsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
+    if (!box || !box.dataset.highlightsUrl) return Promise.resolve();
+    return fetchJsonRetry(box.dataset.highlightsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
       .then(function (data) {
         if (!data.ok) throw new Error(data.error || "فشل التحميل");
         applyKpiHighlights(data.highlights || {});
@@ -1692,35 +1713,17 @@
     } catch (e) { /* keep server HTML if any */ }
   }
 
-  loadKpiHighlights();
-  // تسلسل أخف على أوراكل: مجموعات أولاً، ثم باقي اللوحات
-  setTimeout(function () {
-    var sellersBoard = document.getElementById("sellers-board");
-    var hasSellerCards = sellersBoard && sellersBoard.querySelector(".seller-card");
-    if (!hasSellerCards) loadSideSellers();
-  }, 800);
-  setTimeout(function () { loadMargins(); }, 1200);
-  if (!loadPanels()) {
-    var box = document.getElementById("dash-groups");
-    if (box && box.dataset.groupsUrl) {
-      fetchJsonRetry(box.dataset.groupsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
-        .then(function (data) {
-          if (!data.ok) throw new Error(data.error || "فشل التحميل");
-          renderGroups(data.panel || {});
-        })
-        .catch(failGroups);
-    }
-    var itemsBox = document.getElementById("dash-top-items");
-    if (itemsBox && itemsBox.dataset.itemsUrl) {
-      fetchJsonRetry(itemsBox.dataset.itemsUrl, { attempts: FETCH_ATTEMPTS, timeoutMs: FETCH_FULL_MS })
-        .then(function (data) {
-          if (!data.ok) throw new Error(data.error || "فشل التحميل");
-          renderItems(data.items || []);
-        })
-        .catch(failItems);
-    }
-    setTimeout(function () { loadBranchChart(); }, 150);
-  } else if (seedEmpty) {
-    // loadPanels يحجز loadBranchChart — لا تكرار هنا
-  }
+  // طابور واحد فقط — يمنع 502 عند WEB_CONCURRENCY=2 في الإنتاج
+  var sellersBoard = document.getElementById("sellers-board");
+  var hasSellerCards = sellersBoard && sellersBoard.querySelector(".seller-card");
+  Promise.resolve()
+    .then(function () { return loadPanels(); })
+    .then(function () {
+      if (!hasSellerCards) return loadSideSellers();
+    })
+    .then(function () { return loadMargins(); })
+    .then(function () {
+      if (seedEmpty) return loadBranchChart();
+    })
+    .then(function () { return loadKpiHighlights(); });
 })();

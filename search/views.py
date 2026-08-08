@@ -1088,8 +1088,9 @@ def _build_group_panel(
     g_sales = sum(float(r.get('sales_total') or 0) for r in group_rows)
     g_gross = sum(float(r.get('gross_total') or 0) for r in group_rows)
     g_qty = sum(float(r.get('qty_total') or 0) for r in group_rows)
-    # فواتير حقيقية من رأس الفاتورة عند عرض كل المجموعات
-    # (مجموع فواتير صفوف المجموعات يضاعف الفاتورة المشتركة)
+    totals_from_header = False
+    # فواتير + مبالغ التذييل من رأس الفاتورة (مثل جدول الفروع / أونكس)
+    # حتى لا يختلف الإجمالي عن مجموع أسطر المجموعات
     if by_branch:
         g_inv = sum(int(r.get('invoice_count') or 0) for r in group_rows)
     else:
@@ -1107,9 +1108,13 @@ def _build_group_panel(
                 ),
                 None,
             )
-            g_inv = int((match or {}).get('invoice_count') or 0)
-        else:
-            g_inv = sum(int(r.get('invoice_count') or 0) for r in branch_rows)
+            branch_rows = [match] if match else []
+        g_inv = sum(int(r.get('invoice_count') or 0) for r in branch_rows)
+        g_gross = sum(float(r.get('gross_total') or 0) for r in branch_rows)
+        g_net = sum(float(r.get('net_total') or 0) for r in branch_rows)
+        g_vat = sum(float(r.get('vat_total') or 0) for r in branch_rows)
+        g_sales = sum(float(r.get('sales_total') or 0) for r in branch_rows)
+        totals_from_header = True
     g_avg = round(g_sales / g_inv, 2) if g_inv else 0.0
     grand_inv_display = f'{g_inv:,}'
     grand_avg_display = f'{g_avg:,.2f}'
@@ -1128,6 +1133,7 @@ def _build_group_panel(
         'selected_group_name': selected_group_name,
         'selected_branch': selected_branch,
         'by_branch': by_branch,
+        'totals_from_header': totals_from_header,
         'grand_invoices': g_inv,
         'grand_invoices_display': grand_inv_display,
         'grand_qty_display': f'{g_qty:,.2f}',
@@ -1135,6 +1141,10 @@ def _build_group_panel(
         'grand_gross': f'{g_gross:,.2f}',
         'grand_net': f'{g_net:,.2f}',
         'grand_vat': f'{g_vat:,.2f}',
+        'grand_sales_num': round(float(g_sales), 2),
+        'grand_gross_num': round(float(g_gross), 2),
+        'grand_net_num': round(float(g_net), 2),
+        'grand_vat_num': round(float(g_vat), 2),
         'grand_avg_basket': grand_avg_display,
         'fast_mode': fast_mode,
         'loading': False,
