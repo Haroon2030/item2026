@@ -315,7 +315,13 @@
       var mReady = Number(cache.months_ready || 0);
       var mTotal = Number(cache.months_total || 0);
       var cacheNote =
-        mTotal > 1 ? " · JSON " + mReady + "/" + mTotal + " شهر" : "";
+        cache.source === "sample"
+          ? " · عيّنة سريعة"
+          : mTotal > 1
+            ? " · JSON " + mReady + "/" + mTotal + " شهر"
+            : cache.source === "json"
+              ? " · من الكاش"
+              : "";
       var stateNote = stillWarming || incomplete
         ? " · يُجلب SQL ويُجمَّع…"
         : matched
@@ -435,7 +441,7 @@
         body,
         sub,
         pill,
-        "جلب مبيعات المجموعات دفعة واحدة… " + formatDuration(Date.now() - started)
+        "جلب توزيع المجموعات (عيّنة سريعة)… " + formatDuration(Date.now() - started)
       );
     }, 1000);
 

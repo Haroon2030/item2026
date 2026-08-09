@@ -365,6 +365,8 @@ ORACLE = {
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
+# مبيعات المجموعات: light = عيّنة فواتير (سريع على WAN) | full = مسح DTL كامل
+GROUPS_SQL_MODE = (_env('GROUPS_SQL_MODE', 'light') or 'light').strip().lower()
 
 LOGGING = {
     'version': 1,

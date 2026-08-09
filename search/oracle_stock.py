@@ -349,6 +349,18 @@ def oracle_enabled() -> bool:
     return bool(cfg.get("ENABLED"))
 
 
+def _groups_sql_mode() -> str:
+    """light = عيّنة فواتير (افتراضي لـ WAN) · full = مسح DTL كامل (بطيء جداً)."""
+    mode = str(
+        getattr(settings, "GROUPS_SQL_MODE", None)
+        or getattr(settings, "ORACLE", {}).get("GROUPS_SQL_MODE")
+        or "light"
+    ).strip().lower()
+    if mode in ("full", "heavy", "exact", "all"):
+        return "full"
+    return "light"
+
+
 def use_oracle_stock() -> bool:
     source = (getattr(settings, "STOCK_QTY_SOURCE", "api") or "api").strip().lower()
     return oracle_enabled() and source == "oracle"
@@ -831,6 +843,16 @@ def pop_groups_fetch_warning() -> str:
     except Exception:
         pass
     return msg
+
+
+def pop_groups_source() -> str:
+    """مصدر صفوف المجموعات: json | sample | sql — يُستهلك مرة واحدة."""
+    src = str(getattr(_tls, "groups_source", "") or "").strip()
+    try:
+        _tls.groups_source = ""
+    except Exception:
+        pass
+    return src
 
 
 def pop_groups_incomplete() -> bool:
@@ -3956,6 +3978,67 @@ def _assemble_group_rows(sales_rows, returns_by_key, *, by_branch: bool = True) 
     return out
 
 
+def _fetch_pos_group_totals_light(
+    date_from,
+    date_to,
+    branch_code: str = "",
+    group_code: str = "",
+) -> list[dict]:
+    """توزيع المجموعات من عيّنة فواتير خفيفة (رأس MST ثم بنود العيّنة فقط).
+
+    بديل لمسح كل IAS_POS_BILL_DTL عبر WAN (Hostinger/Dokploy) — أسرع بعشرات المرات.
+    المبالغ المطلقة من العيّنة ناقصة؛ تُطابَق لاحقاً مع صافي الفروع (رأس الفاتورة).
+    """
+    span = _date_span_days(date_from, date_to)
+    if span <= 3:
+        max_bills, sample_mod = 40000, 1
+    elif span <= 14:
+        max_bills, sample_mod = 18000, 1
+    elif span <= 45:
+        max_bills, sample_mod = 14000, 1
+    elif span <= 120:
+        max_bills, sample_mod = 12000, 2
+    else:
+        max_bills, sample_mod = 10000, 3
+
+    try:
+        _item_group_code_map()
+    except Exception:
+        pass
+
+    with oracle_session():
+        item_rows = _fetch_pos_item_sales_agg(
+            date_from,
+            date_to,
+            branch_code=branch_code,
+            group_code=group_code,
+            max_bills=max_bills,
+            sample_mod=sample_mod,
+        )
+    rows = _fold_pos_item_rows_to_group_sales(
+        item_rows,
+        by_branch=False,
+        group_code=group_code,
+        with_bills=False,
+    )
+    try:
+        _tls.groups_source = "sample"
+        _tls.groups_stale = False
+        _tls.groups_incomplete = False
+        _tls.groups_warning = ""
+    except Exception:
+        pass
+    logger.info(
+        "POS groups light sample %s→%s bills_cap=%s mod=%s groups=%s",
+        date_from,
+        date_to,
+        max_bills,
+        sample_mod,
+        len(rows),
+    )
+    return rows
+
+
 def _fetch_pos_group_totals(
     date_from,
     date_to,
@@ -3965,19 +4048,32 @@ def _fetch_pos_group_totals(
     skip_returns: bool = False,
     _allow_fanout: bool = True,
     _month_split: bool = True,
+    _force_full: bool = False,
 ) -> list[dict]:
     """مبيعات نقاط البيع مجمّعة حسب المجموعة (أو المجموعة×الفرع).
 
-    تجميع على مرحلتين بدل COUNT(DISTINCT نص طويل) لتقليل TEMP.
-    أسماء المجموعات تُحلّ في بايثون من GROUP_DETAILS المخزّن مؤقتاً.
-    للفترة الطويلة بدون فرع: تقسيم الفروع بالتوازي (أسرع بكثير من مسح واحد).
+    افتراضياً (GROUPS_SQL_MODE=light): عيّنة فواتير خفيفة بدل مسح DTL الكامل.
     """
+    brn = str(branch_code or "").strip()
+    # مسار خفيف — الافتراضي على الإنتاج عبر WAN
+    if (
+        skip_returns
+        and not _force_full
+        and not by_branch
+        and _groups_sql_mode() == "light"
+    ):
+        return _fetch_pos_group_totals_light(
+            date_from,
+            date_to,
+            branch_code=brn,
+            group_code=group_code,
+        )
+
     pos = _pos_owner()
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
     branch_filter = ""
     group_filter = ""
-    brn = str(branch_code or "").strip()
     if brn:
         params["brn"] = brn
         branch_filter = "AND m.BRN_NO = :brn"
@@ -5017,6 +5113,8 @@ def fetch_group_sales_totals(
             _tls.groups_warning = ""
             _tls.groups_months_ready = len(months)
             _tls.groups_months_total = len(months)
+            if not str(getattr(_tls, "groups_source", "") or "").strip():
+                _tls.groups_source = "json"
         except Exception:
             pass
         _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
@@ -5051,7 +5149,7 @@ def fetch_group_sales_totals(
         )
         return rows
 
-    # فترات طويلة: أظهر الكاش فوراً إن اكتمل — وإلا اجلب دفعة واحدة ثم أرجع
+    # فترات طويلة: كاش كامل أولاً — وإلا عيّنة خفيفة دفعة واحدة (لا مسح DTL عبر WAN)
     if long_range:
         merged_chk, missing_chk = _monthly_merge()
         if merged_chk is not None and not missing_chk:
@@ -5060,9 +5158,44 @@ def fetch_group_sales_totals(
         period_hit = _period_cached(allow_stale=True)
         display = _pick_richer_group_rows(merged_chk, period_hit)
 
-        # كاش جزئي غني: أرجعه فوراً + دفّئ الناقص (زيارات متكررة)
+        # مسار light: لا ننتظر شهور JSON — عيّنة واحدة للفترة ثم كاش الفترة
+        if (
+            conf.get("source") == "pos"
+            and fast
+            and _groups_sql_mode() == "light"
+            and not split_by_branch
+        ):
+            if display is not None and not missing_chk:
+                return _return_complete(
+                    merged_chk if merged_chk is not None else display
+                )
+            rows_light: list[dict] = []
+            try:
+                rows_light = _fetch_pos_group_totals_light(
+                    date_from,
+                    date_to,
+                    branch_code=brn,
+                    group_code=gcode,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("light groups oneshot failed: %s", exc)
+                rows_light = []
+            if rows_light:
+                return _return_complete(rows_light)
+            if display is not None:
+                return _return_partial(
+                    display,
+                    list(missing_chk or months),
+                    note="عرض من الكاش — تعذّر تحديث عيّنة المجموعات",
+                )
+            return _return_partial(
+                [],
+                list(months),
+                note="تعذّر جلب توزيع المجموعات — أعد المحاولة",
+            )
+
+        # كاش جزئي غني (وضع full): أرجعه فوراً + دفّئ الناقص
         if display is not None and missing_chk:
-            # إن بقي شهر أو اثنان فقط أكملهم الآن دفعة واحدة بدل الاستطلاع
             if len(missing_chk) <= 2:
                 try:
                     _run_parallel_ex(
@@ -5098,7 +5231,7 @@ def fetch_group_sales_totals(
                 merged_chk if merged_chk is not None else display
             )
 
-        # لا كاش: دفعة واحدة — تفرّع فروع على كامل الفترة (بدون تقسيم شهور متسلسل)
+        # لا كاش (وضع full): تفرّع فروع على كامل الفترة
         rows: list[dict] = []
         try:
             if conf.get("source") == "pos":
@@ -5111,6 +5244,7 @@ def fetch_group_sales_totals(
                     skip_returns=fast,
                     _allow_fanout=not bool(brn),
                     _month_split=False,
+                    _force_full=True,
                 )
             else:
                 with oracle_session():

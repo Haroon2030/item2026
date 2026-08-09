@@ -436,6 +436,7 @@ def build_sales_groups(
         pop_groups_fetch_warning,
         pop_groups_incomplete,
         pop_groups_months_progress,
+        pop_groups_source,
         sales_long_range,
     )
 
@@ -444,7 +445,7 @@ def build_sales_groups(
     gcode = str(group_code or "").strip()
     warning = ""
 
-    # SQL→JSON شهري في الكاش ثم تجميع — أو قراءة JSON جاهز
+    # كاش أو عيّنة خفيفة (GROUPS_SQL_MODE=light) — بلا مسح DTL الثقيل عبر WAN
     groups_raw = fetch_group_sales_totals(
         date_from,
         date_to,
@@ -456,6 +457,7 @@ def build_sales_groups(
     warning = pop_groups_fetch_warning() or ""
     incomplete = pop_groups_incomplete()
     months_ready, months_total = pop_groups_months_progress()
+    groups_source = pop_groups_source() or "json"
 
     # اكتمال شهور JSON ⇒ صالح للمطابقة (حتى لو علق علم الجزئية)
     months_complete = bool(months_total) and months_ready >= months_total
@@ -529,7 +531,7 @@ def build_sales_groups(
         "incomplete": incomplete,
         "matched": bool(matched) and not incomplete,
         "cache": {
-            "source": "json",
+            "source": groups_source,
             "months_ready": months_ready,
             "months_total": months_total,
         },
