@@ -543,7 +543,67 @@ def build_sales_groups(
         payload["warning"] = warning
     if sales_long_range(date_from, date_to):
         payload["long_range"] = True
+    # شهور ناقصة لجلب SQL متوازٍ من الواجهة (أسرع في الإنتاج عبر WAN)
+    if incomplete or (months_total and months_ready < months_total):
+        try:
+            from .oracle_stock import _load_groups_month_json, _month_spans
+
+            missing_jobs: list[dict[str, str]] = []
+            for a, b in _month_spans(date_from, date_to):
+                hit = _load_groups_month_json(
+                    system="pos",
+                    date_from=a,
+                    date_to=b,
+                    brn=brn,
+                    gcode=gcode,
+                    split_by_branch=False,
+                    mode="gross",
+                )
+                if hit is None:
+                    missing_jobs.append(
+                        {
+                            "date_from": a.isoformat(),
+                            "date_to": b.isoformat(),
+                        }
+                    )
+            if missing_jobs:
+                payload["sql_months"] = missing_jobs
+        except Exception:
+            pass
     return payload
+
+
+def build_sales_groups_month(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+) -> dict[str, Any]:
+    """جلب شهر واحد بـ SQL → JSON كاش → صفوف منسّقة للواجهة."""
+    from .oracle_stock import _fetch_one_month_group_totals
+
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    raw = _fetch_one_month_group_totals(
+        system="pos",
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=False,
+        fast=True,
+    )
+    rows, totals = _format_group_rows(raw or [])
+    return {
+        "rows": rows,
+        "totals": totals,
+        "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
+        "scope_label": _scope_label(brn, gcode),
+        "source": "sql",
+        "incomplete": False,
+        "matched": False,
+    }
 
 
 def _format_top_return_item_rows(

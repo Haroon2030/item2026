@@ -38,6 +38,113 @@
     return "";
   }
 
+  function readMonthApiBase() {
+    var seed = document.getElementById("sales-groups-month-url");
+    if (!seed) return "";
+    try {
+      return String(JSON.parse(seed.textContent || '""') || "");
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function monthApiUrl(base, dateFrom, dateTo) {
+    if (!base) return "";
+    var join = base.indexOf("?") >= 0 ? "&" : "?";
+    return (
+      base +
+      join +
+      "date_from=" +
+      encodeURIComponent(dateFrom) +
+      "&date_to=" +
+      encodeURIComponent(dateTo)
+    );
+  }
+
+  function runPool(jobs, concurrency, worker) {
+    var i = 0;
+    var running = 0;
+    var done = 0;
+    return new Promise(function (resolve) {
+      function pump() {
+        while (running < concurrency && i < jobs.length) {
+          (function (job, idx) {
+            running += 1;
+            Promise.resolve()
+              .then(function () {
+                return worker(job, idx);
+              })
+              .catch(function () {
+                /* ignore one month fail */
+              })
+              .then(function () {
+                running -= 1;
+                done += 1;
+                if (done >= jobs.length) resolve();
+                else pump();
+              });
+          })(jobs[i], i);
+          i += 1;
+        }
+        if (jobs.length === 0) resolve();
+      }
+      pump();
+    });
+  }
+
+  function fetchSqlMonthsThenReload(mainUrl, data, started) {
+    var months = (data && data.groups && data.groups.sql_months) || [];
+    var monthBase = readMonthApiBase();
+    if (!months.length || !monthBase) {
+      maybePollRefresh(mainUrl, data);
+      return;
+    }
+    var body = document.getElementById("sales-groups-body");
+    var sub = document.getElementById("sales-groups-sub");
+    var pill = document.getElementById("sales-groups-pill");
+    var total = months.length;
+    var finished = 0;
+    setStatus("warming", "SQL " + finished + "/" + total);
+    if (sub) {
+      sub.textContent =
+        "نقاط البيع · جلب SQL متوازٍ للشهور… 0/" + total;
+    }
+    runPool(months, 3, function (m) {
+      var u = monthApiUrl(monthBase, m.date_from, m.date_to);
+      return fetchJson(u, 150 * 1000).then(function () {
+        finished += 1;
+        setStatus("warming", "SQL " + finished + "/" + total);
+        if (sub) {
+          sub.textContent =
+            "نقاط البيع · جلب SQL متوازٍ… " +
+            finished +
+            "/" +
+            total +
+            " · " +
+            formatDuration(Date.now() - started);
+        }
+      });
+    }).then(function () {
+      return fetchJson(mainUrl, 120 * 1000).then(function (fresh) {
+        render(fresh, Date.now() - started);
+        var still =
+          !!(fresh && fresh.groups && fresh.groups.incomplete) ||
+          ((fresh.groups && fresh.groups.sql_months) || []).length > 0;
+        if (still) {
+          maybePollRefresh(mainUrl, fresh);
+        }
+      });
+    }).catch(function (err) {
+      fail(
+        body,
+        sub,
+        pill,
+        friendlyFetchError(err),
+        Date.now() - started
+      );
+    });
+  }
+
   function readSeed() {
     var el = document.getElementById("sales-groups-seed");
     if (!el) return null;
@@ -337,7 +444,7 @@
         clearInterval(tick);
         finishSignals();
         render(data, Date.now() - started);
-        maybePollRefresh(url, data);
+        fetchSqlMonthsThenReload(url, data, started);
       })
       .catch(function (err) {
         clearInterval(tick);
@@ -365,15 +472,16 @@
     if (seeded) {
       render(seeded, 0, "من الكاش");
       finishSignals();
-      // تحديث صامت مرة واحدة — بلا حلقة شهور
+      // تحديث صامت مرة واحدة — إن ناقص شهور يُجلب SQL متوازٍ
       if (url) {
         fetchJson(url, 180 * 1000)
           .then(function (data) {
             render(data, 0, "محدّث");
-            maybePollRefresh(url, data);
+            fetchSqlMonthsThenReload(url, data, Date.now());
           })
           .catch(function () {
             /* أبقِ الكاش المعروض */
+            fetchSqlMonthsThenReload(url, seeded, Date.now());
           });
       }
       return;

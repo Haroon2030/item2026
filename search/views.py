@@ -1005,6 +1005,7 @@ def browse_sales(request):
                 'error': str(exc),
                 'browsed': False,
                 'groups_api_url': '',
+                'groups_month_api_url': '',
                 'items_api_url': '',
                 'activity_api_url': '',
             },
@@ -1055,6 +1056,7 @@ def browse_sales(request):
         dashboard = None
 
     groups_api_url = ''
+    groups_month_api_url = ''
     items_api_url = ''
     users_api_url = ''
     groups_seed = None
@@ -1069,6 +1071,16 @@ def browse_sales(request):
             qs['group'] = selected_group
         # بدون partial: عند اكتمال الشهور تُطابق المجموعات مع إجمالي جدول الفروع
         groups_api_url = f"{reverse('browse_sales_groups_api')}?{urlencode(qs)}"
+        month_qs = {}
+        if selected_branch:
+            month_qs['branch'] = selected_branch
+        if selected_group:
+            month_qs['group'] = selected_group
+        groups_month_api_url = reverse('browse_sales_groups_month_api')
+        if month_qs:
+            groups_month_api_url = (
+                f"{groups_month_api_url}?{urlencode(month_qs)}"
+            )
         items_api_url = f"{reverse('browse_sales_top_items_api')}?{urlencode(qs)}"
         users_api_url = f"{reverse('browse_sales_top_users_api')}?{urlencode(qs)}"
         # زرع فوري من الكاش — بلا حلقة شهور في الواجهة
@@ -1113,6 +1125,7 @@ def browse_sales(request):
             'error': error,
             'browsed': dashboard is not None,
             'groups_api_url': groups_api_url,
+            'groups_month_api_url': groups_month_api_url,
             'items_api_url': items_api_url,
             'users_api_url': users_api_url,
             'groups_seed': groups_seed,
@@ -1177,6 +1190,50 @@ def browse_sales_groups_api(request):
                     or 'تعذّر جلب مبيعات المجموعات. أعد المحاولة بعد لحظات.',
                 },
             }
+        )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_groups_month_api(request):
+    """SQL لشهر واحد من مبيعات المجموعات → JSON (للجلب المتوازي من الواجهة)."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    group_code = str(request.GET.get('group') or '').strip()
+
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_groups_month
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'},
+                status=400,
+            )
+        payload = build_sales_groups_month(
+            date_from,
+            date_to,
+            branch_code=branch_code,
+            group_code=group_code,
+        )
+        return JsonResponse({'ok': True, 'month': payload, 'source': 'sql'})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_groups_month_api failed: %s', exc)
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': str(exc)
+                or 'تعذّر جلب مبيعات مجموعات الشهر من أوراكل.',
+            },
+            status=200,
         )
 
 
