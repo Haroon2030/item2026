@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Tajawal:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=306">
+  <link rel="stylesheet" href="/static/css/style.css?v=315">
   <link rel="stylesheet" href="/static/css/theme-v2.css?v=33">
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -132,13 +132,13 @@
             <svg class="sidebar-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div class="sidebar-group-items" role="group" aria-label="المبيعات">
-            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'sales_search' %}is-active{% endif %}" href="{% url 'sales_search' %}" title="البحث عن المبيعات">
-              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/><path d="M4 19h16"/></svg>
-              <span>البحث عن المبيعات</span>
-            </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_sales' %}is-active{% endif %}" href="{% url 'browse_sales' %}" title="تحليل المبيعات">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
               <span>تحليل المبيعات</span>
+            </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'sales_search' %}is-active{% endif %}" href="{% url 'sales_search' %}" title="البحث عن مبيعات صنف">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/><path d="M4 19h16"/></svg>
+              <span>البحث عن مبيعات صنف</span>
             </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_performance' %}is-active{% endif %}" href="{% url 'browse_performance' %}" title="تحليل الأداء">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M18 20V4M6 20v-4"/><path d="M4 20h16"/></svg>

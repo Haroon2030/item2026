@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 
 from django.conf import settings
@@ -31,7 +30,6 @@ from .validators import ValidationError, looks_like_item_code, resolve_group, re
 
 logger = logging.getLogger(__name__)
 
-
 def _fetch_suppliers_safe(item_code: str) -> list[dict]:
     """جلب موردي الصنف من أوراكل (قراءة فقط) دون تعطيل نتيجة البحث عند الفشل."""
     code = str(item_code or '').strip()
@@ -46,7 +44,6 @@ def _fetch_suppliers_safe(item_code: str) -> list[dict]:
     except Exception as exc:  # noqa: BLE001
         logger.warning('Item suppliers skipped: %s', exc)
         return []
-
 
 def _warehouses() -> list[dict]:
     """قائمة المخازن: من أوراكل بالاسم الحقيقي، مع الرجوع لإعدادات WAREHOUSES عند التعذر."""
@@ -85,7 +82,6 @@ def _warehouses() -> list[dict]:
     except Exception as exc:  # noqa: BLE001
         logger.warning('Warehouse list from Oracle failed: %s', exc)
         return fallback
-
 
 def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str) -> tuple[list[dict], dict | None]:
     """يربط باركود الوحدات من الفهرس ويختار الصف المطابق (باركود أو وحدة الرصيد/التكلفة)."""
@@ -158,7 +154,6 @@ def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str)
 
     return enriched, matched
 
-
 def _items_from_prices(prices: list[dict], group_info: dict) -> list[dict]:
     """احتياطي: بناء صفوف الربط من نتائج الأسعار إن الفهرس المحلي ناقص."""
     seen = set()
@@ -183,7 +178,6 @@ def _items_from_prices(prices: list[dict], group_info: dict) -> list[dict]:
             }
         )
     return items
-
 
 @login_required
 def item_search(request):
@@ -401,7 +395,6 @@ def item_search(request):
         },
     )
 
-
 def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
     """قائمة مخازن المقارنة من الإعدادات مع الإبقاء على الموجود فعلياً."""
     cfg = settings.EXTERNAL_API or {}
@@ -418,7 +411,6 @@ def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
         if filtered:
             return filtered
     return raw
-
 
 @login_required
 @require_GET
@@ -568,7 +560,6 @@ def sales_search(request):
         },
     )
 
-
 @login_required
 @require_POST
 def sync_barcodes(request):
@@ -608,7 +599,6 @@ def sync_barcodes(request):
         # أي فشل قاعدة بيانات/مزامنة يجب أن يعود JSON للواجهة لا صفحة HTML
         return respond_error(f'فشلت المزامنة: {exc}', status=500)
 
-
 def _parse_qty(value) -> float | None:
     if value is None or value == '':
         return None
@@ -616,7 +606,6 @@ def _parse_qty(value) -> float | None:
         return float(str(value).replace(',', '').strip())
     except ValueError:
         return None
-
 
 def _priced_items_for_group(
     warehouse: str, group_code: str, all_items: list[dict]
@@ -660,7 +649,6 @@ def _priced_items_for_group(
     except Exception as exc:  # noqa: BLE001
         error = f'تعذّر جلب الكميات: {exc}'
     return stocked, counts, error
-
 
 @login_required
 @require_GET
@@ -790,7 +778,6 @@ def browse_groups(request):
         },
     )
 
-
 def _parse_sales_dates(raw_from: str | None, raw_to: str | None):
     """يحوّل تواريخ النموذج إلى date؛ الافتراضي يوم اليوم (من وإلى)."""
     from datetime import date, datetime
@@ -815,1172 +802,11 @@ def _parse_sales_dates(raw_from: str | None, raw_to: str | None):
         raise ValidationError('الفترة القصوى سنة واحدة.')
     return d_from, d_to
 
-
-def _format_sales_metric_rows(rows):
-    for row in rows:
-        row['net_total_display'] = f"{float(row.get('net_total') or 0):,.2f}"
-        row['vat_total_display'] = f"{float(row.get('vat_total') or 0):,.2f}"
-        row['sales_total_display'] = f"{float(row.get('sales_total') or 0):,.2f}"
-        row['gross_total_display'] = f"{float(row.get('gross_total') or 0):,.2f}"
-        row['avg_basket_display'] = f"{float(row.get('avg_basket') or 0):,.2f}"
-        row['invoice_count_display'] = f"{int(row.get('invoice_count') or 0):,}"
-        row['return_count_display'] = f"{int(row.get('return_count') or 0):,}"
-
-
-def _build_sales_system(
-    key,
-    label,
-    date_from,
-    date_to,
-    requested_user,
-    branch_code='',
-    *,
-    light=False,
-):
-    """يجمع إجماليات الفروع (أو يومي لفرع) وأعلى المستخدمين لنظام بيع واحد."""
-    from .oracle_stock import (
-        fetch_branch_daily_sales_totals,
-        fetch_sales_mst_bundle,
-        fetch_user_invoice_details,
-    )
-
-    bundle = fetch_sales_mst_bundle(
-        date_from,
-        date_to,
-        system=key,
-        light=light,
-        top_users_limit=8,
-    )
-    branch_rows = bundle.get('branches') or []
-    branches = [
-        {
-            'code': str(r.get('branch_code') or ''),
-            'name': str(r.get('branch_name') or ''),
-        }
-        for r in branch_rows
-        if r.get('branch_code')
-    ]
-    branches_by_code = {b['code']: b for b in branches}
-    selected_branch = str(branch_code or '').strip()
-    if selected_branch and selected_branch not in branches_by_code:
-        selected_branch = ''
-
-    daily_mode = bool(selected_branch) and not light
-    if daily_mode:
-        rows = fetch_branch_daily_sales_totals(
-            date_from,
-            date_to,
-            selected_branch,
-            system=key,
-        )
-        selected_branch_name = branches_by_code[selected_branch]['name']
-    else:
-        rows = branch_rows
-        selected_branch_name = ''
-
-    _format_sales_metric_rows(rows)
-    top_users: list[dict] = []
-    # قائمة البائعين الثقيلة تُحمَّل عبر /sales/api/users إلا عند اختيار فرع/مستخدم
-    if not light and (selected_branch or requested_user):
-        from .oracle_stock import fetch_top_sales_users
-
-        top_users = fetch_top_sales_users(
-            date_from,
-            date_to,
-            system=key,
-            branch_code=selected_branch,
-            limit=8,
-        )
-        for user in top_users:
-            user['net_total_display'] = f"{float(user.get('net_total') or 0):,.2f}"
-            user['sales_total_display'] = f"{float(user.get('sales_total') or 0):,.2f}"
-
-    users_by_code = {str(u.get('user_code') or ''): u for u in top_users}
-    selected_code = requested_user if requested_user in users_by_code else ''
-    selected_name = ''
-    invoice_groups: list[dict] = []
-    if selected_code and not light:
-        selected_name = str(users_by_code[selected_code].get('user_name') or '')
-        invoice_groups = fetch_user_invoice_details(
-            date_from,
-            date_to,
-            selected_code,
-            system=key,
-        )
-        for group in invoice_groups:
-            group['sales_total_display'] = (
-                f"{float(group.get('sales_total') or 0):,.2f}"
-            )
-            for invoice in group.get('invoices') or []:
-                invoice['bill_total_display'] = (
-                    f"{float(invoice.get('bill_total') or 0):,.2f}"
-                )
-
-    grand_net = sum(float(r.get('net_total') or 0) for r in rows)
-    grand_vat = sum(float(r.get('vat_total') or 0) for r in rows)
-    grand_sales = sum(float(r.get('sales_total') or 0) for r in rows)
-    grand_gross = sum(float(r.get('gross_total') or 0) for r in rows)
-    grand_invoices = sum(int(r.get('invoice_count') or 0) for r in rows)
-    grand_returns = sum(int(r.get('return_count') or 0) for r in rows)
-    # مبلغ المرتجع من إجمالي الفروع (وليس صفوف اليومي فقط)
-    grand_return_total = sum(float(r.get('return_total') or 0) for r in branch_rows)
-    grand_return_bills = sum(int(r.get('return_count') or 0) for r in branch_rows)
-    grand_avg = round(grand_sales / grand_invoices, 2) if grand_invoices else 0.0
-
-    top_visit_branch = ''
-    top_visit_invoices = 0
-    top_visit_invoices_display = '0'
-    if branch_rows:
-        best = max(branch_rows, key=lambda r: int(r.get('invoice_count') or 0))
-        top_visit_invoices = int(best.get('invoice_count') or 0)
-        if top_visit_invoices > 0:
-            top_visit_branch = str(
-                best.get('branch_name') or best.get('branch_code') or ''
-            )
-            top_visit_invoices_display = f'{top_visit_invoices:,}'
-
-    seller_count = int(bundle.get('seller_count') or 0)
-    device_count = int(bundle.get('device_count') or 0)
-
-    chart_branches: list[dict] = []
-    if not light and branch_rows:
-        ranked = sorted(
-            branch_rows,
-            key=lambda r: float(r.get('return_total') or 0),
-            reverse=True,
-        )
-        ranked = [r for r in ranked if float(r.get('return_total') or 0) > 0][:15]
-        total = sum(float(r.get('return_total') or 0) for r in ranked)
-        assigned = 0.0
-        for idx, row in enumerate(ranked):
-            amount = float(row.get('return_total') or 0)
-            inv = int(row.get('return_count') or 0)
-            if not total:
-                pct = 0.0
-            elif idx == len(ranked) - 1:
-                pct = round(max(0.0, 100.0 - assigned), 1)
-            else:
-                pct = round((amount / total) * 100.0, 1)
-                assigned += pct
-            chart_branches.append(
-                {
-                    'branch_code': str(row.get('branch_code') or ''),
-                    'branch_name': str(
-                        row.get('branch_name') or row.get('branch_code') or ''
-                    ),
-                    'sales_total': amount,
-                    'sales_total_display': f'{amount:,.2f}',
-                    'invoice_count': inv,
-                    'invoice_count_display': f'{inv:,}',
-                    'share_pct': pct,
-                }
-            )
-
-    return {
-        'key': key,
-        'label': label,
-        'rows': rows if not light else [],
-        'branches': branches,
-        'chart_branches': chart_branches,
-        'daily_mode': daily_mode,
-        'selected_branch': selected_branch if not light else '',
-        'selected_branch_name': selected_branch_name,
-        'top_users': top_users,
-        'invoice_groups': invoice_groups,
-        'selected_user_code': selected_code,
-        'selected_user_name': selected_name,
-        'branch_count': len(branch_rows),
-        'day_count': len(rows) if daily_mode else 0,
-        'seller_count': seller_count,
-        'seller_count_display': f'{seller_count:,}',
-        'device_count': device_count,
-        'device_count_display': f'{device_count:,}',
-        'grand_invoices': grand_invoices,
-        'grand_returns': grand_returns,
-        'grand_invoices_display': f'{grand_invoices:,}',
-        'grand_returns_display': f'{grand_returns:,}',
-        'grand_return_total': f'{grand_return_total:,.2f}',
-        'grand_return_total_num': grand_return_total,
-        'grand_return_bills': grand_return_bills,
-        'grand_return_bills_display': f'{grand_return_bills:,}',
-        'grand_gross': f'{grand_gross:,.2f}',
-        'grand_net': f'{grand_net:,.2f}',
-        'grand_vat': f'{grand_vat:,.2f}',
-        'grand_sales': f'{grand_sales:,.2f}',
-        'grand_avg_basket': f'{grand_avg:,.2f}',
-        'grand_sales_num': grand_sales,
-        'top_user_name': str(top_users[0].get('user_name') or '') if top_users else '',
-        'top_user_sales': top_users[0]['sales_total_display'] if top_users else '0.00',
-        'top_visit_branch': top_visit_branch,
-        'top_visit_invoices': top_visit_invoices,
-        'top_visit_invoices_display': top_visit_invoices_display,
-    }
-
-
-def _empty_group_panel(selected_branch='', selected_group='', groups=None):
-    return {
-        'rows': [],
-        'groups': groups or [],
-        'selected_group': selected_group,
-        'selected_group_name': '',
-        'selected_branch': selected_branch,
-        'by_branch': bool(selected_group),
-        'grand_invoices': 0,
-        'grand_invoices_display': '0',
-        'grand_qty_display': '0.00',
-        'grand_sales': '0.00',
-        'grand_gross': '0.00',
-        'grand_net': '0.00',
-        'grand_vat': '0.00',
-        'grand_avg_basket': '0.00',
-        'fast_mode': False,
-        'loading': True,
-        'returns_deducted': False,
-    }
-
-
-def _build_group_panel(
-    date_from,
-    date_to,
-    active_system,
-    branches,
-    selected_group='',
-    selected_branch='',
-    force_fast=None,
-):
-    from .oracle_stock import (
-        fetch_group_sales_totals,
-        fetch_sales_group_options,
-    )
-
-    group_options = fetch_sales_group_options()
-    group_codes = {g['code'] for g in group_options}
-    if selected_group and selected_group not in group_codes:
-        selected_group = ''
-    by_branch = bool(selected_group)
-    fast_mode = True  # مبيعات مجموعات بدون خصم مرتجع
-    group_rows = fetch_group_sales_totals(
-        date_from,
-        date_to,
-        system=active_system,
-        branch_code=selected_branch,
-        group_code=selected_group,
-        by_branch=by_branch,
-        force_fast=True,
-    )
-    _format_sales_metric_rows(group_rows)
-    for row in group_rows:
-        row['qty_total_display'] = f"{float(row.get('qty_total') or 0):,.2f}"
-    if not by_branch and selected_branch:
-        branch_label = next(
-            (
-                str(b.get('name') or b.get('code') or '')
-                for b in (branches or [])
-                if str(b.get('code') or '') == selected_branch
-            ),
-            selected_branch,
-        )
-        for row in group_rows:
-            row['branch_code'] = selected_branch
-            row['branch_name'] = branch_label
-    g_net = sum(float(r.get('net_total') or 0) for r in group_rows)
-    g_vat = sum(float(r.get('vat_total') or 0) for r in group_rows)
-    g_sales = sum(float(r.get('sales_total') or 0) for r in group_rows)
-    g_gross = sum(float(r.get('gross_total') or 0) for r in group_rows)
-    g_qty = sum(float(r.get('qty_total') or 0) for r in group_rows)
-    totals_from_header = False
-    # فواتير + مبالغ التذييل من رأس الفاتورة (مثل جدول الفروع / أونكس)
-    # حتى لا يختلف الإجمالي عن مجموع أسطر المجموعات
-    if by_branch:
-        g_inv = sum(int(r.get('invoice_count') or 0) for r in group_rows)
-    else:
-        from .oracle_stock import fetch_branch_sales_totals
-
-        branch_rows = fetch_branch_sales_totals(
-            date_from, date_to, system=active_system
-        )
-        if selected_branch:
-            match = next(
-                (
-                    r
-                    for r in branch_rows
-                    if str(r.get('branch_code') or '') == selected_branch
-                ),
-                None,
-            )
-            branch_rows = [match] if match else []
-        g_inv = sum(int(r.get('invoice_count') or 0) for r in branch_rows)
-        g_gross = sum(float(r.get('gross_total') or 0) for r in branch_rows)
-        g_net = sum(float(r.get('net_total') or 0) for r in branch_rows)
-        g_vat = sum(float(r.get('vat_total') or 0) for r in branch_rows)
-        g_sales = sum(float(r.get('sales_total') or 0) for r in branch_rows)
-        totals_from_header = True
-    g_avg = round(g_sales / g_inv, 2) if g_inv else 0.0
-    grand_inv_display = f'{g_inv:,}'
-    grand_avg_display = f'{g_avg:,.2f}'
-    selected_group_name = ''
-    if by_branch and group_rows:
-        selected_group_name = str(group_rows[0].get('group_name') or selected_group)
-    elif selected_group:
-        selected_group_name = next(
-            (g['name'] for g in group_options if g['code'] == selected_group),
-            selected_group,
-        )
-    return {
-        'rows': group_rows,
-        'groups': group_options,
-        'selected_group': selected_group,
-        'selected_group_name': selected_group_name,
-        'selected_branch': selected_branch,
-        'by_branch': by_branch,
-        'totals_from_header': totals_from_header,
-        'grand_invoices': g_inv,
-        'grand_invoices_display': grand_inv_display,
-        'grand_qty_display': f'{g_qty:,.2f}',
-        'grand_sales': f'{g_sales:,.2f}',
-        'grand_gross': f'{g_gross:,.2f}',
-        'grand_net': f'{g_net:,.2f}',
-        'grand_vat': f'{g_vat:,.2f}',
-        'grand_sales_num': round(float(g_sales), 2),
-        'grand_gross_num': round(float(g_gross), 2),
-        'grand_net_num': round(float(g_net), 2),
-        'grand_vat_num': round(float(g_vat), 2),
-        'grand_avg_basket': grand_avg_display,
-        'fast_mode': fast_mode,
-        'loading': False,
-        'returns_deducted': False,
-    }
-
-
-def _empty_group_returns_panel(selected_branch='', selected_group=''):
-    return {
-        'rows': [],
-        'selected_branch': selected_branch,
-        'selected_group': selected_group,
-        'grand_returns': '0.00',
-        'grand_net': '0.00',
-        'grand_vat': '0.00',
-        'grand_count': 0,
-        'grand_count_display': '0',
-        'grand_qty_display': '0.00',
-        'loading': True,
-    }
-
-
-def _build_group_returns_panel(
-    date_from,
-    date_to,
-    active_system,
-    selected_group='',
-    selected_branch='',
-    limit=80,
-):
-    from .oracle_stock import fetch_group_return_totals
-
-    rows = fetch_group_return_totals(
-        date_from,
-        date_to,
-        system=active_system,
-        branch_code=selected_branch,
-        group_code=selected_group,
-        limit=limit,
-    )
-    for row in rows:
-        row['return_count_display'] = f"{int(row.get('return_count') or 0):,}"
-        row['return_qty_display'] = f"{float(row.get('return_qty') or 0):,.2f}"
-        row['return_total_display'] = f"{float(row.get('return_total') or 0):,.2f}"
-        row['net_total_display'] = f"{float(row.get('net_total') or 0):,.2f}"
-        row['vat_total_display'] = f"{float(row.get('vat_total') or 0):,.2f}"
-    g_total = sum(float(r.get('return_total') or 0) for r in rows)
-    g_net = sum(float(r.get('net_total') or 0) for r in rows)
-    g_vat = sum(float(r.get('vat_total') or 0) for r in rows)
-    g_qty = sum(float(r.get('return_qty') or 0) for r in rows)
-    g_count = sum(int(r.get('return_count') or 0) for r in rows)
-    return {
-        'rows': rows,
-        'selected_branch': selected_branch,
-        'selected_group': selected_group,
-        'grand_returns': f'{g_total:,.2f}',
-        'grand_net': f'{g_net:,.2f}',
-        'grand_vat': f'{g_vat:,.2f}',
-        'grand_count': g_count,
-        'grand_count_display': f'{g_count:,}',
-        'grand_qty_display': f'{g_qty:,.2f}',
-        'loading': False,
-    }
-
-
-def _build_sales_panels_payload(
-    date_from,
-    date_to,
-    active_system,
-    selected_group='',
-    selected_branch='',
-    item_limit=20,
-):
-    """مجموعات (بدون خصم مرتجع) + مرتجعات مجموعات + أصناف."""
-    panel = _build_group_panel(
-        date_from,
-        date_to,
-        active_system,
-        branches=[],
-        selected_group=selected_group,
-        selected_branch=selected_branch,
-    )
-    gcode = panel.get('selected_group') or ''
-    returns_panel = _build_group_returns_panel(
-        date_from,
-        date_to,
-        active_system,
-        selected_group=gcode,
-        selected_branch=selected_branch,
-    )
-    items, fast_mode = _build_top_items_list(
-        date_from,
-        date_to,
-        active_system,
-        selected_branch=selected_branch,
-        selected_group=gcode,
-        limit=item_limit,
-    )
-    return_items = _build_top_return_items_list(
-        date_from,
-        date_to,
-        active_system,
-        selected_branch=selected_branch,
-        selected_group=gcode,
-        limit=item_limit,
-    )
-    return panel, returns_panel, items, return_items, fast_mode
-
-
-def _build_top_items_list(
-    date_from,
-    date_to,
-    active_system,
-    selected_branch='',
-    selected_group='',
-    limit=20,
-    force_fast=None,
-):
-    from .oracle_stock import fetch_top_sales_items
-
-    top_items = fetch_top_sales_items(
-        date_from,
-        date_to,
-        system=active_system,
-        branch_code=selected_branch,
-        group_code=selected_group,
-        limit=limit,
-        force_fast=False,
-    )
-    for item in top_items:
-        item['sales_total_display'] = f"{float(item.get('sales_total') or 0):,.2f}"
-        item['qty_total_display'] = f"{float(item.get('qty_total') or 0):,.2f}"
-    return top_items, False
-
-
-def _build_top_users_list(
-    date_from,
-    date_to,
-    active_system,
-    selected_branch='',
-    limit=8,
-):
-    from .oracle_stock import fetch_top_sales_users
-
-    top_users = fetch_top_sales_users(
-        date_from,
-        date_to,
-        system=active_system,
-        branch_code=selected_branch,
-        limit=limit,
-    )
-    for user in top_users:
-        user['net_total_display'] = f"{float(user.get('net_total') or 0):,.2f}"
-        user['sales_total_display'] = f"{float(user.get('sales_total') or 0):,.2f}"
-    return top_users
-
-
-def _build_top_return_items_list(
-    date_from,
-    date_to,
-    active_system,
-    selected_branch='',
-    selected_group='',
-    limit=20,
-):
-    from .oracle_stock import fetch_top_returned_items
-
-    rows = fetch_top_returned_items(
-        date_from,
-        date_to,
-        system=active_system,
-        branch_code=selected_branch,
-        group_code=selected_group,
-        limit=limit,
-    )
-    for item in rows:
-        total = float(item.get('return_total') or item.get('sales_total') or 0)
-        item['sales_total_display'] = f'{total:,.2f}'
-        item['return_total_display'] = f'{total:,.2f}'
-        item['qty_total_display'] = f"{float(item.get('qty_total') or 0):,.2f}"
-    return rows
-
-
-def _build_chart_branches_list(
-    date_from,
-    date_to,
-    active_system,
-    selected_branch='',
-    selected_group='',
-    limit=15,
-):
-    """فروع مرتبة حسب قيمة المرتجع — مع فلتر مجموعة/فرع اختياري."""
-    from .oracle_stock import fetch_branch_return_totals
-
-    ranked = fetch_branch_return_totals(
-        date_from,
-        date_to,
-        system=active_system,
-        branch_code=selected_branch,
-        group_code=selected_group,
-        limit=limit,
-    )
-    total = sum(float(r.get('return_total') or r.get('sales_total') or 0) for r in ranked)
-    out: list[dict] = []
-    assigned = 0.0
-    for idx, row in enumerate(ranked):
-        amount = float(row.get('return_total') or row.get('sales_total') or 0)
-        inv = int(row.get('return_count') or row.get('invoice_count') or 0)
-        if not total:
-            pct = 0.0
-        elif idx == len(ranked) - 1:
-            pct = round(max(0.0, 100.0 - assigned), 1)
-        else:
-            pct = round((amount / total) * 100.0, 1)
-            assigned += pct
-        out.append(
-            {
-                'branch_code': str(row.get('branch_code') or ''),
-                'branch_name': str(
-                    row.get('branch_name') or row.get('branch_code') or ''
-                ),
-                'sales_total': amount,
-                'sales_total_display': f'{amount:,.2f}',
-                'invoice_count': inv,
-                'invoice_count_display': f'{inv:,}',
-                'share_pct': pct,
-            }
-        )
-    return out
-
-
 @login_required
+
 @require_GET
+
 @never_cache
-def browse_sales(request):
-    """داشبورد مبيعات: نقاط البيع والجملة بأرقام صحيحة دون تكرار."""
-    error = ''
-    systems: list[dict] = []
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        from datetime import date as date_cls
-
-        today = date_cls.today()
-        return render(
-            request,
-            'search/browse_sales.html',
-            {
-                'date_from': (request.GET.get('date_from') or '')[:10],
-                'date_to': (request.GET.get('date_to') or '')[:10],
-                'systems': [],
-                'active': None,
-                'active_system': active_system,
-                'kpi': None,
-                'browsed': False,
-                'error': str(exc),
-                'default_from': today.isoformat(),
-                'default_to': today.isoformat(),
-            },
-        )
-
-    selected_group = str(request.GET.get('group') or '').strip()
-    active = None
-    systems_by_key: dict = {}
-    top_items: list[dict] = []
-    group_panel = _empty_group_panel()
-    group_returns_panel = _empty_group_returns_panel()
-    defer_heavy = True
-    try:
-        from .oracle_stock import (
-            SALES_SYSTEMS,
-            oracle_enabled,
-            oracle_session,
-        )
-
-        if not oracle_enabled():
-            error = 'أوراكل غير مفعّل — لا يمكن جلب المبيعات.'
-        else:
-            requested_branch = str(request.GET.get('branch') or '').strip()
-
-            def _job_system(key, label, is_active):
-                with oracle_session():
-                    return _build_sales_system(
-                        key,
-                        label,
-                        date_from,
-                        date_to,
-                        str(request.GET.get('user_id') or '').strip() if is_active else '',
-                        requested_branch if is_active else '',
-                        light=not is_active,
-                    )
-
-            built = {}
-            try:
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    futures = {
-                        pool.submit(
-                            _job_system,
-                            key,
-                            conf['label'],
-                            key == active_system,
-                        ): key
-                        for key, conf in SALES_SYSTEMS.items()
-                    }
-                    for fut in as_completed(futures):
-                        built[futures[fut]] = fut.result()
-            except RuntimeError as parallel_exc:
-                msg = str(parallel_exc).lower()
-                if 'interpreter shutdown' not in msg and 'cannot schedule' not in msg:
-                    raise
-                # بعد إعادة تحميل runserver يتعذّر إنشاء خيوط — نحمّل تسلسلياً
-                built = {
-                    key: _job_system(key, conf['label'], key == active_system)
-                    for key, conf in SALES_SYSTEMS.items()
-                }
-            systems = [
-                built[key] for key in SALES_SYSTEMS.keys() if key in built
-            ]
-
-            systems_by_key = {s['key']: s for s in systems}
-            active = systems_by_key.get(active_system) or (
-                systems[0] if systems else None
-            )
-            if active:
-                active_system = active['key']
-
-            if active:
-                from .oracle_stock import fetch_sales_group_options
-
-                group_options = fetch_sales_group_options()
-                group_codes = {g['code'] for g in group_options}
-                if selected_group and selected_group not in group_codes:
-                    selected_group = ''
-                group_panel = _empty_group_panel(
-                    selected_branch=active.get('selected_branch') or '',
-                    selected_group=selected_group,
-                    groups=group_options,
-                )
-                group_returns_panel = _empty_group_returns_panel(
-                    selected_branch=active.get('selected_branch') or '',
-                    selected_group=selected_group,
-                )
-                # دائماً: أول رسم = MST فقط؛ المجموعات/المرتجعات عبر API
-                from .oracle_stock import sales_long_range
-
-                long_range = sales_long_range(date_from, date_to)
-                active['chart_branches'] = []
-                active['item_highlights'] = {
-                    'top_amount_name': '…',
-                    'top_amount_code': '',
-                    'top_amount_value': '—',
-                    'top_qty_name': '…',
-                    'top_qty_code': '',
-                    'top_qty_value': '—',
-                    'top_return_name': '…',
-                    'top_return_code': '',
-                    'top_return_value': '—',
-                }
-                active['load_kpi_highlights'] = True
-                active['sales_progressive'] = long_range
-                # لا تُجلب أبرز الأصناف/الرسوم على SSR — تُحمَّل بعد الصفحة
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales failed: %s', exc)
-        error = f'تعذّر جلب المبيعات: {exc}'
-        systems = []
-        active = None
-        systems_by_key = {}
-        top_items = []
-        defer_heavy = False
-
-    kpi = None
-    if systems:
-        if not systems_by_key:
-            systems_by_key = {s['key']: s for s in systems}
-        pos = systems_by_key.get('pos') or {}
-        wholesale = systems_by_key.get('wholesale') or {}
-        total_sales = float(pos.get('grand_sales_num') or 0) + float(
-            wholesale.get('grand_sales_num') or 0
-        )
-        total_invoices = int(pos.get('grand_invoices') or 0) + int(
-            wholesale.get('grand_invoices') or 0
-        )
-        highlights = (active or {}).get('item_highlights') or {}
-        kpi = {
-            'pos_sales': pos.get('grand_sales') or '0.00',
-            'pos_invoices': pos.get('grand_invoices_display') or '0',
-            'pos_returns': pos.get('grand_return_total') or '0.00',
-            'pos_return_bills': pos.get('grand_return_bills_display') or '0',
-            'wholesale_sales': wholesale.get('grand_sales') or '0.00',
-            'wholesale_invoices': wholesale.get('grand_invoices_display') or '0',
-            'wholesale_returns': wholesale.get('grand_return_total') or '0.00',
-            'wholesale_return_bills': wholesale.get('grand_return_bills_display') or '0',
-            'total_sales': f'{total_sales:,.2f}',
-            'total_invoices': f'{total_invoices:,}',
-            'total_returns': f'{float(pos.get("grand_return_total_num") or 0) + float(wholesale.get("grand_return_total_num") or 0):,.2f}',
-            'total_return_bills': f'{int(pos.get("grand_return_bills") or 0) + int(wholesale.get("grand_return_bills") or 0):,}',
-            'branch_count': max(
-                int(pos.get('branch_count') or 0),
-                int(wholesale.get('branch_count') or 0),
-            ),
-            'seller_count': (active or {}).get('seller_count_display')
-            or f"{int((active or {}).get('seller_count') or 0):,}",
-            'device_count': (active or {}).get('device_count_display')
-            or f"{int((active or {}).get('device_count') or 0):,}",
-            'seller_system_label': (active or {}).get('label') or '',
-            'top_visit_branch': (
-                pos.get('top_visit_branch')
-                or (active or {}).get('top_visit_branch')
-                or '—'
-            ),
-            'top_visit_invoices': (
-                pos.get('top_visit_invoices_display')
-                or (active or {}).get('top_visit_invoices_display')
-                or '0'
-            ),
-            'top_item_amount_name': highlights.get('top_amount_name') or '—',
-            'top_item_amount_code': highlights.get('top_amount_code') or '',
-            'top_item_amount_value': highlights.get('top_amount_value') or '0.00',
-            'top_item_qty_name': highlights.get('top_qty_name') or '—',
-            'top_item_qty_code': highlights.get('top_qty_code') or '',
-            'top_item_qty_value': highlights.get('top_qty_value') or '0.00',
-            'top_item_return_name': highlights.get('top_return_name') or '—',
-            'top_item_return_code': highlights.get('top_return_code') or '',
-            'top_item_return_value': highlights.get('top_return_value') or '0.00',
-        }
-
-    return render(
-        request,
-        'search/browse_sales.html',
-        {
-            'date_from': date_from.isoformat(),
-            'date_to': date_to.isoformat(),
-            'systems': systems,
-            'active': active,
-            'active_system': active_system,
-            'selected_branch': (active or {}).get('selected_branch') or '',
-            'selected_group': selected_group,
-            'group_panel': group_panel,
-            'group_returns_panel': group_returns_panel,
-            'top_items': top_items,
-            'defer_heavy': defer_heavy and bool(active) and not error,
-            'sales_progressive': bool((active or {}).get('sales_progressive')),
-            'load_kpi_highlights': bool((active or {}).get('load_kpi_highlights')),
-            'kpi': kpi,
-            'browsed': bool(systems) and not error,
-            'error': error,
-            'default_from': date_from.isoformat(),
-            'default_to': date_to.isoformat(),
-        },
-    )
-
-
-def _request_force_fast(request):
-    """fast=1 يفرض مسار الفترة الطويلة على الشريحة (للتحميل التصاعدي)."""
-    raw = str(request.GET.get('fast') or '').strip().lower()
-    if raw in ('1', 'true', 'yes'):
-        return True
-    if raw in ('0', 'false', 'no'):
-        return False
-    return None
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_groups_api(request):
-    """تحميل لاحق لجدول المجموعات (شريحة تاريخية واحدة — للتحميل التصاعدي شهراً بشهر)."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    force_fast = _request_force_fast(request)
-    try:
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            panel = _build_group_panel(
-                date_from,
-                date_to,
-                active_system,
-                branches=[],
-                selected_group=selected_group,
-                selected_branch=selected_branch,
-                force_fast=True,
-            )
-        return JsonResponse({
-            'ok': True,
-            'panel': panel,
-            'chunk_from': date_from.isoformat(),
-            'chunk_to': date_to.isoformat(),
-        })
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_groups_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_group_returns_api(request):
-    """مرتجعات المجموعات — جدول مستقل بدون خصم من مبيعات المجموعات."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    try:
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            panel = _build_group_returns_panel(
-                date_from,
-                date_to,
-                active_system,
-                selected_group=selected_group,
-                selected_branch=selected_branch,
-                limit=80,
-            )
-        return JsonResponse({'ok': True, 'panel': panel})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_group_returns_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_items_api(request):
-    """تحميل لاحق للأصناف الأكثر مبيعاً."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    force_fast = _request_force_fast(request)
-    try:
-        limit = int(request.GET.get('limit') or 20)
-    except (TypeError, ValueError):
-        limit = 20
-    limit = max(1, min(limit, 80))
-    try:
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            items, fast_mode = _build_top_items_list(
-                date_from,
-                date_to,
-                active_system,
-                selected_branch=selected_branch,
-                selected_group=selected_group,
-                limit=limit,
-                force_fast=False,
-            )
-        return JsonResponse({'ok': True, 'items': items, 'fast_mode': fast_mode})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_items_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_users_api(request):
-    """أكثر المستخدمين مبيعاً مع فلتر فرع."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    try:
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            users = _build_top_users_list(
-                date_from,
-                date_to,
-                active_system,
-                selected_branch=selected_branch,
-                limit=8,
-            )
-        return JsonResponse({'ok': True, 'users': users})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_users_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_panels_api(request):
-    """طلب واحد: مجموعات + أعلى أصناف (جلسة أوراكل واحدة)."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    try:
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            panel, returns_panel, items, return_items, fast_mode = _build_sales_panels_payload(
-                date_from,
-                date_to,
-                active_system,
-                selected_group=selected_group,
-                selected_branch=selected_branch,
-                item_limit=20,
-            )
-        return JsonResponse(
-            {
-                'ok': True,
-                'panel': panel,
-                'returns_panel': returns_panel,
-                'items': items,
-                'return_items': return_items,
-                'fast_mode': fast_mode,
-            }
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_panels_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_highlights_api(request):
-    """أبرز أصناف KPI (مبلغ / كمية / مرتجع) — للتحميل اللاحق في الفترات الطويلة."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    try:
-        from .oracle_stock import (
-            fetch_sales_item_highlights,
-            oracle_enabled,
-            oracle_session,
-        )
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            highlights = fetch_sales_item_highlights(
-                date_from,
-                date_to,
-                branch_code=selected_branch,
-                group_code=selected_group,
-                system=active_system,
-            )
-        return JsonResponse({'ok': True, 'highlights': highlights})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_highlights_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_charts_api(request):
-    """رسوم الفروع + الأصناف الأكثر إرجاعاً مع فلتر فرع/مجموعة."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    try:
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            chart_branches = _build_chart_branches_list(
-                date_from,
-                date_to,
-                active_system,
-                selected_branch=selected_branch,
-                selected_group=selected_group,
-                limit=15,
-            )
-            return_items = _build_top_return_items_list(
-                date_from,
-                date_to,
-                active_system,
-                selected_branch=selected_branch,
-                selected_group=selected_group,
-                limit=20,
-            )
-        return JsonResponse(
-            {
-                'ok': True,
-                'chart_branches': chart_branches,
-                'return_items': return_items,
-            }
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_charts_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_sales_margins_api(request):
-    """هامش ربح الفروع والمجموعات — أعلى 15 من الأفضل إلى الأسوأ."""
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from'),
-            request.GET.get('date_to'),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    active_system = str(request.GET.get('sys') or 'pos').strip().lower()
-    if active_system not in ('pos', 'wholesale'):
-        active_system = 'pos'
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    force_fast = _request_force_fast(request)
-    try:
-        from .oracle_stock import fetch_margin_ranks, oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
-        with oracle_session():
-            payload = fetch_margin_ranks(
-                date_from,
-                date_to,
-                system=active_system,
-                branch_code=selected_branch,
-                group_code=selected_group,
-                limit=15,
-                force_fast=False,
-            )
-        branches = []
-        for row in payload.get('branches') or []:
-            branch = dict(row)
-            branch['sales_net_display'] = f"{float(branch.get('sales_net') or 0):,.2f}"
-            branch['cost_total_display'] = f"{float(branch.get('cost_total') or 0):,.2f}"
-            branch['profit_display'] = f"{float(branch.get('profit') or 0):,.2f}"
-            branch['qty_total_display'] = f"{float(branch.get('qty_total') or 0):,.2f}"
-            margin = branch.get('margin_pct')
-            branch['margin_pct_display'] = (
-                f"{float(margin):.2f}%" if margin is not None else '—'
-            )
-            branches.append(branch)
-        groups = []
-        for row in payload.get('groups') or []:
-            group = dict(row)
-            group['sales_net_display'] = f"{float(group.get('sales_net') or 0):,.2f}"
-            group['cost_total_display'] = f"{float(group.get('cost_total') or 0):,.2f}"
-            group['profit_display'] = f"{float(group.get('profit') or 0):,.2f}"
-            group['qty_total_display'] = f"{float(group.get('qty_total') or 0):,.2f}"
-            margin = group.get('margin_pct')
-            group['margin_pct_display'] = (
-                f"{float(margin):.2f}%" if margin is not None else '—'
-            )
-            groups.append(group)
-        return JsonResponse({'ok': True, 'branches': branches, 'groups': groups})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_margins_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
 
 @login_required
 @require_GET
@@ -2142,6 +968,162 @@ def browse_performance(request):
 @login_required
 @require_GET
 @never_cache
+def browse_sales(request):
+    """تحليل المبيعات — الفروع فوراً، والمجموعات تُحمَّل لاحقاً عبر API."""
+    from datetime import date
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    today = date.today()
+    error = ''
+    dashboard = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_sales.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': today.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_group': selected_group,
+                'branches': [],
+                'groups': [],
+                'dashboard': None,
+                'error': str(exc),
+                'browsed': False,
+                'groups_api_url': '',
+            },
+        )
+
+    try:
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .sales_dashboard import build_sales_branches
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن تحليل المبيعات.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True)
+                groups = fetch_sales_group_options()
+                branch_map: dict[str, str] = {}
+                for w in warehouses:
+                    brn = str(w.get('branch_code') or '').strip()
+                    if brn:
+                        branch_map[brn] = str(w.get('branch_name') or brn)
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
+                ]
+                branch_codes = {b['code'] for b in branches}
+                group_codes = {g['code'] for g in groups}
+                if selected_branch and selected_branch not in branch_codes:
+                    selected_branch = ''
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+
+            dashboard = build_sales_branches(
+                date_from,
+                date_to,
+                branch_code=selected_branch,
+                group_code=selected_group,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales failed: %s', exc)
+        error = f'تعذّر تحليل المبيعات: {exc}'
+        dashboard = None
+
+    groups_api_url = ''
+    if dashboard is not None:
+        qs = {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+        }
+        if selected_branch:
+            qs['branch'] = selected_branch
+        if selected_group:
+            qs['group'] = selected_group
+        groups_api_url = f"{reverse('browse_sales_groups_api')}?{urlencode(qs)}"
+
+    return render(
+        request,
+        'search/browse_sales.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': today.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'branches': branches,
+            'groups': groups,
+            'dashboard': dashboard,
+            'error': error,
+            'browsed': dashboard is not None,
+            'groups_api_url': groups_api_url,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_groups_api(request):
+    """تحميل لاحق لمبيعات المجموعات (تفاصيل الأصناف)."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    group_code = str(request.GET.get('group') or '').strip()
+
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_groups
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'},
+                status=400,
+            )
+        payload = build_sales_groups(
+            date_from,
+            date_to,
+            branch_code=branch_code,
+            group_code=group_code,
+        )
+        return JsonResponse({'ok': True, 'groups': payload})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_groups_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_inventory(request):
     """تحليل المخزون — إجماليات حسب المخازن والمجموعات والفروع."""
     error = ''
@@ -2214,7 +1196,14 @@ def browse_inventory(request):
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_inventory failed: %s', exc)
-        error = f'تعذّر تحليل المخزون: {exc}'
+        msg = str(exc or '').lower()
+        if 'interpreter shutdown' in msg or 'cannot schedule' in msg:
+            # غالباً بعد حفظ ملف وإعادة تحميل runserver أثناء الطلب الطويل
+            error = (
+                'أُعيد تحميل الخادم أثناء التحليل — حدّث الصفحة وأعد المحاولة.'
+            )
+        else:
+            error = f'تعذّر تحليل المخزون: {exc}'
         insights = None
 
     return render(
@@ -2231,7 +1220,6 @@ def browse_inventory(request):
             'error': error,
         },
     )
-
 
 @login_required
 @require_GET
@@ -2331,7 +1319,6 @@ def browse_purchases(request):
             'error': error,
         },
     )
-
 
 @login_required
 @require_GET
@@ -2484,7 +1471,6 @@ def browse_pr_compare(request):
         },
     )
 
-
 @login_required
 @require_GET
 @never_cache
@@ -2551,7 +1537,6 @@ def browse_pr_compare_detail(request):
             'error': error,
         },
     )
-
 
 @login_required
 @require_GET

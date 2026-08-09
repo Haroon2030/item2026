@@ -1067,21 +1067,6 @@ select:focus {
   color: #f5f3ff !important;
 }
 
-.page.sales-dash .dash-margins-groups {
-  background: linear-gradient(165deg, #f3eef8 0%, #e0d4ef 100%) !important;
-  border: 1px solid #b9a3d4 !important;
-}
-.page.sales-dash .dash-margins-groups .dash-panel-head {
-  background: rgba(91, 33, 182, 0.08);
-  border-bottom-color: #cbb8e0;
-}
-.page.sales-dash .dash-margins-groups .dash-panel-head h3 { color: #5b21b6 !important; }
-.page.sales-dash .dash-margins-groups .result-pill {
-  background: #6d28d9 !important;
-  border-color: #5b21b6 !important;
-  color: #f5f3ff !important;
-}
-
 /* جداول داخل البطاقات الملونة — واضحة القراءة */
 .page.sales-dash .dash-panel-glass .table-wrap,
 .page.sales-dash .dash-panel-glass .seller-board,
@@ -1215,6 +1200,34 @@ select:focus {
 .dash-tab.is-active .money,
 .dash-tab.is-active .sar-symbol {
   color: #e8f4fb !important;
+}
+
+.page.sales-dash .dash-analysis-tabs {
+  border-color: var(--line) !important;
+  background: linear-gradient(180deg, #fff 0%, var(--bg-soft) 100%) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.page.sales-dash .dash-analysis-tab {
+  color: var(--ink-soft) !important;
+  font-weight: 700 !important;
+}
+
+.page.sales-dash .dash-analysis-tab:hover {
+  background: var(--brand-soft) !important;
+  color: var(--brand-dark) !important;
+}
+
+.page.sales-dash .dash-analysis-tab.is-active {
+  background: #fff !important;
+  border-color: var(--line) !important;
+  color: var(--brand) !important;
+  box-shadow: 0 2px 8px rgba(14, 74, 110, 0.1) !important;
+}
+
+.page.sales-dash .dash-overview-stack,
+.page.sales-dash .dash-returns-stack {
+  gap: 0.95rem;
 }
 
 .result-pill {

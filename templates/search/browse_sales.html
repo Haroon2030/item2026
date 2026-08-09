@@ -2,29 +2,15 @@
 {% load money_fmt %}
 
 {% block title %}تحليل المبيعات{% endblock %}
-{% block page_class %}sales-dash{% endblock %}
+{% block page_class %}sales-dash sales-overview-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
 <section class="dash-head" aria-label="تحليل المبيعات">
   <div class="dash-head-copy">
     <h2>تحليل المبيعات</h2>
-    <p>نقاط البيع (نقد + بطائق) والآجل — أرقام منفصلة مطابقة لأونكس</p>
+    <p>نقاط البيع · الجملة (الآجل) · مبيعات المجموعات من نقاط البيع</p>
   </div>
-  <form method="get" action="{% url 'browse_sales' %}" class="dash-filter" role="search">
-    <input type="hidden" name="sys" value="{{ active_system }}">
-    {% if selected_branch %}<input type="hidden" name="branch" value="{{ selected_branch }}">{% endif %}
-    {% if selected_group %}<input type="hidden" name="group" value="{{ selected_group }}">{% endif %}
-    <div class="field">
-      <label for="date_from">من</label>
-      <input id="date_from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
-    </div>
-    <div class="field">
-      <label for="date_to">إلى</label>
-      <input id="date_to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
-    </div>
-    <button type="submit" class="btn-primary">تحديث</button>
-  </form>
 </section>
 
 {% if error %}
@@ -34,824 +20,269 @@
   </div>
 {% endif %}
 
-{% if browsed and kpi and active %}
-  <section
-    class="dash-kpi"
-    aria-label="ملخص الفترة"
-    {% if load_kpi_highlights %}
-    data-highlights-url="/sales/api/highlights/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-    {% endif %}
-  >
+{% if dashboard %}
+  {% if dashboard.scope_label and dashboard.scope_label != "كل الفروع والمجموعات" %}
+    <p class="sales-ov-scope">النطاق: {{ dashboard.scope_label }}</p>
+  {% endif %}
+  <section class="sales-ov-kpis" aria-label="ملخص نقاط البيع">
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-pos">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 17v2h10v-2"/><path d="M7 9h4M7 12h2"/><circle cx="16.5" cy="10.5" r="1.2"/></svg>
+        <span class="dash-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 17v2h10v-2"/><path d="M7 9h4M7 12h2"/></svg>
         </span>
-        نقاط البيع
+        مبيعات نقاط البيع
       </span>
-      <strong class="dash-kpi-value mono">{% money kpi.pos_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ kpi.pos_invoices }} فاتورة</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_sales %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_invoices }} فاتورة · {{ dashboard.kpis.pos_branches }} فرع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v5l3 2"/></svg>
+        <span class="dash-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
         </span>
-        إجمالي المرتجع
+        مرتجع نقاط البيع
       </span>
-      <strong class="dash-kpi-value mono">{% money kpi.pos_returns %}</strong>
-      <span class="dash-kpi-hint mono">{{ kpi.pos_return_bills }} فاتورة مرتجع · نقاط البيع</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_returns %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_return_bills }} فاتورة مرتجع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
+        <span class="dash-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
         </span>
-        الآجل
+        مبيعات الجملة
       </span>
-      <strong class="dash-kpi-value mono">{% money kpi.wholesale_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ kpi.wholesale_invoices }} فاتورة</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_sales %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة · {{ dashboard.kpis.wholesale_branches }} فرع</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total dash-kpi-accent">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
+        <span class="dash-kpi-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
         </span>
-        الإجمالي الكلي
+        الإجمالي (نقاط + جملة)
       </span>
-      <strong class="dash-kpi-value mono">{% money kpi.total_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ kpi.total_invoices }} فاتورة</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-sellers">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-sellers" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.8-3 2.9-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><circle cx="17" cy="9" r="2.4"/><path d="M14.2 19c.5-2 1.8-3.2 3.6-3.2 1.2 0 2.2.5 2.9 1.4"/></svg>
-        </span>
-        البائعون النشطون
-      </span>
-      <strong class="dash-kpi-value mono">{{ kpi.seller_count }}</strong>
-      <span class="dash-kpi-hint">مستخدم · {{ kpi.seller_system_label }}</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-devices">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-devices" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M10 18h4"/><path d="M9 7h6M9 10.5h6M9 14h4"/></svg>
-        </span>
-        الأجهزة النشطة
-      </span>
-      <strong class="dash-kpi-value mono">{{ kpi.device_count }}</strong>
-      <span class="dash-kpi-hint">جهاز · {{ kpi.seller_system_label }}</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-branches">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-branches" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M9 11h.01M15 11h.01"/></svg>
-        </span>
-        الفروع النشطة
-      </span>
-      <strong class="dash-kpi-value mono">{{ kpi.branch_count }}</strong>
-      <span class="dash-kpi-hint">{{ date_from }} → {{ date_to }}</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-visit dash-kpi-ranked">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-visit" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.2-6.5-10A6.5 6.5 0 0 1 12 4.5 6.5 6.5 0 0 1 18.5 11c0 4.8-6.5 10-6.5 10z"/><circle cx="12" cy="11" r="2.2"/></svg>
-        </span>
-        <span class="dash-kpi-label-text">الفرع الأكثر زيارة</span>
-        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
-      </span>
-      <strong class="dash-kpi-value">{{ kpi.top_visit_branch }}</strong>
-      <span class="dash-kpi-hint mono">{{ kpi.top_visit_invoices }} زيارة · نقاط البيع</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-amt dash-kpi-ranked">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-item-amt" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M7 8h7.5a2.5 2.5 0 0 1 0 5H9a2.5 2.5 0 0 0 0 5H17"/></svg>
-        </span>
-        <span class="dash-kpi-label-text">الصنف الأكثر مبيعاً</span>
-        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
-      </span>
-      <strong class="dash-kpi-value" id="kpi-item-amt-name" title="{{ kpi.top_item_amount_code }}">{{ kpi.top_item_amount_name }}</strong>
-      <span class="dash-kpi-hint mono" id="kpi-item-amt-hint">{% money kpi.top_item_amount_value %} مبلغ</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty dash-kpi-ranked">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-item-qty" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
-        </span>
-        <span class="dash-kpi-label-text">الصنف الأكثر سحباً</span>
-        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
-      </span>
-      <strong class="dash-kpi-value" id="kpi-item-qty-name" title="{{ kpi.top_item_qty_code }}">{{ kpi.top_item_qty_name }}</strong>
-      <span class="dash-kpi-hint mono" id="kpi-item-qty-hint">{{ kpi.top_item_qty_value }} كمية</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret dash-kpi-ranked">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-item-ret" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v5l3 2"/></svg>
-        </span>
-        <span class="dash-kpi-label-text">الصنف الأكثر إرجاعاً</span>
-        <span class="dash-kpi-rank" title="المرتبة الأولى" aria-label="المرتبة 1">1</span>
-      </span>
-      <strong class="dash-kpi-value" id="kpi-item-ret-name" title="{{ kpi.top_item_return_code }}">{{ kpi.top_item_return_name }}</strong>
-      <span class="dash-kpi-hint mono" id="kpi-item-ret-hint">{% money kpi.top_item_return_value %} مبلغ مرتجع · {{ kpi.seller_system_label }}</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_sales %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · {{ dashboard.period_label }}</span>
     </article>
   </section>
+{% endif %}
 
-  <nav class="dash-tabs" aria-label="نظام المبيعات">
-    {% for sys in systems %}
-      <a
-        class="dash-tab {% if sys.key == active_system %}is-active{% endif %}"
-        href="?sys={{ sys.key }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-      >
-        {{ sys.label }}
-        <span class="mono">{% money sys.grand_sales %}</span>
-      </a>
-    {% endfor %}
-  </nav>
+<form method="get" action="{% url 'browse_sales' %}" class="sales-ov-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="sales-from">من</label>
+    <input id="sales-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="sales-to">إلى</label>
+    <input id="sales-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="sales-branch">الفرع</label>
+    <select id="sales-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="sales-group">المجموعة</label>
+    <select id="sales-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">تحليل المبيعات</button>
+</form>
 
-  <section class="dash-grid {% if active.daily_mode %}is-daily{% endif %}" aria-label="{{ active.label }}">
-    <div class="dash-main-col">
-      <div class="dash-panel dash-branches dash-panel-glass" id="dash-branches">
-        <div class="dash-panel-head">
-          <div class="dash-branches-title">
-            {% if active.daily_mode %}
-              <h3>{{ active.selected_branch_name }} — يومي</h3>
-            {% else %}
-              <h3>الفروع — {{ active.label }}</h3>
-            {% endif %}
-          </div>
-          <div class="dash-panel-head-actions">
-            <form method="get" action="{% url 'browse_sales' %}" class="dash-branch-filter">
-              <input type="hidden" name="sys" value="{{ active_system }}">
-              <input type="hidden" name="date_from" value="{{ date_from }}">
-              <input type="hidden" name="date_to" value="{{ date_to }}">
-              {% if selected_group %}<input type="hidden" name="group" value="{{ selected_group }}">{% endif %}
-              <label class="sr-only" for="branch-filter">الفرع</label>
-              <select id="branch-filter" name="branch">
-                <option value="">كل الفروع</option>
-                {% for b in active.branches %}
-                  <option value="{{ b.code }}" {% if b.code == active.selected_branch %}selected{% endif %}>{{ b.name }}</option>
-                {% endfor %}
-              </select>
-              <button type="submit" class="sales-view-btn">عرض</button>
-            </form>
-            <span class="result-pill mono">
-              {% if active.daily_mode %}{{ active.day_count }} يوم · {% endif %}
-              {{ active.grand_invoices_display }} فاتورة
-            </span>
-            <button
-              type="button"
-              class="sales-cols-toggle"
-              id="sales-cols-toggle"
-              aria-controls="sales-branches-table"
-              aria-expanded="false"
-              title="إظهار كل الأعمدة"
-            >كل الأعمدة</button>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table sales-table" id="sales-branches-table" aria-label="{% if active.daily_mode %}أيام {{ active.selected_branch_name }}{% else %}فروع {{ active.label }}{% endif %}">
-            <thead>
-              <tr>
-                <th>#</th>
-                {% if active.daily_mode %}
-                  <th>اليوم</th>
-                {% else %}
-                  <th>الفرع</th>
-                {% endif %}
-                <th>فواتير المبيعات</th>
-                <th>إجمالي المبيعات</th>
-                <th>الصافي بعد المرتجع</th>
-                <th>متوسط السلة</th>
-                <th class="sales-col-extra">الصافي قبل الضريبة</th>
-                <th class="sales-col-extra">الضريبة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in active.rows %}
-                <tr>
-                  <td class="mono">{{ forloop.counter }}</td>
-                  {% if active.daily_mode %}
-                    <td class="mono">{{ row.day_display }}</td>
-                  {% else %}
-                    <td>{{ row.branch_name }}</td>
-                  {% endif %}
-                  <td class="mono">
-                    <button
-                      type="button"
-                      class="sales-num-btn"
-                      data-sales-cols-toggle
-                      aria-controls="sales-branches-table"
-                      title="إظهار كل الأعمدة"
-                    >{{ row.invoice_count_display }}</button>
-                  </td>
-                  <td class="mono sales-amt sales-amt-gross">{% money row.gross_total_display %}</td>
-                  <td class="mono sales-amt sales-amt-net">{% money row.sales_total_display %}</td>
-                  <td class="mono sales-amt sales-amt-avg">{% money row.avg_basket_display %}</td>
-                  <td class="mono sales-amt sales-col-extra">{% money row.net_total_display %}</td>
-                  <td class="mono sales-amt sales-col-extra">{% money row.vat_total_display %}</td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="8" class="sales-empty">لا توجد فواتير في هذه الفترة.</td></tr>
-              {% endfor %}
-            </tbody>
-            {% if active.rows %}
-              <tfoot>
-                <tr class="sales-grand-row">
-                  <td colspan="2">الإجمالي</td>
-                  <td class="mono">{{ active.grand_invoices_display }}</td>
-                  <td class="mono sales-amt sales-amt-gross">{% money active.grand_gross %}</td>
-                  <td class="mono sales-amt sales-amt-net">{% money active.grand_sales %}</td>
-                  <td class="mono sales-amt sales-amt-avg">{% money active.grand_avg_basket %}</td>
-                  <td class="mono sales-amt sales-col-extra">{% money active.grand_net %}</td>
-                  <td class="mono sales-amt sales-col-extra">{% money active.grand_vat %}</td>
-                </tr>
-              </tfoot>
-            {% endif %}
-          </table>
-        </div>
-      </div>
-
-      {% if group_panel %}
-        <div class="dash-panel dash-groups dash-panel-glass" id="dash-groups" aria-label="المبيعات حسب المجموعة"
-          {% if defer_heavy %}
-          data-groups-url="/sales/api/groups/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-          data-panels-url="/sales/api/panels/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-          data-groups-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
-          data-date-from="{{ date_from }}"
-          data-date-to="{{ date_to }}"
-          {% endif %}
-        >
-          <div class="dash-panel-head">
-            <div class="dash-branches-title">
-              {% if group_panel.by_branch %}
-                <h3>{{ group_panel.selected_group_name }} — حسب الفروع</h3>
-              {% else %}
-                <h3>المجموعات — {{ active.label }}</h3>
-              {% endif %}
-            </div>
-            <div class="dash-panel-head-actions">
-              <form method="get" action="{% url 'browse_sales' %}" class="dash-branch-filter">
-                <input type="hidden" name="sys" value="{{ active_system }}">
-                <input type="hidden" name="date_from" value="{{ date_from }}">
-                <input type="hidden" name="date_to" value="{{ date_to }}">
-                <label class="sr-only" for="group-branch-filter">الفرع</label>
-                <select id="group-branch-filter" name="branch">
-                  <option value="">كل الفروع</option>
-                  {% for b in active.branches %}
-                    <option value="{{ b.code }}" {% if b.code == group_panel.selected_branch %}selected{% endif %}>{{ b.name }}</option>
-                  {% endfor %}
-                </select>
-                <label class="sr-only" for="group-filter">المجموعة</label>
-                <select id="group-filter" name="group">
-                  <option value="">كل المجموعات</option>
-                  {% for g in group_panel.groups %}
-                    <option value="{{ g.code }}" {% if g.code == group_panel.selected_group %}selected{% endif %}>{{ g.name }}</option>
-                  {% endfor %}
-                </select>
-                <button type="submit" class="sales-view-btn">عرض</button>
-              </form>
-              <span class="result-pill mono" id="groups-result-pill">
-                {% if defer_heavy %}…{% else %}{{ group_panel.rows|length }} صف · {{ group_panel.grand_invoices_display }} فاتورة{% endif %}
-              </span>
-            </div>
-          </div>
-          <div class="table-wrap" id="sales-groups-body-wrap">
-            {% if defer_heavy %}
-              <p class="sales-empty dash-loading" id="groups-loading">جاري تحميل المجموعات…</p>
-              <table class="data-table sales-table" id="sales-groups-table" aria-label="مبيعات المجموعات" hidden>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>المجموعة</th>
-                    <th id="groups-branch-th">{% if group_panel.by_branch %}الفرع{% else %}الفروع{% endif %}</th>
-                    <th>فواتير المبيعات</th>
-                    <th>إجمالي المبيعات</th>
-                    <th>المبيعات (بدون خصم مرتجع)</th>
-                    <th title="مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
-                    <th class="sales-col-extra">الكمية</th>
-                    <th class="sales-col-extra">الصافي قبل الضريبة</th>
-                    <th class="sales-col-extra">الضريبة</th>
-                  </tr>
-                </thead>
-                <tbody id="sales-groups-tbody"></tbody>
-                <tfoot id="sales-groups-tfoot" hidden></tfoot>
-              </table>
-            {% else %}
-            <table class="data-table sales-table" id="sales-groups-table" aria-label="مبيعات المجموعات">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>المجموعة</th>
-                  {% if group_panel.by_branch %}
-                    <th>الفرع</th>
-                  {% else %}
-                    <th>الفروع</th>
-                  {% endif %}
-                  <th>فواتير المبيعات</th>
-                  <th>إجمالي المبيعات</th>
-                  <th>المبيعات (بدون خصم مرتجع)</th>
-                  <th title="مبيعات المجموعة ÷ فواتير لمست أصنافها">متوسط المجموعة</th>
-                  <th class="sales-col-extra">الكمية</th>
-                  <th class="sales-col-extra">الصافي قبل الضريبة</th>
-                  <th class="sales-col-extra">الضريبة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in group_panel.rows %}
-                  <tr>
-                    <td class="mono">{{ forloop.counter }}</td>
-                    <td>{{ row.group_name }}</td>
-                    <td>{% if group_panel.by_branch or group_panel.selected_branch %}{{ row.branch_name }}{% else %}كل الفروع{% endif %}</td>
-                    <td class="mono">
-                      <button
-                        type="button"
-                        class="sales-num-btn"
-                        data-sales-cols-toggle
-                        aria-controls="sales-groups-table"
-                        title="إظهار كل الأعمدة"
-                      >{{ row.invoice_count_display }}</button>
-                    </td>
-                    <td class="mono sales-amt sales-amt-gross">{% money row.gross_total_display %}</td>
-                    <td class="mono sales-amt sales-amt-net">{% money row.sales_total_display %}</td>
-                    <td class="mono sales-amt sales-amt-avg">{% money row.avg_basket_display %}</td>
-                    <td class="mono sales-col-extra">{{ row.qty_total_display }}</td>
-                    <td class="mono sales-amt sales-col-extra">{% money row.net_total_display %}</td>
-                    <td class="mono sales-amt sales-col-extra">{% money row.vat_total_display %}</td>
-                  </tr>
-                {% empty %}
-                  <tr><td colspan="10" class="sales-empty">لا توجد مبيعات مجموعات في هذه الفترة.</td></tr>
-                {% endfor %}
-              </tbody>
-              {% if group_panel.rows %}
-                <tfoot>
-                  <tr class="sales-grand-row">
-                    <td colspan="3">{% if group_panel.by_branch %}إجمالي المجموعة{% else %}الإجمالي{% endif %}</td>
-                    <td class="mono">{{ group_panel.grand_invoices_display }}</td>
-                    <td class="mono sales-amt sales-amt-gross">{% money group_panel.grand_gross %}</td>
-                    <td class="mono sales-amt sales-amt-net">{% money group_panel.grand_sales %}</td>
-                    <td class="mono sales-amt sales-amt-avg">{% money group_panel.grand_avg_basket %}</td>
-                    <td class="mono sales-col-extra">{{ group_panel.grand_qty_display }}</td>
-                    <td class="mono sales-amt sales-col-extra">{% money group_panel.grand_net %}</td>
-                    <td class="mono sales-amt sales-col-extra">{% money group_panel.grand_vat %}</td>
-                  </tr>
-                </tfoot>
-              {% endif %}
-            </table>
-            {% endif %}
-          </div>
-          <p class="dash-branches-sub" id="groups-fast-note" hidden style="padding:0.35rem 0.85rem 0.7rem">صفوف المجموعات من تفاصيل الأصناف. إجمالي التذييل من رأس الفاتورة مثل جدول الفروع وأونكس. المرتجعات في الجدول أسفل. «متوسط المجموعة» = مبيعات المجموعة ÷ فواتيرها.</p>
-        </div>
-      {% endif %}
-    </div>
-
-    <div class="dash-side-col">
-      <aside
-        class="dash-panel dash-top-items dash-panel-glass"
-        aria-label="الأصناف الأكثر مبيعاً"
-        id="dash-top-items"
-        data-items-url="/sales/api/items/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-        {% if defer_heavy %}
-        data-items-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
-        data-date-from="{{ date_from }}"
-        data-date-to="{{ date_to }}"
-        data-panels-url="/sales/api/panels/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-        {% endif %}
-      >
-        <div class="dash-panel-head">
-          <div class="dash-sellers-title">
-            <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg>
-            </span>
-            <div>
-              <h3>الأصناف الأكثر مبيعاً</h3>
-            </div>
-          </div>
-          <div class="dash-panel-head-actions">
-            <div class="dash-branch-filter" data-side-filter="items">
-              <label class="sr-only" for="side-items-branch">الفرع</label>
-              <select id="side-items-branch">
-                <option value="">كل الفروع</option>
-                {% for b in active.branches %}
-                  <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-                {% endfor %}
-              </select>
-              <button type="button" class="sales-view-btn" data-side-apply="items">عرض</button>
-            </div>
-            <span class="result-pill" id="items-pill">أعلى 20</span>
-          </div>
-        </div>
-        <p class="sales-empty dash-loading" id="items-loading"{% if not defer_heavy and top_items %} hidden{% endif %}>{% if defer_heavy or not top_items %}جاري تحميل الأصناف…{% endif %}</p>
-        <div class="seller-board" id="items-board" role="list">
-          {% if not defer_heavy and top_items %}
-            {% for item in top_items %}
-              <div
-                class="seller-card rank-{{ forloop.counter }}"
-                role="listitem"
-                style="--bar-pct: {{ item.share_pct }}%; --i: {{ forloop.counter0 }}"
-              >
-                <span class="seller-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
-                <span class="seller-body">
-                  <span class="seller-name" title="{{ item.item_name }} — {{ item.item_code }}">{{ item.item_name }}</span>
-                  <span class="seller-meta">
-                    <span class="seller-meta-inv mono">{{ item.qty_total_display }} كمية</span>
-                    <span class="seller-meta-code mono">{{ item.invoice_count }} سطر</span>
-                  </span>
-                  <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
-                </span>
-                <span class="seller-side">
-                  {% money item.sales_total_display "seller-amt mono money" %}
-                  <span class="seller-pct mono">{{ item.share_pct }}%</span>
-                </span>
-              </div>
-            {% endfor %}
-          {% endif %}
-        </div>
-      </aside>
-
-      <aside
-        class="dash-panel dash-sellers dash-panel-glass"
-        aria-label="الأكثر مبيعاً"
-        id="dash-top-sellers"
-        data-users-url="/sales/api/users/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
-      >
-        <div class="dash-panel-head">
-          <div class="dash-sellers-title">
-            <span class="dash-sellers-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
-            </span>
-            <div>
-              <h3>الأكثر مبيعاً</h3>
-            </div>
-          </div>
-          <div class="dash-panel-head-actions">
-            <div class="dash-branch-filter" data-side-filter="sellers">
-              <label class="sr-only" for="side-sellers-branch">الفرع</label>
-              <select id="side-sellers-branch">
-                <option value="">كل الفروع</option>
-                {% for b in active.branches %}
-                  <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-                {% endfor %}
-              </select>
-              <button type="button" class="sales-view-btn" data-side-apply="sellers">عرض</button>
-            </div>
-            <span class="result-pill" id="sellers-pill">أعلى 8</span>
-          </div>
-        </div>
-        <p class="sales-empty dash-loading" id="sellers-loading" hidden></p>
-        <div class="seller-board" id="sellers-board" role="list">
-          {% if active.top_users %}
-            {% for u in active.top_users %}
-              <a
-                class="seller-card rank-{{ forloop.counter }} {% if u.user_code == active.selected_user_code %}is-active{% endif %}"
-                href="?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}&amp;user_id={{ u.user_code }}#invoices"
-                role="listitem"
-                style="--bar-pct: {{ u.share_pct }}%; --i: {{ forloop.counter0 }}"
-                data-user-code="{{ u.user_code }}"
-              >
-                <span class="seller-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
-                <span class="seller-body">
-                  <span class="seller-name" title="{{ u.user_name }} — {{ u.user_code }}">{{ u.user_name }}</span>
-                  <span class="seller-meta">
-                    <span class="seller-meta-inv mono">{{ u.invoice_count }} فاتورة</span>
-                    <span class="seller-meta-code mono">#{{ u.user_code }}</span>
-                  </span>
-                  <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
-                </span>
-                <span class="seller-side">
-                  {% money u.sales_total_display "seller-amt mono money" %}
-                  <span class="seller-pct mono">{{ u.share_pct }}%</span>
-                </span>
-              </a>
-            {% endfor %}
-          {% else %}
-            <p class="sales-empty">لا يوجد مستخدمون في هذه الفترة.</p>
-          {% endif %}
-        </div>
-      </aside>
-    </div>
-  </section>
-
-  <section
-    class="dash-returns-pair"
-    id="dash-returns-pair"
-    aria-label="مرتجعات المجموعات والأصناف"
-  >
-    {% if group_panel %}
-    <div class="dash-panel dash-group-returns dash-panel-glass" id="dash-group-returns" aria-label="مرتجعات المجموعات"
-      data-returns-url="/sales/api/group-returns/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if group_panel.selected_branch %}&amp;branch={{ group_panel.selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-    >
+{% if dashboard %}
+  <section class="sales-ov-grid" aria-label="تفصيل المبيعات">
+    <section class="dash-panel dash-panel-glass sales-ov-panel" aria-label="مبيعات نقاط البيع حسب الفروع">
       <div class="dash-panel-head">
-        <div class="dash-branches-title">
-          <h3>مرتجعات المجموعات{% if active %} — {{ active.label }}{% endif %}</h3>
+        <div>
+          <h3>مبيعات نقاط البيع</h3>
+          <p class="sales-ov-sub">حسب الفروع · متوسط السلة {% money dashboard.pos.totals.avg_basket_display %}</p>
         </div>
-        <div class="dash-panel-head-actions">
-          <span class="result-pill mono" id="group-returns-pill">…</span>
-        </div>
+        <span class="result-pill">{{ dashboard.pos.branches|length }}</span>
       </div>
-      <div class="table-wrap dash-returns-body">
-        <p class="sales-empty dash-loading" id="group-returns-loading">جاري تحميل مرتجعات المجموعات…</p>
-        <table class="data-table sales-table" id="sales-group-returns-table" aria-label="مرتجعات المجموعات" hidden>
+      <div class="table-wrap sales-ov-scroll">
+        <table class="data-table sales-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>المجموعة</th>
-              <th>فواتير المرتجع</th>
-              <th>إجمالي المرتجع</th>
-              <th class="sales-col-extra">الكمية</th>
-              <th class="sales-col-extra">الصافي قبل الضريبة</th>
-              <th class="sales-col-extra">الضريبة</th>
+              <th>الفرع</th>
+              <th>الفواتير</th>
+              <th>المرتجع</th>
+              <th>المبيعات</th>
+              <th>الحصة</th>
             </tr>
           </thead>
-          <tbody id="sales-group-returns-tbody"></tbody>
-          <tfoot id="sales-group-returns-tfoot" hidden></tfoot>
+          <tbody>
+            {% for row in dashboard.pos.branches %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
+                <td class="mono">{{ row.invoice_count_display }}</td>
+                <td class="mono">{% money row.return_total_display %}</td>
+                <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                <td class="mono">{{ row.share_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="sales-empty">لا مبيعات نقاط بيع في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if dashboard.pos.branches %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono">{{ dashboard.pos.totals.invoice_count_display }}</td>
+                <td class="mono">{% money dashboard.pos.totals.return_total_display %}</td>
+                <td class="mono sales-amt">{% money dashboard.pos.totals.sales_total_display %}</td>
+                <td class="mono">100%</td>
+              </tr>
+            </tfoot>
+          {% endif %}
         </table>
       </div>
-      <p class="dash-branches-sub" style="padding:0.35rem 0.85rem 0.7rem">جدول مستقل لمرتجعات كل مجموعة — لا يُخصم من جدول المبيعات أعلاه.</p>
-    </div>
-    {% endif %}
+    </section>
 
-    <div class="dash-panel dash-chart-items dash-panel-glass" aria-label="الأصناف الأكثر إرجاعاً">
+    <section class="dash-panel dash-panel-glass sales-ov-panel" aria-label="مبيعات الجملة حسب الفروع">
       <div class="dash-panel-head">
-        <div class="dash-sellers-title">
-          <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/></svg>
-          </span>
-          <div>
-            <h3>الأصناف الأكثر إرجاعاً</h3>
-          </div>
+        <div>
+          <h3>مبيعات الجملة</h3>
+          <p class="sales-ov-sub">الآجل من فواتير أونكس · حسب الفروع</p>
         </div>
-        <div class="dash-panel-head-actions">
-          <div class="dash-branch-filter" data-chart-filter="returns">
-            <label class="sr-only" for="chart-ret-branch">الفرع</label>
-            <select id="chart-ret-branch">
-              <option value="">كل الفروع</option>
-              {% for b in active.branches %}
-                <option value="{{ b.code }}">{{ b.name }}</option>
-              {% endfor %}
-            </select>
-            <label class="sr-only" for="chart-ret-group">المجموعة</label>
-            <select id="chart-ret-group">
-              <option value="">كل المجموعات</option>
-              {% for g in group_panel.groups %}
-                <option value="{{ g.code }}">{{ g.name }}</option>
-              {% endfor %}
-            </select>
-            <button type="button" class="sales-view-btn" data-chart-apply="returns">عرض</button>
-          </div>
-          <span class="result-pill" id="chart-returns-pill">أعلى 20</span>
-        </div>
+        <span class="result-pill">{{ dashboard.wholesale.branches|length }}</span>
       </div>
-      <p class="sales-empty dash-loading" id="chart-items-loading"{% if not defer_heavy %} hidden{% endif %}>{% if defer_heavy %}جاري تحميل المرتجعات…{% endif %}</p>
-      <div class="seller-board top20-chart perf-inv-chart is-scroll" id="chart-items-board" role="list"></div>
-    </div>
-  </section>
-
-  <section
-    class="dash-branch-margin-pair"
-    id="dash-branch-margin-pair"
-    aria-label="مرتجعات الفروع وهامش ربح الفروع"
-  >
-    <div
-      class="dash-panel dash-branch-chart dash-panel-glass"
-      id="dash-charts"
-      aria-label="الفروع الأكثر إرجاعاً"
-      data-charts-url="/sales/api/charts/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
-    >
-      <div class="dash-panel-head">
-        <div class="dash-sellers-title">
-          <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
-          </span>
-          <div>
-            <h3>الفروع الأكثر إرجاعاً</h3>
-          </div>
-        </div>
-        <div class="dash-panel-head-actions">
-          <div class="dash-branch-filter" data-chart-filter="branches">
-            <label class="sr-only" for="chart-br-branch">الفرع</label>
-            <select id="chart-br-branch">
-              <option value="">كل الفروع</option>
-              {% for b in active.branches %}
-                <option value="{{ b.code }}">{{ b.name }}</option>
-              {% endfor %}
-            </select>
-            <label class="sr-only" for="chart-br-group">المجموعة</label>
-            <select id="chart-br-group">
-              <option value="">كل المجموعات</option>
-              {% for g in group_panel.groups %}
-                <option value="{{ g.code }}">{{ g.name }}</option>
-              {% endfor %}
-            </select>
-            <button type="button" class="sales-view-btn" data-chart-apply="branches">عرض</button>
-          </div>
-          <span class="result-pill" id="chart-branches-pill">أعلى {{ active.chart_branches|length }}</span>
-        </div>
-      </div>
-      <p class="sales-empty dash-loading" id="chart-branches-loading" hidden>جاري تحديث الفروع…</p>
-      {{ active.chart_branches|json_script:"chart-branches-seed" }}
-      <div class="branch-chart branch-donut" id="chart-branches-board" role="list"{% if not active.chart_branches %} hidden{% endif %}></div>
-      {% if not active.chart_branches %}
-        <p class="sales-empty" id="chart-branches-empty">لا توجد فروع في هذه الفترة.</p>
-      {% endif %}
-    </div>
-
-    <div
-      class="dash-panel dash-panel-glass dash-margins dash-margins-branches"
-      aria-label="هامش ربح الفروع"
-      id="dash-margins"
-      data-margins-url="/sales/api/margins/?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}"
-      {% if defer_heavy %}
-      data-margins-progressive="{% if sales_progressive %}1{% else %}0{% endif %}"
-      data-date-from="{{ date_from }}"
-      data-date-to="{{ date_to }}"
-      {% endif %}
-    >
-      <div class="dash-panel-head">
-        <div class="dash-sellers-title">
-          <span class="dash-sellers-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg>
-          </span>
-          <div>
-            <h3>هامش ربح الفروع</h3>
-          </div>
-        </div>
-        <div class="dash-panel-head-actions">
-          <div class="dash-branch-filter" data-margin-filter="branches">
-            <label class="sr-only" for="margin-br-branch">الفرع</label>
-            <select id="margin-br-branch">
-              <option value="">كل الفروع</option>
-              {% for b in active.branches %}
-                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-              {% endfor %}
-            </select>
-            <label class="sr-only" for="margin-br-group">المجموعة</label>
-            <select id="margin-br-group">
-              <option value="">كل المجموعات</option>
-              {% for g in group_panel.groups %}
-                <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
-              {% endfor %}
-            </select>
-            <button type="button" class="sales-view-btn" data-margin-apply="branches">عرض</button>
-          </div>
-          <span class="result-pill" id="margin-branches-pill">كل الفروع</span>
-        </div>
-      </div>
-      <p class="sales-empty dash-loading" id="margin-branches-loading">جاري تحميل هامش الفروع…</p>
-      <div class="margin-table-block" id="margin-branches-block" hidden>
-        <div class="table-wrap margin-scroll" id="margin-branches-wrap">
-          <table class="data-table sales-table" aria-label="هامش ربح الفروع">
-            <colgroup>
-              <col class="m-col-idx" />
-              <col class="m-col-name" />
-              <col class="m-col-num" />
-              <col class="m-col-num" />
-              <col class="m-col-num" />
-              <col class="m-col-num" />
-            </colgroup>
-            <thead>
+      <div class="table-wrap sales-ov-scroll">
+        <table class="data-table sales-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الفرع</th>
+              <th>الفواتير</th>
+              <th>المرتجع</th>
+              <th>المبيعات</th>
+              <th>الحصة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in dashboard.wholesale.branches %}
               <tr>
-                <th>#</th>
-                <th>الفرع</th>
-                <th>صافي الفاتورة</th>
-                <th>التكلفة</th>
-                <th>هامش الربح</th>
-                <th>نسبة الربح</th>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
+                <td class="mono">{{ row.invoice_count_display }}</td>
+                <td class="mono">{% money row.return_total_display %}</td>
+                <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                <td class="mono">{{ row.share_display }}</td>
               </tr>
-            </thead>
-            <tbody id="margin-branches-body"></tbody>
-            <tfoot id="margin-branches-totals" aria-label="إجمالي الفروع" hidden></tfoot>
-          </table>
-        </div>
+            {% empty %}
+              <tr><td colspan="6" class="sales-empty">لا مبيعات جملة في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if dashboard.wholesale.branches %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono">{{ dashboard.wholesale.totals.invoice_count_display }}</td>
+                <td class="mono">{% money dashboard.wholesale.totals.return_total_display %}</td>
+                <td class="mono sales-amt">{% money dashboard.wholesale.totals.sales_total_display %}</td>
+                <td class="mono">100%</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
       </div>
-      <p class="sales-empty" id="margin-branches-empty" hidden>لا بيانات هامش فروع لهذه الفترة.</p>
-    </div>
-  </section>
+    </section>
 
-  <section
-    class="dash-margins dash-margins-groups-only"
-    id="dash-margins-groups"
-    aria-label="هامش ربح المجموعات"
-  >
-    <div class="dash-panel dash-panel-glass dash-margins-groups" aria-label="هامش ربح المجموعات">
-      <div class="dash-panel-head">
-        <div class="dash-sellers-title">
-          <span class="dash-sellers-mark dash-items-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 6h7v7H4zM13 6h7v4h-7zM13 12h7v6h-7zM4 15h7v3H4z"/></svg>
-          </span>
+    <div class="sales-ov-bottom" aria-label="المجموعات والمرتجعات">
+      {% if groups_api_url %}{{ groups_api_url|json_script:"sales-groups-url" }}{% endif %}
+      <section
+        class="dash-panel dash-panel-glass sales-ov-panel sales-ov-groups"
+        aria-label="مبيعات المجموعات"
+        id="sales-groups-panel"
+      >
+        <div class="dash-panel-head">
           <div>
-            <h3>هامش ربح المجموعات</h3>
+            <h3>مبيعات المجموعات</h3>
+            <p class="sales-ov-sub" id="sales-groups-sub">
+              {% if dashboard.groups_pending %}
+                نقاط البيع · جاري التحميل…
+              {% else %}
+                نقاط البيع · {{ dashboard.kpis.group_count }} مجموعة · إجمالي {% money dashboard.kpis.group_sales %}
+              {% endif %}
+            </p>
           </div>
+          <span class="result-pill" id="sales-groups-pill">{% if dashboard.groups_pending %}…{% else %}{{ dashboard.groups.rows|length }}{% endif %}</span>
         </div>
-        <div class="dash-panel-head-actions">
-          <div class="dash-branch-filter" data-margin-filter="groups">
-            <label class="sr-only" for="margin-gr-branch">الفرع</label>
-            <select id="margin-gr-branch">
-              <option value="">كل الفروع</option>
-              {% for b in active.branches %}
-                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-              {% endfor %}
-            </select>
-            <label class="sr-only" for="margin-gr-group">المجموعة</label>
-            <select id="margin-gr-group">
-              <option value="">كل المجموعات</option>
-              {% for g in group_panel.groups %}
-                <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
-              {% endfor %}
-            </select>
-            <button type="button" class="sales-view-btn" data-margin-apply="groups">عرض</button>
-          </div>
-          <span class="result-pill" id="margin-groups-pill">كل المجموعات</span>
-        </div>
-      </div>
-      <p class="sales-empty dash-loading" id="margin-groups-loading">جاري تحميل هامش المجموعات…</p>
-      <div class="margin-table-block" id="margin-groups-block" hidden>
-        <div class="table-wrap margin-scroll" id="margin-groups-wrap">
-          <table class="data-table sales-table" aria-label="هامش ربح المجموعات">
-            <colgroup>
-              <col class="m-col-idx" />
-              <col class="m-col-name" />
-              <col class="m-col-num" />
-              <col class="m-col-num" />
-              <col class="m-col-num" />
-              <col class="m-col-num" />
-            </colgroup>
+        <div class="table-wrap sales-ov-scroll">
+          <table class="data-table sales-table">
             <thead>
               <tr>
                 <th>#</th>
                 <th>المجموعة</th>
-                <th>صافي الفاتورة</th>
-                <th>التكلفة</th>
-                <th>هامش الربح</th>
-                <th>نسبة الربح</th>
+                <th>الفواتير</th>
+                <th>الكمية</th>
+                <th>المبيعات</th>
+                <th>الحصة</th>
               </tr>
             </thead>
-            <tbody id="margin-groups-body"></tbody>
-            <tfoot id="margin-groups-totals" aria-label="إجمالي المجموعات" hidden></tfoot>
-          </table>
-        </div>
-      </div>
-      <p class="sales-empty" id="margin-groups-empty" hidden>لا بيانات هامش مجموعات لهذه الفترة.</p>
-    </div>
-  </section>
-
-  {% if active.selected_user_code %}
-    <section class="dash-panel dash-invoices dash-panel-glass" id="invoices" aria-label="فواتير المستخدم">
-      <div class="dash-panel-head">
-        <div>
-          <h3>فواتير {{ active.selected_user_name }}</h3>
-        </div>
-        <a
-          class="sales-invoice-link"
-          href="?sys={{ active_system }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}{% if selected_group %}&amp;group={{ selected_group }}{% endif %}"
-        >إغلاق</a>
-      </div>
-
-      {% for group in active.invoice_groups %}
-        <details class="cashier-machine" {% if forloop.first %}open{% endif %}>
-          <summary>
-            <span class="cashier-machine-main">
-              <strong>الصندوق <span class="mono">{{ group.machine_no }}</span></strong>
-              <span>{{ group.branch_name }}</span>
-              <span>الجهاز: <bdi class="mono">{{ group.terminal_name }}</bdi></span>
-            </span>
-            <span class="cashier-machine-totals">
-              <b class="mono">{{ group.invoice_count }}</b> فاتورة
-              <b class="mono">{% money group.sales_total_display %}</b>
-            </span>
-          </summary>
-          <div class="table-wrap cashier-bills-wrap">
-            <table class="data-table cashier-bills-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>رقم الفاتورة</th>
-                  <th>التاريخ</th>
-                  <th>الإجمالي</th>
+            <tbody id="sales-groups-body">
+              {% if dashboard.groups_pending %}
+                <tr id="sales-groups-loading">
+                  <td colspan="6" class="sales-empty sales-ov-loading">جاري تحميل مبيعات المجموعات…</td>
                 </tr>
-              </thead>
-              <tbody>
-                {% for invoice in group.invoices %}
+              {% else %}
+                {% for row in dashboard.groups.rows %}
                   <tr>
                     <td class="mono">{{ forloop.counter }}</td>
-                    <td class="mono">{{ invoice.bill_no }}</td>
-                    <td class="mono">{{ invoice.bill_date }}</td>
-                    <td class="mono sales-amt">{% money invoice.bill_total_display %}</td>
+                    <td title="{{ row.group_code }}">{{ row.group_name }}</td>
+                    <td class="mono">{{ row.invoice_count_display }}</td>
+                    <td class="mono">{{ row.qty_display }}</td>
+                    <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                    <td class="mono">{{ row.share_display }}</td>
                   </tr>
+                {% empty %}
+                  <tr><td colspan="6" class="sales-empty">لا مبيعات مجموعات في الفترة.</td></tr>
                 {% endfor %}
-              </tbody>
-            </table>
+              {% endif %}
+            </tbody>
+            <tfoot id="sales-groups-foot"{% if dashboard.groups_pending or not dashboard.groups.rows %} hidden{% endif %}>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono" id="sales-groups-tot-inv">{{ dashboard.groups.totals.invoice_count_display }}</td>
+                <td class="mono" id="sales-groups-tot-qty">{{ dashboard.groups.totals.qty_display }}</td>
+                <td class="mono sales-amt" id="sales-groups-tot-sales">{% money dashboard.groups.totals.sales_total_display %}</td>
+                <td class="mono">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section class="dash-panel dash-panel-glass sales-ov-panel sales-ov-returns" aria-label="الفروع الأكثر مرتجعاً">
+        <div class="dash-panel-head">
+          <div>
+            <h3>الفروع الأكثر مرتجعاً</h3>
+            <p class="sales-ov-sub">نقاط البيع · إجمالي {% money dashboard.top_returns.total_display %}</p>
           </div>
-        </details>
-      {% empty %}
-        <p class="sales-empty">لا توجد فواتير لهذا المستخدم.</p>
-      {% endfor %}
-    </section>
-  {% endif %}
+          <span class="result-pill">{{ dashboard.top_returns.count }}</span>
+        </div>
+        {{ dashboard.top_returns.rows|json_script:"sales-returns-data" }}
+        <div id="sales-returns-board" class="branch-donut sales-returns-donut" hidden></div>
+        <p id="sales-returns-empty" class="sales-empty"{% if dashboard.top_returns.rows %} hidden{% endif %}>
+          لا مرتجعات في الفترة.
+        </p>
+      </section>
+    </div>
+  </section>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-dash.js?v=50" defer></script>
+<script src="/static/js/sales-returns-donut.js?v=1" defer></script>
+<script src="/static/js/sales-groups-loader.js?v=6" defer></script>
 {% endblock %}

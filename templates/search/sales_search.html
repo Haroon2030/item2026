@@ -1,54 +1,27 @@
 {% extends "base.html" %}
 
-{% block title %}البحث عن المبيعات{% endblock %}
+{% block title %}البحث عن مبيعات صنف{% endblock %}
 {% block page_class %}ss-page sales-search-page{% endblock %}
 
 {% block content %}
-<section class="ss-shell" aria-label="البحث عن المبيعات">
+<section class="ss-shell" aria-label="البحث عن مبيعات صنف">
   <header class="ss-head">
     <div class="ss-head-copy">
-      <h2>البحث عن المبيعات</h2>
+      <h2>البحث عن مبيعات صنف</h2>
       <p>فواتير أونكس (مبيعات الأصناف) أو نقاط البيع — حسب المخزن والفترة</p>
     </div>
   </header>
 
-  <form method="get" action="{% url 'sales_search' %}" class="ss-toolbar" role="search" id="sales-search-form">
-    <div class="ss-toolbar-grid">
-      <div class="field scope-field ss-scope" role="radiogroup" aria-label="مصدر المبيعات">
-        <span class="scope-field-label">المصدر</span>
-        <div class="scope-toggle" data-sync-group="sys">
-          <label class="scope-option {% if active_system != 'pos' %}is-active{% endif %}">
-            <input type="radio" name="sys" value="bill" {% if active_system != 'pos' %}checked{% endif %}>
-            <span>فواتير (أونكس)</span>
-          </label>
-          <label class="scope-option {% if active_system == 'pos' %}is-active{% endif %}">
-            <input type="radio" name="sys" value="pos" {% if active_system == 'pos' %}checked{% endif %}>
-            <span>نقاط البيع</span>
-          </label>
+  <form method="get" action="{% url 'sales_search' %}" class="ss-toolbar ss-toolbar-sales" role="search" id="sales-search-form">
+    <div class="ss-toolbar-grid ss-sales-grid{% if compare_mode %} is-compare{% endif %}">
+      <div class="field query-field ss-query">
+        <label for="q">الباركود / رقم الصنف / الاسم</label>
+        <div class="query-row">
+          <input id="q" type="search" name="q" value="{{ query }}" placeholder="ابحث ثم Enter…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
+          <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا" aria-label="مسح الباركود بالكاميرا">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
         </div>
-      </div>
-
-      <div class="field scope-field ss-scope" role="radiogroup" aria-label="نطاق البحث">
-        <span class="scope-field-label">النطاق</span>
-        <div class="scope-toggle" data-sync-group="scope">
-          <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
-            <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
-            <span>مخزن واحد</span>
-          </label>
-          <label class="scope-option {% if compare_mode %}is-active{% endif %}">
-            <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
-            <span>كل المخازن المختارة</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
-        <label for="warehouse">المخزن</label>
-        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
-          {% for wh in warehouses %}
-            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
-          {% endfor %}
-        </select>
       </div>
 
       <div class="field date-field ss-date">
@@ -61,13 +34,40 @@
         <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
       </div>
 
-      <div class="field query-field ss-query">
-        <label for="q">الباركود / رقم الصنف / الاسم</label>
-        <div class="query-row">
-          <input id="q" type="search" name="q" value="{{ query }}" placeholder="ابحث ثم Enter…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
-          <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا" aria-label="مسح الباركود بالكاميرا">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </button>
+      <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
+        <label for="warehouse">المخزن</label>
+        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+          {% for wh in warehouses %}
+            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field scope-field ss-scope ss-scope-range" role="radiogroup" aria-label="نطاق البحث">
+        <span class="scope-field-label">النطاق</span>
+        <div class="scope-toggle" data-sync-group="scope">
+          <label class="scope-option {% if not compare_mode %}is-active{% endif %}" title="مخزن واحد">
+            <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
+            <span>مخزن</span>
+          </label>
+          <label class="scope-option {% if compare_mode %}is-active{% endif %}" title="كل المخازن المختارة">
+            <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
+            <span>مقارنة</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field scope-field ss-scope ss-scope-sys" role="radiogroup" aria-label="مصدر المبيعات">
+        <span class="scope-field-label">المصدر</span>
+        <div class="scope-toggle" data-sync-group="sys">
+          <label class="scope-option {% if active_system != 'pos' %}is-active{% endif %}" title="فواتير أونكس">
+            <input type="radio" name="sys" value="bill" {% if active_system != 'pos' %}checked{% endif %}>
+            <span>أونكس</span>
+          </label>
+          <label class="scope-option {% if active_system == 'pos' %}is-active{% endif %}" title="نقاط البيع">
+            <input type="radio" name="sys" value="pos" {% if active_system == 'pos' %}checked{% endif %}>
+            <span>POS</span>
+          </label>
         </div>
       </div>
 
@@ -238,6 +238,7 @@
   var form = document.getElementById("sales-search-form");
   if (!form) return;
   var field = document.getElementById("warehouse-field");
+  var grid = form.querySelector(".ss-sales-grid");
 
   function syncGroup(name) {
     var radios = form.querySelectorAll('input[name="' + name + '"]');
@@ -251,7 +252,10 @@
         else label.classList.remove("is-active");
       }
     });
-    if (name === "scope" && field) field.hidden = compare;
+    if (name === "scope") {
+      if (field) field.hidden = compare;
+      if (grid) grid.classList.toggle("is-compare", compare);
+    }
   }
 
   form.querySelectorAll(".scope-toggle").forEach(function (toggle) {

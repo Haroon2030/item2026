@@ -2948,6 +2948,69 @@ body.sales-dash-body .app-backdrop {
   color: #d7e8ff;
 }
 
+/* تبويبات التحليل (تحميل عند الطلب) */
+.dash-analysis-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.35rem;
+  flex-wrap: wrap;
+  border: 1px solid #d5e4f4;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f4f8fc 0%, #eef4fb 100%);
+}
+
+.dash-analysis-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #3a5d86;
+  font: inherit;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-analysis-tab:hover {
+  background: rgba(29, 79, 145, 0.08);
+  color: #1d4f91;
+}
+
+.dash-analysis-tab.is-active {
+  background: #fff;
+  border-color: #c5d8ef;
+  color: #1d4f91;
+  box-shadow: 0 1px 2px rgba(29, 79, 145, 0.08);
+}
+
+.dash-tab-panel {
+  display: none;
+}
+
+.dash-tab-panel.is-active {
+  display: block;
+}
+
+.dash-overview-stack,
+.dash-returns-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.dash-overview-stack > .dash-panel,
+.dash-returns-stack > .dash-panel {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.dash-kpi-overview {
+  margin-bottom: 0.85rem;
+}
+
 .dash-charts {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.95fr);
@@ -2986,10 +3049,6 @@ body.sales-dash-body .app-backdrop {
 .dash-branch-margin-pair .dash-margins-branches .margin-table-block {
   flex: 1;
   min-height: 0;
-}
-
-.dash-margins.dash-margins-groups-only {
-  grid-template-columns: 1fr;
 }
 
 /* مرتجعات المجموعات + الأصناف الأكثر إرجاعاً جنباً إلى جنب */
@@ -3039,22 +3098,19 @@ body.sales-dash-body .app-backdrop {
 }
 
 .dash-margins .dash-panel,
-.dash-margins-branches,
-.dash-margins-groups {
+.dash-margins-branches {
   min-width: 0;
 }
 
 .dash-margins .table-wrap,
-.dash-margins-branches .table-wrap,
-.dash-margins-groups .table-wrap {
+.dash-margins-branches .table-wrap {
   max-height: calc(2.2rem + (19 * 2.05rem) + 2.55rem);
   overflow: auto;
   padding: 0 0.55rem 0.55rem;
 }
 
 .dash-margins .margin-table-block,
-.dash-margins-branches .margin-table-block,
-.dash-margins-groups .margin-table-block {
+.dash-margins-branches .margin-table-block {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -3062,8 +3118,7 @@ body.sales-dash-body .app-backdrop {
 
 /* الصفوف تتمرر — الإجمالي ثابت تحتها */
 .dash-margins .margin-scroll,
-.dash-margins-branches .margin-scroll,
-.dash-margins-groups .margin-scroll {
+.dash-margins-branches .margin-scroll {
   max-height: calc(2.2rem + (19 * 2.05rem));
   overflow-y: auto;
   overflow-x: auto;
@@ -10285,6 +10340,101 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   align-items: end;
 }
 
+/* شريط بحث مبيعات الصنف — صف مضغوط بلا تداخل */
+.sales-search-page .ss-toolbar-sales {
+  padding: 0.55rem 0.7rem 0.5rem;
+}
+
+.sales-search-page .ss-sales-grid {
+  grid-template-columns:
+    minmax(11rem, 1.8fr)
+    7.6rem
+    7.6rem
+    minmax(9rem, 1.1fr)
+    auto
+    auto
+    auto;
+  gap: 0.4rem 0.45rem;
+  align-items: end;
+}
+
+.sales-search-page .ss-sales-grid.is-compare {
+  grid-template-columns:
+    minmax(11rem, 1.8fr)
+    7.6rem
+    7.6rem
+    auto
+    auto
+    auto;
+}
+
+.sales-search-page .ss-sales-grid > .field[hidden],
+.sales-search-page .ss-sales-grid > [hidden] {
+  display: none !important;
+}
+
+.sales-search-page .ss-toolbar .field label,
+.sales-search-page .ss-toolbar .scope-field-label {
+  margin-bottom: 0.18rem;
+  font-size: 0.68rem;
+}
+
+.sales-search-page .ss-toolbar .scope-toggle {
+  gap: 0.18rem;
+  padding: 0.12rem;
+  border-radius: 9px;
+}
+
+.sales-search-page .ss-toolbar .scope-option {
+  gap: 0.22rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 7px;
+  font-size: 0.72rem;
+}
+
+.sales-search-page .ss-toolbar .scope-option input[type="radio"] {
+  width: 0.78rem !important;
+  height: 0.78rem !important;
+}
+
+.sales-search-page .ss-toolbar input[type="date"],
+.sales-search-page .ss-toolbar input[type="search"],
+.sales-search-page .ss-toolbar .warehouse-select,
+.sales-search-page .ss-wh .inv-select-trigger,
+.sales-search-page .ss-actions .btn-primary {
+  min-height: 2.05rem;
+  font-size: 0.82rem;
+}
+
+.sales-search-page .ss-actions .btn-primary {
+  padding-inline: 0.85rem;
+  white-space: nowrap;
+}
+
+.sales-search-page .ss-query .query-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.sales-search-page .ss-query .btn-scan {
+  width: 2.05rem;
+  min-width: 2.05rem;
+  min-height: 2.05rem;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.sales-search-page .ss-wh .inv-select-menu[hidden] {
+  display: none !important;
+}
+
+.sales-search-page .ss-hint {
+  margin-top: 0.4rem;
+  line-height: 1.35;
+}
+
 .ss-page .ss-toolbar .field label,
 .ss-page .ss-toolbar .scope-field-label {
   display: block;
@@ -10718,6 +10868,21 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   .ss-page .ss-actions {
     grid-column: 1 / -1;
   }
+
+  .sales-search-page .ss-sales-grid,
+  .sales-search-page .ss-sales-grid.is-compare {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sales-search-page .ss-sales-grid .ss-query {
+    grid-column: 1 / -1;
+  }
+  .sales-search-page .ss-sales-grid .ss-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+  .sales-search-page .ss-sales-grid .ss-actions .btn-primary {
+    width: 100%;
+  }
 }
 
 .ss-page .ss-toolbar-grid.is-item {
@@ -10760,3 +10925,251 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 }
 
 
+/* —— تحليل المبيعات (نظرة مركّزة) —— */
+.sales-overview-dash .sales-ov-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.55rem 0.7rem;
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.85rem;
+}
+
+.sales-overview-dash .sales-ov-kpis + .sales-ov-filter {
+  margin-top: 0.15rem;
+}
+
+.sales-overview-dash .sales-ov-filter .field {
+  min-width: 8.5rem;
+}
+
+.sales-overview-dash .sales-ov-filter label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #47617f;
+}
+
+.sales-overview-dash .sales-ov-filter input[type="date"],
+.sales-overview-dash .sales-ov-filter select {
+  min-height: 2.15rem;
+  border: 1px solid #c5d5e8;
+  border-radius: 9px;
+  padding: 0.3rem 0.5rem;
+  background: #fff;
+  min-width: 9.5rem;
+  max-width: 14rem;
+}
+
+.sales-overview-dash .sales-ov-scope {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #47617f;
+}
+
+.sales-overview-dash .sales-ov-filter .btn-primary {
+  min-height: 2.15rem;
+  padding-inline: 1rem;
+}
+
+.sales-overview-dash .sales-ov-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 0 0 0.9rem;
+  align-items: stretch;
+}
+
+/* بطاقات الملخص: المحتوى داخل البطاقة، والحجم يتقلص مع ضيق العرض / كبر الرقم */
+.sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
+  container-type: inline-size;
+  container-name: sales-kpi;
+  height: auto;
+  min-height: 0;
+  padding: 0.85rem 0.95rem;
+  gap: 0.3rem;
+  overflow: hidden;
+  justify-content: center;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: clamp(0.78rem, 4.2cqi, 0.95rem);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-ico {
+  flex: 0 0 auto;
+  width: clamp(1.25rem, 7cqi, 1.55rem);
+  height: clamp(1.25rem, 7cqi, 1.55rem);
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-ico svg {
+  width: 100%;
+  height: 100%;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-value {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: clamp(1rem, 7.5cqi, 1.45rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-value .money {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.25em;
+  overflow: hidden;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-value .money-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-value .sar-symbol {
+  flex: 0 0 auto;
+  width: 0.7em;
+  height: 0.78em;
+}
+
+.sales-overview-dash .sales-ov-kpis .dash-kpi-hint {
+  min-width: 0;
+  max-width: 100%;
+  font-size: clamp(0.7rem, 3.8cqi, 0.86rem);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container sales-kpi (max-width: 11.5rem) {
+  .dash-kpi-value {
+    font-size: clamp(0.85rem, 8cqi, 1.15rem);
+  }
+  .dash-kpi-hint {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+
+.sales-overview-dash .sales-ov-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.sales-overview-dash .sales-ov-bottom {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.9fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.sales-overview-dash .sales-ov-returns .sales-returns-donut.branch-donut {
+  display: grid;
+  grid-template-columns: minmax(9rem, 11rem) minmax(0, 1fr);
+  gap: 0.65rem 0.85rem;
+  align-items: start;
+  padding: 0.55rem 0.75rem 0.85rem;
+}
+
+.sales-overview-dash .sales-ov-returns .branch-donut-visual {
+  width: min(100%, 11rem);
+  margin-inline: auto;
+}
+
+.sales-overview-dash .sales-ov-returns .branch-donut-legend {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sales-overview-dash .sales-ov-panel .dash-panel-head {
+  align-items: start;
+}
+
+.sales-overview-dash .sales-ov-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.sales-overview-dash .sales-ov-scroll {
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.sales-overview-dash .sales-ov-groups .sales-ov-scroll {
+  max-height: 28rem;
+}
+
+.sales-overview-dash .sales-ov-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eef4fb;
+  box-shadow: 0 1px 0 #9eb4ce;
+}
+
+.sales-overview-dash .sales-ov-scroll tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: #eaf2fb;
+  box-shadow: 0 -1px 0 #1d4f91;
+}
+
+.sales-overview-dash .sales-ov-scroll tfoot .sales-amt {
+  background: #e6f6ee !important;
+}
+
+.sales-overview-dash .sales-ov-loading {
+  color: #47617f !important;
+  font-weight: 700;
+}
+
+@media (max-width: 1100px) {
+  .sales-overview-dash .sales-ov-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sales-overview-dash .sales-ov-grid {
+    grid-template-columns: 1fr;
+  }
+  .sales-overview-dash .sales-ov-bottom {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-overview-dash .sales-ov-kpis {
+    grid-template-columns: 1fr;
+  }
+  .sales-overview-dash .sales-ov-filter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -222,7 +222,6 @@ def build_inventory_insights(
     branch_code: str = "",
 ) -> dict[str, Any]:
     """يبني لوحة تحليل مخزون من أوراكل (قيمة بعد خصم مبيعات POS غير المرحلة)."""
-    from concurrent.futures import ThreadPoolExecutor
     from datetime import date, timedelta
 
     from .oracle_stock import (
@@ -299,20 +298,13 @@ def build_inventory_insights(
                 branch_code=brn,
             )
 
-    # موجة واحدة: استعلامات ثقيلة بالتوازي — عمال أقل من سقف المجمّع لتجنب استنزاف الاتصالات
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        f_wh = pool.submit(_by_wh)
-        f_group = pool.submit(_by_group)
-        f_brn = pool.submit(_by_brn)
-        f_sales = pool.submit(_sales_raw)
-        f_stagnant = pool.submit(_stagnant)
-        f_wastage = pool.submit(_wastage)
-        by_warehouse = f_wh.result()
-        by_group = f_group.result()
-        by_branch = f_brn.result()
-        sales_rows = f_sales.result()
-        stagnant_rows = f_stagnant.result()
-        wastage = f_wastage.result()
+    # تسلسلي فقط: تجنّب ThreadPoolExecutor (يتعطّل بعد إعادة تحميل runserver على Windows)
+    by_warehouse = _by_wh()
+    by_group = _by_group()
+    by_branch = _by_brn()
+    sales_rows = _sales_raw()
+    stagnant_rows = _stagnant()
+    wastage = _wastage()
 
     group_sales_rank, sales_period_label, sales_by_code = _rank_group_sales(
         by_group,
