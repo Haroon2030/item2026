@@ -7299,24 +7299,57 @@ html.users-modal-open {
   }
 }
 
-.inv-dash .inv-share {
-  color: #0b7a45 !important;
+.inv-dash .inv-share,
+.inv-dash .inv-col-share {
+  color: #0c4a6e !important;
   font-weight: 800;
 }
 
-.inv-dash .inv-value {
-  color: #b34040 !important;
+.inv-dash .inv-value,
+.inv-dash .inv-col-cost {
+  color: #92400e !important;
   font-weight: 800;
 }
 
-.inv-dash .sales-grand-row .inv-value {
-  color: #b34040 !important;
-  background: #f8eaea;
+.inv-dash .inv-table-compact th.inv-col-qty,
+.inv-dash .inv-table-compact td.inv-col-qty {
+  background: #eafaf0 !important;
+  color: #166534 !important;
+  font-weight: 800;
 }
 
-.inv-dash .sales-grand-row .inv-share {
-  color: #0b7a45 !important;
-  background: #e6f6ee;
+.inv-dash .inv-table-compact th.inv-col-cost,
+.inv-dash .inv-table-compact td.inv-col-cost {
+  background: #fef7e8 !important;
+  color: #92400e !important;
+  font-weight: 800;
+}
+
+.inv-dash .inv-table-compact th.inv-col-share,
+.inv-dash .inv-table-compact td.inv-col-share {
+  background: #eef6fd !important;
+  color: #0c4a6e !important;
+  font-weight: 700;
+}
+
+.inv-dash .sales-grand-row .inv-value,
+.inv-dash .sales-grand-row .inv-col-cost,
+.inv-dash .inv-table-scroll tfoot td.inv-col-cost {
+  color: #78350f !important;
+  background: #fdeecd !important;
+}
+
+.inv-dash .sales-grand-row .inv-share,
+.inv-dash .sales-grand-row .inv-col-share,
+.inv-dash .inv-table-scroll tfoot td.inv-col-share {
+  color: #0c4a6e !important;
+  background: #dbeafe !important;
+}
+
+.inv-dash .sales-grand-row .inv-col-qty,
+.inv-dash .inv-table-scroll tfoot td.inv-col-qty {
+  color: #14532d !important;
+  background: #d7f3e3 !important;
 }
 
 .inv-dash .perf-kpi-grid {
@@ -7550,9 +7583,69 @@ html.users-modal-open {
 
 .inv-dash .inv-table-scroll {
   max-height: calc(1.95rem + (19 * 1.85rem) + 2.4rem);
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0;
+}
+
+.inv-dash .inv-table-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.inv-dash .inv-table-frame .inv-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 0;
+}
+
+.inv-dash .inv-table-foot {
+  flex: 0 0 auto;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  margin: 0;
+  border-top: 2px solid #0a3550;
+}
+
+.inv-dash .inv-table-foot td {
+  position: static !important;
+  background: #0e4a6e !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  font-size: 0.78rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.inv-dash .inv-table-foot td.inv-col-qty {
+  background: #d7f3e3 !important;
+  color: #14532d !important;
+}
+
+.inv-dash .inv-table-foot td.inv-col-cost {
+  background: #fdeecd !important;
+  color: #78350f !important;
+}
+
+.inv-dash .inv-table-foot td.inv-col-share {
+  background: #dbeafe !important;
+  color: #0c4a6e !important;
+}
+
+.inv-dash .inv-table-foot .inv-col-sticky {
+  position: static !important;
+  inset: auto !important;
+  box-shadow: none !important;
+  border-inline-end: 1px solid #0a3a57;
 }
 
 .inv-dash .inv-tables-duo {
@@ -7592,75 +7685,151 @@ html.users-modal-open {
 }
 
 .inv-dash .inv-table-compact {
-  width: 100%;
-  table-layout: auto;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
 }
 
 .inv-dash .inv-table-compact th,
 .inv-dash .inv-table-compact td {
-  padding: 0.28rem 0.35rem !important;
+  padding: 0.28rem 0.4rem !important;
   font-size: 0.72rem !important;
   line-height: 1.25;
-  white-space: nowrap;
+  white-space: nowrap !important;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
-.inv-dash .inv-table-compact .inv-cell-clip {
-  max-width: 5.8rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.inv-dash .inv-table-compact .inv-cell-clip,
+.inv-dash .inv-table-compact .inv-col-sticky {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  max-width: 0; /* ellipsis مع fixed layout */
+}
+
+.inv-dash .inv-table-compact .inv-col-qty,
+.inv-dash .inv-table-compact .inv-col-cost,
+.inv-dash .inv-table-compact .inv-col-share,
+.inv-dash .inv-table-compact td.mono {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  width: auto !important; /* يتجاوز width:1% من theme */
+}
+
+/* نسب أعمدة: اسم | فرع/عدد | أصناف | كمية | قيمة | حصة */
+.inv-dash .inv-tables-duo .inv-table-compact th:nth-child(1),
+.inv-dash .inv-tables-duo .inv-table-compact td:nth-child(1) {
+  width: 26%;
+}
+
+.inv-dash .inv-tables-duo .inv-table-compact th:nth-child(2),
+.inv-dash .inv-tables-duo .inv-table-compact td:nth-child(2) {
+  width: 18%;
+}
+
+.inv-dash .inv-tables-duo .inv-table-compact th:nth-child(3),
+.inv-dash .inv-tables-duo .inv-table-compact td:nth-child(3) {
+  width: 10%;
+  text-align: center;
+  max-width: none;
+}
+
+.inv-dash .inv-tables-duo .inv-table-compact th:nth-child(4),
+.inv-dash .inv-tables-duo .inv-table-compact td:nth-child(4) {
+  width: 15%;
+  max-width: none;
+}
+
+.inv-dash .inv-tables-duo .inv-table-compact th:nth-child(5),
+.inv-dash .inv-tables-duo .inv-table-compact td:nth-child(5) {
+  width: 18%;
+  max-width: none;
+}
+
+.inv-dash .inv-tables-duo .inv-table-compact th:nth-child(6),
+.inv-dash .inv-tables-duo .inv-table-compact td:nth-child(6) {
+  width: 13%;
+  max-width: none;
 }
 
 .inv-dash .inv-table-scroll thead th {
   position: sticky;
   top: 0;
-  z-index: 3;
-  background: #eef4fb !important;
-  box-shadow: 0 1px 0 #d5e3f2;
+  z-index: 5;
+  background: #e8f0fa !important;
+  color: #173e69 !important;
+  box-shadow: 0 1px 0 #c5d6ea;
 }
 
-/* عمود رقم ثابت مع خلفية معتمة أثناء التمرير */
+.inv-dash .inv-table-scroll thead th.inv-col-qty {
+  background: #d7f3e3 !important;
+  color: #14532d !important;
+}
+
+.inv-dash .inv-table-scroll thead th.inv-col-cost {
+  background: #fdeecd !important;
+  color: #78350f !important;
+}
+
+.inv-dash .inv-table-scroll thead th.inv-col-share {
+  background: #dbeafe !important;
+  color: #0c4a6e !important;
+}
+
+/* عمود الاسم ثابت أثناء التمرير الأفقي — خلفية معتمة لمنع تداخل النص */
 .inv-dash .inv-table-scroll .inv-col-sticky {
   position: sticky;
   inset-inline-start: 0;
-  z-index: 2;
-  background: #fff !important;
+  z-index: 4;
+  background: #ffffff !important;
+  opacity: 1;
   border-inline-end: 1px solid #d5e3f2;
-  box-shadow: none;
+  box-shadow: -4px 0 8px -4px rgba(15, 40, 70, 0.18);
 }
 
 .inv-dash .inv-table-scroll thead th.inv-col-sticky {
-  z-index: 5;
-  background: #eef4fb !important;
-  box-shadow: 0 1px 0 #d5e3f2;
+  z-index: 7;
+  top: 0;
+  background: #e8f0fa !important;
+  box-shadow:
+    0 1px 0 #c5d6ea,
+    -4px 0 8px -4px rgba(15, 40, 70, 0.18);
 }
 
 .inv-dash .inv-table-scroll tbody tr:nth-child(even) .inv-col-sticky {
-  background: #f7fafc !important;
+  background: #f3f7fb !important;
+}
+
+.inv-dash .inv-table-scroll tbody tr:hover .inv-col-sticky {
+  background: #e8f1f8 !important;
 }
 
 .inv-dash .inv-table-scroll tfoot td.inv-col-sticky,
 .inv-dash .inv-table-scroll tfoot .inv-col-sticky {
-  z-index: 5;
+  z-index: 8;
+  bottom: 0;
   background: #0e4a6e !important;
   color: #fff !important;
   border-inline-end-color: #0a3a57;
+  box-shadow:
+    0 -2px 0 #0a3550,
+    -4px 0 8px -4px rgba(0, 0, 0, 0.25);
 }
 
 .inv-dash .inv-table-scroll tfoot td {
   position: sticky;
   bottom: 0;
-  z-index: 3;
-  background: #eaf2fb;
-  box-shadow: 0 -1px 0 #1d4f91;
-}
-
-.inv-dash .inv-table-scroll tfoot .inv-value {
-  background: #f8eaea !important;
-}
-
-.inv-dash .inv-table-scroll tfoot .inv-share {
-  background: #e6f6ee !important;
+  z-index: 6;
+  background: #0e4a6e !important;
+  color: #fff !important;
+  box-shadow: 0 -2px 0 #0a3550;
+  max-width: none;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 @media (max-width: 700px) {
@@ -10982,16 +11151,40 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   align-items: stretch;
 }
 
+.sales-overview-dash .sales-ov-rank-kpis {
+  margin-top: -0.35rem;
+}
+
+.sales-overview-dash .sales-ov-rank-kpis > .dash-kpi-card {
+  min-height: 6.4rem !important;
+  max-height: none !important;
+  height: auto !important;
+}
+
+.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-value {
+  font-size: clamp(0.85rem, 4.2cqi, 1.15rem) !important;
+  font-weight: 900 !important;
+  white-space: normal !important;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  text-align: start;
+  justify-content: flex-start;
+  line-height: 1.25;
+}
+
 /* بطاقات موحّدة الارتفاع — النص يتقلص ليتسع داخل البطاقة */
 .sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
   container-type: inline-size;
   container-name: sales-kpi;
   box-sizing: border-box;
   height: 100%;
-  min-height: 5.6rem;
-  max-height: 5.6rem;
-  padding: 0.45rem 0.55rem !important;
-  gap: 0.12rem !important;
+  min-height: 6.2rem;
+  max-height: 6.2rem;
+  padding: 0.5rem 0.6rem !important;
+  gap: 0.18rem !important;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -11074,8 +11267,9 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   min-width: 0;
   max-width: 100%;
   width: 100%;
-  font-size: clamp(0.52rem, 2.5cqi, 0.64rem) !important;
-  line-height: 1.2;
+  font-size: clamp(0.72rem, 3.6cqi, 0.92rem) !important;
+  font-weight: 700 !important;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11090,8 +11284,8 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 
 @media (max-width: 1100px) {
   .sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
-    min-height: 5.3rem;
-    max-height: 5.3rem;
+    min-height: 5.9rem;
+    max-height: 5.9rem;
   }
 }
 

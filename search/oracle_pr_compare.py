@@ -580,9 +580,10 @@ def build_purchase_request_compare(
     branch_code: str = "",
 ) -> dict[str, Any] | None:
     """
-    مقارنة أصناف طلب شراء مع المخازن ذات الرصيد فقط.
+    مقارنة أصناف طلب شراء مع المخازن ذات الرصيد الموجب فقط.
     الكمية تُعرض بنفس وحدة الطلب (حبة/كرتون…).
-    يقيّد بالمخزن المختار أو بمخازن الفرع المحدد.
+    أعمدة المخازن = اتحاد المخازن التي لديها رصيد > 0 لأي صنف في الطلب.
+    بدون warehouse_codes/branch_code تُجلب كل مخازن الشركة ذات الرصيد.
     """
     if not oracle_enabled():
         return None
@@ -597,12 +598,12 @@ def build_purchase_request_compare(
         return None
 
     items = _fetch_request_items(pr_type, pr_no, pr_ser)
-    scope_branch = _norm_code(branch_code) or _norm_code(header.get("branch_code"))
     item_codes = [row["code"] for row in items]
+    # لا نوسّع النطاق تلقائياً لفرع الطلب — فقط ما طُلب صراحةً
     stock_map = _fetch_stock_for_items(
         item_codes,
         warehouse_codes=warehouse_codes,
-        branch_code="" if warehouse_codes else scope_branch,
+        branch_code=branch_code,
     )
     packs_map = _fetch_unit_packs_map(item_codes)
 
@@ -621,6 +622,12 @@ def build_purchase_request_compare(
             req_unit=item.get("unit") or "—",
             packs=packs,
         )
+        # أعمدة فقط لمخازن برصيد موجب بعد التحويل لوحدة الطلب
+        stock_by_wh = {
+            wh: cell
+            for wh, cell in stock_by_wh.items()
+            if float(cell.get("qty") or 0) > 0
+        }
         stock_rows = list(stock_by_wh.values())
         for wh_code, cell in stock_by_wh.items():
             if wh_code not in warehouse_map:

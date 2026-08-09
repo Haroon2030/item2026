@@ -66,6 +66,29 @@
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · {{ dashboard.period_label }}</span>
     </article>
   </section>
+
+  <section class="sales-ov-kpis sales-ov-rank-kpis" aria-label="أبرز الترتيبات">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-visit dash-kpi-ranked">
+      <span class="dash-kpi-label">أكثر فرع زيارة</span>
+      <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_visit_branch.code }}">{{ dashboard.ranks.top_visit_branch.name }}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.ranks.top_visit_branch.value_display }} فاتورة · {{ dashboard.ranks.top_visit_branch.hint }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-branches dash-kpi-ranked">
+      <span class="dash-kpi-label">أكثر فرع مبيعات</span>
+      <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_sales_branch.code }}">{{ dashboard.ranks.top_sales_branch.name }}</strong>
+      <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_sales_branch.value_display != "—" %}{% money dashboard.ranks.top_sales_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_sales_branch.hint }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns dash-kpi-ranked">
+      <span class="dash-kpi-label">أكثر فرع إرجاع</span>
+      <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_return_branch.code }}">{{ dashboard.ranks.top_return_branch.name }}</strong>
+      <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_return_branch.value_display != "—" %}{% money dashboard.ranks.top_return_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_return_branch.hint }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret dash-kpi-ranked" id="sales-rank-item-card">
+      <span class="dash-kpi-label">أكثر صنف إرجاع</span>
+      <strong class="dash-kpi-value" id="sales-rank-item-name">{{ dashboard.ranks.top_return_item.name }}</strong>
+      <span class="dash-kpi-hint mono" id="sales-rank-item-hint">{{ dashboard.ranks.top_return_item.hint }}</span>
+    </article>
+  </section>
 {% endif %}
 
 <form method="get" action="{% url 'browse_sales' %}" class="sales-ov-filter dash-panel-glass" role="search">
@@ -374,6 +397,6 @@
 {% block extra_js %}
 <script src="/static/js/sales-returns-donut.js?v=1" defer></script>
 <script src="/static/js/sales-groups-loader.js?v=13" defer></script>
-<script src="/static/js/sales-top-items-loader.js?v=12" defer></script>
+<script src="/static/js/sales-top-items-loader.js?v=13" defer></script>
 <script src="/static/js/sales-top-users-loader.js?v=2" defer></script>
 {% endblock %}

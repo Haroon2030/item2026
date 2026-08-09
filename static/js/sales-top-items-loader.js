@@ -65,6 +65,25 @@
     }
   }
 
+  function fillRankCard(row) {
+    var nameEl = document.getElementById("sales-rank-item-name");
+    var hintEl = document.getElementById("sales-rank-item-hint");
+    if (!nameEl || !hintEl) return;
+    if (!row) {
+      nameEl.textContent = "—";
+      hintEl.textContent = "لا بيانات";
+      return;
+    }
+    nameEl.textContent = row.item_name || row.item_code || "—";
+    nameEl.title = row.item_code || "";
+    hintEl.textContent =
+      (row.return_total_display || row.sales_total_display || "0.00") +
+      " · " +
+      (row.return_count_display || row.invoice_count_display || "0") +
+      " فاتورة · كمية " +
+      (row.qty_display || "0");
+  }
+
   function render(data, elapsedMs) {
     var body = document.getElementById("sales-items-body");
     var foot = document.getElementById("sales-items-foot");
@@ -77,6 +96,7 @@
 
     if (!data || !data.ok || !data.items) {
       fail((data && data.error) || "تعذّر تحميل أصناف الإرجاع", elapsedMs);
+      fillRankCard(null);
       return;
     }
 
@@ -91,8 +111,11 @@
       if (foot) foot.hidden = true;
       if (pill) pill.textContent = "0";
       if (sub) sub.textContent = "نقاط البيع · لا بيانات · خلال " + took;
+      fillRankCard(null);
       return;
     }
+
+    fillRankCard(rows[0]);
 
     var html = "";
     rows.forEach(function (row, i) {

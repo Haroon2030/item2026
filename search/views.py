@@ -1703,32 +1703,20 @@ def browse_pr_compare_detail(request):
         error = 'معرّف طلب الشراء غير مكتمل.'
     else:
         try:
-            from .oracle_pr_compare import (
-                build_purchase_request_compare,
-                fetch_warehouses_for_branch,
-            )
+            from .oracle_pr_compare import build_purchase_request_compare
             from .oracle_stock import oracle_enabled, oracle_session
 
             if not oracle_enabled():
                 error = 'أوراكل غير مفعّل — لا يمكن مقارنة الطلب.'
             else:
-                wh_filter = None
+                # ورقة المقارنة: كل المخازن ذات الرصيد فقط (بدون تقييد بفرع/مقصد الفلتر)
                 with oracle_session():
-                    if selected_warehouse:
-                        branch_wh = {
-                            str(row.get("code") or "").strip()
-                            for row in fetch_warehouses_for_branch(selected_branch)
-                        }
-                        if selected_branch and selected_warehouse not in branch_wh:
-                            selected_warehouse = ""
-                        if selected_warehouse:
-                            wh_filter = [selected_warehouse]
                     compare = build_purchase_request_compare(
                         pr_type=pr_type,
                         pr_no=pr_no,
                         pr_ser=pr_ser,
-                        warehouse_codes=wh_filter,
-                        branch_code="" if wh_filter else selected_branch,
+                        warehouse_codes=None,
+                        branch_code="",
                     )
                 if compare is None:
                     error = 'طلب الشراء غير موجود أو غير نشط.'

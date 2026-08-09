@@ -220,6 +220,88 @@ def _top_return_branches(pos_branches: list[dict], *, limit: int = 12) -> dict[s
     }
 
 
+def _empty_rank_card(title: str = "") -> dict[str, Any]:
+    return {
+        "title": title,
+        "name": "—",
+        "code": "",
+        "value_display": "—",
+        "hint": "لا بيانات",
+        "pending": False,
+    }
+
+
+def _rank_highlights(
+    pos_branches: list[dict], top_returns: dict[str, Any]
+) -> dict[str, Any]:
+    """أبرز الترتيبات لبطاقات الملخص (زيارة / مبيعات / إرجاع)."""
+    visit = _empty_rank_card("أكثر فرع زيارة")
+    sales = _empty_rank_card("أكثر فرع مبيعات")
+    ret_br = _empty_rank_card("أكثر فرع إرجاع")
+    ret_item = _empty_rank_card("أكثر صنف إرجاع")
+    ret_item["pending"] = True
+    ret_item["hint"] = "جاري التحميل…"
+    ret_item["value_display"] = "…"
+
+    if pos_branches:
+        top_visit = max(
+            pos_branches,
+            key=lambda r: (
+                int(r.get("invoice_count") or 0),
+                float(r.get("sales_total") or 0),
+            ),
+        )
+        if int(top_visit.get("invoice_count") or 0) > 0:
+            visit = {
+                "title": "أكثر فرع زيارة",
+                "name": str(
+                    top_visit.get("branch_name") or top_visit.get("branch_code") or "—"
+                ),
+                "code": str(top_visit.get("branch_code") or ""),
+                "value_display": str(top_visit.get("invoice_count_display") or "0"),
+                "hint": f"مبيعات {_money(top_visit.get('sales_total') or 0)}",
+                "pending": False,
+            }
+
+        top_sales = max(
+            pos_branches,
+            key=lambda r: (
+                float(r.get("sales_total") or 0),
+                int(r.get("invoice_count") or 0),
+            ),
+        )
+        if float(top_sales.get("sales_total") or 0) > 0:
+            sales = {
+                "title": "أكثر فرع مبيعات",
+                "name": str(
+                    top_sales.get("branch_name") or top_sales.get("branch_code") or "—"
+                ),
+                "code": str(top_sales.get("branch_code") or ""),
+                "value_display": _money(top_sales.get("sales_total") or 0),
+                "hint": f"{top_sales.get('invoice_count_display') or 0} فاتورة",
+                "pending": False,
+            }
+
+    ret_rows = list((top_returns or {}).get("rows") or [])
+    if ret_rows:
+        best = ret_rows[0]
+        ret_br = {
+            "title": "أكثر فرع إرجاع",
+            "name": str(best.get("name") or best.get("code") or "—"),
+            "code": str(best.get("code") or ""),
+            "value_display": str(best.get("amount_display") or "0.00"),
+            "hint": f"{int(best.get('invoice_count') or 0):,} فاتورة مرتجع",
+            "pending": False,
+        }
+
+    return {
+        "top_visit_branch": visit,
+        "top_sales_branch": sales,
+        "top_return_branch": ret_br,
+        "top_return_item": ret_item,
+    }
+
+
 def build_sales_branches(
     date_from,
     date_to,
@@ -250,6 +332,7 @@ def build_sales_branches(
     wholesale_branches, wholesale_totals = _format_branch_rows(wholesale_raw)
     groups = _empty_groups()
     top_returns = _top_return_branches(pos_branches)
+    ranks = _rank_highlights(pos_branches, top_returns)
 
     combined_sales = round(
         float(pos_totals["sales_total"]) + float(wholesale_totals["sales_total"]),
@@ -269,6 +352,7 @@ def build_sales_branches(
         "wholesale": {"branches": wholesale_branches, "totals": wholesale_totals},
         "groups": groups,
         "top_returns": top_returns,
+        "ranks": ranks,
         "kpis": {
             "pos_sales": pos_totals["sales_total_display"],
             "pos_invoices": pos_totals["invoice_count_display"],

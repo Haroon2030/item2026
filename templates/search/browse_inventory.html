@@ -154,50 +154,48 @@
         <h3>حسب المخازن</h3>
         <span class="result-pill">{{ insights.by_warehouse|length }}</span>
       </div>
-      <div class="table-wrap inv-table-scroll">
-        <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المخزن">
-          <thead>
-            <tr>
-              <th class="inv-col-sticky">رقم</th>
-              <th>الفرع</th>
-              <th>أصناف</th>
-              <th title="رصيد الجدول قبل خصم غير المرحّل">قبل الترحيل</th>
-              <th title="تكلفة الكمية غير المرحلة المخصومة من الرصيد">غير مرحّل تكلفة</th>
-              <th>بعد الترحيل</th>
-              <th class="inv-value">القيمة</th>
-              <th class="inv-share">الحصة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in insights.by_warehouse %}
+      <div class="inv-table-frame">
+        <div class="table-wrap inv-table-scroll">
+          <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المخزن">
+            <thead>
               <tr>
-                <td class="mono inv-col-sticky">{{ row.code }}</td>
-                <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
-                <td class="mono">{{ row.item_count_display }}</td>
-                <td class="mono">{{ row.stock_before_display }}</td>
-                <td class="mono">{{ row.pending_cost_display }}</td>
-                <td class="mono">{{ row.qty_display }}</td>
-                <td class="mono inv-value">{{ row.stock_value_display }}</td>
-                <td class="mono inv-share">{{ row.share_display }}</td>
+                <th class="inv-col-sticky">المخزن</th>
+                <th>الفرع</th>
+                <th>أصناف</th>
+                <th class="inv-col-qty" title="الكمية بعد خصم غير المرحّل">الكمية</th>
+                <th class="inv-col-cost" title="القيمة بالتكلفة بعد الترحيل">القيمة</th>
+                <th class="inv-col-share">الحصة</th>
               </tr>
-            {% empty %}
-              <tr><td colspan="8" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
-            {% endfor %}
-          </tbody>
-          {% if insights.by_warehouse %}
-            <tfoot>
+            </thead>
+            <tbody>
+              {% for row in insights.by_warehouse %}
+                <tr>
+                  <td class="inv-col-sticky inv-cell-clip" title="{{ row.name }} #{{ row.code }}">{{ row.name }}</td>
+                  <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
+                  <td class="mono">{{ row.item_count_display }}</td>
+                  <td class="mono inv-col-qty">{{ row.qty_display }}</td>
+                  <td class="mono inv-col-cost">{{ row.stock_value_display }}</td>
+                  <td class="mono inv-col-share">{{ row.share_display }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6" class="sales-empty">لا رصيد ضمن هذا الفلتر.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if insights.by_warehouse %}
+          <table class="data-table sales-table perf-compare-table inv-table-compact inv-table-foot" aria-label="إجمالي المخازن">
+            <tbody>
               <tr class="sales-grand-row">
                 <td class="inv-col-sticky" colspan="2">الإجمالي</td>
                 <td class="mono">{{ insights.warehouse_totals.item_count_display }}</td>
-                <td class="mono">{{ insights.warehouse_totals.stock_before_display }}</td>
-                <td class="mono">{{ insights.warehouse_totals.pending_cost_display }}</td>
-                <td class="mono">{{ insights.warehouse_totals.qty_display }}</td>
-                <td class="mono inv-value">{{ insights.warehouse_totals.stock_value_display }}</td>
-                <td class="mono inv-share">{{ insights.warehouse_totals.share_display }}</td>
+                <td class="mono inv-col-qty">{{ insights.warehouse_totals.qty_display }}</td>
+                <td class="mono inv-col-cost">{{ insights.warehouse_totals.stock_value_display }}</td>
+                <td class="mono inv-col-share">{{ insights.warehouse_totals.share_display }}</td>
               </tr>
-            </tfoot>
-          {% endif %}
-        </table>
+            </tbody>
+          </table>
+        {% endif %}
       </div>
     </section>
 
@@ -206,52 +204,49 @@
         <h3>حسب المجموعات</h3>
         <span class="result-pill">{{ insights.by_group|length }}</span>
       </div>
-      <p class="inv-match-hint">القيمة بعد الترحيل = قبل الترحيل − تكلفة غير المرحّل.</p>
-      <div class="table-wrap inv-table-scroll">
-        <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المجموعة">
-          <thead>
-            <tr>
-              <th>المجموعة</th>
-              <th>مخازن</th>
-              <th>أصناف</th>
-              <th title="رصيد الجدول قبل خصم غير المرحّل">قبل الترحيل</th>
-              <th title="تكلفة الكمية غير المرحلة المخصومة من الرصيد">غير مرحّل تكلفة</th>
-              <th>بعد الترحيل</th>
-              <th class="inv-value">القيمة</th>
-              <th class="inv-share">الحصة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in insights.by_group %}
+      <div class="inv-table-frame">
+        <div class="table-wrap inv-table-scroll">
+          <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المجموعة">
+            <thead>
               <tr>
-                <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
-                <td class="mono">{{ row.warehouse_count }}</td>
-                <td class="mono">{{ row.item_count_display }}</td>
-                <td class="mono">{{ row.stock_before_display }}</td>
-                <td class="mono">{{ row.pending_cost_display }}</td>
-                <td class="mono">{{ row.qty_display }}</td>
-                <td class="mono inv-value">{{ row.stock_value_display }}</td>
-                <td class="mono inv-share">{{ row.share_display }}</td>
+                <th>المجموعة</th>
+                <th>مخازن</th>
+                <th>أصناف</th>
+                <th class="inv-col-qty" title="الكمية بعد خصم غير المرحّل">الكمية</th>
+                <th class="inv-col-cost" title="القيمة بالتكلفة بعد الترحيل">القيمة</th>
+                <th class="inv-col-share">الحصة</th>
               </tr>
-            {% empty %}
-              <tr><td colspan="8" class="sales-empty">لا مجموعات ضمن هذا الفلتر.</td></tr>
-            {% endfor %}
-          </tbody>
-          {% if insights.by_group %}
-            <tfoot>
+            </thead>
+            <tbody>
+              {% for row in insights.by_group %}
+                <tr>
+                  <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
+                  <td class="mono">{{ row.warehouse_count }}</td>
+                  <td class="mono">{{ row.item_count_display }}</td>
+                  <td class="mono inv-col-qty">{{ row.qty_display }}</td>
+                  <td class="mono inv-col-cost">{{ row.stock_value_display }}</td>
+                  <td class="mono inv-col-share">{{ row.share_display }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="6" class="sales-empty">لا مجموعات ضمن هذا الفلتر.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if insights.by_group %}
+          <table class="data-table sales-table perf-compare-table inv-table-compact inv-table-foot" aria-label="إجمالي المجموعات">
+            <tbody>
               <tr class="sales-grand-row">
                 <td>الإجمالي</td>
                 <td class="mono">{{ insights.group_totals.warehouse_count_display }}</td>
                 <td class="mono">{{ insights.group_totals.item_count_display }}</td>
-                <td class="mono">{{ insights.group_totals.stock_before_display }}</td>
-                <td class="mono">{{ insights.group_totals.pending_cost_display }}</td>
-                <td class="mono">{{ insights.group_totals.qty_display }}</td>
-                <td class="mono inv-value">{{ insights.group_totals.stock_value_display }}</td>
-                <td class="mono inv-share">{{ insights.group_totals.share_display }}</td>
+                <td class="mono inv-col-qty">{{ insights.group_totals.qty_display }}</td>
+                <td class="mono inv-col-cost">{{ insights.group_totals.stock_value_display }}</td>
+                <td class="mono inv-col-share">{{ insights.group_totals.share_display }}</td>
               </tr>
-            </tfoot>
-          {% endif %}
-        </table>
+            </tbody>
+          </table>
+        {% endif %}
       </div>
     </section>
   </section>
@@ -263,51 +258,49 @@
           <h3>حسب الفروع</h3>
           <span class="result-pill">{{ insights.by_branch|length }}</span>
         </div>
-        <div class="table-wrap inv-table-scroll">
-          <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب الفرع">
-            <thead>
-              <tr>
-                <th>الفرع</th>
-                <th>مخازن</th>
-                <th>أصناف</th>
-                <th>قبل الترحيل</th>
-                <th>غير مرحّل تكلفة</th>
-                <th>بعد الترحيل</th>
-                <th class="inv-value">القيمة</th>
-                <th class="inv-share">الحصة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in insights.by_branch %}
+        <div class="inv-table-frame">
+          <div class="table-wrap inv-table-scroll">
+            <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب الفرع">
+              <thead>
                 <tr>
-                  <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
-                  <td class="mono">{{ row.warehouse_count }}</td>
-                  <td class="mono">{{ row.item_count_display }}</td>
-                  <td class="mono">{{ row.stock_before_display }}</td>
-                  <td class="mono">{{ row.pending_cost_display }}</td>
-                  <td class="mono">{{ row.qty_display }}</td>
-                  <td class="mono inv-value">{{ row.stock_value_display }}</td>
-                  <td class="mono inv-share">{{ row.share_display }}</td>
+                  <th>الفرع</th>
+                  <th>مخازن</th>
+                  <th>أصناف</th>
+                  <th class="inv-col-qty" title="الكمية بعد خصم غير المرحّل">الكمية</th>
+                  <th class="inv-col-cost" title="القيمة بالتكلفة بعد الترحيل">القيمة</th>
+                  <th class="inv-col-share">الحصة</th>
                 </tr>
-              {% empty %}
-                <tr><td colspan="8" class="sales-empty">لا فروع ضمن هذا الفلتر.</td></tr>
-              {% endfor %}
-            </tbody>
-            {% if insights.by_branch %}
-              <tfoot>
+              </thead>
+              <tbody>
+                {% for row in insights.by_branch %}
+                  <tr>
+                    <td class="inv-cell-clip" title="{{ row.name }}">{{ row.name }}</td>
+                    <td class="mono">{{ row.warehouse_count }}</td>
+                    <td class="mono">{{ row.item_count_display }}</td>
+                    <td class="mono inv-col-qty">{{ row.qty_display }}</td>
+                    <td class="mono inv-col-cost">{{ row.stock_value_display }}</td>
+                    <td class="mono inv-col-share">{{ row.share_display }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="6" class="sales-empty">لا فروع ضمن هذا الفلتر.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if insights.by_branch %}
+            <table class="data-table sales-table perf-compare-table inv-table-compact inv-table-foot" aria-label="إجمالي الفروع">
+              <tbody>
                 <tr class="sales-grand-row">
                   <td>الإجمالي</td>
                   <td class="mono">{{ insights.branch_totals.warehouse_count_display }}</td>
                   <td class="mono">{{ insights.branch_totals.item_count_display }}</td>
-                  <td class="mono">{{ insights.branch_totals.stock_before_display }}</td>
-                  <td class="mono">{{ insights.branch_totals.pending_cost_display }}</td>
-                  <td class="mono">{{ insights.branch_totals.qty_display }}</td>
-                  <td class="mono inv-value">{{ insights.branch_totals.stock_value_display }}</td>
-                  <td class="mono inv-share">{{ insights.branch_totals.share_display }}</td>
+                  <td class="mono inv-col-qty">{{ insights.branch_totals.qty_display }}</td>
+                  <td class="mono inv-col-cost">{{ insights.branch_totals.stock_value_display }}</td>
+                  <td class="mono inv-col-share">{{ insights.branch_totals.share_display }}</td>
                 </tr>
-              </tfoot>
-            {% endif %}
-          </table>
+              </tbody>
+            </table>
+          {% endif %}
         </div>
       </section>
 

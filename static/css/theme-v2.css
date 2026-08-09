@@ -606,6 +606,71 @@ select:focus {
   height: 5.6rem !important;
 }
 
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis > .dash-kpi-card {
+  min-height: 5.9rem !important;
+  max-height: none !important;
+  height: auto !important;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-value {
+  white-space: normal !important;
+  font-size: clamp(0.85rem, 1.35vw, 1.12rem) !important;
+  font-weight: 900 !important;
+  line-height: 1.25 !important;
+  text-align: start !important;
+}
+
+/* ألوان النص تطابق لون كل بطاقة ترتيب */
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .dash-kpi-label,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .dash-kpi-value,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .dash-kpi-hint,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .money,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .money-value {
+  color: #9f1239 !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .dash-kpi-label {
+  color: #be123c !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-visit .dash-kpi-hint {
+  color: #c2185b !important;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-branches .dash-kpi-label {
+  color: #b45309 !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-branches .dash-kpi-value,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-branches .money,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-branches .money-value {
+  color: #92400e !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-branches .dash-kpi-hint {
+  color: #c27803 !important;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-returns .dash-kpi-label {
+  color: #b91c1c !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-returns .dash-kpi-value,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-returns .money,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-returns .money-value {
+  color: #991b1b !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-returns .dash-kpi-hint {
+  color: #c0392b !important;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-item-ret .dash-kpi-label {
+  color: #b91c1c !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-item-ret .dash-kpi-value,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-item-ret .money,
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-item-ret .money-value {
+  color: #7f1d1d !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-rank-kpis .dash-kpi-glass-item-ret .dash-kpi-hint {
+  color: #c0392b !important;
+}
+
 .page.sales-dash .dash-kpi-glass-sellers {
   background: linear-gradient(155deg, #dde8fb 0%, #c0d2f5 100%) !important;
   border-color: #8eace6 !important;
@@ -1093,6 +1158,41 @@ select:focus {
   color: var(--ink-soft) !important;
 }
 
+/* مخزون: رأس أعمدة ثابت عند التمرير — خلفية معتمة حتى لا يتداخل النص */
+.page.sales-dash.inv-dash .inv-table-scroll {
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 5 !important;
+  background: #e8f0fa !important;
+  color: #173e69 !important;
+  box-shadow: 0 1px 0 #c5d6ea;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll thead th.inv-col-qty {
+  background: #d7f3e3 !important;
+  color: #14532d !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll thead th.inv-col-cost {
+  background: #fdeecd !important;
+  color: #78350f !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll thead th.inv-col-share {
+  background: #dbeafe !important;
+  color: #0c4a6e !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll thead th.inv-col-sticky {
+  z-index: 7 !important;
+  background: #e8f0fa !important;
+}
+
 /* نظرة عامة للمبيعات: رؤوس أعمدة ثابتة عند التمرير داخل الجدول */
 .page.sales-dash.sales-overview-dash .sales-ov-scroll {
   max-height: 22rem;
@@ -1161,6 +1261,23 @@ select:focus {
 
 .page.sales-dash .dash-panel-glass .data-table tbody tr:hover td {
   background: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* مخزون: عمود الاسم الثابت معتم بالكامل — لا شفافية */
+.page.sales-dash.inv-dash .inv-table-scroll tbody td.inv-col-sticky,
+.page.sales-dash.inv-dash .inv-table-scroll tbody td.inv-col-sticky.inv-cell-clip {
+  background: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll tbody tr:nth-child(even) td.inv-col-sticky,
+.page.sales-dash.inv-dash .inv-table-scroll tbody tr:nth-child(even) td.inv-col-sticky.inv-cell-clip {
+  background: #f3f7fb !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-scroll tbody tr:hover td.inv-col-sticky,
+.page.sales-dash.inv-dash .inv-table-scroll tbody tr:hover td.inv-col-sticky.inv-cell-clip {
+  background: #e8f1f8 !important;
 }
 
 .page.sales-dash .dash-panel-glass .sales-grand-row td {
@@ -1373,7 +1490,7 @@ select:focus {
 /* أعمدة الأرقام مرنة: تتقلص/تتسع حسب طول الرقم */
 .page.sales-dash .sales-table,
 .page.sales-dash .cashier-bills-table,
-.inv-dash .sales-table,
+.inv-dash .sales-table:not(.inv-table-compact),
 .purchase-dash .sales-table,
 .page.sales-dash .dash-margins .margin-scroll .sales-table {
   table-layout: auto !important;
@@ -1386,8 +1503,8 @@ select:focus {
 .page.sales-dash .sales-table td,
 .page.sales-dash .cashier-bills-table th,
 .page.sales-dash .cashier-bills-table td,
-.inv-dash .sales-table th,
-.inv-dash .sales-table td,
+.inv-dash .sales-table:not(.inv-table-compact) th,
+.inv-dash .sales-table:not(.inv-table-compact) td,
 .purchase-dash .sales-table th,
 .purchase-dash .sales-table td,
 .page.sales-dash .dash-margins .sales-table th,
@@ -1402,10 +1519,10 @@ select:focus {
 .page.sales-dash .sales-table th.mono,
 .page.sales-dash .cashier-bills-table .sales-amt,
 .page.sales-dash .cashier-bills-table td.mono,
-.inv-dash .sales-table .sales-amt,
-.inv-dash .sales-table td.mono,
-.inv-dash .sales-table .inv-value,
-.inv-dash .sales-table .inv-share,
+.inv-dash .sales-table:not(.inv-table-compact) .sales-amt,
+.inv-dash .sales-table:not(.inv-table-compact) td.mono,
+.inv-dash .sales-table:not(.inv-table-compact) .inv-value,
+.inv-dash .sales-table:not(.inv-table-compact) .inv-share,
 .purchase-dash .sales-table .sales-amt,
 .purchase-dash .sales-table td.mono,
 .page.sales-dash .dash-margins .sales-table .sales-amt,
@@ -1432,8 +1549,8 @@ select:focus {
 /* عمود الاسم يتمدد؛ الأرقام تبقى ضيقة حسب المحتوى */
 .page.sales-dash .sales-table th:nth-child(2),
 .page.sales-dash .sales-table td:nth-child(2),
-.inv-dash .sales-table th:nth-child(2),
-.inv-dash .sales-table td:nth-child(2),
+.inv-dash .sales-table:not(.inv-table-compact) th:nth-child(2),
+.inv-dash .sales-table:not(.inv-table-compact) td:nth-child(2),
 .page.sales-dash .dash-margins .sales-table th:nth-child(2),
 .page.sales-dash .dash-margins .sales-table td:nth-child(2) {
   width: auto !important;
@@ -1553,32 +1670,49 @@ select:focus {
   width: auto !important;
 }
 
-/* مخزون: 19 صف + إجمالي واضح */
+/* مخزون: صف الإجمالي خارج التمرير — كل الخلايا ثابتة */
 .inv-dash .inv-table-scroll {
   max-height: calc(1.95rem + (19 * 1.85rem) + 2.5rem) !important;
 }
 
-.inv-dash .inv-table-scroll tfoot td,
-.inv-dash .sales-grand-row td {
+.page.sales-dash.inv-dash .inv-table-foot,
+.page.sales-dash.inv-dash .inv-table-foot .sales-grand-row td {
   background: #0e4a6e !important;
-  color: #fff !important;
-  font-weight: 800 !important;
-  font-size: 0.95rem !important;
-  white-space: nowrap !important;
-  overflow: visible !important;
-  text-overflow: clip !important;
 }
 
-.inv-dash .inv-table-scroll tfoot .inv-value,
-.inv-dash .inv-table-scroll tfoot .inv-share,
-.inv-dash .sales-grand-row .inv-value,
-.inv-dash .sales-grand-row .inv-share,
-.inv-dash .sales-grand-row .money,
-.inv-dash .sales-grand-row .mono {
+.page.sales-dash.inv-dash .inv-table-foot .sales-grand-row td {
+  position: static !important;
+  bottom: auto !important;
+  z-index: auto !important;
   color: #fff !important;
   font-weight: 800 !important;
-  background: transparent !important;
+  font-size: 0.78rem !important;
   white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  background: #0e4a6e !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-foot .sales-grand-row td.mono:not(.inv-col-qty):not(.inv-col-cost):not(.inv-col-share) {
+  color: #fff !important;
+  background: #0e4a6e !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-foot .sales-grand-row td.inv-col-qty {
+  color: #14532d !important;
+  background: #d7f3e3 !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-foot .sales-grand-row td.inv-col-cost {
+  color: #78350f !important;
+  background: #fdeecd !important;
+}
+
+.page.sales-dash.inv-dash .inv-table-foot .sales-grand-row td.inv-col-share {
+  color: #0c4a6e !important;
+  background: #dbeafe !important;
 }
 
 .sales-num-btn {
