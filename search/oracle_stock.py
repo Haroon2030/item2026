@@ -3964,6 +3964,7 @@ def _fetch_pos_group_totals(
     by_branch: bool = False,
     skip_returns: bool = False,
     _allow_fanout: bool = True,
+    _month_split: bool = True,
 ) -> list[dict]:
     """مبيعات نقاط البيع مجمّعة حسب المجموعة (أو المجموعة×الفرع).
 
@@ -3999,9 +4000,11 @@ def _fetch_pos_group_totals(
     span = _date_span_days(date_from, date_to)
 
     # فترات طويلة: شهور متسلسلة (لا تداخل مع توازي الفروع — أقل ضغطاً على أوراكل)
+    # _month_split=False → تفرّع فروع على كامل الفترة دفعة واحدة (أسرع للواجهة)
     if (
         skip_returns
         and _allow_fanout
+        and _month_split
         and not brn
         and span > 45
     ):
@@ -4095,15 +4098,19 @@ def _fetch_pos_group_totals(
                     return []
 
             # شهر: عمال أكثر بعد تسريع الاستعلام (بلا JOIN أصناف)
+            # فترة طويلة دفعة واحدة: عمال أقل ومهلة أطول لكل فرع
             if span <= 31:
                 workers = min(6, len(branches))
                 job_timeout = 75.0 if span <= 16 else 110.0
             elif span <= 62:
                 workers = min(4, len(branches))
                 job_timeout = 140.0
+            elif span <= 120:
+                workers = min(4, len(branches))
+                job_timeout = 220.0
             else:
                 workers = min(3, len(branches))
-                job_timeout = 180.0
+                job_timeout = 320.0
             # حمّل خريطة الأصناف مرة قبل التفرّع
             try:
                 _item_group_code_map()
@@ -4729,8 +4736,7 @@ def _fetch_one_month_group_totals(
 ) -> list[dict]:
     """1) اقرأ JSON من الكاش  2) وإلا SQL → JSON  3) أعد الصفوف للتجميع.
 
-    على WAN (الإنتاج): مسح شهر واحد باستعلام واحد أسرع من تفرّع عشرات الفروع
-    (كل فرع = اتصال + رحلة شبكة).
+    شهر بدون فرع: تفرّع الفروع أسرع بكثير من مسح كل الفروع باستعلام واحد (~30ث).
     """
     mode = "gross" if fast else "net"
     cached = _load_groups_month_json(
@@ -4744,7 +4750,6 @@ def _fetch_one_month_group_totals(
     )
     if cached is not None:
         return cached
-    # بلا تفرّع فروع على WAN: استعلام شهر واحد أسرع من عشرات الاتصالات
     if _system_conf(system).get("source") == "pos":
         rows = _fetch_pos_group_totals(
             date_from,
@@ -4753,7 +4758,8 @@ def _fetch_one_month_group_totals(
             group_code=gcode,
             by_branch=split_by_branch,
             skip_returns=fast,
-            _allow_fanout=False,
+            # تفرّع فروع لشهر واحد — أسرع من مسح موحّد بطيء
+            _allow_fanout=not bool(brn),
         )
     else:
         with oracle_session():
@@ -4959,8 +4965,8 @@ def fetch_group_sales_totals(
 
     أونكس/فواتير: صافي بعد خصم المرتجع (ليطابق تقرير مبيعات الأصناف في أونكس).
     نقاط البيع: إجمالي بدون مرتجع افتراضياً (المرتجع يُعرض منفصلاً) إلا مع force_fast=False.
-    مسار سريع: كاش حي → دمج شهور من الكاش → كاش قديم → أوراكل مرة واحدة.
-    للسنة/الفترات الطويلة: لا يُمسح العام دفعة واحدة — شهور من الكاش + أحدث شهر ثم تدفئة خلفية.
+    مسار سريع: كاش حي → دمج شهور من الكاش → كاش قديم → أوراكل دفعة واحدة.
+    للسنة/الفترات الطويلة بدون كاش: تفرّع فروع على كامل الفترة ثم إرجاع كامل.
     """
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
@@ -5045,7 +5051,7 @@ def fetch_group_sales_totals(
         )
         return rows
 
-    # فترات طويلة: أظهر الكاش فوراً — لا تنتظر SQL الشهر في طلب HTTP
+    # فترات طويلة: أظهر الكاش فوراً إن اكتمل — وإلا اجلب دفعة واحدة ثم أرجع
     if long_range:
         merged_chk, missing_chk = _monthly_merge()
         if merged_chk is not None and not missing_chk:
@@ -5054,22 +5060,78 @@ def fetch_group_sales_totals(
         period_hit = _period_cached(allow_stale=True)
         display = _pick_richer_group_rows(merged_chk, period_hit)
 
-        # يوجد كاش جزئي: أرجعه فوراً + دفّئ الناقص في الخلفية (بلا انتظار 50ث)
-        if display is not None:
-            still = list(missing_chk or [])
-            if not still and merged_chk is not None:
+        # كاش جزئي غني: أرجعه فوراً + دفّئ الناقص (زيارات متكررة)
+        if display is not None and missing_chk:
+            # إن بقي شهر أو اثنان فقط أكملهم الآن دفعة واحدة بدل الاستطلاع
+            if len(missing_chk) <= 2:
+                try:
+                    _run_parallel_ex(
+                        [
+                            lambda m=pair: _fetch_one_month_group_totals(
+                                system=system,
+                                date_from=m[0],
+                                date_to=m[1],
+                                brn=brn,
+                                gcode=gcode,
+                                split_by_branch=split_by_branch,
+                                fast=fast,
+                            )
+                            for pair in missing_chk
+                        ],
+                        max_workers=min(2, len(missing_chk)),
+                        timeout_sec=240.0,
+                        soft_fail=True,
+                    )
+                    merged_chk, missing_chk = _monthly_merge()
+                    if merged_chk is not None and not missing_chk:
+                        return _return_complete(merged_chk)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("oneshot finish missing months failed: %s", exc)
+            if missing_chk:
+                return _return_partial(display, missing_chk)
+            if merged_chk is not None:
                 return _return_complete(merged_chk)
-            if not still:
-                _, still = _monthly_merge()
-            if not still:
-                return _return_complete(
-                    merged_chk if merged_chk is not None else display
-                )
-            return _return_partial(display, still)
+            return _return_complete(display)
 
-        # لا كاش أصلاً: اجلب أحدث شهر فقط ثم أرجعه (أول زيارة باردة)
-        newest = months[-1] if months else None
+        if display is not None and not missing_chk:
+            return _return_complete(
+                merged_chk if merged_chk is not None else display
+            )
+
+        # لا كاش: دفعة واحدة — تفرّع فروع على كامل الفترة (بدون تقسيم شهور متسلسل)
         rows: list[dict] = []
+        try:
+            if conf.get("source") == "pos":
+                rows = _fetch_pos_group_totals(
+                    date_from,
+                    date_to,
+                    branch_code=brn,
+                    group_code=gcode,
+                    by_branch=split_by_branch,
+                    skip_returns=fast,
+                    _allow_fanout=not bool(brn),
+                    _month_split=False,
+                )
+            else:
+                with oracle_session():
+                    rows = _fetch_bill_group_totals(
+                        date_from,
+                        date_to,
+                        conf,
+                        brn,
+                        gcode,
+                        by_branch=split_by_branch,
+                        skip_returns=fast,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("oneshot period groups fetch failed: %s", exc)
+            rows = []
+
+        if rows:
+            return _return_complete(rows)
+
+        # فشل الدفعة: حاول أحدث شهر كحد أدنى
+        newest = months[-1] if months else None
         if newest:
             try:
                 rows = _fetch_one_month_group_totals(
@@ -5089,16 +5151,16 @@ def fetch_group_sales_totals(
                 return _return_complete(merged_chk)
             if merged_chk is not None:
                 return _return_partial(merged_chk, missing_chk)
-        missing = [m for m in months if m != newest] if newest else list(months)
-        if rows:
-            return _return_partial(
-                rows,
-                missing,
-                note="عرض أحدث شهر — بقية الشهور تُجهَّز في الخلفية",
-            )
+            missing = [m for m in months if m != newest]
+            if rows:
+                return _return_partial(
+                    rows,
+                    missing,
+                    note="عرض أحدث شهر — بقية الشهور تُجهَّز في الخلفية",
+                )
         return _return_partial(
             [],
-            missing,
+            list(months),
             note="جاري تجهيز مبيعات المجموعات في الخلفية — أعد التحميل بعد قليل",
         )
 

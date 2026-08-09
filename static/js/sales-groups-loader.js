@@ -435,11 +435,11 @@
         body,
         sub,
         pill,
-        "جاري تحميل مبيعات المجموعات… " + formatDuration(Date.now() - started)
+        "جلب مبيعات المجموعات دفعة واحدة… " + formatDuration(Date.now() - started)
       );
     }, 1000);
 
-    fetchJson(url, 180 * 1000)
+    fetchJson(url, 420 * 1000)
       .then(function (data) {
         clearInterval(tick);
         finishSignals();
@@ -474,7 +474,7 @@
       finishSignals();
       // تحديث صامت مرة واحدة — إن ناقص شهور يُجلب SQL متوازٍ
       if (url) {
-        fetchJson(url, 180 * 1000)
+        fetchJson(url, 420 * 1000)
           .then(function (data) {
             render(data, 0, "محدّث");
             fetchSqlMonthsThenReload(url, data, Date.now());
