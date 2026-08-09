@@ -35,13 +35,19 @@
         /* fall through */
       }
     }
-    var panel = document.getElementById("sales-groups-panel");
-    if (!panel) return "";
-    var raw = panel.getAttribute("data-groups-url") || "";
-    // فك &#38; / &amp; إن بقيت مشفّرة في الخاصية
-    var ta = document.createElement("textarea");
-    ta.innerHTML = raw;
-    return String(ta.value || "").trim();
+    return "";
+  }
+
+  function readSeed() {
+    var el = document.getElementById("sales-groups-seed");
+    if (!el) return null;
+    try {
+      var data = JSON.parse(el.textContent || "null");
+      if (data && data.ok && data.groups) return data;
+    } catch (e) {
+      /* ignore */
+    }
+    return null;
   }
 
   function setLoading(body, sub, pill, msg) {
@@ -58,7 +64,16 @@
   function fail(body, sub, pill, msg, elapsedMs) {
     if (body) {
       body.innerHTML =
-        '<tr><td colspan="6" class="sales-empty">' + esc(msg) + "</td></tr>";
+        '<tr><td colspan="6" class="sales-empty">' +
+        esc(msg) +
+        ' <button type="button" class="btn-primary sales-groups-retry" style="margin-inline-start:0.5rem">إعادة المحاولة</button>' +
+        "</td></tr>";
+      var btn = body.querySelector(".sales-groups-retry");
+      if (btn) {
+        btn.addEventListener("click", function () {
+          loadSingle(readUrl(), 1);
+        });
+      }
     }
     if (pill) pill.textContent = "!";
     if (sub) {
@@ -67,7 +82,7 @@
     }
   }
 
-  function render(data, elapsedMs) {
+  function render(data, elapsedMs, progressNote) {
     var body = document.getElementById("sales-groups-body");
     var foot = document.getElementById("sales-groups-foot");
     var sub = document.getElementById("sales-groups-sub");
@@ -90,6 +105,7 @@
 
     var rows = data.groups.rows || [];
     var totals = data.groups.totals || {};
+    var warn = (data.groups && data.groups.warning) || data.warning || "";
     if (!rows.length) {
       if (body) {
         body.innerHTML =
@@ -119,10 +135,10 @@
         '<td class="mono">' +
         esc(row.qty_display) +
         "</td>" +
-        '<td class="mono sales-amt">' +
+        '<td class="mono sales-amt sales-col-amt">' +
         moneyHtml(row.sales_total_display) +
         "</td>" +
-        '<td class="mono">' +
+        '<td class="mono sales-col-share">' +
         esc(row.share_display) +
         "</td>" +
         "</tr>";
@@ -140,7 +156,9 @@
         " مجموعة · إجمالي " +
         (totals.sales_total_display || "0.00") +
         " · خلال " +
-        took;
+        took +
+        (progressNote ? " · " + progressNote : "") +
+        (warn ? " · " + warn : "");
     }
   }
 
@@ -151,6 +169,9 @@
     }
     var raw = String(err.message || "");
     var low = raw.toLowerCase();
+    if (/مهلة|timeout|timed out/i.test(raw)) {
+      return "انتهت مهلة جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات.";
+    }
     if (
       low === "failed to fetch" ||
       low.indexOf("networkerror") !== -1 ||
@@ -162,24 +183,7 @@
     return raw || "تعذّر تحميل المجموعات";
   }
 
-  function loadGroups(url, attempt) {
-    var body = document.getElementById("sales-groups-body");
-    var sub = document.getElementById("sales-groups-sub");
-    var pill = document.getElementById("sales-groups-pill");
-    var started = Date.now();
-    var tryNo = attempt || 1;
-    var maxTries = 3;
-
-    var tick = setInterval(function () {
-      var elapsed = Date.now() - started;
-      setLoading(
-        body,
-        sub,
-        pill,
-        "جاري تحميل مبيعات المجموعات… " + formatDuration(elapsed)
-      );
-    }, 1000);
-
+  function fetchJson(url, timeoutMs) {
     var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
     var abortTimer = null;
     if (ctrl) {
@@ -189,24 +193,9 @@
         } catch (e) {
           /* ignore */
         }
-      }, 6 * 60 * 1000);
+      }, timeoutMs || 4 * 60 * 1000);
     }
-
-    function done() {
-      clearInterval(tick);
-      if (abortTimer) clearTimeout(abortTimer);
-    }
-
-    function finishAll() {
-      done();
-      try {
-        window.dispatchEvent(new Event("sales-groups-done"));
-      } catch (e) {
-        /* ignore */
-      }
-    }
-
-    fetch(url, {
+    return fetch(url, {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -220,7 +209,6 @@
           } catch (e) {
             data = null;
           }
-          // جلسة منتهية → إعادة توجيه لتسجيل الدخول
           if (r.redirected && /\/login\/?/i.test(r.url || "")) {
             throw new Error("انتهت الجلسة — سجّل الدخول ثم أعد فتح الصفحة");
           }
@@ -230,52 +218,92 @@
                 (r.ok ? "تعذّر تحميل المجموعات" : "HTTP " + r.status)
             );
           }
-          if (!data) {
-            throw new Error("استجابة غير JSON");
-          }
+          if (!data) throw new Error("استجابة غير JSON");
           return data;
         });
       })
+      .finally(function () {
+        if (abortTimer) clearTimeout(abortTimer);
+      });
+  }
+
+  function finishSignals() {
+    try {
+      window.dispatchEvent(new Event("sales-groups-first"));
+      window.dispatchEvent(new Event("sales-groups-done"));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function loadSingle(url, attempt) {
+    if (!url) return;
+    var body = document.getElementById("sales-groups-body");
+    var sub = document.getElementById("sales-groups-sub");
+    var pill = document.getElementById("sales-groups-pill");
+    var started = Date.now();
+    var tryNo = attempt || 1;
+    var maxTries = 2;
+
+    var tick = setInterval(function () {
+      setLoading(
+        body,
+        sub,
+        pill,
+        "جاري تحميل مبيعات المجموعات… " + formatDuration(Date.now() - started)
+      );
+    }, 1000);
+
+    fetchJson(url, 180 * 1000)
       .then(function (data) {
-        finishAll();
+        clearInterval(tick);
+        finishSignals();
         render(data, Date.now() - started);
       })
       .catch(function (err) {
-        done();
-        var isAbort = err && err.name === "AbortError";
+        clearInterval(tick);
         var msg = friendlyFetchError(err);
-        var isNet =
-          !isAbort &&
-          /انقطع الاتصال|failed to fetch|network/i.test(
+        var isRetryable =
+          /انقطع|failed to fetch|network|مهلة|timeout|abort/i.test(
             String((err && err.message) || "") + " " + msg
           );
-
-        if (isNet && tryNo < maxTries) {
+        if (isRetryable && tryNo < maxTries) {
           setLoading(
             body,
             sub,
             pill,
-            "انقطع الاتصال — إعادة المحاولة " + (tryNo + 1) + "/" + maxTries + "…"
+            "تعثّر التحميل — إعادة المحاولة " + (tryNo + 1) + "/" + maxTries + "…"
           );
           setTimeout(function () {
-            loadGroups(url, tryNo + 1);
-          }, 1500 * tryNo);
+            loadSingle(url, tryNo + 1);
+          }, 1500);
           return;
         }
-
-        if (isNet) {
-          msg =
-            "انقطع الاتصال بالسيرفر. تأكد أن السيرفر يعمل ثم حدّث الصفحة (Ctrl+F5)";
-        }
-        finishAll();
+        finishSignals();
         fail(body, sub, pill, msg, Date.now() - started);
       });
   }
 
   function init() {
     var url = readUrl();
+    var seeded = readSeed();
+    if (seeded) {
+      render(seeded, 0, "من الكاش");
+      finishSignals();
+      // تحديث صامت مرة واحدة — بلا حلقة شهور
+      if (url) {
+        fetchJson(url, 180 * 1000)
+          .then(function (data) {
+            render(data, 0, "محدّث");
+          })
+          .catch(function () {
+            /* أبقِ الكاش المعروض */
+          });
+      }
+      return;
+    }
     if (!url) return;
-    loadGroups(url, 1);
+    loadSingle(url, 1);
   }
 
   if (document.readyState === "loading") {

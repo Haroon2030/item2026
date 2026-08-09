@@ -10988,8 +10988,8 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   container-name: sales-kpi;
   box-sizing: border-box;
   height: 100%;
-  min-height: 5.1rem;
-  max-height: 5.1rem;
+  min-height: 5.6rem;
+  max-height: 5.6rem;
   padding: 0.45rem 0.55rem !important;
   gap: 0.12rem !important;
   overflow: hidden;
@@ -11005,8 +11005,9 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   gap: 0.28rem;
   min-width: 0;
   width: 100%;
-  font-size: clamp(0.58rem, 2.9cqi, 0.72rem) !important;
-  line-height: 1.2;
+  font-size: clamp(0.78rem, 3.8cqi, 0.95rem) !important;
+  font-weight: 800 !important;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11025,13 +11026,16 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-value {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   width: 100%;
-  font-size: clamp(0.68rem, 4.4cqi, 0.92rem) !important;
-  line-height: 1.1;
+  font-size: clamp(0.95rem, 7cqi, 1.45rem) !important;
+  font-weight: 900 !important;
+  line-height: 1.05;
   letter-spacing: -0.03em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11080,14 +11084,14 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 @container sales-kpi (max-width: 12rem) {
   .sales-overview-dash .sales-ov-kpis .dash-kpi-value,
   .dash-kpi-value {
-    font-size: clamp(0.6rem, 5.2cqi, 0.8rem) !important;
+    font-size: clamp(0.8rem, 7.5cqi, 1.15rem) !important;
   }
 }
 
 @media (max-width: 1100px) {
   .sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
-    min-height: 4.85rem;
-    max-height: 4.85rem;
+    min-height: 5.3rem;
+    max-height: 5.3rem;
   }
 }
 
@@ -11100,14 +11104,14 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 .sales-overview-dash .sales-ov-bottom {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.9fr);
+  grid-template-columns: 1fr 1fr;
   gap: 0.85rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .sales-overview-dash .sales-ov-returns {
   min-width: 0;
-  min-height: 22.5rem;
+  min-height: 28rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -11119,10 +11123,102 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   min-height: 0;
 }
 
-/* نفس تنسيق لوحة المجموعات: رأس + جدول بعرض كامل */
-.sales-overview-dash .sales-ov-items {
+/* صف أصناف الإرجاع + أكثر المستخدمين — عرض وارتفاع متساويان */
+.sales-overview-dash .sales-ov-items-row {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  align-items: stretch;
   margin-top: 0.15rem;
+}
+
+.sales-overview-dash .sales-ov-bottom > .sales-ov-panel,
+.sales-overview-dash .sales-ov-items-row > .sales-ov-panel {
+  margin-top: 0;
+  min-width: 0;
+  height: 100%;
+  min-height: 28rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.sales-overview-dash .sales-ov-bottom > .sales-ov-panel > .sales-ov-scroll,
+.sales-overview-dash .sales-ov-items-row > .sales-ov-panel > .sales-ov-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: 22rem;
+}
+
+.sales-overview-dash .sales-ov-items,
+.sales-overview-dash .sales-ov-users,
+.sales-overview-dash .sales-ov-activity {
+  margin-top: 0;
+  min-width: 0;
+}
+
+/* تلوين احترافي: المبلغ أخضر · التكلفة/المرتجع كهرماني · الحصة أزرق */
+.sales-overview-dash .sales-table th.sales-col-amt,
+.sales-overview-dash .sales-table td.sales-col-amt {
+  background: #eafaf0 !important;
+  color: #166534 !important;
+  font-weight: 800;
+}
+
+.sales-overview-dash .sales-table th.sales-col-cost,
+.sales-overview-dash .sales-table td.sales-col-cost {
+  background: #fef7e8 !important;
+  color: #92400e !important;
+  font-weight: 800;
+}
+
+.sales-overview-dash .sales-table th.sales-col-share,
+.sales-overview-dash .sales-table td.sales-col-share {
+  background: #eef6fd !important;
+  color: #0c4a6e !important;
+  font-weight: 700;
+}
+
+.sales-overview-dash .sales-table tfoot td.sales-col-amt {
+  background: #d7f3e3 !important;
+  color: #14532d !important;
+}
+
+.sales-overview-dash .sales-table tfoot td.sales-col-cost {
+  background: #fdeecd !important;
+  color: #78350f !important;
+}
+
+.sales-overview-dash .sales-ov-panel .dash-panel-head {
+  flex: 0 0 auto;
+}
+
+.sales-overview-dash .sales-ov-users .suppliers-name small,
+.sales-overview-dash .sales-ov-users td small {
+  color: #64748b;
+  font-weight: 600;
+  margin-inline-start: 0.3rem;
+}
+
+.sales-overview-dash .sales-cont-high {
+  color: #0f7a45;
+  font-weight: 800;
+}
+
+.sales-overview-dash .sales-cont-mid {
+  color: #1d4f91;
+  font-weight: 800;
+}
+
+.sales-overview-dash .sales-cont-ok {
+  color: #9a5b12;
+  font-weight: 700;
+}
+
+.sales-overview-dash .sales-cont-low {
+  color: #8a4a5a;
+  font-weight: 700;
 }
 
 .sales-overview-dash .sales-ov-returns .sales-returns-donut.branch-donut {
@@ -11166,7 +11262,9 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 }
 
 .sales-overview-dash .sales-ov-groups .sales-ov-scroll,
-.sales-overview-dash .sales-ov-items .sales-ov-scroll {
+.sales-overview-dash .sales-ov-items .sales-ov-scroll,
+.sales-overview-dash .sales-ov-users .sales-ov-scroll,
+.sales-overview-dash .sales-ov-activity .sales-ov-scroll {
   max-height: 28rem;
 }
 
@@ -11209,6 +11307,9 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   .sales-overview-dash .sales-ov-bottom {
     grid-template-columns: 1fr;
   }
+  .sales-overview-dash .sales-ov-items-row {
+    grid-template-columns: 1fr;
+  }
   .sales-overview-dash .sales-ov-returns {
     min-height: 18rem;
   }
@@ -11221,5 +11322,253 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   .sales-overview-dash .sales-ov-filter {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+/* �� �������� (�������) �� */
+.suppliers-dash .suppliers-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.75rem;
+  align-items: end;
+  padding: 0.75rem 0.9rem;
+  margin: 0 0 0.9rem;
+}
+
+.suppliers-dash .suppliers-filter .field {
+  min-width: 8.5rem;
+}
+
+.suppliers-dash .suppliers-q-field {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.suppliers-dash .suppliers-q-field input[type="search"] {
+  width: 100%;
+}
+
+.suppliers-dash .suppliers-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0 0 0.9rem;
+}
+
+.suppliers-dash .suppliers-kpis .dash-kpi-value {
+  display: block;
+  font-size: clamp(1.1rem, 1.6vw, 1.55rem) !important;
+  font-weight: 900 !important;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1280px) {
+  .suppliers-dash .suppliers-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.suppliers-dash .suppliers-panel .sales-ov-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.suppliers-dash .suppliers-scroll {
+  max-height: min(70vh, 36rem);
+  overflow: auto;
+}
+
+.suppliers-dash .suppliers-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f1f5f9 !important;
+  box-shadow: 0 1px 0 #cbd5e1;
+}
+
+.suppliers-dash .suppliers-scroll tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
+.suppliers-dash .suppliers-name {
+  max-width: 22rem;
+}
+
+.suppliers-dash .suppliers-name small {
+  display: inline-block;
+  margin-inline-start: 0.35rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* احتواء الجدول: خط أصغر وحشوة أضيق واسم مقصوص — بلا تمرير أفقي */
+.suppliers-dash .suppliers-table {
+  width: 100%;
+  table-layout: auto;
+  font-size: 0.85rem;
+}
+
+.suppliers-dash .suppliers-table th,
+.suppliers-dash .suppliers-table td {
+  padding: 0.4rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* عمود الاسم يلتف حول المحتوى — بلا فراغ زائد داخل الخلية */
+.suppliers-dash .suppliers-table .suppliers-name {
+  width: 1%;
+  max-width: none;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+/* تثبيت عمودَي # والمورد عند التمرير الأفقي */
+.page.sales-dash.suppliers-dash .suppliers-table th:nth-child(1),
+.page.sales-dash.suppliers-dash .suppliers-table td:nth-child(1) {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+  background: #fff !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-table th:nth-child(2),
+.page.sales-dash.suppliers-dash .suppliers-table td:nth-child(2) {
+  position: sticky;
+  inset-inline-start: 2.3rem;
+  z-index: 2;
+  background: #fff !important;
+  box-shadow: -6px 0 8px -6px rgba(15, 23, 42, 0.2);
+}
+
+/* كل الخلايا بخلفية بيضاء صلبة — ثبات كامل بلا شفافية عند التمرير */
+.page.sales-dash.suppliers-dash .suppliers-table tbody td {
+  background: #fff !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-table tbody tr:nth-child(even) td {
+  background: #fff !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-scroll thead th {
+  background: #fff !important;
+}
+
+/* الأعمدة الملوّنة تبقى ملوّنة فوق الأبيض */
+.page.sales-dash.suppliers-dash .suppliers-table tbody td.sup-col-buy {
+  background: #fef7e8 !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-table tbody td.sup-col-pay {
+  background: #eafaf0 !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-table tbody td.sup-col-stock {
+  background: #eef6fd !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-scroll thead th.sup-col-buy {
+  background: #fdeecd !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-scroll thead th.sup-col-pay {
+  background: #d7f3e3 !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-scroll thead th.sup-col-stock {
+  background: #dcedfa !important;
+}
+
+/* زوايا الرأس: فوق التثبيت العمودي والأفقي معاً */
+.page.sales-dash.suppliers-dash .suppliers-scroll thead th:nth-child(1),
+.page.sales-dash.suppliers-dash .suppliers-scroll thead th:nth-child(2) {
+  z-index: 5;
+  background: #fff !important;
+}
+
+.page.sales-dash.suppliers-dash .suppliers-table tfoot td:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 5;
+}
+
+.suppliers-dash .suppliers-table .suppliers-name small {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* تلوين الأعمدة: التوريد/التكلفة كهرماني · السداد أخضر · المخزون أزرق فاتح */
+.suppliers-dash .suppliers-table td.sup-col-buy {
+  background: #fef7e8;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.suppliers-dash .suppliers-table th.sup-col-buy {
+  background: #fdeecd !important;
+  color: #92400e;
+}
+
+.suppliers-dash .suppliers-table td.sup-col-pay {
+  background: #eafaf0;
+  color: #166534;
+  font-weight: 700;
+}
+
+.suppliers-dash .suppliers-table th.sup-col-pay {
+  background: #d7f3e3 !important;
+  color: #166534;
+}
+
+.suppliers-dash .suppliers-table td.sup-col-stock {
+  background: #eef6fd;
+  color: #0c4a6e;
+  font-weight: 700;
+}
+
+.suppliers-dash .suppliers-table th.sup-col-stock {
+  background: #dcedfa !important;
+  color: #0c4a6e;
+}
+
+.suppliers-dash .suppliers-table tfoot td.sup-col-buy,
+.suppliers-dash .suppliers-table tfoot td.sup-col-pay,
+.suppliers-dash .suppliers-table tfoot td.sup-col-stock {
+  font-weight: 800;
+}
+
+@media (max-width: 1280px) {
+  .suppliers-dash .suppliers-table {
+    font-size: 0.78rem;
+  }
+  .suppliers-dash .suppliers-table .suppliers-name {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .suppliers-dash .suppliers-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .suppliers-dash .suppliers-filter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .suppliers-dash .suppliers-kpis {
+    grid-template-columns: 1fr;
   }
 }

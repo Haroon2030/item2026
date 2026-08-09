@@ -200,6 +200,7 @@
 
     <div class="sales-ov-bottom" aria-label="المجموعات والمرتجعات">
       {% if groups_api_url %}{{ groups_api_url|json_script:"sales-groups-url" }}{% endif %}
+      {% if groups_seed %}{{ groups_seed|json_script:"sales-groups-seed" }}{% endif %}
       <section
         class="dash-panel dash-panel-glass sales-ov-panel sales-ov-groups"
         aria-label="مبيعات المجموعات"
@@ -226,8 +227,8 @@
                 <th>المجموعة</th>
                 <th>الفواتير</th>
                 <th>الكمية</th>
-                <th>المبيعات</th>
-                <th>الحصة</th>
+                <th class="sales-col-amt">المبيعات</th>
+                <th class="sales-col-share">الحصة</th>
               </tr>
             </thead>
             <tbody id="sales-groups-body">
@@ -242,8 +243,8 @@
                     <td title="{{ row.group_code }}">{{ row.group_name }}</td>
                     <td class="mono">{{ row.invoice_count_display }}</td>
                     <td class="mono">{{ row.qty_display }}</td>
-                    <td class="mono sales-amt">{% money row.sales_total_display %}</td>
-                    <td class="mono">{{ row.share_display }}</td>
+                    <td class="mono sales-amt sales-col-amt">{% money row.sales_total_display %}</td>
+                    <td class="mono sales-col-share">{{ row.share_display }}</td>
                   </tr>
                 {% empty %}
                   <tr><td colspan="6" class="sales-empty">لا مبيعات مجموعات في الفترة.</td></tr>
@@ -255,8 +256,8 @@
                 <td colspan="2">الإجمالي</td>
                 <td class="mono" id="sales-groups-tot-inv">{{ dashboard.groups.totals.invoice_count_display }}</td>
                 <td class="mono" id="sales-groups-tot-qty">{{ dashboard.groups.totals.qty_display }}</td>
-                <td class="mono sales-amt" id="sales-groups-tot-sales">{% money dashboard.groups.totals.sales_total_display %}</td>
-                <td class="mono">100%</td>
+                <td class="mono sales-amt sales-col-amt" id="sales-groups-tot-sales">{% money dashboard.groups.totals.sales_total_display %}</td>
+                <td class="mono sales-col-share">100%</td>
               </tr>
             </tfoot>
           </table>
@@ -280,53 +281,99 @@
     </div>
 
     {% if items_api_url %}{{ items_api_url|json_script:"sales-items-url" }}{% endif %}
-    <section
-      class="dash-panel dash-panel-glass sales-ov-panel sales-ov-items"
-      id="sales-items-panel"
-      aria-label="أعلى أصناف الإرجاع"
-    >
-      <div class="dash-panel-head">
-        <div>
-          <h3>أعلى أصناف الإرجاع</h3>
-          <p class="sales-ov-sub" id="sales-items-sub">نقاط البيع · جاري التحميل…</p>
+    {% if users_api_url %}{{ users_api_url|json_script:"sales-users-url" }}{% endif %}
+    <div class="sales-ov-items-row" aria-label="أصناف الإرجاع وأكثر المستخدمين بيعاً">
+      <section
+        class="dash-panel dash-panel-glass sales-ov-panel sales-ov-items"
+        id="sales-items-panel"
+        aria-label="أعلى أصناف الإرجاع"
+      >
+        <div class="dash-panel-head">
+          <div>
+            <h3>أعلى أصناف الإرجاع</h3>
+            <p class="sales-ov-sub" id="sales-items-sub">نقاط البيع · جاري التحميل…</p>
+          </div>
+          <span class="result-pill" id="sales-items-pill">…</span>
         </div>
-        <span class="result-pill" id="sales-items-pill">…</span>
-      </div>
-      <div class="table-wrap sales-ov-scroll">
-        <table class="data-table sales-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>الصنف</th>
-              <th>فواتير المرتجع</th>
-              <th>الكمية</th>
-              <th>قيمة المرتجع</th>
-              <th>الحصة</th>
-            </tr>
-          </thead>
-          <tbody id="sales-items-body">
-            <tr>
-              <td colspan="6" class="sales-empty sales-ov-loading">جاري تحميل أعلى أصناف الإرجاع…</td>
-            </tr>
-          </tbody>
-          <tfoot id="sales-items-foot" hidden>
-            <tr class="sales-grand-row">
-              <td colspan="2">الإجمالي</td>
-              <td class="mono" id="sales-items-tot-inv">0</td>
-              <td class="mono" id="sales-items-tot-qty">0</td>
-              <td class="mono sales-amt" id="sales-items-tot-sales">0.00</td>
-              <td class="mono">100%</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </section>
+        <div class="table-wrap sales-ov-scroll">
+          <table class="data-table sales-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>الصنف</th>
+                <th>فواتير المرتجع</th>
+                <th>الكمية</th>
+                <th class="sales-col-cost">قيمة المرتجع</th>
+                <th class="sales-col-share">الحصة</th>
+              </tr>
+            </thead>
+            <tbody id="sales-items-body">
+              <tr>
+                <td colspan="6" class="sales-empty sales-ov-loading">جاري تحميل أعلى أصناف الإرجاع…</td>
+              </tr>
+            </tbody>
+            <tfoot id="sales-items-foot" hidden>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono" id="sales-items-tot-inv">0</td>
+                <td class="mono" id="sales-items-tot-qty">0</td>
+                <td class="mono sales-amt sales-col-cost" id="sales-items-tot-sales">0.00</td>
+                <td class="mono sales-col-share">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="dash-panel dash-panel-glass sales-ov-panel sales-ov-users"
+        id="sales-users-panel"
+        aria-label="أكثر المستخدمين بيعاً"
+      >
+        <div class="dash-panel-head">
+          <div>
+            <h3>أكثر المستخدمين بيعاً</h3>
+            <p class="sales-ov-sub" id="sales-users-sub">نقاط البيع · جاري التحميل…</p>
+          </div>
+          <span class="result-pill" id="sales-users-pill">…</span>
+        </div>
+        <div class="table-wrap sales-ov-scroll">
+          <table class="data-table sales-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>المستخدم</th>
+                <th>الفواتير</th>
+                <th class="sales-col-cost">متوسط السلة</th>
+                <th class="sales-col-amt">إجمالي المبيعات</th>
+                <th class="sales-col-share">الحصة</th>
+              </tr>
+            </thead>
+            <tbody id="sales-users-body">
+              <tr>
+                <td colspan="6" class="sales-empty sales-ov-loading">جاري تحميل أكثر المستخدمين بيعاً…</td>
+              </tr>
+            </tbody>
+            <tfoot id="sales-users-foot" hidden>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono" id="sales-users-tot-inv">0</td>
+                <td class="mono sales-col-cost">—</td>
+                <td class="mono sales-amt sales-col-amt" id="sales-users-tot-sales">0.00</td>
+                <td class="mono sales-col-share">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+    </div>
   </section>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/sales-returns-donut.js?v=1" defer></script>
-<script src="/static/js/sales-groups-loader.js?v=8" defer></script>
-<script src="/static/js/sales-top-items-loader.js?v=9" defer></script>
+<script src="/static/js/sales-groups-loader.js?v=13" defer></script>
+<script src="/static/js/sales-top-items-loader.js?v=12" defer></script>
+<script src="/static/js/sales-top-users-loader.js?v=2" defer></script>
 {% endblock %}

@@ -44,7 +44,7 @@ _WRITE_KW = re.compile(
 _client_ready = False
 _client_lock = threading.Lock()
 _tls = threading.local()
-_SALES_CACHE_TTL = 1800  # 30 دقيقة لكل الموقع
+_SALES_CACHE_TTL = 7200  # ساعتان — الداشبورد يعتمد على الكاش أولاً
 _LOOKUP_CACHE_TTL = 1800  # 30 دقيقة
 _pool = None
 _pool_lock = threading.Lock()
@@ -67,15 +67,45 @@ def _run_parallel(jobs: list, *, max_workers: int = 2, timeout_sec: float | None
 
     مهلة واحدة إجمالية للدفعة، مع إيقاف فوري عند أول خطأ (مثل انقطاع أوراكل).
     """
+    return _run_parallel_ex(
+        jobs,
+        max_workers=max_workers,
+        timeout_sec=timeout_sec,
+        soft_fail=False,
+    )
+
+
+def _run_parallel_ex(
+    jobs: list,
+    *,
+    max_workers: int = 2,
+    timeout_sec: float | None = None,
+    soft_fail: bool = False,
+) -> list:
+    """parallel runner؛ soft_fail=True يُبقي النتائج الناجحة ويتجاهل فشل فرع واحد."""
     import sys
     from concurrent.futures import wait, FIRST_EXCEPTION, ALL_COMPLETED
 
     if not jobs:
         return []
     if len(jobs) == 1:
-        return [jobs[0]()]
+        try:
+            return [jobs[0]()]
+        except Exception:
+            if soft_fail:
+                return [[]]
+            raise
     if getattr(sys, "is_finalizing", lambda: False)():
-        return [fn() for fn in jobs]
+        out = []
+        for fn in jobs:
+            try:
+                out.append(fn())
+            except Exception:
+                if soft_fail:
+                    out.append([])
+                else:
+                    raise
+        return out
 
     workers = max(1, min(int(max_workers or 1), len(jobs)))
     pool = None
@@ -85,12 +115,41 @@ def _run_parallel(jobs: list, *, max_workers: int = 2, timeout_sec: float | None
         pool = ThreadPoolExecutor(max_workers=workers)
         futs = [pool.submit(fn) for fn in jobs]
         if timeout_sec is None:
-            return [fut.result() for fut in futs]
+            if not soft_fail:
+                return [fut.result() for fut in futs]
+            out = []
+            for fut in futs:
+                try:
+                    out.append(fut.result())
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Parallel soft-fail job: %s", exc)
+                    out.append([])
+            return out
 
         wait_s = max(5.0, float(timeout_sec))
-        done, not_done = wait(futs, timeout=wait_s, return_when=FIRST_EXCEPTION)
+        if soft_fail:
+            done, not_done = wait(futs, timeout=wait_s, return_when=ALL_COMPLETED)
+            out = []
+            for fut in futs:
+                if fut in not_done:
+                    fut.cancel()
+                    out.append([])
+                    continue
+                try:
+                    out.append(fut.result(timeout=0))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Parallel soft-fail job: %s", exc)
+                    out.append([])
+            if not_done:
+                logger.warning(
+                    "Parallel soft-fail: %s/%s jobs timed out",
+                    len(not_done),
+                    len(futs),
+                )
+            # عند فشل الكل نُرجع قوائم فارغة ليتسنّى للمسار الأعلى تجربة بديل/كاش
+            return out
 
-        # أول فشل → ألغِ الباقي فوراً (لا ننتظر بقية الفروع دقائق)
+        done, not_done = wait(futs, timeout=wait_s, return_when=FIRST_EXCEPTION)
         for fut in done:
             exc = fut.exception()
             if exc is not None:
@@ -108,7 +167,6 @@ def _run_parallel(jobs: list, *, max_workers: int = 2, timeout_sec: float | None
                 "انتهت مهلة جلب البيانات من أوراكل. أعد المحاولة بعد لحظات."
             )
 
-        # اكتملت كلها بدون استثناء
         _ = wait(futs, timeout=0, return_when=ALL_COMPLETED)
         return [fut.result() for fut in futs]
     except RuntimeError as exc:
@@ -127,6 +185,64 @@ def _run_parallel(jobs: list, *, max_workers: int = 2, timeout_sec: float | None
                     pass
             except Exception:
                 pass
+
+
+def _month_slices(date_from, date_to) -> list[tuple[date, date]]:
+    """توافق — استخدم _month_spans."""
+    return _month_spans(date_from, date_to)
+
+
+def _merge_group_total_parts(parts: list, *, by_branch: bool) -> list[dict]:
+    acc: dict[str, dict] = {}
+    for rows in parts:
+        for row in rows or []:
+            key = _group_branch_key(
+                str(row.get("group_code") or ""),
+                str(row.get("branch_code") or "") if by_branch else "",
+            )
+            cur = acc.get(key)
+            if cur is None:
+                acc[key] = dict(row)
+                continue
+            cur["invoice_count"] = int(cur.get("invoice_count") or 0) + int(
+                row.get("invoice_count") or 0
+            )
+            cur["return_count"] = int(cur.get("return_count") or 0) + int(
+                row.get("return_count") or 0
+            )
+            cur["qty_total"] = float(cur.get("qty_total") or 0) + float(
+                row.get("qty_total") or 0
+            )
+            cur["gross_total"] = float(cur.get("gross_total") or 0) + float(
+                row.get("gross_total") or 0
+            )
+            cur["net_total"] = float(cur.get("net_total") or 0) + float(
+                row.get("net_total") or 0
+            )
+            cur["vat_total"] = float(cur.get("vat_total") or 0) + float(
+                row.get("vat_total") or 0
+            )
+            cur["sales_total"] = float(cur.get("sales_total") or 0) + float(
+                row.get("sales_total") or 0
+            )
+    out = list(acc.values())
+    for row in out:
+        inv = int(row.get("invoice_count") or 0)
+        sales = float(row.get("sales_total") or 0)
+        row["avg_basket"] = round(sales / inv, 2) if inv else 0.0
+        if not by_branch:
+            row["branch_code"] = ""
+            row["branch_name"] = "كل الفروع"
+    out.sort(
+        key=lambda r: (
+            -float(r.get("sales_total") or 0),
+            str(r.get("group_name") or ""),
+            str(r.get("branch_name") or ""),
+            str(r.get("group_code") or ""),
+            str(r.get("branch_code") or ""),
+        )
+    )
+    return out
 
 
 def _is_connect_timeout(exc: BaseException) -> bool:
@@ -185,7 +301,7 @@ def _connect_kwargs() -> dict:
     """خيارات اتصال مشتركة للمجمّع والاتصال المباشر — بلا إعادة محاولة لتفادي البطء."""
     cfg = _cfg()
     tcp_timeout = max(5, int(cfg.get("TCP_CONNECT_TIMEOUT") or 20))
-    call_ms = max(30_000, int(cfg.get("CALL_TIMEOUT_MS") or 180_000))
+    call_ms = max(30_000, int(cfg.get("CALL_TIMEOUT_MS") or 120_000))
     return {
         "tcp_connect_timeout": tcp_timeout,
         "retry_count": 0,
@@ -197,7 +313,7 @@ def _connect_kwargs() -> dict:
 def _apply_call_timeout(conn) -> None:
     """يمنع استعلاماً معلّقاً من إبقاء الطلب مفتوحاً عشرات الدقائق."""
     try:
-        ms = int(_connect_kwargs().get("call_timeout_ms") or 180_000)
+        ms = int(_connect_kwargs().get("call_timeout_ms") or 120_000)
         conn.call_timeout = ms
     except Exception:
         pass
@@ -699,6 +815,24 @@ def _sales_cache_get(key: str):
         return None
 
 
+def _sales_cache_get_stale(key: str):
+    try:
+        return cache.get(f"{key}:stale")
+    except Exception:
+        return None
+
+
+def pop_groups_fetch_warning() -> str:
+    """تحذير واجهة بعد جلب مجموعات (مثلاً كاش قديم) — يُستهلك مرة واحدة."""
+    msg = str(getattr(_tls, "groups_warning", "") or "").strip()
+    try:
+        _tls.groups_warning = ""
+        _tls.groups_stale = False
+    except Exception:
+        pass
+    return msg
+
+
 def _sales_cache_set(
     key: str,
     value: Any,
@@ -706,11 +840,15 @@ def _sales_cache_set(
     *,
     date_from=None,
     date_to=None,
+    keep_stale: bool = True,
 ) -> None:
     try:
         if ttl is None:
             ttl = _sales_cache_ttl(date_from, date_to)
         cache.set(key, value, ttl)
+        if keep_stale:
+            # نسخة احتياطية أطول عند انقطاع أوراكل
+            cache.set(f"{key}:stale", value, max(int(ttl), 86400))
     except Exception:
         pass
 
@@ -2782,6 +2920,97 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     return rows
 
 
+def fetch_branch_sales_activity(
+    date_from,
+    date_to,
+    branch_code: str = "",
+) -> list[dict]:
+    """نشاط الفروع من رأس فاتورة POS: ساعات البيع وأيام العمل.
+
+    يقيس الاستمرارية عبر متوسط الساعات النشطة يومياً (فترات HH24 فيها فواتير).
+    """
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    brn = str(branch_code or "").strip()
+    cache_key = (
+        f"sales:branch_activity:v1:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}"
+    )
+    cached = _sales_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    pos = _pos_owner()
+    params = _date_params(date_from, date_to)
+    branch_filter = ""
+    if brn:
+        params["brn"] = _bind_brn(brn)
+        branch_filter = "AND p.BRN_NO = :brn"
+    names = _branch_names()
+    raw = _fetch_all(
+        f"""
+        SELECT
+            TO_CHAR(p.BRN_NO) AS BRANCH_CODE,
+            COUNT(DISTINCT p.BILL_NO) AS INVOICE_COUNT,
+            ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS SALES_TOTAL,
+            COUNT(DISTINCT TRUNC(p.BILL_DATE)) AS ACTIVE_DAYS,
+            COUNT(DISTINCT TO_CHAR(p.BILL_DATE, 'YYYYMMDDHH24')) AS ACTIVE_SLOTS,
+            MIN(TO_NUMBER(TO_CHAR(p.BILL_DATE, 'HH24'))) AS FIRST_HOUR,
+            MAX(TO_NUMBER(TO_CHAR(p.BILL_DATE, 'HH24'))) AS LAST_HOUR
+        FROM {pos}.IAS_POS_BILL_MST p
+        WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
+          AND NVL(p.HUNG, 0) = 0
+          AND p.BRN_NO IS NOT NULL
+          {branch_filter}
+        GROUP BY TO_CHAR(p.BRN_NO)
+        """,
+        params,
+    )
+    out: list[dict] = []
+    for row in raw:
+        code = str(row.get("BRANCH_CODE") or "").strip()
+        if not code:
+            continue
+        invoices = int(row.get("INVOICE_COUNT") or 0)
+        sales = round(float(row.get("SALES_TOTAL") or 0), 2)
+        days = max(1, int(row.get("ACTIVE_DAYS") or 0))
+        slots = int(row.get("ACTIVE_SLOTS") or 0)
+        first_h = int(row.get("FIRST_HOUR") or 0)
+        last_h = int(row.get("LAST_HOUR") or 0)
+        avg_hours = round(slots / days, 1) if days else 0.0
+        span_hours = max(0, last_h - first_h + 1)
+        # كثافة: فواتير لكل ساعة نشطة
+        density = round(invoices / slots, 1) if slots else 0.0
+        # درجة استمرارية نسبة ليوم عمل ~14 ساعة
+        continuity = round(min(100.0, avg_hours / 14.0 * 100.0), 1)
+        out.append(
+            {
+                "branch_code": code,
+                "branch_name": names.get(code) or code,
+                "invoice_count": invoices,
+                "sales_total": sales,
+                "active_days": days,
+                "active_slots": slots,
+                "avg_hours_per_day": avg_hours,
+                "span_hours": span_hours,
+                "first_hour": first_h,
+                "last_hour": last_h,
+                "invoices_per_hour": density,
+                "continuity_pct": continuity,
+            }
+        )
+    out.sort(
+        key=lambda r: (
+            -float(r.get("avg_hours_per_day") or 0),
+            -float(r.get("continuity_pct") or 0),
+            -int(r.get("invoice_count") or 0),
+            str(r.get("branch_name") or ""),
+        )
+    )
+    _sales_cache_set(cache_key, out, date_from=date_from, date_to=date_to)
+    return out
+
+
 def fetch_branch_return_totals(
     date_from,
     date_to,
@@ -3680,20 +3909,82 @@ def _fetch_pos_group_totals(
     hung_m = _hung_ok("m")
     span = _date_span_days(date_from, date_to)
 
-    # مسح كل الفروع دفعة واحدة بطيء جداً — فرع لكل عامل أسرع (~7ث بدل دقائق)
+    # فترات طويلة: شهور متسلسلة (لا تداخل مع توازي الفروع — أقل ضغطاً على أوراكل)
     if (
         skip_returns
         and _allow_fanout
         and not brn
-        and span > 7
+        and span > 45
+    ):
+        months = _month_spans(date_from, date_to)
+        if len(months) >= 2:
+            import time as _time
+
+            parts: list = []
+            deadline = _time.monotonic() + min(420.0, 70.0 * len(months))
+            for df, dt in months:
+                if _time.monotonic() > deadline:
+                    logger.warning(
+                        "POS group month fanout budget exhausted after %s/%s",
+                        len(parts),
+                        len(months),
+                    )
+                    break
+                # كاش الشهر أولاً — بدون أوراكل إن وُجد
+                part, mkey = _groups_cache_lookup(
+                    "pos",
+                    df,
+                    dt,
+                    "",
+                    str(group_code or ""),
+                    by_branch,
+                    "gross",
+                    allow_stale=True,
+                )
+                if part is None:
+                    try:
+                        # شهر واحد = مسح واحد على اتصال واحد — لا تفرّع فروع
+                        with oracle_session():
+                            part = _fetch_pos_group_totals(
+                                df,
+                                dt,
+                                branch_code="",
+                                group_code=group_code,
+                                by_branch=by_branch,
+                                skip_returns=True,
+                                _allow_fanout=False,
+                            )
+                        if part:
+                            _sales_cache_set(
+                                mkey, part, date_from=df, date_to=dt
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "POS group month %s→%s failed: %s", df, dt, exc
+                        )
+                        part = []
+                parts.append(part or [])
+            if any(parts):
+                return _merge_group_total_parts(parts, by_branch=by_branch)
+
+    # تفرّع الفروع للفترات الطويلة فقط — شهر أو أقل = استعلام واحد (اتصال واحد)
+    if (
+        skip_returns
+        and _allow_fanout
+        and not brn
+        and span > 35
     ):
         try:
             branches = _pos_branches_in_range(date_from, date_to)
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, OracleStockError) or _is_connect_timeout(exc):
-                raise OracleStockError(_friendly_connect_error(exc)) from exc
-            logger.warning("POS group branches-in-range failed: %s", exc)
-            branches = []
+                logger.warning(
+                    "POS group branches-in-range failed; single scan: %s", exc
+                )
+                branches = []
+            else:
+                logger.warning("POS group branches-in-range failed: %s", exc)
+                branches = []
         if len(branches) >= 2:
 
             def _one(b: str) -> list[dict]:
@@ -3710,66 +4001,25 @@ def _fetch_pos_group_totals(
                         )
                 except Exception as exc:  # noqa: BLE001
                     if _is_connect_timeout(exc) or _is_disconnect_error(exc):
-                        raise OracleStockError(_friendly_connect_error(exc)) from exc
-                    raise
+                        logger.warning("POS group branch %s failed: %s", b, exc)
+                        return []
+                    logger.warning("POS group branch %s error: %s", b, exc)
+                    return []
 
-            # مهلة إجمالية واحدة للدفعة كلها (ليست × عدد الفروع)
-            job_timeout = 180.0 if span <= 62 else 240.0
-            parts = _run_parallel(
+            # عمال أقل + مهلة أقصر: fail-soft ثم مسح واحد أو كاش احتياطي
+            job_timeout = 120.0 if span <= 35 else (160.0 if span <= 62 else 200.0)
+            parts = _run_parallel_ex(
                 [lambda b=code: _one(b) for code in branches],
                 max_workers=min(2, len(branches)),
                 timeout_sec=job_timeout,
+                soft_fail=True,
             )
-            acc: dict[str, dict] = {}
-            for rows in parts:
-                for row in rows or []:
-                    key = _group_branch_key(
-                        str(row.get("group_code") or ""),
-                        str(row.get("branch_code") or "") if by_branch else "",
-                    )
-                    cur = acc.get(key)
-                    if cur is None:
-                        acc[key] = dict(row)
-                        continue
-                    cur["invoice_count"] = int(cur.get("invoice_count") or 0) + int(
-                        row.get("invoice_count") or 0
-                    )
-                    cur["return_count"] = int(cur.get("return_count") or 0) + int(
-                        row.get("return_count") or 0
-                    )
-                    cur["qty_total"] = float(cur.get("qty_total") or 0) + float(
-                        row.get("qty_total") or 0
-                    )
-                    cur["gross_total"] = float(cur.get("gross_total") or 0) + float(
-                        row.get("gross_total") or 0
-                    )
-                    cur["net_total"] = float(cur.get("net_total") or 0) + float(
-                        row.get("net_total") or 0
-                    )
-                    cur["vat_total"] = float(cur.get("vat_total") or 0) + float(
-                        row.get("vat_total") or 0
-                    )
-                    cur["sales_total"] = float(cur.get("sales_total") or 0) + float(
-                        row.get("sales_total") or 0
-                    )
-            out = list(acc.values())
-            for row in out:
-                inv = int(row.get("invoice_count") or 0)
-                sales = float(row.get("sales_total") or 0)
-                row["avg_basket"] = round(sales / inv, 2) if inv else 0.0
-                if not by_branch:
-                    row["branch_code"] = ""
-                    row["branch_name"] = "كل الفروع"
-            out.sort(
-                key=lambda r: (
-                    -float(r.get("sales_total") or 0),
-                    str(r.get("group_name") or ""),
-                    str(r.get("branch_name") or ""),
-                    str(r.get("group_code") or ""),
-                    str(r.get("branch_code") or ""),
-                )
+            if any(parts):
+                return _merge_group_total_parts(parts, by_branch=by_branch)
+            logger.warning(
+                "POS group branch fanout empty (%s branches); falling back to single scan",
+                len(branches),
             )
-            return out
 
     if skip_returns:
         # مسار سريع (مرحلتان): فاتورة×مجموعة ثم طيّ للمجموعة —
@@ -4039,6 +4289,141 @@ def _fetch_bill_group_totals(
     return _assemble_group_rows(sales_rows, returns_by_key, by_branch=by_branch)
 
 
+def _groups_cache_key(
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+    *,
+    version: str = "v19",
+) -> str:
+    return (
+        f"sales:groups:{version}:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:{mode}"
+    )
+
+
+def _groups_cache_lookup(
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+    *,
+    allow_stale: bool = True,
+):
+    """يقرأ v19 ثم v18 للتوافق مع كاش سابق."""
+    for ver in ("v19", "v18"):
+        key = _groups_cache_key(
+            system,
+            date_from,
+            date_to,
+            brn,
+            gcode,
+            split_by_branch,
+            mode,
+            version=ver,
+        )
+        hit = _sales_cache_get(key)
+        if hit is not None:
+            return hit, key
+        if allow_stale:
+            stale = _sales_cache_get_stale(key)
+            if stale is not None:
+                return stale, key
+    return None, _groups_cache_key(
+        system, date_from, date_to, brn, gcode, split_by_branch, mode
+    )
+
+
+def _try_merge_monthly_group_cache(
+    *,
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+) -> list[dict] | None:
+    """يجمع الفترة من كاش الشهور الجاهزة — بدون لمس أوراكل."""
+    months = _month_spans(date_from, date_to)
+    if len(months) < 2 or brn:
+        return None
+    parts: list = []
+    for a, b in months:
+        part, _ = _groups_cache_lookup(
+            system, a, b, brn, gcode, split_by_branch, mode, allow_stale=True
+        )
+        if part is None:
+            return None
+        parts.append(part)
+    return _merge_group_total_parts(parts, by_branch=split_by_branch)
+
+
+def peek_group_sales_totals(
+    date_from,
+    date_to,
+    system: str = "pos",
+    branch_code: str = "",
+    group_code: str = "",
+    by_branch: bool | None = None,
+    force_fast: bool | None = None,
+) -> list[dict] | None:
+    """قراءة كاش فقط (حي / قديم / دمج شهور) — بلا أوراكل."""
+    if not oracle_enabled():
+        return None
+    conf = _system_conf(system)
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    split_by_branch = bool(by_branch) if by_branch is not None else bool(gcode)
+    if force_fast is None:
+        fast = conf.get("source") == "pos"
+    else:
+        fast = bool(force_fast)
+    mode = "gross" if fast else "net"
+    cached, cache_key = _groups_cache_lookup(
+        system,
+        date_from,
+        date_to,
+        brn,
+        gcode,
+        split_by_branch,
+        mode,
+        allow_stale=False,
+    )
+    if cached is not None:
+        return cached
+    merged = _try_merge_monthly_group_cache(
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=split_by_branch,
+        mode=mode,
+    )
+    if merged is not None:
+        _sales_cache_set(cache_key, merged, date_from=date_from, date_to=date_to)
+        return merged
+    stale, _ = _groups_cache_lookup(
+        system,
+        date_from,
+        date_to,
+        brn,
+        gcode,
+        split_by_branch,
+        mode,
+        allow_stale=True,
+    )
+    return stale
+
+
 def fetch_group_sales_totals(
     date_from,
     date_to,
@@ -4052,6 +4437,7 @@ def fetch_group_sales_totals(
 
     أونكس/فواتير: صافي بعد خصم المرتجع (ليطابق تقرير مبيعات الأصناف في أونكس).
     نقاط البيع: إجمالي بدون مرتجع افتراضياً (المرتجع يُعرض منفصلاً) إلا مع force_fast=False.
+    مسار سريع: كاش حي → دمج شهور من الكاش → كاش قديم → أوراكل مرة واحدة.
     """
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
@@ -4065,34 +4451,192 @@ def fetch_group_sales_totals(
     else:
         fast = bool(force_fast)
     mode = "gross" if fast else "net"
-    cache_key = (
-        f"sales:groups:v16:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:{mode}"
+    cached, cache_key = _groups_cache_lookup(
+        system,
+        date_from,
+        date_to,
+        brn,
+        gcode,
+        split_by_branch,
+        mode,
+        allow_stale=False,
     )
-    cached = _sales_cache_get(cache_key)
     if cached is not None:
+        try:
+            _tls.groups_stale = False
+            _tls.groups_warning = ""
+        except Exception:
+            pass
         return cached
-    if conf.get("source") == "pos":
-        rows = _fetch_pos_group_totals(
+
+    merged = _try_merge_monthly_group_cache(
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=split_by_branch,
+        mode=mode,
+    )
+    if merged is not None:
+        try:
+            _tls.groups_stale = False
+            _tls.groups_warning = ""
+        except Exception:
+            pass
+        _sales_cache_set(cache_key, merged, date_from=date_from, date_to=date_to)
+        return merged
+
+    # فترات طويلة: أعِد كاشاً قديماً فوراً بدل انتظار أوراكل
+    if sales_long_range(date_from, date_to):
+        stale_fast, stale_key = _groups_cache_lookup(
+            system,
             date_from,
             date_to,
             brn,
             gcode,
-            by_branch=split_by_branch,
-            skip_returns=fast,
+            split_by_branch,
+            mode,
+            allow_stale=True,
         )
-    else:
-        rows = _fetch_bill_group_totals(
+        if stale_fast is not None:
+            try:
+                _tls.groups_stale = True
+                _tls.groups_warning = "عرض سريع من الكاش — يُحدَّث في الخلفية"
+            except Exception:
+                pass
+            _schedule_groups_refresh(
+                date_from,
+                date_to,
+                system=system,
+                branch_code=brn,
+                group_code=gcode,
+                by_branch=split_by_branch,
+                force_fast=fast,
+                cache_key=stale_key or cache_key,
+            )
+            return stale_fast
+
+    try:
+        if conf.get("source") == "pos":
+            rows = _fetch_pos_group_totals(
+                date_from,
+                date_to,
+                brn,
+                gcode,
+                by_branch=split_by_branch,
+                skip_returns=fast,
+            )
+        else:
+            rows = _fetch_bill_group_totals(
+                date_from,
+                date_to,
+                conf,
+                brn,
+                gcode,
+                by_branch=split_by_branch,
+                skip_returns=fast,
+            )
+    except Exception as exc:  # noqa: BLE001
+        stale, _ = _groups_cache_lookup(
+            system,
             date_from,
             date_to,
-            conf,
             brn,
             gcode,
-            by_branch=split_by_branch,
-            skip_returns=fast,
+            split_by_branch,
+            mode,
+            allow_stale=True,
         )
+        if stale is not None:
+            logger.warning("groups serving stale cache after error: %s", exc)
+            try:
+                _tls.groups_stale = True
+                _tls.groups_warning = (
+                    "عرض من ذاكرة مؤقتة سابقة — أوراكل متعثّر حالياً"
+                )
+            except Exception:
+                pass
+            return stale
+        if isinstance(exc, OracleStockError):
+            raise
+        if _is_connect_timeout(exc) or _is_disconnect_error(exc):
+            raise OracleStockError(
+                "انتهت مهلة جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
+            ) from exc
+        raise OracleStockError(
+            "تعذّر جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
+        ) from exc
+    try:
+        _tls.groups_stale = False
+        _tls.groups_warning = ""
+    except Exception:
+        pass
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
+
+
+def _schedule_groups_refresh(
+    date_from,
+    date_to,
+    *,
+    system: str,
+    branch_code: str,
+    group_code: str,
+    by_branch: bool,
+    force_fast: bool,
+    cache_key: str,
+) -> None:
+    """تحديث كاش المجموعات في خيط خلفي بعد عرض سريع من الكاش القديم."""
+    import threading
+
+    lock_key = f"{cache_key}:refreshing"
+    try:
+        if cache.get(lock_key):
+            return
+        cache.set(lock_key, 1, 300)
+    except Exception:
+        return
+
+    def _job():
+        try:
+            with oracle_session():
+                if _system_conf(system).get("source") == "pos":
+                    rows = _fetch_pos_group_totals(
+                        date_from,
+                        date_to,
+                        branch_code,
+                        group_code,
+                        by_branch=by_branch,
+                        skip_returns=force_fast,
+                    )
+                else:
+                    rows = _fetch_bill_group_totals(
+                        date_from,
+                        date_to,
+                        _system_conf(system),
+                        branch_code,
+                        group_code,
+                        by_branch=by_branch,
+                        skip_returns=force_fast,
+                    )
+            _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("background groups refresh failed: %s", exc)
+        finally:
+            try:
+                cache.delete(lock_key)
+            except Exception:
+                pass
+
+    try:
+        threading.Thread(target=_job, name="groups-refresh", daemon=True).start()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not start groups refresh: %s", exc)
+        try:
+            cache.delete(lock_key)
+        except Exception:
+            pass
 
 
 def _item_in_filter(alias_col: str, codes: list[str], params: dict) -> str:

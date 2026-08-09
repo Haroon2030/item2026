@@ -24,6 +24,17 @@ urlpatterns = [
         views.browse_sales_top_items_api,
         name='browse_sales_top_items_api',
     ),
+    path(
+        'sales/api/branch-activity/',
+        views.browse_sales_branch_activity_api,
+        name='browse_sales_branch_activity_api',
+    ),
+    path(
+        'sales/api/top-users/',
+        views.browse_sales_top_users_api,
+        name='browse_sales_top_users_api',
+    ),
+    path('suppliers/', views.browse_suppliers, name='browse_suppliers'),
     path('sales/search/', views.sales_search, name='sales_search'),
     path('sales/performance/', views.browse_performance, name='browse_performance'),
     path('income/', views.browse_income, name='browse_income'),

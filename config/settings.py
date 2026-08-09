@@ -353,7 +353,7 @@ ORACLE = {
     # ثوانٍ: فحص حياة الاتصال الخامل قبل إعادة استخدامه
     'POOL_PING_INTERVAL': int(_env('ORACLE_POOL_PING_INTERVAL', '30') or '30'),
     # مللي ثانية: أقصى مدة لاستعلام أوراكل واحد (call timeout)
-    'CALL_TIMEOUT_MS': int(_env('ORACLE_CALL_TIMEOUT_MS', '180000') or '180000'),
+    'CALL_TIMEOUT_MS': int(_env('ORACLE_CALL_TIMEOUT_MS', '120000') or '120000'),
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()

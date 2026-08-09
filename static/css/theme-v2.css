@@ -601,9 +601,9 @@ select:focus {
 /* نظرة المبيعات: حجم موحّد لكل بطاقات الملخص */
 .page.sales-dash.sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
   padding: 0.45rem 0.55rem !important;
-  min-height: 5.1rem !important;
-  max-height: 5.1rem !important;
-  height: 5.1rem !important;
+  min-height: 5.6rem !important;
+  max-height: 5.6rem !important;
+  height: 5.6rem !important;
 }
 
 .page.sales-dash .dash-kpi-glass-sellers {
@@ -1101,8 +1101,25 @@ select:focus {
 }
 
 .page.sales-dash.sales-overview-dash .sales-ov-groups .sales-ov-scroll,
-.page.sales-dash.sales-overview-dash .sales-ov-items .sales-ov-scroll {
-  max-height: 28rem;
+.page.sales-dash.sales-overview-dash .sales-ov-items .sales-ov-scroll,
+.page.sales-dash.sales-overview-dash .sales-ov-users .sales-ov-scroll,
+.page.sales-dash.sales-overview-dash .sales-ov-activity .sales-ov-scroll {
+  max-height: none;
+  height: 22rem;
+}
+
+/* رأس ملون يبقى ثابتاً عند التمرير */
+.page.sales-dash.sales-overview-dash .sales-ov-scroll thead th.sales-col-amt {
+  background: #eafaf0 !important;
+  color: #166534 !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-scroll thead th.sales-col-cost {
+  background: #fef7e8 !important;
+  color: #92400e !important;
+}
+.page.sales-dash.sales-overview-dash .sales-ov-scroll thead th.sales-col-share {
+  background: #eef6fd !important;
+  color: #0c4a6e !important;
 }
 
 .page.sales-dash.sales-overview-dash .sales-ov-scroll::after {

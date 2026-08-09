@@ -112,10 +112,10 @@
         '<td class="mono">' +
         esc(row.qty_display) +
         "</td>" +
-        '<td class="mono sales-amt">' +
+        '<td class="mono sales-amt sales-col-cost">' +
         moneyHtml(row.return_total_display || row.sales_total_display) +
         "</td>" +
-        '<td class="mono">' +
+        '<td class="mono sales-col-share">' +
         esc(row.share_display) +
         "</td>" +
         "</tr>";
@@ -202,6 +202,11 @@
           clearInterval(tick);
           if (abortTimer) clearTimeout(abortTimer);
           render(data, Date.now() - started);
+          try {
+            window.dispatchEvent(new Event("sales-items-done"));
+          } catch (e) {
+            /* ignore */
+          }
         })
         .catch(function (err) {
           clearInterval(tick);
@@ -211,16 +216,16 @@
             msg = "انتهت مهلة التحميل — أوراكل بطيء أو غير مستجيب";
           }
           fail(msg, Date.now() - started);
+          try {
+            window.dispatchEvent(new Event("sales-items-done"));
+          } catch (e) {
+            /* ignore */
+          }
         });
     }
 
-    // لا نضغط أوراكل مع طلب المجموعات في نفس اللحظة
-    if (document.getElementById("sales-groups-panel")) {
-      window.addEventListener("sales-groups-done", start, { once: true });
-      setTimeout(start, 60 * 1000);
-    } else {
-      start();
-    }
+    // طلب واحد فوري — بلا انتظار حلقات
+    start();
   }
 
   if (document.readyState === "loading") {

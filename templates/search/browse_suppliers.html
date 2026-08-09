@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}الموردون{% endblock %}
+{% block page_class %}sales-dash suppliers-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="الموردون">
+  <div class="dash-head-copy">
+    <h2>الموردون</h2>
+    <p>عدد فواتير الشراء، رصيد مخزون أصناف المورد، إجمالي السداد وآخر سداد في الفترة</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="suppliers-kpis" aria-label="ملخص الموردين">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-sellers">
+      <span class="dash-kpi-label">الموردون</span>
+      <strong class="dash-kpi-value mono">{{ report.totals.supplier_count_display }}</strong>
+      <span class="dash-kpi-hint">{{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
+      <span class="dash-kpi-label">فواتير الشراء</span>
+      <strong class="dash-kpi-value mono">{{ report.totals.invoice_count_display }}</strong>
+      <span class="dash-kpi-hint">في الفترة</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-branches">
+      <span class="dash-kpi-label">إجمالي التوريد</span>
+      <strong class="dash-kpi-value mono">{% money report.totals.purchase_total_display %}</strong>
+      <span class="dash-kpi-hint">فواتير الشراء بالضريبة</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-amt">
+      <span class="dash-kpi-label">إجمالي السداد</span>
+      <strong class="dash-kpi-value mono">{% money report.totals.pay_total_display %}</strong>
+      <span class="dash-kpi-hint">سندات صرف للموردين</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty">
+      <span class="dash-kpi-label">قيمة مخزون الموردين</span>
+      <strong class="dash-kpi-value mono">{% money report.totals.stock_value_display %}</strong>
+      <span class="dash-kpi-hint">مورد بطاقة الصنف · بعد الترحيل</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_suppliers' %}" class="suppliers-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="sup-from">من</label>
+    <input id="sup-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="sup-to">إلى</label>
+    <input id="sup-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="sup-branch">الفرع</label>
+    <select id="sup-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="sup-scope">النوع</label>
+    <select id="sup-scope" name="scope">
+      <option value="all" {% if scope == 'all' %}selected{% endif %}>الكل</option>
+      <option value="both" {% if scope == 'both' %}selected{% endif %}>توريد وسداد معاً</option>
+      <option value="inv_only" {% if scope == 'inv_only' %}selected{% endif %}>توريد بدون سداد</option>
+      <option value="pay_only" {% if scope == 'pay_only' %}selected{% endif %}>سداد بدون توريد</option>
+    </select>
+  </div>
+  <div class="field suppliers-q-field">
+    <label for="sup-q">بحث المورد</label>
+    <input id="sup-q" type="search" name="q" value="{{ q }}" placeholder="رقم أو اسم المورد" autocomplete="off">
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <section class="dash-panel dash-panel-glass suppliers-panel" aria-label="جدول الموردين">
+    <div class="dash-panel-head">
+      <div>
+        <h3>جدول الموردين</h3>
+        <p class="sales-ov-sub">مرتب حسب إجمالي السداد · حتى {{ report.limit }} مورد</p>
+      </div>
+      <span class="result-pill">{{ report.totals.supplier_count_display }}</span>
+    </div>
+    <div class="table-wrap suppliers-scroll">
+      <table class="data-table sales-table suppliers-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>المورد</th>
+            <th>الفواتير</th>
+            <th class="sup-col-buy">إجمالي التوريد</th>
+            <th>آخر توريد</th>
+            <th>رصيد الكمية</th>
+            <th class="sup-col-stock">قيمة المخزون</th>
+            <th class="sup-col-pay">إجمالي السداد</th>
+            <th>آخر سداد</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr>
+              <td class="mono">{{ row.rank }}</td>
+              <td class="suppliers-name" title="{{ row.code }}">
+                {{ row.name }}
+                <small class="mono">#{{ row.code }}</small>
+              </td>
+              <td class="mono">{{ row.invoice_count_display }}</td>
+              <td class="mono sup-col-buy">{% money row.purchase_total_display %}</td>
+              <td class="mono">{{ row.last_bill_date }}</td>
+              <td class="mono">{{ row.stock_qty_display }}</td>
+              <td class="mono sup-col-stock">{% money row.stock_value_display %}</td>
+              <td class="mono sup-col-pay">{% money row.pay_total_display %}</td>
+              <td class="mono">{{ row.last_pay_date }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="sales-empty">لا موردين مطابقين للفلاتر في الفترة.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="2">الإجمالي</td>
+              <td class="mono">{{ report.totals.invoice_count_display }}</td>
+              <td class="mono sup-col-buy">{% money report.totals.purchase_total_display %}</td>
+              <td class="mono">—</td>
+              <td class="mono">—</td>
+              <td class="mono sup-col-stock">{% money report.totals.stock_value_display %}</td>
+              <td class="mono sup-col-pay">{% money report.totals.pay_total_display %}</td>
+              <td class="mono">—</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

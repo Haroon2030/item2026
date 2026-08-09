@@ -1006,6 +1006,7 @@ def browse_sales(request):
                 'browsed': False,
                 'groups_api_url': '',
                 'items_api_url': '',
+                'activity_api_url': '',
             },
         )
 
@@ -1055,6 +1056,8 @@ def browse_sales(request):
 
     groups_api_url = ''
     items_api_url = ''
+    users_api_url = ''
+    groups_seed = None
     if dashboard is not None:
         qs = {
             'date_from': date_from.isoformat(),
@@ -1066,6 +1069,32 @@ def browse_sales(request):
             qs['group'] = selected_group
         groups_api_url = f"{reverse('browse_sales_groups_api')}?{urlencode(qs)}"
         items_api_url = f"{reverse('browse_sales_top_items_api')}?{urlencode(qs)}"
+        users_api_url = f"{reverse('browse_sales_top_users_api')}?{urlencode(qs)}"
+        # زرع فوري من الكاش — بلا حلقة شهور في الواجهة
+        try:
+            from .sales_dashboard import peek_sales_groups
+
+            peeked = peek_sales_groups(
+                date_from,
+                date_to,
+                branch_code=selected_branch,
+                group_code=selected_group,
+            )
+            if peeked and peeked.get('rows'):
+                groups_seed = {'ok': True, 'groups': peeked}
+                dashboard['groups'] = {
+                    'rows': peeked['rows'],
+                    'totals': peeked['totals'],
+                }
+                dashboard['groups_pending'] = False
+                dashboard['kpis']['group_sales'] = peeked['totals'][
+                    'sales_total_display'
+                ]
+                dashboard['kpis']['group_count'] = peeked['totals'][
+                    'group_count_display'
+                ]
+        except Exception:  # noqa: BLE001
+            groups_seed = None
 
     return render(
         request,
@@ -1084,6 +1113,8 @@ def browse_sales(request):
             'browsed': dashboard is not None,
             'groups_api_url': groups_api_url,
             'items_api_url': items_api_url,
+            'users_api_url': users_api_url,
+            'groups_seed': groups_seed,
         },
     )
 
@@ -1103,6 +1134,11 @@ def browse_sales_groups_api(request):
 
     branch_code = str(request.GET.get('branch') or '').strip()
     group_code = str(request.GET.get('group') or '').strip()
+    partial = str(request.GET.get('partial') or '').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+    )
 
     try:
         from .oracle_stock import oracle_enabled
@@ -1118,6 +1154,7 @@ def browse_sales_groups_api(request):
             date_to,
             branch_code=branch_code,
             group_code=group_code,
+            reconcile=not partial,
         )
         return JsonResponse({'ok': True, 'groups': payload})
     except Exception as exc:  # noqa: BLE001
@@ -1161,6 +1198,141 @@ def browse_sales_top_items_api(request):
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_top_items_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_branch_activity_api(request):
+    """توافق: حوّل لأكثر المستخدمين مبيعاً."""
+    return browse_sales_top_users_api(request)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_top_users_api(request):
+    """تحميل لاحق لأكثر المستخدمين مبيعاً."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    try:
+        limit = int(request.GET.get('limit') or 15)
+    except (TypeError, ValueError):
+        limit = 15
+
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_top_users
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'},
+                status=400,
+            )
+        payload = build_sales_top_users(
+            date_from,
+            date_to,
+            branch_code=branch_code,
+            limit=limit,
+        )
+        return JsonResponse({'ok': True, 'users': payload})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_top_users_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_suppliers(request):
+    """الموردون — فواتير، رصيد مخزون أصنافهم، والسداد."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    q = str(request.GET.get('q') or '').strip()
+    scope = str(request.GET.get('scope') or 'all').strip().lower()
+    if scope not in {'all', 'both', 'inv_only', 'pay_only'}:
+        scope = 'all'
+    try:
+        limit = int(request.GET.get('limit') or 5000)
+    except (TypeError, ValueError):
+        limit = 5000
+    report = None
+    error = ''
+    branches: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_suppliers.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'q': q,
+                'scope': scope,
+                'branches': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_suppliers import build_suppliers_report
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض الموردين.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                report = build_suppliers_report(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    q=q,
+                    scope=scope,
+                    limit=limit,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_suppliers failed: %s', exc)
+        error = f'تعذّر تحميل تقرير الموردين: {exc}'
+
+    return render(
+        request,
+        'search/browse_suppliers.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'q': q,
+            'scope': scope,
+            'branches': branches,
+            'report': report,
+            'error': error,
+        },
+    )
 
 
 @login_required
