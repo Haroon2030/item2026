@@ -2808,9 +2808,14 @@ def _assemble_branch_rows(sales_rows, returns_by_brn) -> list[dict]:
 
 
 def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
-    """إجماليات نقاط البيع من IAS_POS_BILL_MST / IAS_POS_RT_BILL_MST."""
+    """إجماليات نقاط البيع من IAS_POS_BILL_MST / IAS_POS_RT_BILL_MST.
+
+    صافي بعد المرتجع — مرجع الفترة لنقاط البيع (يطابقه جدول المجموعات بعد المطابقة).
+    """
     pos = _pos_owner()
     params = _date_params(date_from, date_to)
+    hung = _hung_ok("p")
+    amt_ok = _bill_amt_ok("p", "BILL_AMT")
     sales_rows = _fetch_all(
         f"""
         SELECT
@@ -2821,7 +2826,8 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
             ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS GROSS_TOTAL
         FROM {pos}.IAS_POS_BILL_MST p
         WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
-          AND NVL(p.HUNG, 0) = 0
+          AND {hung}
+          AND {amt_ok}
         GROUP BY TO_CHAR(p.BRN_NO)
         """,
         params,
@@ -2830,6 +2836,8 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
     if _skip_mst_returns(date_from, date_to):
         return _assemble_branch_rows(sales_rows, returns_by_brn)
     try:
+        ret_hung = _hung_ok("r")
+        ret_amt = _bill_amt_ok("r", "RT_BILL_AMT")
         for row in _fetch_all(
             f"""
             SELECT
@@ -2839,7 +2847,8 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
                 ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
             FROM {pos}.IAS_POS_RT_BILL_MST r
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-              AND NVL(r.HUNG, 0) = 0
+              AND {ret_hung}
+              AND {ret_amt}
             GROUP BY TO_CHAR(r.BRN_NO)
             """,
             params,
@@ -2924,7 +2933,7 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:branches:v6:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v7:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not _skip_mst_returns(date_from, date_to))}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3795,6 +3804,67 @@ def _item_group_code_map() -> dict[str, str]:
     return _django_lookup_set("item_group_map:v1", out)
 
 
+def _fold_pos_item_rows_to_group_sales(
+    item_rows: list[dict],
+    *,
+    by_branch: bool,
+    group_code: str = "",
+    with_bills: bool = False,
+) -> list[dict]:
+    """طي صفوف مجمّعة حسب الصنف (ودون JOIN أوراكل) → إجماليات مجموعات.
+
+    with_bills=True: الصفوف تحمل BILL_NO/BILL_SRL لعدّ فواتير دقيق لكل مجموعة.
+    """
+    gmap = _item_group_code_map()
+    want = str(group_code or "").strip()
+    # مبالغ: (group[, branch]) → totals
+    amt: dict[tuple[str, str], dict[str, float]] = {}
+    # فواتير فريدة لكل مجموعة
+    bills: dict[tuple[str, str], set] = {}
+
+    for row in item_rows or []:
+        item = str(row.get("ITEM_CODE") or "").strip()
+        if not item:
+            continue
+        g_code = gmap.get(item) or "(بلا)"
+        if want and str(g_code) != str(want):
+            continue
+        b_code = str(row.get("BRANCH_CODE") or "").strip() if by_branch else ""
+        key = (g_code, b_code)
+        bucket = amt.get(key)
+        if bucket is None:
+            bucket = {"qty": 0.0, "net": 0.0, "vat": 0.0}
+            amt[key] = bucket
+        bucket["qty"] += float(row.get("QTY_TOTAL") or 0)
+        bucket["net"] += float(row.get("NET_TOTAL") or 0)
+        bucket["vat"] += float(row.get("VAT_TOTAL") or 0)
+        if with_bills:
+            bill_no = row.get("BILL_NO")
+            if bill_no is None or str(bill_no).strip() == "":
+                continue
+            srl = row.get("BILL_SRL")
+            bset = bills.get(key)
+            if bset is None:
+                bset = set()
+                bills[key] = bset
+            bset.add((b_code, str(bill_no), str(srl if srl is not None else 0)))
+
+    sales_rows: list[dict] = []
+    for (g_code, b_code), bucket in amt.items():
+        inv = len(bills.get((g_code, b_code), ())) if with_bills else 0
+        sales_rows.append(
+            {
+                "GROUP_CODE": g_code,
+                "BRANCH_CODE": b_code or None,
+                "INVOICE_COUNT": inv,
+                "QTY_TOTAL": round(bucket["qty"], 2),
+                "NET_TOTAL": round(bucket["net"], 2),
+                "VAT_TOTAL": round(bucket["vat"], 2),
+            }
+        )
+    return _assemble_group_rows(sales_rows, {}, by_branch=by_branch)
+
+
 def _month_spans(date_from, date_to) -> list[tuple[date, date]]:
     """شرائح شهرية نصف مفتوحة زمنياً ضمن [from, to]."""
     from calendar import monthrange
@@ -3962,17 +4032,16 @@ def _fetch_pos_group_totals(
                 )
                 if part is None:
                     try:
-                        # شهر واحد = مسح واحد على اتصال واحد — لا تفرّع فروع
-                        with oracle_session():
-                            part = _fetch_pos_group_totals(
-                                df,
-                                dt,
-                                branch_code="",
-                                group_code=group_code,
-                                by_branch=by_branch,
-                                skip_returns=True,
-                                _allow_fanout=False,
-                            )
+                        # شهر واحد: تفرّع فروع داخلي (أسرع من مسح كل الفروع دفعة)
+                        part = _fetch_pos_group_totals(
+                            df,
+                            dt,
+                            branch_code="",
+                            group_code=group_code,
+                            by_branch=by_branch,
+                            skip_returns=True,
+                            _allow_fanout=True,
+                        )
                         if part:
                             _sales_cache_set(
                                 mkey, part, date_from=df, date_to=dt
@@ -4025,16 +4094,21 @@ def _fetch_pos_group_totals(
                     logger.warning("POS group branch %s error: %s", b, exc)
                     return []
 
-            # شهر: عمال أكثر؛ سنة: أقل ضغطاً على أوراكل
+            # شهر: عمال أكثر بعد تسريع الاستعلام (بلا JOIN أصناف)
             if span <= 31:
-                workers = min(4, len(branches))
-                job_timeout = 100.0 if span <= 16 else 140.0
+                workers = min(6, len(branches))
+                job_timeout = 75.0 if span <= 16 else 110.0
             elif span <= 62:
-                workers = min(3, len(branches))
-                job_timeout = 160.0
+                workers = min(4, len(branches))
+                job_timeout = 140.0
             else:
-                workers = min(2, len(branches))
-                job_timeout = 200.0
+                workers = min(3, len(branches))
+                job_timeout = 180.0
+            # حمّل خريطة الأصناف مرة قبل التفرّع
+            try:
+                _item_group_code_map()
+            except Exception:
+                pass
             parts = _run_parallel_ex(
                 [lambda b=code: _one(b) for code in branches],
                 max_workers=workers,
@@ -4049,32 +4123,23 @@ def _fetch_pos_group_totals(
             )
 
     if skip_returns:
-        # مسار سريع (مرحلتان): فاتورة×مجموعة ثم طيّ للمجموعة —
-        # بدون تجميع وسيط فاتورة×صنف (كان يضاعف TEMP على الفترات الطويلة).
+        # مسار سريع: بلا JOIN على IAS_ITM_MST — تجميع حسب الصنف ثم طي المجموعة في بايثون.
+        # مع فرع محدد: صف لكل (صنف×فاتورة) لعدّ فواتير دقيق؛ بدون فرع: صف لكل صنف فقط.
         if by_branch:
-            outer_branch_sel = "TO_CHAR(y.BRN_NO) AS BRANCH_CODE,"
-            outer_group_by = "y.GROUP_CODE, y.BRN_NO"
+            branch_sel = "TO_CHAR(m.BRN_NO) AS BRANCH_CODE,"
+            branch_grp = ", m.BRN_NO"
         else:
-            outer_branch_sel = "CAST(NULL AS VARCHAR2(20)) AS BRANCH_CODE,"
-            outer_group_by = "y.GROUP_CODE"
+            branch_sel = "CAST(NULL AS VARCHAR2(20)) AS BRANCH_CODE,"
+            branch_grp = ""
 
-        gcode_mid = ""
-        if group_code:
-            gcode_mid = "AND i.G_CODE = :gcode"
-
-        sales_rows = _fetch_all(
-            f"""
-            SELECT
-                y.GROUP_CODE AS GROUP_CODE,
-                {outer_branch_sel}
-                COUNT(*) AS INVOICE_COUNT,
-                ROUND(SUM(y.QTY_TOTAL), 2) AS QTY_TOTAL,
-                ROUND(SUM(y.NET_TOTAL), 2) AS NET_TOTAL,
-                ROUND(SUM(y.VAT_TOTAL), 2) AS VAT_TOTAL
-            FROM (
+        # فرع واحد (أو تفرّع): أدرج مفتاح الفاتورة لعدّ صحيح بدون JOIN أصناف
+        with_bills = bool(brn) and not by_branch
+        if with_bills:
+            item_rows = _fetch_all(
+                f"""
                 SELECT
-                    NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
-                    m.BRN_NO AS BRN_NO,
+                    TO_CHAR(d.I_CODE) AS ITEM_CODE,
+                    {branch_sel}
                     m.BILL_NO AS BILL_NO,
                     NVL(m.BILL_SRL, 0) AS BILL_SRL,
                     SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
@@ -4085,19 +4150,42 @@ def _fetch_pos_group_totals(
                   ON d.BILL_NO = m.BILL_NO
                  AND d.BRN_NO = m.BRN_NO
                  AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
-                LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
                 WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
                   AND {hung_m}
                   AND d.I_CODE IS NOT NULL
                   {branch_filter}
-                  {gcode_mid}
-                GROUP BY NVL(TO_CHAR(i.G_CODE), '(بلا)'), m.BRN_NO, m.BILL_NO, NVL(m.BILL_SRL, 0)
-            ) y
-            GROUP BY {outer_group_by}
-            """,
-            params,
+                GROUP BY TO_CHAR(d.I_CODE), m.BILL_NO, NVL(m.BILL_SRL, 0){branch_grp}
+                """,
+                params,
+            )
+        else:
+            item_rows = _fetch_all(
+                f"""
+                SELECT
+                    TO_CHAR(d.I_CODE) AS ITEM_CODE,
+                    {branch_sel}
+                    SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+                    SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
+                    SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                FROM {pos}.IAS_POS_BILL_MST m
+                JOIN {pos}.IAS_POS_BILL_DTL d
+                  ON d.BILL_NO = m.BILL_NO
+                 AND d.BRN_NO = m.BRN_NO
+                 AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+                WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                  AND {hung_m}
+                  AND d.I_CODE IS NOT NULL
+                  {branch_filter}
+                GROUP BY TO_CHAR(d.I_CODE){branch_grp}
+                """,
+                params,
+            )
+        return _fold_pos_item_rows_to_group_sales(
+            item_rows,
+            by_branch=by_branch,
+            group_code=str(group_code or ""),
+            with_bills=with_bills,
         )
-        return _assemble_group_rows(sales_rows, {}, by_branch=by_branch)
 
     sales_sql = f"""
         SELECT
@@ -4325,7 +4413,7 @@ def _groups_cache_key(
     split_by_branch: bool,
     mode: str,
     *,
-    version: str = "v20",
+    version: str = "v21",
 ) -> str:
     return (
         f"sales:groups:{version}:{system}:{_as_date(date_from).isoformat()}:"
@@ -4344,8 +4432,8 @@ def _groups_cache_lookup(
     *,
     allow_stale: bool = True,
 ):
-    """يقرأ v20 ثم v19/v18 للتوافق مع كاش سابق."""
-    for ver in ("v20", "v19", "v18"):
+    """يقرأ v21 ثم v20/v19 للتوافق مع كاش سابق."""
+    for ver in ("v21", "v20", "v19"):
         key = _groups_cache_key(
             system,
             date_from,
@@ -4393,6 +4481,199 @@ def _try_merge_monthly_group_cache(
     return merged
 
 
+def _groups_month_json_key(
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+) -> str:
+    """مفتاح JSON لشهر واحد: نتيجة SQL مخزّنة ثم تُجمَّع لاحقاً."""
+    return (
+        f"sales:groups:monthjson:v1:{system}:"
+        f"{_as_date(date_from).isoformat()}:{_as_date(date_to).isoformat()}:"
+        f"{brn}:{gcode}:{int(split_by_branch)}:{mode}"
+    )
+
+
+def _normalize_group_rows_json(rows: list[dict] | None) -> list[dict]:
+    """صفوف مجموعات قابلة للتسلسل JSON (بدون كائنات أوراكل)."""
+    out: list[dict] = []
+    for row in rows or []:
+        out.append(
+            {
+                "group_code": str(row.get("group_code") or "").strip() or "(بلا)",
+                "group_name": str(row.get("group_name") or "").strip(),
+                "branch_code": str(row.get("branch_code") or "").strip(),
+                "branch_name": str(row.get("branch_name") or "").strip(),
+                "invoice_count": int(row.get("invoice_count") or 0),
+                "return_count": int(row.get("return_count") or 0),
+                "qty_total": round(float(row.get("qty_total") or 0), 2),
+                "gross_total": round(float(row.get("gross_total") or 0), 2),
+                "net_total": round(float(row.get("net_total") or 0), 2),
+                "vat_total": round(float(row.get("vat_total") or 0), 2),
+                "sales_total": round(float(row.get("sales_total") or 0), 2),
+                "avg_basket": round(float(row.get("avg_basket") or 0), 2),
+            }
+        )
+    return out
+
+
+def _save_groups_month_json(
+    *,
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+    rows: list[dict],
+) -> list[dict]:
+    """SQL → JSON في الكاش."""
+    import json as _json
+
+    clean = _normalize_group_rows_json(rows)
+    payload = {
+        "v": 1,
+        "source": "sql",
+        "system": system,
+        "mode": mode,
+        "date_from": _as_date(date_from).isoformat(),
+        "date_to": _as_date(date_to).isoformat(),
+        "branch_code": brn,
+        "group_code": gcode,
+        "by_branch": int(split_by_branch),
+        "row_count": len(clean),
+        "sales_total": _group_rows_sales_sum(clean),
+        "rows": clean,
+    }
+    key = _groups_month_json_key(
+        system, date_from, date_to, brn, gcode, split_by_branch, mode
+    )
+    raw = _json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    # TTL طويل للشهور المكتملة — تُجمَّع لاحقاً بدون أوراكل
+    try:
+        cache.set(key, raw, 60 * 60 * 24 * 14)
+    except Exception:
+        _sales_cache_set(key, payload, date_from=date_from, date_to=date_to)
+    # توافق مع مسار الكاش القديم السابق
+    legacy_key = _groups_cache_key(
+        system, date_from, date_to, brn, gcode, split_by_branch, mode
+    )
+    _sales_cache_set(legacy_key, clean, date_from=date_from, date_to=date_to)
+    return clean
+
+
+def _load_groups_month_json(
+    *,
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+) -> list[dict] | None:
+    """قراءة JSON شهر من الكاش — بلا أوراكل."""
+    import json as _json
+
+    key = _groups_month_json_key(
+        system, date_from, date_to, brn, gcode, split_by_branch, mode
+    )
+    hit = _sales_cache_get(key)
+    if hit is None:
+        hit = _sales_cache_get_stale(key)
+    if isinstance(hit, str):
+        try:
+            hit = _json.loads(hit)
+        except Exception:
+            hit = None
+    if isinstance(hit, dict) and isinstance(hit.get("rows"), list):
+        return _normalize_group_rows_json(hit.get("rows"))
+    # توافق: كاش قديم كقائمة صفوف
+    legacy, _ = _groups_cache_lookup(
+        system,
+        date_from,
+        date_to,
+        brn,
+        gcode,
+        split_by_branch,
+        mode,
+        allow_stale=True,
+    )
+    if legacy is not None:
+        return _normalize_group_rows_json(legacy)
+    return None
+
+
+def _aggregate_groups_from_month_json(
+    *,
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+) -> tuple[list[dict] | None, list[tuple[date, date]], int, int]:
+    """تجميع مبيعات المجموعات من JSON الشهور في الكاش فقط.
+
+    يُرجع: (الصفوف المجمّعة أو None، الشهور الناقصة، عدد الجاهز، الإجمالي).
+    """
+    months = _month_spans(date_from, date_to)
+    if not months:
+        return None, [], 0, 0
+    parts: list[list[dict]] = []
+    missing: list[tuple[date, date]] = []
+    for a, b in months:
+        part = _load_groups_month_json(
+            system=system,
+            date_from=a,
+            date_to=b,
+            brn=brn,
+            gcode=gcode,
+            split_by_branch=split_by_branch,
+            mode=mode,
+        )
+        if part is None:
+            missing.append((a, b))
+        else:
+            parts.append(part)
+    ready = len(parts)
+    total = len(months)
+    try:
+        _tls.groups_months_ready = ready
+        _tls.groups_months_total = total
+    except Exception:
+        pass
+    if not parts:
+        return None, missing, ready, total
+    # شهر واحد ضمن فترة قصيرة: لا حاجة لدمج
+    if total == 1:
+        return parts[0], missing, ready, total
+    return (
+        _merge_group_total_parts(parts, by_branch=split_by_branch),
+        missing,
+        ready,
+        total,
+    )
+
+
+def pop_groups_months_progress() -> tuple[int, int]:
+    """(جاهز، إجمالي) لشريحة JSON الشهرية — يُستهلك مرة واحدة."""
+    ready = int(getattr(_tls, "groups_months_ready", 0) or 0)
+    total = int(getattr(_tls, "groups_months_total", 0) or 0)
+    try:
+        _tls.groups_months_ready = 0
+        _tls.groups_months_total = 0
+    except Exception:
+        pass
+    return ready, total
+
+
 def _merge_available_monthly_group_cache(
     *,
     system: str,
@@ -4403,23 +4684,37 @@ def _merge_available_monthly_group_cache(
     split_by_branch: bool,
     mode: str,
 ) -> tuple[list[dict] | None, list[tuple[date, date]]]:
-    """دمج الشهور المتوفرة في الكاش + قائمة الشهور الناقصة."""
+    """دمج JSON الشهور من الكاش + قائمة الشهور الناقصة."""
     months = _month_spans(date_from, date_to)
     if len(months) < 2:
-        return None, []
-    parts: list = []
-    missing: list[tuple[date, date]] = []
-    for a, b in months:
-        part, _ = _groups_cache_lookup(
-            system, a, b, brn, gcode, split_by_branch, mode, allow_stale=True
+        # فترة قصيرة: جرّب JSON الشهر/الفترة نفسها
+        part = _load_groups_month_json(
+            system=system,
+            date_from=date_from,
+            date_to=date_to,
+            brn=brn,
+            gcode=gcode,
+            split_by_branch=split_by_branch,
+            mode=mode,
         )
-        if part is None:
-            missing.append((a, b))
-        else:
-            parts.append(part)
-    if not parts:
-        return None, missing
-    return _merge_group_total_parts(parts, by_branch=split_by_branch), missing
+        if part is not None:
+            try:
+                _tls.groups_months_ready = 1
+                _tls.groups_months_total = 1
+            except Exception:
+                pass
+            return part, []
+        return None, []
+    merged, missing, _ready, _total = _aggregate_groups_from_month_json(
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=split_by_branch,
+        mode=mode,
+    )
+    return merged, missing
 
 
 def _fetch_one_month_group_totals(
@@ -4432,21 +4727,20 @@ def _fetch_one_month_group_totals(
     split_by_branch: bool,
     fast: bool,
 ) -> list[dict]:
-    """جلب شهر واحد وتخزينه في كاش الشهر (مع توازي فروع عند الإمكان)."""
+    """1) اقرأ JSON من الكاش  2) وإلا SQL → JSON  3) أعد الصفوف للتجميع."""
     mode = "gross" if fast else "net"
-    cached, mkey = _groups_cache_lookup(
-        system,
-        date_from,
-        date_to,
-        brn,
-        gcode,
-        split_by_branch,
-        mode,
-        allow_stale=False,
+    cached = _load_groups_month_json(
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=split_by_branch,
+        mode=mode,
     )
     if cached is not None:
         return cached
-    # توازي الفروع داخل الشهر — بلا تداخل مع تفرّع الشهور
+    # SQL فقط عند غياب JSON
     if _system_conf(system).get("source") == "pos":
         rows = _fetch_pos_group_totals(
             date_from,
@@ -4468,8 +4762,16 @@ def _fetch_one_month_group_totals(
                 by_branch=split_by_branch,
                 skip_returns=fast,
             )
-    _sales_cache_set(mkey, rows, date_from=date_from, date_to=date_to)
-    return rows
+    return _save_groups_month_json(
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=split_by_branch,
+        mode=mode,
+        rows=rows,
+    )
 
 
 def _schedule_groups_monthly_warm(
@@ -4526,6 +4828,7 @@ def _schedule_groups_monthly_warm(
                 timeout_sec=min(480.0, 160.0 * len(months)),
                 soft_fail=True,
             )
+            # بعد كل دفعة: دمج الكاش فوراً حتى يظهر التقدّم عند الاستطلاع
             mode = "gross" if force_fast else "net"
             merged, still_missing = _merge_available_monthly_group_cache(
                 system=system,
@@ -4536,7 +4839,6 @@ def _schedule_groups_monthly_warm(
                 split_by_branch=by_branch,
                 mode=mode,
             )
-            # اكتب كاش الفترة فقط عند اكتمال كل الشهور
             if merged is not None and not still_missing:
                 _sales_cache_set(
                     cache_key, merged, date_from=date_from, date_to=date_to
@@ -4622,6 +4924,24 @@ def peek_group_sales_totals(
     return stale
 
 
+def _group_rows_sales_sum(rows: list[dict] | None) -> float:
+    return round(sum(float(r.get("sales_total") or 0) for r in (rows or [])), 2)
+
+
+def _pick_richer_group_rows(
+    primary: list[dict] | None,
+    secondary: list[dict] | None,
+) -> list[dict] | None:
+    """اختر أغنى صفوف من الكاش (حسب إجمالي المبيعات)."""
+    if primary is None:
+        return secondary
+    if secondary is None:
+        return primary
+    if _group_rows_sales_sum(secondary) > _group_rows_sales_sum(primary) * 1.01:
+        return secondary
+    return primary
+
+
 def fetch_group_sales_totals(
     date_from,
     date_to,
@@ -4656,9 +4976,8 @@ def fetch_group_sales_totals(
         system, date_from, date_to, brn, gcode, split_by_branch, mode
     )
 
-    # للفترات الطويلة: اعتمد دمج الشهور فقط — كاش الفترة القديم قد يكون جزئياً ومضلِّلاً
-    if long_range:
-        merged_chk, missing_chk = _merge_available_monthly_group_cache(
+    def _monthly_merge():
+        return _merge_available_monthly_group_cache(
             system=system,
             date_from=date_from,
             date_to=date_to,
@@ -4667,80 +4986,106 @@ def fetch_group_sales_totals(
             split_by_branch=split_by_branch,
             mode=mode,
         )
-        if merged_chk is not None and not missing_chk:
-            try:
-                _tls.groups_stale = False
-                _tls.groups_incomplete = False
-                _tls.groups_warning = ""
-            except Exception:
-                pass
-            _sales_cache_set(cache_key, merged_chk, date_from=date_from, date_to=date_to)
-            return merged_chk
-        if merged_chk is not None and missing_chk:
-            # شهر أخير ناقص: أكمله في نفس الطلب (واجهة تنتظر حتى ~3د)
-            if len(missing_chk) == 1:
-                last_a, last_b = missing_chk[0]
-                try:
-                    _fetch_one_month_group_totals(
-                        system=system,
-                        date_from=last_a,
-                        date_to=last_b,
-                        brn=brn,
-                        gcode=gcode,
-                        split_by_branch=split_by_branch,
-                        fast=fast,
-                    )
-                    merged_done, still = _merge_available_monthly_group_cache(
-                        system=system,
-                        date_from=date_from,
-                        date_to=date_to,
-                        brn=brn,
-                        gcode=gcode,
-                        split_by_branch=split_by_branch,
-                        mode=mode,
-                    )
-                    if merged_done is not None and not still:
-                        try:
-                            _tls.groups_stale = False
-                            _tls.groups_incomplete = False
-                            _tls.groups_warning = ""
-                        except Exception:
-                            pass
-                        _sales_cache_set(
-                            cache_key,
-                            merged_done,
-                            date_from=date_from,
-                            date_to=date_to,
-                        )
-                        return merged_done
-                    if merged_done is not None:
-                        merged_chk = merged_done
-                        missing_chk = still
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "last-month groups sync fetch %s→%s failed: %s",
-                        last_a,
-                        last_b,
-                        exc,
-                    )
-            done = len(months) - len(missing_chk)
-            _mark_groups_partial(
-                f"عرض جزئي ({done}/{len(months)} شهر) — الإجمالي أقل من جدول الفروع حتى تكتمل الأشهر"
-            )
-            _schedule_groups_monthly_warm(
-                date_from,
-                date_to,
-                system=system,
-                branch_code=brn,
-                group_code=gcode,
-                by_branch=split_by_branch,
-                force_fast=fast,
-                cache_key=cache_key,
-                missing_months=missing_chk,
-            )
-            return merged_chk
 
-        # لا شهور في الكاش: أحدث شهر + تدفئة — تجاهل كاش الفترة المسموم
+    def _period_cached(allow_stale: bool = True):
+        hit, _ = _groups_cache_lookup(
+            system,
+            date_from,
+            date_to,
+            brn,
+            gcode,
+            split_by_branch,
+            mode,
+            allow_stale=allow_stale,
+        )
+        return hit
+
+    def _return_complete(rows: list[dict]) -> list[dict]:
+        try:
+            _tls.groups_stale = False
+            _tls.groups_incomplete = False
+            _tls.groups_warning = ""
+            _tls.groups_months_ready = len(months)
+            _tls.groups_months_total = len(months)
+        except Exception:
+            pass
+        _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
+        return rows
+
+    def _return_partial(
+        rows: list[dict],
+        missing: list[tuple[date, date]],
+        *,
+        note: str | None = None,
+    ) -> list[dict]:
+        done = max(0, len(months) - len(missing))
+        try:
+            _tls.groups_months_ready = done
+            _tls.groups_months_total = len(months)
+        except Exception:
+            pass
+        msg = note or (
+            f"JSON كاش {done}/{len(months)} شهر — يُجلب بالـ SQL ويُجمَّع تلقائياً"
+        )
+        _mark_groups_partial(msg)
+        _schedule_groups_monthly_warm(
+            date_from,
+            date_to,
+            system=system,
+            branch_code=brn,
+            group_code=gcode,
+            by_branch=split_by_branch,
+            force_fast=fast,
+            cache_key=cache_key,
+            missing_months=missing,
+        )
+        return rows
+
+    # فترات طويلة: دمج كاش الشهور + كاش الفترة الأغنى + جلب شهر ناقص واحد لكل طلب
+    if long_range:
+        merged_chk, missing_chk = _monthly_merge()
+        if merged_chk is not None and not missing_chk:
+            return _return_complete(merged_chk)
+
+        period_hit = _period_cached(allow_stale=True)
+
+        if missing_chk:
+            # أحدث شهر ناقص أولاً — يُكتب في كاش الشهر ثم يُدمج
+            target_a, target_b = missing_chk[-1]
+            try:
+                _fetch_one_month_group_totals(
+                    system=system,
+                    date_from=target_a,
+                    date_to=target_b,
+                    brn=brn,
+                    gcode=gcode,
+                    split_by_branch=split_by_branch,
+                    fast=fast,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "progressive month groups %s→%s failed: %s",
+                    target_a,
+                    target_b,
+                    exc,
+                )
+            merged_chk, missing_chk = _monthly_merge()
+            if merged_chk is not None and not missing_chk:
+                return _return_complete(merged_chk)
+
+        display = _pick_richer_group_rows(merged_chk, period_hit)
+        if display is not None:
+            still = list(missing_chk or [])
+            if not still and merged_chk is not None:
+                return _return_complete(merged_chk)
+            if not still:
+                _, still = _monthly_merge()
+            if not still:
+                return _return_complete(
+                    merged_chk if merged_chk is not None else display
+                )
+            return _return_partial(display, still)
+
         newest = months[-1] if months else None
         rows: list[dict] = []
         if newest:
@@ -4757,27 +5102,23 @@ def fetch_group_sales_totals(
             except Exception as exc:  # noqa: BLE001
                 logger.warning("newest-month groups fetch failed: %s", exc)
                 rows = []
+            merged_chk, missing_chk = _monthly_merge()
+            if merged_chk is not None and not missing_chk:
+                return _return_complete(merged_chk)
+            if merged_chk is not None:
+                return _return_partial(merged_chk, missing_chk)
         missing = [m for m in months if m != newest] if newest else list(months)
         if rows:
-            _mark_groups_partial(
-                "عرض أحدث شهر أولاً — الإجمالي أقل من جدول الفروع حتى تكتمل بقية الأشهر"
+            return _return_partial(
+                rows,
+                missing,
+                note="عرض أحدث شهر من الكاش — يُجمَع الباقي شهراً فشهراً",
             )
-        else:
-            _mark_groups_partial(
-                "جاري تجهيز مبيعات المجموعات شهراً بشهر — أعد التحميل بعد قليل"
-            )
-        _schedule_groups_monthly_warm(
-            date_from,
-            date_to,
-            system=system,
-            branch_code=brn,
-            group_code=gcode,
-            by_branch=split_by_branch,
-            force_fast=fast,
-            cache_key=cache_key,
-            missing_months=missing,
+        return _return_partial(
+            [],
+            missing,
+            note="جاري تجهيز مبيعات المجموعات شهراً بشهر من الكاش",
         )
-        return rows
 
     cached, cache_key = _groups_cache_lookup(
         system,
@@ -4919,7 +5260,20 @@ def fetch_group_sales_totals(
         _tls.groups_warning = ""
     except Exception:
         pass
-    _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
+    # فترة قصيرة: خزّن JSON أيضاً لتسهيل التجميع لاحقاً
+    try:
+        _save_groups_month_json(
+            system=system,
+            date_from=date_from,
+            date_to=date_to,
+            brn=brn,
+            gcode=gcode,
+            split_by_branch=split_by_branch,
+            mode=mode,
+            rows=rows,
+        )
+    except Exception:
+        _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
 
 

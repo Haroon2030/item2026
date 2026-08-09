@@ -36,10 +36,18 @@
     }
   }
 
+  function setStatus(kind, label) {
+    var el = document.getElementById("sales-users-status");
+    if (!el) return;
+    el.className = "sales-groups-status is-" + (kind || "ready");
+    el.textContent = label || "";
+  }
+
   function setLoading(msg) {
     var body = document.getElementById("sales-users-body");
     var sub = document.getElementById("sales-users-sub");
     var pill = document.getElementById("sales-users-pill");
+    setStatus("loading", "جاري التحميل…");
     if (body) {
       body.innerHTML =
         '<tr><td colspan="6" class="sales-empty sales-ov-loading">' +
@@ -54,6 +62,7 @@
     var body = document.getElementById("sales-users-body");
     var sub = document.getElementById("sales-users-sub");
     var pill = document.getElementById("sales-users-pill");
+    setStatus("error", "غير مكتمل");
     if (body) {
       body.innerHTML =
         '<tr><td colspan="6" class="sales-empty">' + esc(msg) + "</td></tr>";
@@ -89,6 +98,7 @@
       }
       if (foot) foot.hidden = true;
       if (pill) pill.textContent = "0";
+      setStatus("ready", "مكتمل ✓");
       if (sub) sub.textContent = "نقاط البيع · لا بيانات · خلال " + took;
       return;
     }
@@ -126,6 +136,7 @@
     if (totSales) totSales.innerHTML = moneyHtml(totals.sales_total_display || "0.00");
     if (foot) foot.hidden = false;
     if (pill) pill.textContent = String(rows.length);
+    setStatus("ready", "مكتمل ✓");
     if (sub) {
       sub.textContent =
         "نقاط البيع · أعلى " +

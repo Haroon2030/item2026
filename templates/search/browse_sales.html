@@ -9,7 +9,7 @@
 <section class="dash-head" aria-label="تحليل المبيعات">
   <div class="dash-head-copy">
     <h2>تحليل المبيعات</h2>
-    <p>نقاط البيع · الجملة (الآجل) · مبيعات المجموعات من نقاط البيع</p>
+    <p>أرقام صافية بعد المرتجع · مبيعات أونكس للفترة · نقاط البيع · الآجل · المجموعات</p>
   </div>
 </section>
 
@@ -33,7 +33,7 @@
         مبيعات نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_invoices }} فاتورة · {{ dashboard.kpis.pos_branches }} فرع</span>
+      <span class="dash-kpi-hint mono">صافي الفترة · {{ dashboard.kpis.pos_invoices }} فاتورة · {{ dashboard.kpis.pos_branches }} فرع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
       <span class="dash-kpi-label">
@@ -50,20 +50,20 @@
         <span class="dash-kpi-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
         </span>
-        مبيعات الجملة
+        مبيعات الجملة (آجل)
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة · {{ dashboard.kpis.wholesale_branches }} فرع</span>
+      <span class="dash-kpi-hint mono">صافي · مستند 4 و8 · {{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
         </span>
-        الإجمالي (نقاط+جملة)
+        مبيعات أونكس (الفترة)
       </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · {{ dashboard.period_label }}</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.onix_sales %}</strong>
+      <span class="dash-kpi-hint mono">تقرير الأصناف 1+5 · صافي بعد المرتجع · {{ dashboard.kpis.onix_invoices }} فاتورة</span>
     </article>
   </section>
 
@@ -127,7 +127,7 @@
       <div class="dash-panel-head">
         <div>
           <h3>مبيعات نقاط البيع</h3>
-          <p class="sales-ov-sub">حسب الفروع · متوسط السلة {% money dashboard.pos.totals.avg_basket_display %}</p>
+          <p class="sales-ov-sub">صافي بعد المرتجع · مرجع الفترة لنقاط البيع</p>
         </div>
         <span class="result-pill">{{ dashboard.pos.branches|length }}</span>
       </div>
@@ -176,7 +176,7 @@
       <div class="dash-panel-head">
         <div>
           <h3>مبيعات الجملة</h3>
-          <p class="sales-ov-sub">الآجل من فواتير أونكس · حسب الفروع</p>
+          <p class="sales-ov-sub">الآجل مستند 4 و8 · صافي بعد المرتجع · ليس تقرير الأصناف</p>
         </div>
         <span class="result-pill">{{ dashboard.wholesale.branches|length }}</span>
       </div>
@@ -365,7 +365,14 @@
             <h3>أكثر المستخدمين بيعاً</h3>
             <p class="sales-ov-sub" id="sales-users-sub">نقاط البيع · جاري التحميل…</p>
           </div>
-          <span class="result-pill" id="sales-users-pill">…</span>
+          <div class="sales-groups-head-meta">
+            <span
+              class="sales-groups-status is-loading"
+              id="sales-users-status"
+              aria-live="polite"
+            >جاري التحميل…</span>
+            <span class="result-pill" id="sales-users-pill">…</span>
+          </div>
         </div>
         <div class="table-wrap sales-ov-scroll">
           <table class="data-table sales-table">
@@ -403,7 +410,7 @@
 
 {% block extra_js %}
 <script src="/static/js/sales-returns-donut.js?v=1" defer></script>
-<script src="/static/js/sales-groups-loader.js?v=19" defer></script>
+<script src="/static/js/sales-groups-loader.js?v=22" defer></script>
 <script src="/static/js/sales-top-items-loader.js?v=13" defer></script>
-<script src="/static/js/sales-top-users-loader.js?v=2" defer></script>
+<script src="/static/js/sales-top-users-loader.js?v=3" defer></script>
 {% endblock %}

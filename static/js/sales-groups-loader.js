@@ -204,10 +204,15 @@
       if (data.groups && data.groups.pos_total_display) {
         posNote = " · فروع " + data.groups.pos_total_display;
       }
+      var cache = (data.groups && data.groups.cache) || {};
+      var mReady = Number(cache.months_ready || 0);
+      var mTotal = Number(cache.months_total || 0);
+      var cacheNote =
+        mTotal > 1 ? " · JSON " + mReady + "/" + mTotal + " شهر" : "";
       var stateNote = stillWarming || incomplete
-        ? " · يُكمَل / يُطابَق…"
+        ? " · يُجلب SQL ويُجمَّع…"
         : matched
-          ? " · مكتمل ومطابق للفروع"
+          ? " · مطابق لجدول الفروع"
           : warn && /يطابق|مطابقة/i.test(String(warn))
             ? " · غير مطابق للفروع"
             : "";
@@ -217,6 +222,7 @@
         " مجموعة · إجمالي " +
         (totals.sales_total_display || "0.00") +
         posNote +
+        cacheNote +
         " · خلال " +
         took +
         stateNote +
@@ -390,23 +396,23 @@
         /خلفية|شهر|جزئي|أقل من جدول|تجهيز|يطابق|مطابقة/i.test(String(warn || "")));
     if (!needPoll) return;
     var tries = 0;
-    var maxPolls = 12;
+    var maxPolls = 24;
     function poll() {
       tries += 1;
-      fetchJson(url, 120 * 1000)
+      fetchJson(url, 150 * 1000)
         .then(function (fresh) {
           render(fresh, 0);
           var stillIncomplete = !!(fresh && fresh.groups && fresh.groups.incomplete);
           var nowMatched = !!(fresh && fresh.groups && fresh.groups.matched);
           if ((!nowMatched || stillIncomplete) && tries < maxPolls) {
-            setTimeout(poll, 8000);
+            setTimeout(poll, 3500);
           }
         })
         .catch(function () {
-          if (tries < maxPolls) setTimeout(poll, 10000);
+          if (tries < maxPolls) setTimeout(poll, 6000);
         });
     }
-    setTimeout(poll, 5000);
+    setTimeout(poll, 2500);
   }
 
   if (document.readyState === "loading") {

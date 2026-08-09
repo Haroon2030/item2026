@@ -324,12 +324,15 @@ def build_sales_branches(
         wholesale_raw = fetch_branch_sales_totals(
             date_from, date_to, system="wholesale"
         )
+        onix_raw = fetch_branch_sales_totals(date_from, date_to, system="onix")
 
     pos_raw = _filter_branch_rows(pos_raw, brn)
     wholesale_raw = _filter_branch_rows(wholesale_raw, brn)
+    onix_raw = _filter_branch_rows(onix_raw, brn)
 
     pos_branches, pos_totals = _format_branch_rows(pos_raw)
     wholesale_branches, wholesale_totals = _format_branch_rows(wholesale_raw)
+    _onix_branches, onix_totals = _format_branch_rows(onix_raw)
     groups = _empty_groups()
     top_returns = _top_return_branches(pos_branches)
     ranks = _rank_highlights(pos_branches, top_returns)
@@ -350,6 +353,7 @@ def build_sales_branches(
         "groups_pending": True,
         "pos": {"branches": pos_branches, "totals": pos_totals},
         "wholesale": {"branches": wholesale_branches, "totals": wholesale_totals},
+        "onix": {"totals": onix_totals},
         "groups": groups,
         "top_returns": top_returns,
         "ranks": ranks,
@@ -363,6 +367,9 @@ def build_sales_branches(
             "wholesale_sales": wholesale_totals["sales_total_display"],
             "wholesale_invoices": wholesale_totals["invoice_count_display"],
             "wholesale_branches": wholesale_totals["branch_count_display"],
+            "onix_sales": onix_totals["sales_total_display"],
+            "onix_invoices": onix_totals["invoice_count_display"],
+            "onix_returns": onix_totals["return_total_display"],
             "group_sales": groups["totals"]["sales_total_display"],
             "group_count": groups["totals"]["group_count_display"],
             "combined_sales": _money(combined_sales),
@@ -416,8 +423,9 @@ def build_sales_groups(
 ) -> dict[str, Any]:
     """مبيعات المجموعات من نقاط البيع فقط.
 
-    التوزيع من بنود الأصناف؛ الإجمالي يُطابَق مع صافي مبيعات النقاط
-    (جدول الفروع / بطاقة الملخص) — بدون أونكس أو آجل.
+    التوزيع من بنود الأصناف؛ عند اكتمال الفترة يُطابَق الإجمالي مع
+    صافي مبيعات نقاط البيع للفترة (جدول الفروع) — المرجع للمالك على شاشة POS.
+    تقرير أونكس «مبيعات الأصناف» (مستند 1 و5) يظهر في بطاقة KPI المنفصلة.
     """
     import logging
 
@@ -427,6 +435,7 @@ def build_sales_groups(
         oracle_session,
         pop_groups_fetch_warning,
         pop_groups_incomplete,
+        pop_groups_months_progress,
         sales_long_range,
     )
 
@@ -435,7 +444,7 @@ def build_sales_groups(
     gcode = str(group_code or "").strip()
     warning = ""
 
-    # كاش أولاً / دمج شهور / كاش قديم فوري / أوراكل مرة واحدة
+    # SQL→JSON شهري في الكاش ثم تجميع — أو قراءة JSON جاهز
     groups_raw = fetch_group_sales_totals(
         date_from,
         date_to,
@@ -446,11 +455,27 @@ def build_sales_groups(
     )
     warning = pop_groups_fetch_warning() or ""
     incomplete = pop_groups_incomplete()
+    months_ready, months_total = pop_groups_months_progress()
+
+    # اكتمال شهور JSON ⇒ صالح للمطابقة (حتى لو علق علم الجزئية)
+    months_complete = bool(months_total) and months_ready >= months_total
+    if months_complete:
+        incomplete = False
 
     pos_total = None
     matched = False
-    # طابق إجمالي المجموعات مع جدول نقاط البيع عند اكتمال الفترة
-    do_reconcile = bool(reconcile) and not gcode and bool(groups_raw) and not incomplete
+    raw_groups_total = round(
+        sum(float(r.get("sales_total") or 0) for r in (groups_raw or [])), 2
+    )
+
+    # المجموعات = إجمالي بنود (غالباً بدون مرتجع) · الفروع = صافي بعد المرتجع
+    # لذلك نُطابق الإجمالي دائماً مع جدول الفروع عند اكتمال البيانات
+    do_reconcile = (
+        bool(reconcile)
+        and not gcode
+        and bool(groups_raw)
+        and (not incomplete or months_complete)
+    )
     if do_reconcile:
         try:
             with oracle_session():
@@ -462,28 +487,40 @@ def build_sales_groups(
                 sum(float(r.get("sales_total") or 0) for r in pos_raw),
                 2,
             )
-            before = round(
-                sum(float(r.get("sales_total") or 0) for r in groups_raw), 2
-            )
+            before = raw_groups_total
             groups_raw = _reconcile_group_sales_to_target(groups_raw, pos_total)
             after = round(
                 sum(float(r.get("sales_total") or 0) for r in groups_raw), 2
             )
             matched = abs(after - pos_total) < 0.05
+            incomplete = False
             if not matched and not warning:
                 warning = (
                     f"إجمالي المجموعات {_money(before)} لا يطابق الفروع "
                     f"{_money(pos_total)} بعد المطابقة"
+                )
+            elif matched and abs(before - after) >= 1 and not warning:
+                # توضيح صامت في الكاش فقط — الواجهة تعرض المطابق
+                logger.info(
+                    "groups reconciled %s → %s (POS net)",
+                    before,
+                    after,
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning("groups reconcile skipped: %s", exc)
             if not warning:
                 warning = "تم العرض بدون مطابقة ملخص الفروع"
     elif incomplete and not warning:
-        warning = "البيانات جزئية — الإجمالي أقل من جدول الفروع حتى تكتمل الأشهر"
+        warning = (
+            f"جزئي JSON {months_ready}/{months_total or '?'} — "
+            "الإجمالي غير مطابق للفروع حتى تكتمل الشهور"
+        )
 
     rows, totals = _format_group_rows(groups_raw)
-    # matched فقط بعد مطابقة ناجحة مع إجمالي الفروع — لا تُعلَن اكتمالاً وهمياً
+    # بعد المطابقة: ثبّت إجمالي العرض = صافي الفروع بالهللة
+    if matched and pos_total is not None:
+        totals["sales_total"] = pos_total
+        totals["sales_total_display"] = _money(pos_total)
     payload = {
         "rows": rows,
         "totals": totals,
@@ -491,6 +528,13 @@ def build_sales_groups(
         "scope_label": _scope_label(brn, gcode),
         "incomplete": incomplete,
         "matched": bool(matched) and not incomplete,
+        "cache": {
+            "source": "json",
+            "months_ready": months_ready,
+            "months_total": months_total,
+        },
+        "raw_total": raw_groups_total,
+        "raw_total_display": _money(raw_groups_total),
     }
     if pos_total is not None:
         payload["pos_total"] = pos_total
