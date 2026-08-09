@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-mkdir -p /app/data /app/staticfiles
+mkdir -p /app/data /app/data/django_cache /app/staticfiles
 
 # انتظار جاهزية MySQL إن وُجد DB_HOST (Dokploy)
 if [ -n "${DB_HOST:-}" ] || [ -n "${MYSQL_HOST:-}" ]; then

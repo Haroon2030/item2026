@@ -158,16 +158,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# كاش ملفات دائم للمبيعات/الفترات الطويلة (أطول عمراً من LocMem)
-_CACHE_DIR = BASE_DIR / '.cache' / 'django'
+# كاش ملفات دائم للمبيعات/الفترات الطويلة
+# على الإنتاج: /app/data مجلد Docker دائم — لا يُمسَح مع كل نشر
+_DATA_DIR = Path(_env('DATA_DIR', str(BASE_DIR / 'data')))
+_CACHE_DIR = _DATA_DIR / 'django_cache'
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': str(_CACHE_DIR),
-        'TIMEOUT': 1800,
-        # رفع السقف: كاش المبيعات/الشهور كان يملأ 2000 بسرعة ويُصفّى بقوة
-        'OPTIONS': {'MAX_ENTRIES': 20000},
+        # 7 أيام للشهور/الخرائط — الإنتاج يعتمد عليها بعد أول تدفئة
+        'TIMEOUT': int(_env('DJANGO_CACHE_TIMEOUT', str(60 * 60 * 24 * 7)) or str(60 * 60 * 24 * 7)),
+        'OPTIONS': {'MAX_ENTRIES': 50000},
     }
 }
 

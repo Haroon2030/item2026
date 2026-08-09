@@ -45,7 +45,7 @@ _client_ready = False
 _client_lock = threading.Lock()
 _tls = threading.local()
 _SALES_CACHE_TTL = 7200  # ساعتان — الداشبورد يعتمد على الكاش أولاً
-_LOOKUP_CACHE_TTL = 1800  # 30 دقيقة
+_LOOKUP_CACHE_TTL = 60 * 60 * 24 * 7  # 7 أيام — خريطة الأصناف ثقيلة على WAN
 _pool = None
 _pool_lock = threading.Lock()
 _pool_dsn = None
@@ -4727,7 +4727,11 @@ def _fetch_one_month_group_totals(
     split_by_branch: bool,
     fast: bool,
 ) -> list[dict]:
-    """1) اقرأ JSON من الكاش  2) وإلا SQL → JSON  3) أعد الصفوف للتجميع."""
+    """1) اقرأ JSON من الكاش  2) وإلا SQL → JSON  3) أعد الصفوف للتجميع.
+
+    على WAN (الإنتاج): مسح شهر واحد باستعلام واحد أسرع من تفرّع عشرات الفروع
+    (كل فرع = اتصال + رحلة شبكة).
+    """
     mode = "gross" if fast else "net"
     cached = _load_groups_month_json(
         system=system,
@@ -4740,7 +4744,7 @@ def _fetch_one_month_group_totals(
     )
     if cached is not None:
         return cached
-    # SQL فقط عند غياب JSON
+    # بلا تفرّع فروع على WAN: استعلام شهر واحد أسرع من عشرات الاتصالات
     if _system_conf(system).get("source") == "pos":
         rows = _fetch_pos_group_totals(
             date_from,
@@ -4749,7 +4753,7 @@ def _fetch_one_month_group_totals(
             group_code=gcode,
             by_branch=split_by_branch,
             skip_returns=fast,
-            _allow_fanout=True,
+            _allow_fanout=False,
         )
     else:
         with oracle_session():
@@ -4821,11 +4825,11 @@ def _schedule_groups_monthly_warm(
                         "monthly groups warm %s→%s failed: %s", a, b, exc
                     )
 
-            # شهران بالتوازي كحد أقصى — كل شهر يفرّع فروعه داخلياً
+            # حتى 3 شهور بالتوازي — كل شهر استعلام واحد (مناسب لـ WAN)
             _run_parallel_ex(
                 [lambda m=pair: _warm_one(m) for pair in months],
-                max_workers=min(2, len(months)),
-                timeout_sec=min(480.0, 160.0 * len(months)),
+                max_workers=min(3, len(months)),
+                timeout_sec=min(600.0, 200.0 * len(months)),
                 soft_fail=True,
             )
             # بعد كل دفعة: دمج الكاش فوراً حتى يظهر التقدّم عند الاستطلاع
@@ -5041,39 +5045,16 @@ def fetch_group_sales_totals(
         )
         return rows
 
-    # فترات طويلة: دمج كاش الشهور + كاش الفترة الأغنى + جلب شهر ناقص واحد لكل طلب
+    # فترات طويلة: أظهر الكاش فوراً — لا تنتظر SQL الشهر في طلب HTTP
     if long_range:
         merged_chk, missing_chk = _monthly_merge()
         if merged_chk is not None and not missing_chk:
             return _return_complete(merged_chk)
 
         period_hit = _period_cached(allow_stale=True)
-
-        if missing_chk:
-            # أحدث شهر ناقص أولاً — يُكتب في كاش الشهر ثم يُدمج
-            target_a, target_b = missing_chk[-1]
-            try:
-                _fetch_one_month_group_totals(
-                    system=system,
-                    date_from=target_a,
-                    date_to=target_b,
-                    brn=brn,
-                    gcode=gcode,
-                    split_by_branch=split_by_branch,
-                    fast=fast,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "progressive month groups %s→%s failed: %s",
-                    target_a,
-                    target_b,
-                    exc,
-                )
-            merged_chk, missing_chk = _monthly_merge()
-            if merged_chk is not None and not missing_chk:
-                return _return_complete(merged_chk)
-
         display = _pick_richer_group_rows(merged_chk, period_hit)
+
+        # يوجد كاش جزئي: أرجعه فوراً + دفّئ الناقص في الخلفية (بلا انتظار 50ث)
         if display is not None:
             still = list(missing_chk or [])
             if not still and merged_chk is not None:
@@ -5086,6 +5067,7 @@ def fetch_group_sales_totals(
                 )
             return _return_partial(display, still)
 
+        # لا كاش أصلاً: اجلب أحدث شهر فقط ثم أرجعه (أول زيارة باردة)
         newest = months[-1] if months else None
         rows: list[dict] = []
         if newest:
@@ -5112,12 +5094,12 @@ def fetch_group_sales_totals(
             return _return_partial(
                 rows,
                 missing,
-                note="عرض أحدث شهر من الكاش — يُجمَع الباقي شهراً فشهراً",
+                note="عرض أحدث شهر — بقية الشهور تُجهَّز في الخلفية",
             )
         return _return_partial(
             [],
             missing,
-            note="جاري تجهيز مبيعات المجموعات شهراً بشهر من الكاش",
+            note="جاري تجهيز مبيعات المجموعات في الخلفية — أعد التحميل بعد قليل",
         )
 
     cached, cache_key = _groups_cache_lookup(
