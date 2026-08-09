@@ -320,10 +320,10 @@
 
     if (stillWarming || incomplete) {
       setStatus("warming", "جارٍ الإكمال…");
+    } else if (matched) {
+      setStatus("ready", "مطابق لنقاط البيع ✓");
     } else if (exact || byBranch) {
       setStatus("ready", "دقيق كأونكس ✓");
-    } else if (matched) {
-      setStatus("ready", "مكتمل ومطابق ✓");
     } else if (warn && /يطابق|مطابقة/i.test(String(warn))) {
       setStatus("warming", "غير مطابق للفروع");
     } else {
@@ -343,19 +343,17 @@
           ? " · عيّنة تقريبية"
           : cache.source === "group_branch"
             ? " · Exact مجموعة×فروع"
-            : exact
-              ? " · Exact POS"
-              : mTotal > 1
-                ? " · JSON " + mReady + "/" + mTotal + " شهر"
-                : cache.source === "json"
-                  ? " · من الكاش"
-                  : "";
+            : mTotal > 1
+              ? " · JSON " + mReady + "/" + mTotal + " شهر"
+              : cache.source === "json"
+                ? " · من الكاش"
+                : "";
       var stateNote = stillWarming || incomplete
         ? " · يُجلب SQL…"
-        : exact || byBranch
-          ? " · يطابق بنود أونكس/POS"
-          : matched
-            ? " · مطابق لجدول الفروع"
+        : matched
+          ? " · إجمالي = نقاط البيع"
+          : exact || byBranch
+            ? " · بنود POS"
             : warn && /يطابق|مطابقة/i.test(String(warn))
               ? " · غير مطابق للفروع"
               : "";

@@ -459,13 +459,12 @@ def build_sales_groups(
     *,
     branch_code: str = "",
     group_code: str = "",
-    reconcile: bool = False,
+    reconcile: bool = True,
 ) -> dict[str, Any]:
-    """مبيعات المجموعات من نقاط البيع — Exact كما تقرير أونكس للأصناف/المجموعات.
+    """مبيعات المجموعات من نقاط البيع.
 
-    بدون مجموعة: توزيع كل المجموعات من بنود POS (صافي+ضريبة، بدون مطابقة قسرية).
-    مع مجموعة مختارة: صف لكل فرع بعدد فواتير صحيح ومتوسط سلة.
-    ملاحظة: لا نُطابق إجمالي المجموعات مع رأس الفروع (يحرّف الحصص عن أونكس).
+    بدون مجموعة: توزيع المجموعات ثم مطابقة الإجمالي مع صافي جدول الفروع.
+    مع مجموعة مختارة: صف لكل فرع بعدد فواتير صحيح ومتوسط سلة (بلا مطابقة على كل POS).
     """
     import logging
 
@@ -486,7 +485,7 @@ def build_sales_groups(
     by_branch = bool(gcode)
     warning = ""
 
-    # Exact من POS (GROUPS_SQL_MODE=full) — بلا عيّنة تقريبية
+    # Exact من POS ثم مطابقة الإجمالي مع صافي الفروع عند اكتمال البيانات
     groups_raw = fetch_group_sales_totals(
         date_from,
         date_to,
@@ -501,7 +500,7 @@ def build_sales_groups(
     months_ready, months_total = pop_groups_months_progress()
     groups_source = pop_groups_source() or "json"
 
-    # اكتمال شهور JSON ⇒ صالح للعرض
+    # اكتمال شهور JSON ⇒ صالح للمطابقة
     months_complete = bool(months_total) and months_ready >= months_total
     if months_complete:
         incomplete = False
@@ -512,7 +511,7 @@ def build_sales_groups(
         sum(float(r.get("sales_total") or 0) for r in (groups_raw or [])), 2
     )
 
-    # المطابقة القسرية مع رأس الفروع تغيّر حصص المجموعات عن تقرير أونكس — معطّلة افتراضيًا
+    # مجموع المجموعات = صافي بطاقة/جدول نقاط البيع (مرجع المالك)
     do_reconcile = (
         bool(reconcile)
         and not gcode

@@ -1199,13 +1199,13 @@ def browse_sales_groups_api(request):
                 {'ok': False, 'error': 'أوراكل غير مفعّل.', '_debug': _dbg_events},
                 status=400,
             )
-        # Exact كما تقرير أونكس — بلا مطابقة قسرية تحرّف الحصص
+        # مطابقة إجمالي المجموعات مع صافي نقاط البيع (جدول الفروع)
         payload = build_sales_groups(
             date_from,
             date_to,
             branch_code=branch_code,
             group_code=group_code,
-            reconcile=False,
+            reconcile=True,
         )
         # #region agent log
         try:
