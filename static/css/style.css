@@ -11386,6 +11386,11 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 
 .sales-overview-dash .sales-ov-panel .dash-panel-head {
   flex: 0 0 auto;
+  align-items: start;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e8eef5;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .sales-overview-dash .sales-ov-users .suppliers-name small,
@@ -11436,10 +11441,6 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   padding: 0;
   list-style: none;
   min-height: 0;
-}
-
-.sales-overview-dash .sales-ov-panel .dash-panel-head {
-  align-items: start;
 }
 
 .sales-overview-dash .sales-ov-sub {
