@@ -10977,39 +10977,46 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 .sales-overview-dash .sales-ov-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.7rem;
+  gap: 0.55rem;
   margin: 0 0 0.9rem;
   align-items: stretch;
 }
 
-/* بطاقات الملخص: المحتوى داخل البطاقة، والحجم يتقلص مع ضيق العرض / كبر الرقم */
+/* بطاقات موحّدة الارتفاع — النص يتقلص ليتسع داخل البطاقة */
 .sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
   container-type: inline-size;
   container-name: sales-kpi;
-  height: auto;
-  min-height: 0;
-  padding: 0.85rem 0.95rem;
-  gap: 0.3rem;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 5.1rem;
+  max-height: 5.1rem;
+  padding: 0.45rem 0.55rem !important;
+  gap: 0.12rem !important;
   overflow: hidden;
-  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-label {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.28rem;
   min-width: 0;
-  font-size: clamp(0.78rem, 4.2cqi, 0.95rem);
-  line-height: 1.25;
+  width: 100%;
+  font-size: clamp(0.58rem, 2.9cqi, 0.72rem) !important;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 0 auto;
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-ico {
   flex: 0 0 auto;
-  width: clamp(1.25rem, 7cqi, 1.55rem);
-  height: clamp(1.25rem, 7cqi, 1.55rem);
+  width: clamp(0.9rem, 4.8cqi, 1.1rem);
+  height: clamp(0.9rem, 4.8cqi, 1.1rem);
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-ico svg {
@@ -11019,56 +11026,68 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-value {
   display: block;
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
-  font-size: clamp(1rem, 7.5cqi, 1.45rem);
-  line-height: 1.2;
-  letter-spacing: -0.015em;
+  width: 100%;
+  font-size: clamp(0.68rem, 4.4cqi, 0.92rem) !important;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  align-self: stretch;
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-value .money {
   display: inline-flex;
   max-width: 100%;
   min-width: 0;
+  width: 100%;
   align-items: baseline;
-  gap: 0.25em;
+  justify-content: flex-end;
+  gap: 0.15em;
   overflow: hidden;
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-value .money-value {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: end;
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-value .sar-symbol {
   flex: 0 0 auto;
-  width: 0.7em;
-  height: 0.78em;
+  width: 0.62em;
+  height: 0.7em;
 }
 
 .sales-overview-dash .sales-ov-kpis .dash-kpi-hint {
+  display: block;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
-  font-size: clamp(0.7rem, 3.8cqi, 0.86rem);
-  line-height: 1.3;
+  width: 100%;
+  font-size: clamp(0.52rem, 2.5cqi, 0.64rem) !important;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-@container sales-kpi (max-width: 11.5rem) {
+@container sales-kpi (max-width: 12rem) {
+  .sales-overview-dash .sales-ov-kpis .dash-kpi-value,
   .dash-kpi-value {
-    font-size: clamp(0.85rem, 8cqi, 1.15rem);
+    font-size: clamp(0.6rem, 5.2cqi, 0.8rem) !important;
   }
-  .dash-kpi-hint {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+}
+
+@media (max-width: 1100px) {
+  .sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
+    min-height: 4.85rem;
+    max-height: 4.85rem;
   }
 }
 
@@ -11143,6 +11162,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 .sales-overview-dash .sales-ov-scroll {
   max-height: 22rem;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sales-overview-dash .sales-ov-groups .sales-ov-scroll,
@@ -11150,19 +11170,23 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   max-height: 28rem;
 }
 
+.sales-overview-dash .sales-ov-scroll.table-wrap::after {
+  display: none;
+}
+
 .sales-overview-dash .sales-ov-scroll thead th {
   position: sticky;
   top: 0;
-  z-index: 2;
-  background: #eef4fb;
+  z-index: 3;
+  background: #eef4fb !important;
   box-shadow: 0 1px 0 #9eb4ce;
 }
 
 .sales-overview-dash .sales-ov-scroll tfoot td {
   position: sticky;
   bottom: 0;
-  z-index: 3;
-  background: #eaf2fb;
+  z-index: 4;
+  background: #eaf2fb !important;
   box-shadow: 0 -1px 0 #1d4f91;
 }
 

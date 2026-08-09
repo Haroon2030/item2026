@@ -342,8 +342,8 @@ ORACLE = {
     'PASSWORD': _env('ORACLE_PASSWORD', ''),
     'SCHEMA': _env('ORACLE_SCHEMA', ''),
     'CLIENT_LIB_DIR': _env('ORACLE_CLIENT_LIB_DIR', ''),
-    # مهلة فتح TCP بالثواني (افتراضي أوراكل غالباً 20)
-    'TCP_CONNECT_TIMEOUT': int(_env('ORACLE_TCP_CONNECT_TIMEOUT', '60') or '60'),
+    # مهلة فتح TCP بالثواني — قصيرة حتى لا يعلّق الواجهة عند انقطاع VPN
+    'TCP_CONNECT_TIMEOUT': int(_env('ORACLE_TCP_CONNECT_TIMEOUT', '20') or '20'),
     'RETRY_COUNT': int(_env('ORACLE_RETRY_COUNT', '3') or '3'),
     'RETRY_DELAY': int(_env('ORACLE_RETRY_DELAY', '2') or '2'),
     # دقائق: فحص الاتصالات الخاملة في المجمع
@@ -352,6 +352,8 @@ ORACLE = {
     'POOL_MAX': int(_env('ORACLE_POOL_MAX', '12') or '12'),
     # ثوانٍ: فحص حياة الاتصال الخامل قبل إعادة استخدامه
     'POOL_PING_INTERVAL': int(_env('ORACLE_POOL_PING_INTERVAL', '30') or '30'),
+    # مللي ثانية: أقصى مدة لاستعلام أوراكل واحد (call timeout)
+    'CALL_TIMEOUT_MS': int(_env('ORACLE_CALL_TIMEOUT_MS', '180000') or '180000'),
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()

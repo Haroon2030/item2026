@@ -148,36 +148,79 @@
     var url = readUrl();
     if (!url) return;
 
-    var started = Date.now();
-    setLoading("جاري التحميل… 0ث");
-    var tick = setInterval(function () {
-      setLoading("جاري التحميل… " + formatDuration(Date.now() - started));
-    }, 1000);
+    var startedOnce = false;
 
-    fetch(url, {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    })
-      .then(function (r) {
-        var ct = (r.headers.get("content-type") || "").toLowerCase();
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        if (ct.indexOf("application/json") === -1) {
-          throw new Error("استجابة غير JSON");
-        }
-        return r.json();
+    function start() {
+      if (startedOnce) return;
+      startedOnce = true;
+
+      var started = Date.now();
+      setLoading("جاري التحميل… 0ث");
+      var tick = setInterval(function () {
+        setLoading("جاري التحميل… " + formatDuration(Date.now() - started));
+      }, 1000);
+
+      var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var abortTimer = null;
+      if (ctrl) {
+        abortTimer = setTimeout(function () {
+          try {
+            ctrl.abort();
+          } catch (e) {
+            /* ignore */
+          }
+        }, 4 * 60 * 1000);
+      }
+
+      fetch(url, {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: ctrl ? ctrl.signal : undefined,
       })
-      .then(function (data) {
-        clearInterval(tick);
-        render(data, Date.now() - started);
-      })
-      .catch(function (err) {
-        clearInterval(tick);
-        fail(
-          (err && err.message) || "تعذّر تحميل أصناف الإرجاع",
-          Date.now() - started
-        );
-      });
+        .then(function (r) {
+          return r.text().then(function (text) {
+            var data = null;
+            try {
+              data = text ? JSON.parse(text) : null;
+            } catch (e) {
+              data = null;
+            }
+            if (!r.ok || (data && data.ok === false)) {
+              throw new Error(
+                (data && data.error) ||
+                  (r.ok ? "تعذّر تحميل أصناف الإرجاع" : "HTTP " + r.status)
+              );
+            }
+            if (!data) {
+              throw new Error("استجابة غير JSON");
+            }
+            return data;
+          });
+        })
+        .then(function (data) {
+          clearInterval(tick);
+          if (abortTimer) clearTimeout(abortTimer);
+          render(data, Date.now() - started);
+        })
+        .catch(function (err) {
+          clearInterval(tick);
+          if (abortTimer) clearTimeout(abortTimer);
+          var msg = (err && err.message) || "تعذّر تحميل أصناف الإرجاع";
+          if (err && err.name === "AbortError") {
+            msg = "انتهت مهلة التحميل — أوراكل بطيء أو غير مستجيب";
+          }
+          fail(msg, Date.now() - started);
+        });
+    }
+
+    // لا نضغط أوراكل مع طلب المجموعات في نفس اللحظة
+    if (document.getElementById("sales-groups-panel")) {
+      window.addEventListener("sales-groups-done", start, { once: true });
+      setTimeout(start, 60 * 1000);
+    } else {
+      start();
+    }
   }
 
   if (document.readyState === "loading") {

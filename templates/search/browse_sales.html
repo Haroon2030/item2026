@@ -60,7 +60,7 @@
         <span class="dash-kpi-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
         </span>
-        الإجمالي (نقاط + جملة)
+        الإجمالي (نقاط+جملة)
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · {{ dashboard.period_label }}</span>
@@ -327,6 +327,6 @@
 
 {% block extra_js %}
 <script src="/static/js/sales-returns-donut.js?v=1" defer></script>
-<script src="/static/js/sales-groups-loader.js?v=6" defer></script>
-<script src="/static/js/sales-top-items-loader.js?v=8" defer></script>
+<script src="/static/js/sales-groups-loader.js?v=8" defer></script>
+<script src="/static/js/sales-top-items-loader.js?v=9" defer></script>
 {% endblock %}

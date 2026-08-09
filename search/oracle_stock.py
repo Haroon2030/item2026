@@ -62,9 +62,13 @@ def _is_interpreter_shutdown_error(exc: BaseException) -> bool:
     return "interpreter shutdown" in msg or "cannot schedule" in msg
 
 
-def _run_parallel(jobs: list, *, max_workers: int = 2) -> list:
-    """يشغّل دوال بلا وسيط متوازياً؛ عند إيقاف المفسّر (إعادة تحميل runserver) يعود تسلسلياً."""
+def _run_parallel(jobs: list, *, max_workers: int = 2, timeout_sec: float | None = None) -> list:
+    """يشغّل دوال بلا وسيط متوازياً؛ عند إيقاف المفسّر (إعادة تحميل runserver) يعود تسلسلياً.
+
+    مهلة واحدة إجمالية للدفعة، مع إيقاف فوري عند أول خطأ (مثل انقطاع أوراكل).
+    """
     import sys
+    from concurrent.futures import wait, FIRST_EXCEPTION, ALL_COMPLETED
 
     if not jobs:
         return []
@@ -80,7 +84,33 @@ def _run_parallel(jobs: list, *, max_workers: int = 2) -> list:
 
         pool = ThreadPoolExecutor(max_workers=workers)
         futs = [pool.submit(fn) for fn in jobs]
-        return [f.result() for f in futs]
+        if timeout_sec is None:
+            return [fut.result() for fut in futs]
+
+        wait_s = max(5.0, float(timeout_sec))
+        done, not_done = wait(futs, timeout=wait_s, return_when=FIRST_EXCEPTION)
+
+        # أول فشل → ألغِ الباقي فوراً (لا ننتظر بقية الفروع دقائق)
+        for fut in done:
+            exc = fut.exception()
+            if exc is not None:
+                for other in not_done:
+                    other.cancel()
+                for other in done:
+                    if other is not fut:
+                        other.cancel()
+                raise exc
+
+        if not_done:
+            for fut in not_done:
+                fut.cancel()
+            raise OracleStockError(
+                "انتهت مهلة جلب البيانات من أوراكل. أعد المحاولة بعد لحظات."
+            )
+
+        # اكتملت كلها بدون استثناء
+        _ = wait(futs, timeout=0, return_when=ALL_COMPLETED)
+        return [fut.result() for fut in futs]
     except RuntimeError as exc:
         if _is_interpreter_shutdown_error(exc):
             logger.warning("Parallel jobs fell back to serial: %s", exc)
@@ -154,12 +184,23 @@ def _friendly_connect_error(exc: BaseException) -> str:
 def _connect_kwargs() -> dict:
     """خيارات اتصال مشتركة للمجمّع والاتصال المباشر — بلا إعادة محاولة لتفادي البطء."""
     cfg = _cfg()
-    tcp_timeout = max(5, int(cfg.get("TCP_CONNECT_TIMEOUT") or 60))
+    tcp_timeout = max(5, int(cfg.get("TCP_CONNECT_TIMEOUT") or 20))
+    call_ms = max(30_000, int(cfg.get("CALL_TIMEOUT_MS") or 180_000))
     return {
         "tcp_connect_timeout": tcp_timeout,
         "retry_count": 0,
         "retry_delay": 0,
+        "call_timeout_ms": call_ms,
     }
+
+
+def _apply_call_timeout(conn) -> None:
+    """يمنع استعلاماً معلّقاً من إبقاء الطلب مفتوحاً عشرات الدقائق."""
+    try:
+        ms = int(_connect_kwargs().get("call_timeout_ms") or 180_000)
+        conn.call_timeout = ms
+    except Exception:
+        pass
 
 
 def _resolve_host_ipv4(host: str) -> str:
@@ -400,6 +441,7 @@ def _connect():
             conn = pool.acquire()
             setattr(conn, "_from_pool", True)
             setattr(conn, "_pool_ref", pool)
+            _apply_call_timeout(conn)
             return conn
         except Exception as exc:  # noqa: BLE001
             logger.warning("Oracle pool acquire failed: %s", exc)
@@ -417,6 +459,7 @@ def _connect():
         )
         setattr(conn, "_from_pool", False)
         setattr(conn, "_pool_ref", None)
+        _apply_call_timeout(conn)
         return conn
     except Exception as exc:  # noqa: BLE001
         raise OracleStockError(_friendly_connect_error(exc)) from exc
@@ -637,10 +680,12 @@ def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
         if owned:
             _drop_conn(conn)
             owned = False
-        elif _is_disconnect_error(exc):
+        elif _is_disconnect_error(exc) or _is_connect_timeout(exc):
             dead = getattr(_tls, "conn", None)
             _tls.conn = None
             _drop_conn(dead)
+        if _is_connect_timeout(exc):
+            raise OracleStockError(_friendly_connect_error(exc)) from exc
         raise
     finally:
         if owned:
@@ -3645,26 +3690,35 @@ def _fetch_pos_group_totals(
         try:
             branches = _pos_branches_in_range(date_from, date_to)
         except Exception as exc:  # noqa: BLE001
+            if isinstance(exc, OracleStockError) or _is_connect_timeout(exc):
+                raise OracleStockError(_friendly_connect_error(exc)) from exc
             logger.warning("POS group branches-in-range failed: %s", exc)
             branches = []
         if len(branches) >= 2:
 
             def _one(b: str) -> list[dict]:
-                with oracle_session():
-                    return _fetch_pos_group_totals(
-                        date_from,
-                        date_to,
-                        branch_code=b,
-                        group_code=group_code,
-                        by_branch=by_branch,
-                        skip_returns=True,
-                        _allow_fanout=False,
-                    )
+                try:
+                    with oracle_session():
+                        return _fetch_pos_group_totals(
+                            date_from,
+                            date_to,
+                            branch_code=b,
+                            group_code=group_code,
+                            by_branch=by_branch,
+                            skip_returns=True,
+                            _allow_fanout=False,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    if _is_connect_timeout(exc) or _is_disconnect_error(exc):
+                        raise OracleStockError(_friendly_connect_error(exc)) from exc
+                    raise
 
-            # النتائج هنا مجمّعة نهائياً — ندمج الحقول الرقمية
+            # مهلة إجمالية واحدة للدفعة كلها (ليست × عدد الفروع)
+            job_timeout = 180.0 if span <= 62 else 240.0
             parts = _run_parallel(
                 [lambda b=code: _one(b) for code in branches],
                 max_workers=min(2, len(branches)),
+                timeout_sec=job_timeout,
             )
             acc: dict[str, dict] = {}
             for rows in parts:
@@ -4355,7 +4409,8 @@ def _fetch_pos_top_items(
 
             parts = _run_parallel(
                 [lambda b=code: _one(b) for code in branches],
-                max_workers=min(3, len(branches)),
+                max_workers=min(2, len(branches)),
+                timeout_sec=240.0,
             )
             sales_rows = _merge_pos_item_sales_rows(parts)
             by_qty = str(order_by or "sales").strip().lower() == "qty"

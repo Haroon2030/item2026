@@ -299,7 +299,10 @@ def build_sales_groups(
     التوزيع من بنود الأصناف؛ الإجمالي يُطابَق مع صافي مبيعات النقاط
     (جدول الفروع / بطاقة الملخص) — بدون أونكس أو آجل.
     """
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
     from .oracle_stock import (
+        OracleStockError,
         fetch_branch_sales_totals,
         fetch_group_sales_totals,
         oracle_session,
@@ -307,9 +310,12 @@ def build_sales_groups(
 
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
+    span = (date_to - date_from).days + 1
+    # سقف صارم للطلب كاملاً — حتى لو علّق استعلام أوراكل على ويندوز
+    wall_timeout = 150.0 if span <= 62 else 210.0
 
-    with oracle_session():
-        groups_raw = fetch_group_sales_totals(
+    def _load_groups() -> list:
+        return fetch_group_sales_totals(
             date_from,
             date_to,
             system="pos",
@@ -317,16 +323,27 @@ def build_sales_groups(
             group_code=gcode,
             by_branch=False,
         )
-        if not gcode and groups_raw:
+
+    # لا نُبقي اتصالاً معلّقاً أثناء fanout الداخلي (كل فرع يفتح جلسته)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            groups_raw = pool.submit(_load_groups).result(timeout=wall_timeout)
+    except FuturesTimeout as exc:
+        raise OracleStockError(
+            "انتهت مهلة جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
+        ) from exc
+
+    if not gcode and groups_raw:
+        with oracle_session():
             pos_raw = _filter_branch_rows(
                 fetch_branch_sales_totals(date_from, date_to, system="pos"),
                 brn,
             )
-            target = round(
-                sum(float(r.get("sales_total") or 0) for r in pos_raw),
-                2,
-            )
-            groups_raw = _reconcile_group_sales_to_target(groups_raw, target)
+        target = round(
+            sum(float(r.get("sales_total") or 0) for r in pos_raw),
+            2,
+        )
+        groups_raw = _reconcile_group_sales_to_target(groups_raw, target)
 
     rows, totals = _format_group_rows(groups_raw)
     return {

@@ -598,6 +598,14 @@ select:focus {
 .page.sales-dash .dash-kpi-glass-total .dash-kpi-ico,
 .page.sales-dash .dash-kpi-accent .dash-kpi-ico { color: #0f766e !important; }
 
+/* نظرة المبيعات: حجم موحّد لكل بطاقات الملخص */
+.page.sales-dash.sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
+  padding: 0.45rem 0.55rem !important;
+  min-height: 5.1rem !important;
+  max-height: 5.1rem !important;
+  height: 5.1rem !important;
+}
+
 .page.sales-dash .dash-kpi-glass-sellers {
   background: linear-gradient(155deg, #dde8fb 0%, #c0d2f5 100%) !important;
   border-color: #8eace6 !important;
@@ -1083,6 +1091,47 @@ select:focus {
 .page.sales-dash .dash-panel-glass .data-table th {
   background: rgba(255, 255, 255, 0.55) !important;
   color: var(--ink-soft) !important;
+}
+
+/* نظرة عامة للمبيعات: رؤوس أعمدة ثابتة عند التمرير داخل الجدول */
+.page.sales-dash.sales-overview-dash .sales-ov-scroll {
+  max-height: 22rem;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-groups .sales-ov-scroll,
+.page.sales-dash.sales-overview-dash .sales-ov-items .sales-ov-scroll {
+  max-height: 28rem;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-scroll::after {
+  display: none;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f1f5f9 !important;
+  color: var(--ink-soft) !important;
+  font-weight: 800 !important;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 #cbd5e1;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-scroll tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  background: #0e4a6e !important;
+  color: #fff !important;
+  box-shadow: 0 -1px 0 #0a3550;
+}
+
+.page.sales-dash.sales-overview-dash .sales-ov-scroll tfoot .sales-amt {
+  background: #0a3550 !important;
+  color: #fff !important;
 }
 
 .page.sales-dash .dash-panel-glass .data-table td {
