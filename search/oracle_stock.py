@@ -5277,42 +5277,42 @@ def fetch_group_sales_totals(
     # مجموعة مختارة → تفصيل الفروع مباشرة (فواتير + متوسط سلة)
     if conf.get("source") == "pos" and gcode and split_by_branch and fast:
         ends_today = _as_date(date_to) >= date.today()
-        # لا تستخدم كاشًا قديمًا (stale) — سبّب فرق ~ألفَي ريال لمجموعة 26
-        hit, _ = _groups_cache_lookup(
-            system,
-            date_from,
-            date_to,
-            brn,
-            gcode,
-            True,
-            mode,
-            allow_stale=False,
-        )
-        # إذا النهاية «اليوم»: تجاهل الكاش الحي أيضًا حتى لا يفوت مبيعات اليوم
-        if hit is not None and not ends_today:
-            try:
-                _tls.groups_stale = False
-                _tls.groups_incomplete = False
-                _tls.groups_warning = ""
-                _tls.groups_source = "json"
-                _tls.groups_months_ready = 1
-                _tls.groups_months_total = 1
-            except Exception:
-                pass
-            # #region agent log
-            _agent_dbg(
-                "G",
-                "oracle_stock.py:fetch_group_sales_totals:group_branch_cache",
-                "group-branch cache hit",
-                {
-                    "sales_total": round(
-                        sum(float(r.get("sales_total") or 0) for r in hit), 2
-                    ),
-                    "ends_today": ends_today,
-                },
+        # فترة مغلقة فقط: كاش حي — أبدًا لا stale، وأبدًا لا كاش إذا النهاية = اليوم
+        if not ends_today:
+            hit, _ = _groups_cache_lookup(
+                system,
+                date_from,
+                date_to,
+                brn,
+                gcode,
+                True,
+                mode,
+                allow_stale=False,
             )
-            # #endregion
-            return hit
+            if hit is not None:
+                try:
+                    _tls.groups_stale = False
+                    _tls.groups_incomplete = False
+                    _tls.groups_warning = ""
+                    _tls.groups_source = "json"
+                    _tls.groups_months_ready = 1
+                    _tls.groups_months_total = 1
+                except Exception:
+                    pass
+                # #region agent log
+                _agent_dbg(
+                    "G",
+                    "oracle_stock.py:fetch_group_sales_totals:group_branch_cache",
+                    "group-branch cache hit",
+                    {
+                        "sales_total": round(
+                            sum(float(r.get("sales_total") or 0) for r in hit), 2
+                        ),
+                        "ends_today": False,
+                    },
+                )
+                # #endregion
+                return hit
         rows = _fetch_pos_one_group_by_branch(
             date_from, date_to, group_code=gcode, branch_code=brn
         )
@@ -5320,19 +5320,27 @@ def fetch_group_sales_totals(
             _tls.groups_stale = False
             _tls.groups_incomplete = False
             _tls.groups_warning = ""
+            _tls.groups_source = "group_branch"
             _tls.groups_months_ready = 1
             _tls.groups_months_total = 1
         except Exception:
             pass
-        # كاش قصير عندما تشمل الفترة اليوم
-        _sales_cache_set(
-            cache_key,
-            rows,
-            ttl=300 if ends_today else None,
-            date_from=date_from,
-            date_to=date_to,
-            keep_stale=not ends_today,
-        )
+        if not ends_today:
+            # فترة مغلقة فقط — بلا نسخة stale حتى لا تُعرض لاحقًا كرقم ناقص
+            _sales_cache_set(
+                cache_key,
+                rows,
+                date_from=date_from,
+                date_to=date_to,
+                keep_stale=False,
+            )
+        else:
+            # امسح أي كاش/stale قديم لنفس المفتاح حتى لا يُزرع في الصفحة
+            try:
+                cache.delete(cache_key)
+                cache.delete(f"{cache_key}:stale")
+            except Exception:
+                pass
         # #region agent log
         _agent_dbg(
             "G",
@@ -5343,6 +5351,7 @@ def fetch_group_sales_totals(
                     sum(float(r.get("sales_total") or 0) for r in (rows or [])), 2
                 ),
                 "ends_today": ends_today,
+                "cached": not ends_today,
                 "branch": brn,
                 "group": gcode,
             },

@@ -416,11 +416,16 @@ def peek_sales_groups(
     group_code: str = "",
 ) -> dict[str, Any] | None:
     """مجموعات من الكاش فقط — لزرع الصفحة فوراً بلا انتظار أوراكل."""
+    from datetime import date as _date
+
     from .oracle_stock import peek_group_sales_totals, sales_long_range
 
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     by_branch = bool(gcode)
+    # مجموعة + إلى اليوم: لا تزرع رقمًا من الكاش (يتخلف عن أوراكل)
+    if gcode and date_to >= _date.today():
+        return None
     raw = peek_group_sales_totals(
         date_from,
         date_to,
