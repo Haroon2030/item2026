@@ -1067,6 +1067,7 @@ def browse_sales(request):
             qs['branch'] = selected_branch
         if selected_group:
             qs['group'] = selected_group
+        # بدون partial: عند اكتمال الشهور تُطابق المجموعات مع إجمالي جدول الفروع
         groups_api_url = f"{reverse('browse_sales_groups_api')}?{urlencode(qs)}"
         items_api_url = f"{reverse('browse_sales_top_items_api')}?{urlencode(qs)}"
         users_api_url = f"{reverse('browse_sales_top_users_api')}?{urlencode(qs)}"
@@ -1149,6 +1150,7 @@ def browse_sales_groups_api(request):
                 {'ok': False, 'error': 'أوراكل غير مفعّل.'},
                 status=400,
             )
+        # partial=1 يتخطّى مطابقة الفروع (استعلام أوراكل إضافي) لتفادي 502
         payload = build_sales_groups(
             date_from,
             date_to,
@@ -1159,7 +1161,23 @@ def browse_sales_groups_api(request):
         return JsonResponse({'ok': True, 'groups': payload})
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_groups_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+        # 200 بدل 5xx حتى لا يحجب البروكسي الرسالة كـ HTTP 502
+        return JsonResponse(
+            {
+                'ok': True,
+                'groups': {
+                    'rows': [],
+                    'totals': {
+                        'invoice_count_display': '0',
+                        'qty_display': '0',
+                        'sales_total_display': '0.00',
+                        'group_count_display': '0',
+                    },
+                    'warning': str(exc)
+                    or 'تعذّر جلب مبيعات المجموعات. أعد المحاولة بعد لحظات.',
+                },
+            }
+        )
 
 
 @login_required

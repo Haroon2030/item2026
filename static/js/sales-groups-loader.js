@@ -51,6 +51,7 @@
   }
 
   function setLoading(body, sub, pill, msg) {
+    setStatus("loading", "جاري التحميل…");
     if (body) {
       body.innerHTML =
         '<tr><td colspan="6" class="sales-empty sales-ov-loading">' +
@@ -62,6 +63,7 @@
   }
 
   function fail(body, sub, pill, msg, elapsedMs) {
+    setStatus("error", "غير مكتمل");
     if (body) {
       body.innerHTML =
         '<tr><td colspan="6" class="sales-empty">' +
@@ -82,6 +84,13 @@
     }
   }
 
+  function setStatus(kind, label) {
+    var el = document.getElementById("sales-groups-status");
+    if (!el) return;
+    el.className = "sales-groups-status is-" + (kind || "ready");
+    el.textContent = label || "";
+  }
+
   function render(data, elapsedMs, progressNote) {
     var body = document.getElementById("sales-groups-body");
     var foot = document.getElementById("sales-groups-foot");
@@ -93,6 +102,7 @@
     var took = formatDuration(elapsedMs);
 
     if (!data || !data.ok || !data.groups) {
+      setStatus("error", "غير مكتمل");
       fail(
         body,
         sub,
@@ -106,14 +116,43 @@
     var rows = data.groups.rows || [];
     var totals = data.groups.totals || {};
     var warn = (data.groups && data.groups.warning) || data.warning || "";
+    var incomplete = !!(data.groups && data.groups.incomplete);
+    var matched = data.groups && data.groups.matched === true;
+    var stillWarming =
+      incomplete ||
+      (!matched &&
+        /خلفية|شهر|جزئي|أقل من جدول|تجهيز|لا يطابق|بدون مطابقة/i.test(
+          String(warn || "")
+        ));
+
     if (!rows.length) {
       if (body) {
-        body.innerHTML =
-          '<tr><td colspan="6" class="sales-empty">لا مبيعات مجموعات في الفترة.</td></tr>';
+        if (warn) {
+          body.innerHTML =
+            '<tr><td colspan="6" class="sales-empty">' +
+            esc(warn) +
+            ' <button type="button" class="btn-primary sales-groups-retry" style="margin-inline-start:0.5rem">إعادة المحاولة</button>' +
+            "</td></tr>";
+          var retryBtn = body.querySelector(".sales-groups-retry");
+          if (retryBtn) {
+            retryBtn.addEventListener("click", function () {
+              loadSingle(readUrl(), 1);
+            });
+          }
+          setStatus("warming", "جارٍ الإكمال…");
+        } else {
+          body.innerHTML =
+            '<tr><td colspan="6" class="sales-empty">لا مبيعات مجموعات في الفترة.</td></tr>';
+          setStatus("ready", "مكتمل");
+        }
       }
       if (foot) foot.hidden = true;
-      if (pill) pill.textContent = "0";
-      if (sub) sub.textContent = "نقاط البيع · لا بيانات · خلال " + took;
+      if (pill) pill.textContent = warn ? "!" : "0";
+      if (sub) {
+        sub.textContent = warn
+          ? "نقاط البيع · " + warn + " · خلال " + took
+          : "نقاط البيع · لا بيانات · خلال " + took;
+      }
       return;
     }
 
@@ -149,15 +188,38 @@
     if (totSales) totSales.innerHTML = moneyHtml(totals.sales_total_display || "0.00");
     if (foot) foot.hidden = false;
     if (pill) pill.textContent = String(rows.length);
+
+    if (stillWarming || incomplete) {
+      setStatus("warming", "جارٍ الإكمال…");
+    } else if (matched) {
+      setStatus("ready", "مكتمل ومطابق ✓");
+    } else if (warn && /يطابق|مطابقة/i.test(String(warn))) {
+      setStatus("warming", "غير مطابق للفروع");
+    } else {
+      setStatus("ready", "مكتمل");
+    }
+
     if (sub) {
+      var posNote = "";
+      if (data.groups && data.groups.pos_total_display) {
+        posNote = " · فروع " + data.groups.pos_total_display;
+      }
+      var stateNote = stillWarming || incomplete
+        ? " · يُكمَل / يُطابَق…"
+        : matched
+          ? " · مكتمل ومطابق للفروع"
+          : warn && /يطابق|مطابقة/i.test(String(warn))
+            ? " · غير مطابق للفروع"
+            : "";
       sub.textContent =
         "نقاط البيع · " +
         (totals.group_count_display || rows.length) +
         " مجموعة · إجمالي " +
         (totals.sales_total_display || "0.00") +
+        posNote +
         " · خلال " +
         took +
-        (progressNote ? " · " + progressNote : "") +
+        stateNote +
         (warn ? " · " + warn : "");
     }
   }
@@ -172,6 +234,9 @@
     if (/مهلة|timeout|timed out/i.test(raw)) {
       return "انتهت مهلة جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات.";
     }
+    if (/\bHTTP\s*50[234]\b/i.test(raw) || /\b502\b|\b503\b|\b504\b/.test(raw)) {
+      return "السيرفر لم يُكمِل الطلب (بوابة/مهلة). أعد المحاولة بعد لحظات.";
+    }
     if (
       low === "failed to fetch" ||
       low.indexOf("networkerror") !== -1 ||
@@ -181,6 +246,13 @@
       return "انقطع الاتصال بالسيرفر — جاري إعادة المحاولة…";
     }
     return raw || "تعذّر تحميل المجموعات";
+  }
+
+  function isRetryableError(err, msg) {
+    var blob = String((err && err.message) || "") + " " + String(msg || "");
+    return /انقطع|failed to fetch|network|مهلة|timeout|abort|502|503|504|بوابة|gateway/i.test(
+      blob
+    );
   }
 
   function fetchJson(url, timeoutMs) {
@@ -243,7 +315,7 @@
     var pill = document.getElementById("sales-groups-pill");
     var started = Date.now();
     var tryNo = attempt || 1;
-    var maxTries = 2;
+    var maxTries = 3;
 
     var tick = setInterval(function () {
       setLoading(
@@ -259,15 +331,12 @@
         clearInterval(tick);
         finishSignals();
         render(data, Date.now() - started);
+        maybePollRefresh(url, data);
       })
       .catch(function (err) {
         clearInterval(tick);
         var msg = friendlyFetchError(err);
-        var isRetryable =
-          /انقطع|failed to fetch|network|مهلة|timeout|abort/i.test(
-            String((err && err.message) || "") + " " + msg
-          );
-        if (isRetryable && tryNo < maxTries) {
+        if (isRetryableError(err, msg) && tryNo < maxTries) {
           setLoading(
             body,
             sub,
@@ -276,7 +345,7 @@
           );
           setTimeout(function () {
             loadSingle(url, tryNo + 1);
-          }, 1500);
+          }, 1200 * tryNo);
           return;
         }
         finishSignals();
@@ -295,6 +364,7 @@
         fetchJson(url, 180 * 1000)
           .then(function (data) {
             render(data, 0, "محدّث");
+            maybePollRefresh(url, data);
           })
           .catch(function () {
             /* أبقِ الكاش المعروض */
@@ -304,6 +374,39 @@
     }
     if (!url) return;
     loadSingle(url, 1);
+  }
+
+  function maybePollRefresh(url, data) {
+    var incomplete = !!(data && data.groups && data.groups.incomplete);
+    var matched = !!(data && data.groups && data.groups.matched);
+    var longRange = !!(data && data.groups && data.groups.long_range);
+    var warn =
+      (data && data.groups && data.groups.warning) || (data && data.warning) || "";
+    // استمر حتى المطابقة أو انتهاء التدفئة — لا تتوقف عند «مكتمل» وهمي
+    var needPoll =
+      incomplete ||
+      (longRange && !matched) ||
+      (!matched &&
+        /خلفية|شهر|جزئي|أقل من جدول|تجهيز|يطابق|مطابقة/i.test(String(warn || "")));
+    if (!needPoll) return;
+    var tries = 0;
+    var maxPolls = 12;
+    function poll() {
+      tries += 1;
+      fetchJson(url, 120 * 1000)
+        .then(function (fresh) {
+          render(fresh, 0);
+          var stillIncomplete = !!(fresh && fresh.groups && fresh.groups.incomplete);
+          var nowMatched = !!(fresh && fresh.groups && fresh.groups.matched);
+          if ((!nowMatched || stillIncomplete) && tries < maxPolls) {
+            setTimeout(poll, 8000);
+          }
+        })
+        .catch(function () {
+          if (tries < maxPolls) setTimeout(poll, 10000);
+        });
+    }
+    setTimeout(poll, 5000);
   }
 
   if (document.readyState === "loading") {

@@ -11449,6 +11449,77 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   font-weight: 600;
 }
 
+.sales-overview-dash .sales-groups-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sales-overview-dash .sales-groups-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.sales-overview-dash .sales-groups-status.is-ready {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.sales-overview-dash .sales-groups-status.is-ready::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+.sales-overview-dash .sales-groups-status.is-warming,
+.sales-overview-dash .sales-groups-status.is-loading {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.sales-overview-dash .sales-groups-status.is-warming::before,
+.sales-overview-dash .sales-groups-status.is-loading::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #d97706;
+  animation: sales-groups-pulse 1.1s ease-in-out infinite;
+}
+
+.sales-overview-dash .sales-groups-status.is-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+.sales-overview-dash .sales-groups-status.is-error::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+@keyframes sales-groups-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+
 .sales-overview-dash .sales-ov-scroll {
   max-height: 22rem;
   overflow: auto;

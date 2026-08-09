@@ -426,6 +426,7 @@ def build_sales_groups(
         fetch_group_sales_totals,
         oracle_session,
         pop_groups_fetch_warning,
+        pop_groups_incomplete,
         sales_long_range,
     )
 
@@ -444,31 +445,56 @@ def build_sales_groups(
         by_branch=False,
     )
     warning = pop_groups_fetch_warning() or ""
+    incomplete = pop_groups_incomplete()
 
-    if reconcile and not gcode and groups_raw:
+    pos_total = None
+    matched = False
+    # طابق إجمالي المجموعات مع جدول نقاط البيع عند اكتمال الفترة
+    do_reconcile = bool(reconcile) and not gcode and bool(groups_raw) and not incomplete
+    if do_reconcile:
         try:
             with oracle_session():
                 pos_raw = _filter_branch_rows(
                     fetch_branch_sales_totals(date_from, date_to, system="pos"),
                     brn,
                 )
-            target = round(
+            pos_total = round(
                 sum(float(r.get("sales_total") or 0) for r in pos_raw),
                 2,
             )
-            groups_raw = _reconcile_group_sales_to_target(groups_raw, target)
+            before = round(
+                sum(float(r.get("sales_total") or 0) for r in groups_raw), 2
+            )
+            groups_raw = _reconcile_group_sales_to_target(groups_raw, pos_total)
+            after = round(
+                sum(float(r.get("sales_total") or 0) for r in groups_raw), 2
+            )
+            matched = abs(after - pos_total) < 0.05
+            if not matched and not warning:
+                warning = (
+                    f"إجمالي المجموعات {_money(before)} لا يطابق الفروع "
+                    f"{_money(pos_total)} بعد المطابقة"
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("groups reconcile skipped: %s", exc)
             if not warning:
                 warning = "تم العرض بدون مطابقة ملخص الفروع"
+    elif incomplete and not warning:
+        warning = "البيانات جزئية — الإجمالي أقل من جدول الفروع حتى تكتمل الأشهر"
 
     rows, totals = _format_group_rows(groups_raw)
+    # matched فقط بعد مطابقة ناجحة مع إجمالي الفروع — لا تُعلَن اكتمالاً وهمياً
     payload = {
         "rows": rows,
         "totals": totals,
         "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
         "scope_label": _scope_label(brn, gcode),
+        "incomplete": incomplete,
+        "matched": bool(matched) and not incomplete,
     }
+    if pos_total is not None:
+        payload["pos_total"] = pos_total
+        payload["pos_total_display"] = _money(pos_total)
     if warning:
         payload["warning"] = warning
     if sales_long_range(date_from, date_to):

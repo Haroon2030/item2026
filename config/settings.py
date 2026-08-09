@@ -166,7 +166,8 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
         'LOCATION': str(_CACHE_DIR),
         'TIMEOUT': 1800,
-        'OPTIONS': {'MAX_ENTRIES': 2000},
+        # رفع السقف: كاش المبيعات/الشهور كان يملأ 2000 بسرعة ويُصفّى بقوة
+        'OPTIONS': {'MAX_ENTRIES': 20000},
     }
 }
 
@@ -236,10 +237,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ---------------------------------------------------------------------------
 # أمان الجلسات والكوكيز والهيدرز
 # ---------------------------------------------------------------------------
+# جلسات في قاعدة البيانات (لا LocMem) حتى لا تُفقد عند إعادة تشغيل العمال
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', default=not DEBUG)
+# 8 ساعات افتراضياً — جدّد العمرو عند كل طلب حتى لا تنقطع أثناء التصفح الطويل
 SESSION_COOKIE_AGE = int(_env('SESSION_COOKIE_AGE', '28800') or '28800')
+SESSION_SAVE_EVERY_REQUEST = _env_bool('SESSION_SAVE_EVERY_REQUEST', default=True)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = _env_bool('CSRF_COOKIE_SECURE', default=not DEBUG)

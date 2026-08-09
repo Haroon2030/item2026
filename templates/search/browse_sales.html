@@ -240,7 +240,14 @@
               {% endif %}
             </p>
           </div>
-          <span class="result-pill" id="sales-groups-pill">{% if dashboard.groups_pending %}…{% else %}{{ dashboard.groups.rows|length }}{% endif %}</span>
+          <div class="sales-groups-head-meta">
+            <span
+              class="sales-groups-status {% if dashboard.groups_pending %}is-loading{% else %}is-ready{% endif %}"
+              id="sales-groups-status"
+              aria-live="polite"
+            >{% if dashboard.groups_pending %}جاري التحميل…{% else %}مكتمل{% endif %}</span>
+            <span class="result-pill" id="sales-groups-pill">{% if dashboard.groups_pending %}…{% else %}{{ dashboard.groups.rows|length }}{% endif %}</span>
+          </div>
         </div>
         <div class="table-wrap sales-ov-scroll">
           <table class="data-table sales-table">
@@ -396,7 +403,7 @@
 
 {% block extra_js %}
 <script src="/static/js/sales-returns-donut.js?v=1" defer></script>
-<script src="/static/js/sales-groups-loader.js?v=13" defer></script>
+<script src="/static/js/sales-groups-loader.js?v=19" defer></script>
 <script src="/static/js/sales-top-items-loader.js?v=13" defer></script>
 <script src="/static/js/sales-top-users-loader.js?v=2" defer></script>
 {% endblock %}

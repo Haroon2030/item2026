@@ -833,6 +833,25 @@ def pop_groups_fetch_warning() -> str:
     return msg
 
 
+def pop_groups_incomplete() -> bool:
+    """هل نتيجة المجموعات جزئية (شهور ناقصة) — يُستهلك مرة واحدة."""
+    flag = bool(getattr(_tls, "groups_incomplete", False))
+    try:
+        _tls.groups_incomplete = False
+    except Exception:
+        pass
+    return flag
+
+
+def _mark_groups_partial(warning: str) -> None:
+    try:
+        _tls.groups_stale = True
+        _tls.groups_incomplete = True
+        _tls.groups_warning = warning
+    except Exception:
+        pass
+
+
 def _sales_cache_set(
     key: str,
     value: Any,
@@ -3967,12 +3986,12 @@ def _fetch_pos_group_totals(
             if any(parts):
                 return _merge_group_total_parts(parts, by_branch=by_branch)
 
-    # تفرّع الفروع للفترات الطويلة فقط — شهر أو أقل = استعلام واحد (اتصال واحد)
+    # تفرّع الفروع من ~أسبوع فأكثر — شهر كامل بمسح واحد بطيء جداً على كل الفروع
     if (
         skip_returns
         and _allow_fanout
         and not brn
-        and span > 35
+        and span >= 8
     ):
         try:
             branches = _pos_branches_in_range(date_from, date_to)
@@ -4006,11 +4025,19 @@ def _fetch_pos_group_totals(
                     logger.warning("POS group branch %s error: %s", b, exc)
                     return []
 
-            # عمال أقل + مهلة أقصر: fail-soft ثم مسح واحد أو كاش احتياطي
-            job_timeout = 120.0 if span <= 35 else (160.0 if span <= 62 else 200.0)
+            # شهر: عمال أكثر؛ سنة: أقل ضغطاً على أوراكل
+            if span <= 31:
+                workers = min(4, len(branches))
+                job_timeout = 100.0 if span <= 16 else 140.0
+            elif span <= 62:
+                workers = min(3, len(branches))
+                job_timeout = 160.0
+            else:
+                workers = min(2, len(branches))
+                job_timeout = 200.0
             parts = _run_parallel_ex(
                 [lambda b=code: _one(b) for code in branches],
-                max_workers=min(2, len(branches)),
+                max_workers=workers,
                 timeout_sec=job_timeout,
                 soft_fail=True,
             )
@@ -4298,7 +4325,7 @@ def _groups_cache_key(
     split_by_branch: bool,
     mode: str,
     *,
-    version: str = "v19",
+    version: str = "v20",
 ) -> str:
     return (
         f"sales:groups:{version}:{system}:{_as_date(date_from).isoformat()}:"
@@ -4317,8 +4344,8 @@ def _groups_cache_lookup(
     *,
     allow_stale: bool = True,
 ):
-    """يقرأ v19 ثم v18 للتوافق مع كاش سابق."""
-    for ver in ("v19", "v18"):
+    """يقرأ v20 ثم v19/v18 للتوافق مع كاش سابق."""
+    for ver in ("v20", "v19", "v18"):
         key = _groups_cache_key(
             system,
             date_from,
@@ -4351,19 +4378,187 @@ def _try_merge_monthly_group_cache(
     split_by_branch: bool,
     mode: str,
 ) -> list[dict] | None:
-    """يجمع الفترة من كاش الشهور الجاهزة — بدون لمس أوراكل."""
-    months = _month_spans(date_from, date_to)
-    if len(months) < 2 or brn:
+    """يجمع الفترة من كاش الشهور الجاهزة بالكامل — بدون لمس أوراكل."""
+    merged, missing = _merge_available_monthly_group_cache(
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=split_by_branch,
+        mode=mode,
+    )
+    if merged is None or missing:
         return None
+    return merged
+
+
+def _merge_available_monthly_group_cache(
+    *,
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    mode: str,
+) -> tuple[list[dict] | None, list[tuple[date, date]]]:
+    """دمج الشهور المتوفرة في الكاش + قائمة الشهور الناقصة."""
+    months = _month_spans(date_from, date_to)
+    if len(months) < 2:
+        return None, []
     parts: list = []
+    missing: list[tuple[date, date]] = []
     for a, b in months:
         part, _ = _groups_cache_lookup(
             system, a, b, brn, gcode, split_by_branch, mode, allow_stale=True
         )
         if part is None:
-            return None
-        parts.append(part)
-    return _merge_group_total_parts(parts, by_branch=split_by_branch)
+            missing.append((a, b))
+        else:
+            parts.append(part)
+    if not parts:
+        return None, missing
+    return _merge_group_total_parts(parts, by_branch=split_by_branch), missing
+
+
+def _fetch_one_month_group_totals(
+    *,
+    system: str,
+    date_from,
+    date_to,
+    brn: str,
+    gcode: str,
+    split_by_branch: bool,
+    fast: bool,
+) -> list[dict]:
+    """جلب شهر واحد وتخزينه في كاش الشهر (مع توازي فروع عند الإمكان)."""
+    mode = "gross" if fast else "net"
+    cached, mkey = _groups_cache_lookup(
+        system,
+        date_from,
+        date_to,
+        brn,
+        gcode,
+        split_by_branch,
+        mode,
+        allow_stale=False,
+    )
+    if cached is not None:
+        return cached
+    # توازي الفروع داخل الشهر — بلا تداخل مع تفرّع الشهور
+    if _system_conf(system).get("source") == "pos":
+        rows = _fetch_pos_group_totals(
+            date_from,
+            date_to,
+            branch_code=brn,
+            group_code=gcode,
+            by_branch=split_by_branch,
+            skip_returns=fast,
+            _allow_fanout=True,
+        )
+    else:
+        with oracle_session():
+            rows = _fetch_bill_group_totals(
+                date_from,
+                date_to,
+                _system_conf(system),
+                brn,
+                gcode,
+                by_branch=split_by_branch,
+                skip_returns=fast,
+            )
+    _sales_cache_set(mkey, rows, date_from=date_from, date_to=date_to)
+    return rows
+
+
+def _schedule_groups_monthly_warm(
+    date_from,
+    date_to,
+    *,
+    system: str,
+    branch_code: str,
+    group_code: str,
+    by_branch: bool,
+    force_fast: bool,
+    cache_key: str,
+    missing_months: list[tuple[date, date]] | None = None,
+) -> None:
+    """تدفئة شهور ناقصة ثم دمج كاش الفترة الكاملة — في الخلفية."""
+    months = missing_months or _month_spans(date_from, date_to)
+    if not months:
+        return
+    # الأحدث أولاً — يظهر أثره أسرع عند إعادة التحميل
+    months = list(reversed(months))
+    lock_key = f"{cache_key}:monthly-warm"
+    try:
+        # قفل أقصر حتى لا تُعلَّق التدفئة 15د بعد تعثّر خيط/إعادة تشغيل
+        if not cache.add(lock_key, 1, 300):
+            if cache.get(lock_key):
+                return
+            cache.set(lock_key, 1, 300)
+    except Exception:
+        return
+
+    def _job():
+        try:
+            def _warm_one(pair: tuple[date, date]) -> None:
+                a, b = pair
+                try:
+                    _fetch_one_month_group_totals(
+                        system=system,
+                        date_from=a,
+                        date_to=b,
+                        brn=branch_code,
+                        gcode=group_code,
+                        split_by_branch=by_branch,
+                        fast=force_fast,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "monthly groups warm %s→%s failed: %s", a, b, exc
+                    )
+
+            # شهران بالتوازي كحد أقصى — كل شهر يفرّع فروعه داخلياً
+            _run_parallel_ex(
+                [lambda m=pair: _warm_one(m) for pair in months],
+                max_workers=min(2, len(months)),
+                timeout_sec=min(480.0, 160.0 * len(months)),
+                soft_fail=True,
+            )
+            mode = "gross" if force_fast else "net"
+            merged, still_missing = _merge_available_monthly_group_cache(
+                system=system,
+                date_from=date_from,
+                date_to=date_to,
+                brn=branch_code,
+                gcode=group_code,
+                split_by_branch=by_branch,
+                mode=mode,
+            )
+            # اكتب كاش الفترة فقط عند اكتمال كل الشهور
+            if merged is not None and not still_missing:
+                _sales_cache_set(
+                    cache_key, merged, date_from=date_from, date_to=date_to
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("monthly groups warm job failed: %s", exc)
+        finally:
+            try:
+                cache.delete(lock_key)
+            except Exception:
+                pass
+
+    try:
+        threading.Thread(
+            target=_job, name="groups-monthly-warm", daemon=True
+        ).start()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not start monthly groups warm: %s", exc)
+        try:
+            cache.delete(lock_key)
+        except Exception:
+            pass
 
 
 def peek_group_sales_totals(
@@ -4399,7 +4594,7 @@ def peek_group_sales_totals(
     )
     if cached is not None:
         return cached
-    merged = _try_merge_monthly_group_cache(
+    merged, missing = _merge_available_monthly_group_cache(
         system=system,
         date_from=date_from,
         date_to=date_to,
@@ -4408,8 +4603,11 @@ def peek_group_sales_totals(
         split_by_branch=split_by_branch,
         mode=mode,
     )
-    if merged is not None:
+    if merged is not None and not missing:
         _sales_cache_set(cache_key, merged, date_from=date_from, date_to=date_to)
+        return merged
+    if merged is not None:
+        # جزئي من الشهور الجاهزة — أفضل من انتظار السنة كاملة
         return merged
     stale, _ = _groups_cache_lookup(
         system,
@@ -4438,6 +4636,7 @@ def fetch_group_sales_totals(
     أونكس/فواتير: صافي بعد خصم المرتجع (ليطابق تقرير مبيعات الأصناف في أونكس).
     نقاط البيع: إجمالي بدون مرتجع افتراضياً (المرتجع يُعرض منفصلاً) إلا مع force_fast=False.
     مسار سريع: كاش حي → دمج شهور من الكاش → كاش قديم → أوراكل مرة واحدة.
+    للسنة/الفترات الطويلة: لا يُمسح العام دفعة واحدة — شهور من الكاش + أحدث شهر ثم تدفئة خلفية.
     """
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
@@ -4451,6 +4650,135 @@ def fetch_group_sales_totals(
     else:
         fast = bool(force_fast)
     mode = "gross" if fast else "net"
+    months = _month_spans(date_from, date_to)
+    long_range = sales_long_range(date_from, date_to) or len(months) >= 2
+    cache_key = _groups_cache_key(
+        system, date_from, date_to, brn, gcode, split_by_branch, mode
+    )
+
+    # للفترات الطويلة: اعتمد دمج الشهور فقط — كاش الفترة القديم قد يكون جزئياً ومضلِّلاً
+    if long_range:
+        merged_chk, missing_chk = _merge_available_monthly_group_cache(
+            system=system,
+            date_from=date_from,
+            date_to=date_to,
+            brn=brn,
+            gcode=gcode,
+            split_by_branch=split_by_branch,
+            mode=mode,
+        )
+        if merged_chk is not None and not missing_chk:
+            try:
+                _tls.groups_stale = False
+                _tls.groups_incomplete = False
+                _tls.groups_warning = ""
+            except Exception:
+                pass
+            _sales_cache_set(cache_key, merged_chk, date_from=date_from, date_to=date_to)
+            return merged_chk
+        if merged_chk is not None and missing_chk:
+            # شهر أخير ناقص: أكمله في نفس الطلب (واجهة تنتظر حتى ~3د)
+            if len(missing_chk) == 1:
+                last_a, last_b = missing_chk[0]
+                try:
+                    _fetch_one_month_group_totals(
+                        system=system,
+                        date_from=last_a,
+                        date_to=last_b,
+                        brn=brn,
+                        gcode=gcode,
+                        split_by_branch=split_by_branch,
+                        fast=fast,
+                    )
+                    merged_done, still = _merge_available_monthly_group_cache(
+                        system=system,
+                        date_from=date_from,
+                        date_to=date_to,
+                        brn=brn,
+                        gcode=gcode,
+                        split_by_branch=split_by_branch,
+                        mode=mode,
+                    )
+                    if merged_done is not None and not still:
+                        try:
+                            _tls.groups_stale = False
+                            _tls.groups_incomplete = False
+                            _tls.groups_warning = ""
+                        except Exception:
+                            pass
+                        _sales_cache_set(
+                            cache_key,
+                            merged_done,
+                            date_from=date_from,
+                            date_to=date_to,
+                        )
+                        return merged_done
+                    if merged_done is not None:
+                        merged_chk = merged_done
+                        missing_chk = still
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "last-month groups sync fetch %s→%s failed: %s",
+                        last_a,
+                        last_b,
+                        exc,
+                    )
+            done = len(months) - len(missing_chk)
+            _mark_groups_partial(
+                f"عرض جزئي ({done}/{len(months)} شهر) — الإجمالي أقل من جدول الفروع حتى تكتمل الأشهر"
+            )
+            _schedule_groups_monthly_warm(
+                date_from,
+                date_to,
+                system=system,
+                branch_code=brn,
+                group_code=gcode,
+                by_branch=split_by_branch,
+                force_fast=fast,
+                cache_key=cache_key,
+                missing_months=missing_chk,
+            )
+            return merged_chk
+
+        # لا شهور في الكاش: أحدث شهر + تدفئة — تجاهل كاش الفترة المسموم
+        newest = months[-1] if months else None
+        rows: list[dict] = []
+        if newest:
+            try:
+                rows = _fetch_one_month_group_totals(
+                    system=system,
+                    date_from=newest[0],
+                    date_to=newest[1],
+                    brn=brn,
+                    gcode=gcode,
+                    split_by_branch=split_by_branch,
+                    fast=fast,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("newest-month groups fetch failed: %s", exc)
+                rows = []
+        missing = [m for m in months if m != newest] if newest else list(months)
+        if rows:
+            _mark_groups_partial(
+                "عرض أحدث شهر أولاً — الإجمالي أقل من جدول الفروع حتى تكتمل بقية الأشهر"
+            )
+        else:
+            _mark_groups_partial(
+                "جاري تجهيز مبيعات المجموعات شهراً بشهر — أعد التحميل بعد قليل"
+            )
+        _schedule_groups_monthly_warm(
+            date_from,
+            date_to,
+            system=system,
+            branch_code=brn,
+            group_code=gcode,
+            by_branch=split_by_branch,
+            force_fast=fast,
+            cache_key=cache_key,
+            missing_months=missing,
+        )
+        return rows
+
     cached, cache_key = _groups_cache_lookup(
         system,
         date_from,
@@ -4464,12 +4792,14 @@ def fetch_group_sales_totals(
     if cached is not None:
         try:
             _tls.groups_stale = False
+            _tls.groups_incomplete = False
             _tls.groups_warning = ""
         except Exception:
             pass
         return cached
 
-    merged = _try_merge_monthly_group_cache(
+    # دمج شهور كاملة إن وُجدت كلها في الكاش
+    merged_all, missing_months = _merge_available_monthly_group_cache(
         system=system,
         date_from=date_from,
         date_to=date_to,
@@ -4478,44 +4808,45 @@ def fetch_group_sales_totals(
         split_by_branch=split_by_branch,
         mode=mode,
     )
-    if merged is not None:
+    if merged_all is not None and not missing_months:
         try:
             _tls.groups_stale = False
+            _tls.groups_incomplete = False
             _tls.groups_warning = ""
         except Exception:
             pass
-        _sales_cache_set(cache_key, merged, date_from=date_from, date_to=date_to)
-        return merged
+        _sales_cache_set(cache_key, merged_all, date_from=date_from, date_to=date_to)
+        return merged_all
 
-    # فترات طويلة: أعِد كاشاً قديماً فوراً بدل انتظار أوراكل
-    if sales_long_range(date_from, date_to):
-        stale_fast, stale_key = _groups_cache_lookup(
-            system,
+    # كاش قديم للفترة (مسارات قصيرة فقط)
+    stale_fast, stale_key = _groups_cache_lookup(
+        system,
+        date_from,
+        date_to,
+        brn,
+        gcode,
+        split_by_branch,
+        mode,
+        allow_stale=True,
+    )
+    if stale_fast is not None:
+        try:
+            _tls.groups_stale = True
+            _tls.groups_incomplete = False
+            _tls.groups_warning = "عرض سريع من الكاش — يُحدَّث في الخلفية"
+        except Exception:
+            pass
+        _schedule_groups_refresh(
             date_from,
             date_to,
-            brn,
-            gcode,
-            split_by_branch,
-            mode,
-            allow_stale=True,
+            system=system,
+            branch_code=brn,
+            group_code=gcode,
+            by_branch=split_by_branch,
+            force_fast=fast,
+            cache_key=stale_key or cache_key,
         )
-        if stale_fast is not None:
-            try:
-                _tls.groups_stale = True
-                _tls.groups_warning = "عرض سريع من الكاش — يُحدَّث في الخلفية"
-            except Exception:
-                pass
-            _schedule_groups_refresh(
-                date_from,
-                date_to,
-                system=system,
-                branch_code=brn,
-                group_code=gcode,
-                by_branch=split_by_branch,
-                force_fast=fast,
-                cache_key=stale_key or cache_key,
-            )
-            return stale_fast
+        return stale_fast
 
     try:
         if conf.get("source") == "pos":
@@ -4558,17 +4889,33 @@ def fetch_group_sales_totals(
             except Exception:
                 pass
             return stale
-        if isinstance(exc, OracleStockError):
-            raise
-        if _is_connect_timeout(exc) or _is_disconnect_error(exc):
-            raise OracleStockError(
-                "انتهت مهلة جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
-            ) from exc
-        raise OracleStockError(
-            "تعذّر جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
-        ) from exc
+        logger.warning("groups cold fetch failed (soft): %s", exc)
+        try:
+            _tls.groups_stale = True
+            if _is_connect_timeout(exc) or _is_disconnect_error(exc):
+                _tls.groups_warning = (
+                    "انتهت مهلة جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
+                )
+            else:
+                _tls.groups_warning = (
+                    "تعذّر جلب مبيعات المجموعات من أوراكل. أعد المحاولة بعد لحظات."
+                )
+        except Exception:
+            pass
+        _schedule_groups_refresh(
+            date_from,
+            date_to,
+            system=system,
+            branch_code=brn,
+            group_code=gcode,
+            by_branch=split_by_branch,
+            force_fast=fast,
+            cache_key=cache_key,
+        )
+        return []
     try:
         _tls.groups_stale = False
+        _tls.groups_incomplete = False
         _tls.groups_warning = ""
     except Exception:
         pass
@@ -4588,7 +4935,19 @@ def _schedule_groups_refresh(
     cache_key: str,
 ) -> None:
     """تحديث كاش المجموعات في خيط خلفي بعد عرض سريع من الكاش القديم."""
-    import threading
+    # فترات طويلة: تدفئة شهرية بدل مسح السنة دفعة واحدة
+    if sales_long_range(date_from, date_to) or len(_month_spans(date_from, date_to)) >= 2:
+        _schedule_groups_monthly_warm(
+            date_from,
+            date_to,
+            system=system,
+            branch_code=branch_code,
+            group_code=group_code,
+            by_branch=by_branch,
+            force_fast=force_fast,
+            cache_key=cache_key,
+        )
+        return
 
     lock_key = f"{cache_key}:refreshing"
     try:
