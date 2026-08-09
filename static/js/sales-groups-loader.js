@@ -263,17 +263,32 @@
       return;
     }
 
+    var byBranch = !!(data.groups && data.groups.by_branch);
+    var colName = document.getElementById("sales-groups-col-name");
+    var colExtra = document.getElementById("sales-groups-col-extra");
+    if (colName) colName.textContent = byBranch ? "الفرع" : "المجموعة";
+    if (colExtra) colExtra.textContent = byBranch ? "متوسط السلة" : "الحصة";
+
     var html = "";
     rows.forEach(function (row, i) {
+      var label = byBranch
+        ? row.branch_name || row.name || row.group_name
+        : row.group_name || row.name;
+      var code = byBranch
+        ? row.branch_code || row.code || ""
+        : row.group_code || row.code || "";
+      var extra = byBranch
+        ? moneyHtml(row.avg_basket_display || "0.00")
+        : esc(row.share_display);
       html +=
         "<tr>" +
         '<td class="mono">' +
         (i + 1) +
         "</td>" +
         '<td title="' +
-        esc(row.group_code) +
+        esc(code) +
         '">' +
-        esc(row.group_name) +
+        esc(label) +
         "</td>" +
         '<td class="mono">' +
         esc(row.invoice_count_display) +
@@ -285,7 +300,7 @@
         moneyHtml(row.sales_total_display) +
         "</td>" +
         '<td class="mono sales-col-share">' +
-        esc(row.share_display) +
+        extra +
         "</td>" +
         "</tr>";
     });
@@ -293,6 +308,12 @@
     if (totInv) totInv.textContent = totals.invoice_count_display || "0";
     if (totQty) totQty.textContent = totals.qty_display || "0";
     if (totSales) totSales.innerHTML = moneyHtml(totals.sales_total_display || "0.00");
+    var totExtra = document.getElementById("sales-groups-tot-extra");
+    if (totExtra) {
+      totExtra.innerHTML = byBranch
+        ? moneyHtml(totals.avg_basket_display || "0.00")
+        : "100%";
+    }
     if (foot) foot.hidden = false;
     if (pill) pill.textContent = String(rows.length);
 
@@ -300,6 +321,8 @@
       setStatus("warming", "جارٍ الإكمال…");
     } else if (matched) {
       setStatus("ready", "مكتمل ومطابق ✓");
+    } else if (byBranch) {
+      setStatus("ready", "حسب الفروع ✓");
     } else if (warn && /يطابق|مطابقة/i.test(String(warn))) {
       setStatus("warming", "غير مطابق للفروع");
     } else {
@@ -317,22 +340,28 @@
       var cacheNote =
         cache.source === "sample"
           ? " · عيّنة سريعة"
-          : mTotal > 1
-            ? " · JSON " + mReady + "/" + mTotal + " شهر"
-            : cache.source === "json"
-              ? " · من الكاش"
-              : "";
+          : cache.source === "group_branch"
+            ? " · مجموعة×فروع"
+            : mTotal > 1
+              ? " · JSON " + mReady + "/" + mTotal + " شهر"
+              : cache.source === "json"
+                ? " · من الكاش"
+                : "";
       var stateNote = stillWarming || incomplete
         ? " · يُجلب SQL ويُجمَّع…"
         : matched
           ? " · مطابق لجدول الفروع"
-          : warn && /يطابق|مطابقة/i.test(String(warn))
-            ? " · غير مطابق للفروع"
-            : "";
+          : byBranch
+            ? " · تفصيل فروع المجموعة"
+            : warn && /يطابق|مطابقة/i.test(String(warn))
+              ? " · غير مطابق للفروع"
+              : "";
       sub.textContent =
         "نقاط البيع · " +
-        (totals.group_count_display || rows.length) +
-        " مجموعة · إجمالي " +
+        (byBranch
+          ? (totals.branch_count_display || rows.length) + " فرع"
+          : (totals.group_count_display || rows.length) + " مجموعة") +
+        " · إجمالي " +
         (totals.sales_total_display || "0.00") +
         posNote +
         cacheNote +

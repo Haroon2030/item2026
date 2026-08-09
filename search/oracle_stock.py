@@ -4009,6 +4009,110 @@ def _assemble_group_rows(sales_rows, returns_by_key, *, by_branch: bool = True) 
     return out
 
 
+def _fetch_pos_one_group_by_branch(
+    date_from,
+    date_to,
+    group_code: str,
+    branch_code: str = "",
+) -> list[dict]:
+    """مجموعة واحدة مفصّلة حسب الفرع — فواتير صحيحة + متوسط سلة لكل فرع.
+
+    استعلام واحد (MST⋈DTL⋈صنف) أضيق بكثير من مسح كل المجموعات.
+    """
+    gcode = str(group_code or "").strip()
+    if not gcode:
+        return []
+    pos = _pos_owner()
+    schema = _schema()
+    params: dict = _date_params(date_from, date_to)
+    params["gcode"] = _bind_gcode(gcode)
+    brn = str(branch_code or "").strip()
+    branch_filter = ""
+    if brn:
+        params["brn"] = brn
+        branch_filter = "AND m.BRN_NO = :brn"
+    hung_m = _hung_ok("m")
+    # #region agent log
+    t0 = __import__("time").monotonic()
+    _agent_dbg(
+        "F",
+        "oracle_stock.py:_fetch_pos_one_group_by_branch:start",
+        "group-by-branch start",
+        {"group": gcode, "branch": brn, "date_from": str(date_from), "date_to": str(date_to)},
+    )
+    # #endregion
+    try:
+        sales_rows = _fetch_all(
+            f"""
+            SELECT
+                NVL(TO_CHAR(x.G_CODE), '(بلا)') AS GROUP_CODE,
+                TO_CHAR(x.BRN_NO) AS BRANCH_CODE,
+                COUNT(*) AS INVOICE_COUNT,
+                ROUND(SUM(x.QTY_TOTAL), 2) AS QTY_TOTAL,
+                ROUND(SUM(x.NET_TOTAL), 2) AS NET_TOTAL,
+                ROUND(SUM(x.VAT_TOTAL), 2) AS VAT_TOTAL
+            FROM (
+                SELECT
+                    i.G_CODE,
+                    m.BRN_NO,
+                    m.BILL_NO,
+                    NVL(m.BILL_SRL, 0) AS BILL_SRL,
+                    SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+                    SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
+                    SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                FROM {pos}.IAS_POS_BILL_DTL d
+                JOIN {pos}.IAS_POS_BILL_MST m
+                  ON m.BILL_NO = d.BILL_NO
+                 AND m.BRN_NO = d.BRN_NO
+                 AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+                LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+                WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                  AND {hung_m}
+                  AND d.I_CODE IS NOT NULL
+                  AND i.G_CODE = :gcode
+                  {branch_filter}
+                GROUP BY i.G_CODE, m.BRN_NO, m.BILL_NO, NVL(m.BILL_SRL, 0)
+            ) x
+            GROUP BY NVL(TO_CHAR(x.G_CODE), '(بلا)'), x.BRN_NO
+            """,
+            params,
+        )
+        rows = _assemble_group_rows(sales_rows, {}, by_branch=True)
+        # #region agent log
+        _agent_dbg(
+            "F",
+            "oracle_stock.py:_fetch_pos_one_group_by_branch:ok",
+            "group-by-branch ok",
+            {
+                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
+                "branches": len(rows or []),
+                "invoices": sum(int(r.get("invoice_count") or 0) for r in (rows or [])),
+            },
+        )
+        # #endregion
+        try:
+            _tls.groups_source = "group_branch"
+            _tls.groups_stale = False
+            _tls.groups_incomplete = False
+            _tls.groups_warning = ""
+        except Exception:
+            pass
+        return rows
+    except Exception as exc:  # noqa: BLE001
+        # #region agent log
+        _agent_dbg(
+            "F",
+            "oracle_stock.py:_fetch_pos_one_group_by_branch:err",
+            "group-by-branch failed",
+            {
+                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
+                "error": str(exc)[:300],
+            },
+        )
+        # #endregion
+        raise
+
+
 def _fetch_pos_group_totals_light(
     date_from,
     date_to,
@@ -4128,6 +4232,18 @@ def _fetch_pos_group_totals(
     افتراضياً (GROUPS_SQL_MODE=light): عيّنة فواتير خفيفة بدل مسح DTL الكامل.
     """
     brn = str(branch_code or "").strip()
+    # مجموعة محددة × فروع: استعلام مباشر بعدد فواتير صحيح
+    if (
+        skip_returns
+        and by_branch
+        and str(group_code or "").strip()
+    ):
+        return _fetch_pos_one_group_by_branch(
+            date_from,
+            date_to,
+            group_code=str(group_code).strip(),
+            branch_code=brn,
+        )
     # مسار خفيف — الافتراضي على الإنتاج عبر WAN
     if (
         skip_returns
@@ -5154,6 +5270,43 @@ def fetch_group_sales_totals(
     cache_key = _groups_cache_key(
         system, date_from, date_to, brn, gcode, split_by_branch, mode
     )
+
+    # مجموعة مختارة → تفصيل الفروع مباشرة (فواتير + متوسط سلة)
+    if conf.get("source") == "pos" and gcode and split_by_branch and fast:
+        hit, _ = _groups_cache_lookup(
+            system,
+            date_from,
+            date_to,
+            brn,
+            gcode,
+            True,
+            mode,
+            allow_stale=True,
+        )
+        if hit is not None:
+            try:
+                _tls.groups_stale = False
+                _tls.groups_incomplete = False
+                _tls.groups_warning = ""
+                _tls.groups_source = "json"
+                _tls.groups_months_ready = 1
+                _tls.groups_months_total = 1
+            except Exception:
+                pass
+            return hit
+        rows = _fetch_pos_one_group_by_branch(
+            date_from, date_to, group_code=gcode, branch_code=brn
+        )
+        try:
+            _tls.groups_stale = False
+            _tls.groups_incomplete = False
+            _tls.groups_warning = ""
+            _tls.groups_months_ready = 1
+            _tls.groups_months_total = 1
+        except Exception:
+            pass
+        _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
+        return rows
 
     def _monthly_merge():
         return _merge_available_monthly_group_cache(

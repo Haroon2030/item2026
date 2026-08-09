@@ -121,7 +121,9 @@ def _reconcile_group_sales_to_target(
     return adjusted
 
 
-def _format_group_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
+def _format_group_rows(
+    rows: list[dict], *, by_branch: bool = False
+) -> tuple[list[dict], dict[str, Any]]:
     total_sales = round(sum(float(r.get("sales_total") or 0) for r in rows), 2)
     total_qty = round(sum(float(r.get("qty_total") or 0) for r in rows), 2)
     total_invoices = sum(int(r.get("invoice_count") or 0) for r in rows)
@@ -130,19 +132,39 @@ def _format_group_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
         sales = round(float(row.get("sales_total") or 0), 2)
         qty = round(float(row.get("qty_total") or 0), 2)
         invoices = int(row.get("invoice_count") or 0)
+        avg = row.get("avg_basket")
+        if avg is None:
+            avg = round(sales / invoices, 2) if invoices else 0.0
+        else:
+            avg = round(float(avg or 0), 2)
         share_pct, share_display = _share(sales, total_sales)
+        branch_code = str(row.get("branch_code") or "").strip()
+        branch_name = str(
+            row.get("branch_name") or branch_code or "—"
+        ).strip()
+        group_code = str(row.get("group_code") or "").strip()
+        group_name = str(
+            row.get("group_name") or group_code or "—"
+        ).strip()
+        # عند التفصيل بالفرع: عمود الاسم = الفرع
+        name = branch_name if by_branch else group_name
+        code = branch_code if by_branch else group_code
         out.append(
             {
-                "group_code": str(row.get("group_code") or "").strip(),
-                "group_name": str(
-                    row.get("group_name") or row.get("group_code") or "—"
-                ).strip(),
+                "group_code": group_code,
+                "group_name": group_name,
+                "branch_code": branch_code,
+                "branch_name": branch_name,
+                "name": name,
+                "code": code,
                 "invoice_count": invoices,
                 "invoice_count_display": f"{invoices:,}",
                 "qty_total": qty,
                 "qty_display": _qty(qty),
                 "sales_total": sales,
                 "sales_total_display": _money(sales),
+                "avg_basket": avg,
+                "avg_basket_display": _money(avg),
                 "share_pct": share_pct,
                 "share_display": share_display,
             }
@@ -154,8 +176,16 @@ def _format_group_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
         "qty_display": _qty(total_qty),
         "invoice_count": total_invoices,
         "invoice_count_display": f"{total_invoices:,}",
+        "avg_basket": (
+            round(total_sales / total_invoices, 2) if total_invoices else 0.0
+        ),
+        "avg_basket_display": _money(
+            round(total_sales / total_invoices, 2) if total_invoices else 0.0
+        ),
         "group_count": len(out),
         "group_count_display": f"{len(out):,}",
+        "branch_count": len(out) if by_branch else 0,
+        "branch_count_display": f"{len(out):,}" if by_branch else "0",
     }
     return out, totals
 
@@ -390,23 +420,28 @@ def peek_sales_groups(
 
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
+    by_branch = bool(gcode)
     raw = peek_group_sales_totals(
         date_from,
         date_to,
         system="pos",
         branch_code=brn,
         group_code=gcode,
-        by_branch=False,
+        by_branch=by_branch,
     )
     if raw is None:
         return None
-    rows, totals = _format_group_rows(raw)
+    rows, totals = _format_group_rows(raw, by_branch=by_branch)
     payload = {
         "rows": rows,
         "totals": totals,
         "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
         "scope_label": _scope_label(brn, gcode),
         "from_cache": True,
+        "by_branch": by_branch,
+        "matched": False,
+        "incomplete": False,
+        "cache": {"source": "json"},
     }
     if sales_long_range(date_from, date_to):
         payload["long_range"] = True
@@ -423,9 +458,8 @@ def build_sales_groups(
 ) -> dict[str, Any]:
     """مبيعات المجموعات من نقاط البيع فقط.
 
-    التوزيع من بنود الأصناف؛ عند اكتمال الفترة يُطابَق الإجمالي مع
-    صافي مبيعات نقاط البيع للفترة (جدول الفروع) — المرجع للمالك على شاشة POS.
-    تقرير أونكس «مبيعات الأصناف» (مستند 1 و5) يظهر في بطاقة KPI المنفصلة.
+    بدون مجموعة: توزيع كل المجموعات.
+    مع مجموعة مختارة: صف لكل فرع بعدد فواتير صحيح ومتوسط سلة.
     """
     import logging
 
@@ -443,16 +477,17 @@ def build_sales_groups(
     logger = logging.getLogger(__name__)
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
+    by_branch = bool(gcode)
     warning = ""
 
-    # كاش أو عيّنة خفيفة (GROUPS_SQL_MODE=light) — بلا مسح DTL الثقيل عبر WAN
+    # بدون مجموعة: توزيع المجموعات · مع مجموعة: صف لكل فرع (فواتير + متوسط سلة)
     groups_raw = fetch_group_sales_totals(
         date_from,
         date_to,
         system="pos",
         branch_code=brn,
         group_code=gcode,
-        by_branch=False,
+        by_branch=by_branch,
     )
     warning = pop_groups_fetch_warning() or ""
     incomplete = pop_groups_incomplete()
@@ -470,11 +505,11 @@ def build_sales_groups(
         sum(float(r.get("sales_total") or 0) for r in (groups_raw or [])), 2
     )
 
-    # المجموعات = إجمالي بنود (غالباً بدون مرتجع) · الفروع = صافي بعد المرتجع
-    # لذلك نُطابق الإجمالي دائماً مع جدول الفروع عند اكتمال البيانات
+    # لا نطابق إجمالي مجموعة×فروع مع كل نقاط البيع (نطاق مختلف)
     do_reconcile = (
         bool(reconcile)
         and not gcode
+        and not by_branch
         and bool(groups_raw)
         and (not incomplete or months_complete)
     )
@@ -556,7 +591,7 @@ def build_sales_groups(
             "الإجمالي غير مطابق للفروع حتى تكتمل الشهور"
         )
 
-    rows, totals = _format_group_rows(groups_raw)
+    rows, totals = _format_group_rows(groups_raw, by_branch=by_branch)
     # بعد المطابقة: ثبّت إجمالي العرض = صافي الفروع بالهللة
     if matched and pos_total is not None:
         totals["sales_total"] = pos_total
@@ -566,8 +601,9 @@ def build_sales_groups(
         "totals": totals,
         "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
         "scope_label": _scope_label(brn, gcode),
-        "incomplete": incomplete,
+        "incomplete": incomplete and not by_branch,
         "matched": bool(matched) and not incomplete,
+        "by_branch": by_branch,
         "cache": {
             "source": groups_source,
             "months_ready": months_ready,
@@ -583,8 +619,11 @@ def build_sales_groups(
         payload["warning"] = warning
     if sales_long_range(date_from, date_to):
         payload["long_range"] = True
-    # شهور ناقصة لجلب SQL متوازٍ من الواجهة (أسرع في الإنتاج عبر WAN)
-    if incomplete or (months_total and months_ready < months_total):
+    # شهور ناقصة — فقط لوضع كل المجموعات (ليس تفصيل فرع لمجموعة)
+    if (
+        not by_branch
+        and (incomplete or (months_total and months_ready < months_total))
+    ):
         try:
             from .oracle_stock import _load_groups_month_json, _month_spans
 
