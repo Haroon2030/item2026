@@ -263,6 +263,7 @@
       return;
     }
 
+    var exact = !!(data.groups && data.groups.exact);
     var byBranch = !!(data.groups && data.groups.by_branch);
     var colName = document.getElementById("sales-groups-col-name");
     var colExtra = document.getElementById("sales-groups-col-extra");
@@ -319,10 +320,10 @@
 
     if (stillWarming || incomplete) {
       setStatus("warming", "جارٍ الإكمال…");
+    } else if (exact || byBranch) {
+      setStatus("ready", "دقيق كأونكس ✓");
     } else if (matched) {
       setStatus("ready", "مكتمل ومطابق ✓");
-    } else if (byBranch) {
-      setStatus("ready", "حسب الفروع ✓");
     } else if (warn && /يطابق|مطابقة/i.test(String(warn))) {
       setStatus("warming", "غير مطابق للفروع");
     } else {
@@ -339,20 +340,22 @@
       var mTotal = Number(cache.months_total || 0);
       var cacheNote =
         cache.source === "sample"
-          ? " · عيّنة سريعة"
+          ? " · عيّنة تقريبية"
           : cache.source === "group_branch"
-            ? " · مجموعة×فروع"
-            : mTotal > 1
-              ? " · JSON " + mReady + "/" + mTotal + " شهر"
-              : cache.source === "json"
-                ? " · من الكاش"
-                : "";
+            ? " · Exact مجموعة×فروع"
+            : exact
+              ? " · Exact POS"
+              : mTotal > 1
+                ? " · JSON " + mReady + "/" + mTotal + " شهر"
+                : cache.source === "json"
+                  ? " · من الكاش"
+                  : "";
       var stateNote = stillWarming || incomplete
-        ? " · يُجلب SQL ويُجمَّع…"
-        : matched
-          ? " · مطابق لجدول الفروع"
-          : byBranch
-            ? " · تفصيل فروع المجموعة"
+        ? " · يُجلب SQL…"
+        : exact || byBranch
+          ? " · يطابق بنود أونكس/POS"
+          : matched
+            ? " · مطابق لجدول الفروع"
             : warn && /يطابق|مطابقة/i.test(String(warn))
               ? " · غير مطابق للفروع"
               : "";

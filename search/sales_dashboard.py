@@ -459,12 +459,13 @@ def build_sales_groups(
     *,
     branch_code: str = "",
     group_code: str = "",
-    reconcile: bool = True,
+    reconcile: bool = False,
 ) -> dict[str, Any]:
-    """مبيعات المجموعات من نقاط البيع فقط.
+    """مبيعات المجموعات من نقاط البيع — Exact كما تقرير أونكس للأصناف/المجموعات.
 
-    بدون مجموعة: توزيع كل المجموعات.
+    بدون مجموعة: توزيع كل المجموعات من بنود POS (صافي+ضريبة، بدون مطابقة قسرية).
     مع مجموعة مختارة: صف لكل فرع بعدد فواتير صحيح ومتوسط سلة.
+    ملاحظة: لا نُطابق إجمالي المجموعات مع رأس الفروع (يحرّف الحصص عن أونكس).
     """
     import logging
 
@@ -485,7 +486,7 @@ def build_sales_groups(
     by_branch = bool(gcode)
     warning = ""
 
-    # بدون مجموعة: توزيع المجموعات · مع مجموعة: صف لكل فرع (فواتير + متوسط سلة)
+    # Exact من POS (GROUPS_SQL_MODE=full) — بلا عيّنة تقريبية
     groups_raw = fetch_group_sales_totals(
         date_from,
         date_to,
@@ -493,13 +494,14 @@ def build_sales_groups(
         branch_code=brn,
         group_code=gcode,
         by_branch=by_branch,
+        force_fast=True,
     )
     warning = pop_groups_fetch_warning() or ""
     incomplete = pop_groups_incomplete()
     months_ready, months_total = pop_groups_months_progress()
     groups_source = pop_groups_source() or "json"
 
-    # اكتمال شهور JSON ⇒ صالح للمطابقة (حتى لو علق علم الجزئية)
+    # اكتمال شهور JSON ⇒ صالح للعرض
     months_complete = bool(months_total) and months_ready >= months_total
     if months_complete:
         incomplete = False
@@ -510,7 +512,7 @@ def build_sales_groups(
         sum(float(r.get("sales_total") or 0) for r in (groups_raw or [])), 2
     )
 
-    # لا نطابق إجمالي مجموعة×فروع مع كل نقاط البيع (نطاق مختلف)
+    # المطابقة القسرية مع رأس الفروع تغيّر حصص المجموعات عن تقرير أونكس — معطّلة افتراضيًا
     do_reconcile = (
         bool(reconcile)
         and not gcode
@@ -608,6 +610,7 @@ def build_sales_groups(
         "scope_label": _scope_label(brn, gcode),
         "incomplete": incomplete and not by_branch,
         "matched": bool(matched) and not incomplete,
+        "exact": (not incomplete) and groups_source != "sample",
         "by_branch": by_branch,
         "cache": {
             "source": groups_source,

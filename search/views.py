@@ -1148,11 +1148,6 @@ def browse_sales_groups_api(request):
 
     branch_code = str(request.GET.get('branch') or '').strip()
     group_code = str(request.GET.get('group') or '').strip()
-    partial = str(request.GET.get('partial') or '').strip().lower() in (
-        '1',
-        'true',
-        'yes',
-    )
 
     # #region agent log
     import time as _time
@@ -1170,9 +1165,9 @@ def browse_sales_groups_api(request):
                 {
                     "date_from": date_from.isoformat(),
                     "date_to": date_to.isoformat(),
-                    "partial": partial,
                     "mode": _groups_sql_mode(),
                     "branch": branch_code,
+                    "group": group_code,
                 },
             )
         )
@@ -1204,13 +1199,13 @@ def browse_sales_groups_api(request):
                 {'ok': False, 'error': 'أوراكل غير مفعّل.', '_debug': _dbg_events},
                 status=400,
             )
-        # partial=1 يتخطّى مطابقة الفروع (استعلام أوراكل إضافي) لتفادي 502
+        # Exact كما تقرير أونكس — بلا مطابقة قسرية تحرّف الحصص
         payload = build_sales_groups(
             date_from,
             date_to,
             branch_code=branch_code,
             group_code=group_code,
-            reconcile=not partial,
+            reconcile=False,
         )
         # #region agent log
         try:
