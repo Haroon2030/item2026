@@ -1154,13 +1154,54 @@ def browse_sales_groups_api(request):
         'yes',
     )
 
+    # #region agent log
+    import time as _time
+
+    _t0 = _time.monotonic()
+    _dbg_events = []
+    try:
+        from .oracle_stock import _agent_dbg, _groups_sql_mode
+
+        _dbg_events.append(
+            _agent_dbg(
+                "C",
+                "views.py:browse_sales_groups_api:start",
+                "groups api start",
+                {
+                    "date_from": date_from.isoformat(),
+                    "date_to": date_to.isoformat(),
+                    "partial": partial,
+                    "mode": _groups_sql_mode(),
+                    "branch": branch_code,
+                },
+            )
+        )
+    except Exception:
+        pass
+    # #endregion
+
     try:
         from .oracle_stock import oracle_enabled
         from .sales_dashboard import build_sales_groups
 
         if not oracle_enabled():
+            # #region agent log
+            try:
+                from .oracle_stock import _agent_dbg
+
+                _dbg_events.append(
+                    _agent_dbg(
+                        "C",
+                        "views.py:browse_sales_groups_api:no_oracle",
+                        "oracle disabled",
+                        {},
+                    )
+                )
+            except Exception:
+                pass
+            # #endregion
             return JsonResponse(
-                {'ok': False, 'error': 'أوراكل غير مفعّل.'},
+                {'ok': False, 'error': 'أوراكل غير مفعّل.', '_debug': _dbg_events},
                 status=400,
             )
         # partial=1 يتخطّى مطابقة الفروع (استعلام أوراكل إضافي) لتفادي 502
@@ -1171,9 +1212,49 @@ def browse_sales_groups_api(request):
             group_code=group_code,
             reconcile=not partial,
         )
-        return JsonResponse({'ok': True, 'groups': payload})
+        # #region agent log
+        try:
+            from .oracle_stock import _agent_dbg
+
+            _dbg_events.append(
+                _agent_dbg(
+                    "A",
+                    "views.py:browse_sales_groups_api:ok",
+                    "groups api ok",
+                    {
+                        "elapsed_ms": int((_time.monotonic() - _t0) * 1000),
+                        "rows": len((payload or {}).get("rows") or []),
+                        "source": ((payload or {}).get("cache") or {}).get("source"),
+                        "matched": (payload or {}).get("matched"),
+                        "incomplete": (payload or {}).get("incomplete"),
+                        "warning": str((payload or {}).get("warning") or "")[:200],
+                    },
+                )
+            )
+        except Exception:
+            pass
+        # #endregion
+        return JsonResponse({'ok': True, 'groups': payload, '_debug': _dbg_events})
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_groups_api failed: %s', exc)
+        # #region agent log
+        try:
+            from .oracle_stock import _agent_dbg
+
+            _dbg_events.append(
+                _agent_dbg(
+                    "A",
+                    "views.py:browse_sales_groups_api:exc",
+                    "groups api exception",
+                    {
+                        "elapsed_ms": int((_time.monotonic() - _t0) * 1000),
+                        "error": str(exc)[:300],
+                    },
+                )
+            )
+        except Exception:
+            pass
+        # #endregion
         # 200 بدل 5xx حتى لا يحجب البروكسي الرسالة كـ HTTP 502
         return JsonResponse(
             {
@@ -1189,6 +1270,7 @@ def browse_sales_groups_api(request):
                     'warning': str(exc)
                     or 'تعذّر جلب مبيعات المجموعات. أعد المحاولة بعد لحظات.',
                 },
+                '_debug': _dbg_events,
             }
         )
 

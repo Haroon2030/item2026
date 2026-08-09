@@ -480,6 +480,19 @@ def build_sales_groups(
     )
     if do_reconcile:
         try:
+            # #region agent log
+            import time as _time
+
+            _rt0 = _time.monotonic()
+            from .oracle_stock import _agent_dbg
+
+            _agent_dbg(
+                "E",
+                "sales_dashboard.py:build_sales_groups:reconcile:start",
+                "reconcile start",
+                {"raw_groups_total": raw_groups_total},
+            )
+            # #endregion
             with oracle_session():
                 pos_raw = _filter_branch_rows(
                     fetch_branch_sales_totals(date_from, date_to, system="pos"),
@@ -496,6 +509,18 @@ def build_sales_groups(
             )
             matched = abs(after - pos_total) < 0.05
             incomplete = False
+            # #region agent log
+            _agent_dbg(
+                "E",
+                "sales_dashboard.py:build_sales_groups:reconcile:ok",
+                "reconcile ok",
+                {
+                    "elapsed_ms": int((_time.monotonic() - _rt0) * 1000),
+                    "pos_total": pos_total,
+                    "matched": matched,
+                },
+            )
+            # #endregion
             if not matched and not warning:
                 warning = (
                     f"إجمالي المجموعات {_money(before)} لا يطابق الفروع "
@@ -509,6 +534,19 @@ def build_sales_groups(
                     after,
                 )
         except Exception as exc:  # noqa: BLE001
+            # #region agent log
+            try:
+                from .oracle_stock import _agent_dbg
+
+                _agent_dbg(
+                    "E",
+                    "sales_dashboard.py:build_sales_groups:reconcile:err",
+                    "reconcile failed",
+                    {"error": str(exc)[:300]},
+                )
+            except Exception:
+                pass
+            # #endregion
             logger.warning("groups reconcile skipped: %s", exc)
             if not warning:
                 warning = "تم العرض بدون مطابقة ملخص الفروع"

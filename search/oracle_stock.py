@@ -349,6 +349,37 @@ def oracle_enabled() -> bool:
     return bool(cfg.get("ENABLED"))
 
 
+def _agent_dbg(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> dict:
+    """Debug-mode NDJSON (local file + returned for API→browser ingest)."""
+    import json
+    import time
+    from pathlib import Path
+
+    payload = {
+        "sessionId": "e1de1c",
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(time.time() * 1000),
+    }
+    # #region agent log
+    for p in (
+        Path(r"d:\مشاريعي 2026\item\debug-e1de1c.log"),
+        Path("/app/debug-e1de1c.log"),
+        Path("debug-e1de1c.log"),
+        Path("/tmp/debug-e1de1c.log"),
+    ):
+        try:
+            with p.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            break
+        except Exception:
+            continue
+    # #endregion
+    return payload
+
+
 def _groups_sql_mode() -> str:
     """light = عيّنة فواتير (افتراضي لـ WAN) · full = مسح DTL كامل (بطيء جداً)."""
     mode = str(
@@ -4006,21 +4037,63 @@ def _fetch_pos_group_totals_light(
     except Exception:
         pass
 
-    with oracle_session():
-        item_rows = _fetch_pos_item_sales_agg(
-            date_from,
-            date_to,
-            branch_code=branch_code,
-            group_code=group_code,
-            max_bills=max_bills,
-            sample_mod=sample_mod,
-        )
-    rows = _fold_pos_item_rows_to_group_sales(
-        item_rows,
-        by_branch=False,
-        group_code=group_code,
-        with_bills=False,
+    # #region agent log
+    t0 = __import__("time").monotonic()
+    _agent_dbg(
+        "B",
+        "oracle_stock.py:_fetch_pos_group_totals_light:start",
+        "light sample start",
+        {
+            "date_from": str(date_from),
+            "date_to": str(date_to),
+            "span": span,
+            "max_bills": max_bills,
+            "sample_mod": sample_mod,
+            "branch": str(branch_code or ""),
+        },
     )
+    # #endregion
+    try:
+        with oracle_session():
+            item_rows = _fetch_pos_item_sales_agg(
+                date_from,
+                date_to,
+                branch_code=branch_code,
+                group_code=group_code,
+                max_bills=max_bills,
+                sample_mod=sample_mod,
+            )
+        rows = _fold_pos_item_rows_to_group_sales(
+            item_rows,
+            by_branch=False,
+            group_code=group_code,
+            with_bills=False,
+        )
+        # #region agent log
+        _agent_dbg(
+            "B",
+            "oracle_stock.py:_fetch_pos_group_totals_light:ok",
+            "light sample ok",
+            {
+                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
+                "item_rows": len(item_rows or []),
+                "groups": len(rows or []),
+            },
+        )
+        # #endregion
+    except Exception as exc:  # noqa: BLE001
+        # #region agent log
+        _agent_dbg(
+            "B",
+            "oracle_stock.py:_fetch_pos_group_totals_light:err",
+            "light sample failed",
+            {
+                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
+                "error": str(exc)[:300],
+            },
+        )
+        # #endregion
+        raise
     try:
         _tls.groups_source = "sample"
         _tls.groups_stale = False
