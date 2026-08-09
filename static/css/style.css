@@ -11086,12 +11086,33 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   align-items: start;
 }
 
+.sales-overview-dash .sales-ov-returns {
+  min-width: 0;
+  min-height: 22.5rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sales-overview-dash .sales-ov-returns .sales-returns-donut,
+.sales-overview-dash .sales-ov-returns #sales-returns-empty {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* نفس تنسيق لوحة المجموعات: رأس + جدول بعرض كامل */
+.sales-overview-dash .sales-ov-items {
+  grid-column: 1 / -1;
+  margin-top: 0.15rem;
+}
+
 .sales-overview-dash .sales-ov-returns .sales-returns-donut.branch-donut {
   display: grid;
   grid-template-columns: minmax(9rem, 11rem) minmax(0, 1fr);
   gap: 0.65rem 0.85rem;
   align-items: start;
   padding: 0.55rem 0.75rem 0.85rem;
+  overflow: auto;
 }
 
 .sales-overview-dash .sales-ov-returns .branch-donut-visual {
@@ -11100,11 +11121,12 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 }
 
 .sales-overview-dash .sales-ov-returns .branch-donut-legend {
-  max-height: 18rem;
+  max-height: none;
   overflow: auto;
   margin: 0;
   padding: 0;
   list-style: none;
+  min-height: 0;
 }
 
 .sales-overview-dash .sales-ov-panel .dash-panel-head {
@@ -11123,7 +11145,8 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   overflow: auto;
 }
 
-.sales-overview-dash .sales-ov-groups .sales-ov-scroll {
+.sales-overview-dash .sales-ov-groups .sales-ov-scroll,
+.sales-overview-dash .sales-ov-items .sales-ov-scroll {
   max-height: 28rem;
 }
 
@@ -11161,6 +11184,9 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   }
   .sales-overview-dash .sales-ov-bottom {
     grid-template-columns: 1fr;
+  }
+  .sales-overview-dash .sales-ov-returns {
+    min-height: 18rem;
   }
 }
 

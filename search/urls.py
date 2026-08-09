@@ -19,6 +19,11 @@ urlpatterns = [
         views.browse_sales_groups_api,
         name='browse_sales_groups_api',
     ),
+    path(
+        'sales/api/top-items/',
+        views.browse_sales_top_items_api,
+        name='browse_sales_top_items_api',
+    ),
     path('sales/search/', views.sales_search, name='sales_search'),
     path('sales/performance/', views.browse_performance, name='browse_performance'),
     path('income/', views.browse_income, name='browse_income'),

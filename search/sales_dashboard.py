@@ -337,6 +337,93 @@ def build_sales_groups(
     }
 
 
+def _format_top_return_item_rows(
+    rows: list[dict],
+) -> tuple[list[dict], dict[str, Any]]:
+    total_amt = round(
+        sum(float(r.get("return_total") or r.get("sales_total") or 0) for r in rows),
+        2,
+    )
+    total_qty = round(sum(float(r.get("qty_total") or 0) for r in rows), 2)
+    total_bills = sum(
+        int(r.get("return_count") or r.get("invoice_count") or 0) for r in rows
+    )
+    out: list[dict] = []
+    for idx, row in enumerate(rows):
+        amount = round(float(row.get("return_total") or row.get("sales_total") or 0), 2)
+        qty = round(float(row.get("qty_total") or 0), 2)
+        bills = int(row.get("return_count") or row.get("invoice_count") or 0)
+        share_pct, share_display = _share(amount, total_amt)
+        name = str(row.get("item_name") or row.get("item_code") or "—").strip()
+        code = str(row.get("item_code") or "").strip()
+        out.append(
+            {
+                "rank": idx + 1,
+                "item_code": code,
+                "item_name": name,
+                "return_count": bills,
+                "return_count_display": f"{bills:,}",
+                "qty_total": qty,
+                "qty_display": _qty(qty),
+                "return_total": amount,
+                "return_total_display": _money(amount),
+                # توافق مع محمّل الجدول الحالي
+                "invoice_count_display": f"{bills:,}",
+                "sales_total_display": _money(amount),
+                "share_pct": share_pct,
+                "share_display": share_display,
+            }
+        )
+    totals = {
+        "return_total": total_amt,
+        "return_total_display": _money(total_amt),
+        "sales_total_display": _money(total_amt),
+        "qty_total": total_qty,
+        "qty_display": _qty(total_qty),
+        "return_count": total_bills,
+        "return_count_display": f"{total_bills:,}",
+        "invoice_count_display": f"{total_bills:,}",
+        "item_count": len(out),
+        "item_count_display": f"{len(out):,}",
+    }
+    return out, totals
+
+
+def build_sales_top_items(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """أعلى أصناف الإرجاع من نقاط البيع (افتراضياً أفضل 20)."""
+    from .oracle_stock import fetch_top_returned_items, oracle_session
+
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    lim = max(1, min(int(limit or 20), 40))
+
+    with oracle_session():
+        raw = fetch_top_returned_items(
+            date_from,
+            date_to,
+            system="pos",
+            branch_code=brn,
+            group_code=gcode,
+            limit=lim,
+        )
+    rows, totals = _format_top_return_item_rows(raw)
+    return {
+        "rows": rows,
+        "totals": totals,
+        "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
+        "scope_label": _scope_label(brn, gcode),
+        "limit": lim,
+        "kind": "returns",
+    }
+
+
 def build_sales_dashboard(
     date_from,
     date_to,

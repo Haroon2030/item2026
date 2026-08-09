@@ -4167,8 +4167,10 @@ def _fetch_pos_item_sales_agg(
     limit: int | None = None,
     order_by: str = "sales",
     recent_bills: int | None = None,
+    max_bills: int | None = None,
+    sample_mod: int = 1,
 ) -> list[dict]:
-    """تجميع مبيعات أصناف POS — Top-N أو عيّنة أحدث فواتير للمعاينة السريعة."""
+    """تجميع مبيعات أصناف POS — Top-N أو عيّنة فواتير لتسريع اللوحة."""
     pos = _pos_owner()
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
@@ -4199,6 +4201,28 @@ def _fetch_pos_item_sales_agg(
                     AND {hung_m}
                     {branch_filter}
                   ORDER BY m.BILL_DATE DESC, m.BILL_NO DESC
+              ) WHERE ROWNUM <= :bill_cap
+        """
+    elif max_bills and int(max_bills) > 0:
+        # عيّنة موزّعة من رأس الفاتورة فقط (خفيف) ثم تجميع بنودها —
+        # أسرع بكثير من GROUP BY على كل IAS_POS_BILL_DTL للفترة.
+        params["bill_cap"] = int(max_bills)
+        mod = max(1, int(sample_mod or 1))
+        hash_filter = ""
+        if mod > 1:
+            params["sample_mod"] = mod
+            hash_filter = (
+                "AND MOD(ORA_HASH(TO_CHAR(m.BRN_NO) || ':' || TO_CHAR(m.BILL_NO)), "
+                ":sample_mod) = 0"
+            )
+        mst_from = f"""
+              SELECT BILL_NO, BRN_NO, BILL_SRL FROM (
+                  SELECT m.BILL_NO, m.BRN_NO, m.BILL_SRL
+                  FROM {pos}.IAS_POS_BILL_MST m
+                  WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                    AND {hung_m}
+                    {branch_filter}
+                    {hash_filter}
               ) WHERE ROWNUM <= :bill_cap
         """
     else:
@@ -4283,6 +4307,7 @@ def _fetch_pos_top_items(
     skip_returns: bool = False,
     order_by: str = "sales",
     quick: bool = False,
+    fast_sample: bool = False,
 ) -> list[dict]:
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
@@ -4310,6 +4335,7 @@ def _fetch_pos_top_items(
             recent_bills=3000,
         )
     elif (not brn) and span > 10:
+        # رقم دقيق: تجميع كامل لكل فرع ثم دمج (بدون عيّنة وبدون قصّ Top مبكر)
         try:
             branches = _pos_branches_in_range(date_from, date_to)
         except Exception as exc:  # noqa: BLE001
@@ -4320,12 +4346,16 @@ def _fetch_pos_top_items(
             def _one(b: str) -> list[dict]:
                 with oracle_session():
                     return _fetch_pos_item_sales_agg(
-                        date_from, date_to, branch_code=b, group_code=gcode
+                        date_from,
+                        date_to,
+                        branch_code=b,
+                        group_code=gcode,
+                        order_by=order_by,
                     )
 
             parts = _run_parallel(
                 [lambda b=code: _one(b) for code in branches],
-                max_workers=min(2, len(branches)),
+                max_workers=min(3, len(branches)),
             )
             sales_rows = _merge_pos_item_sales_rows(parts)
             by_qty = str(order_by or "sales").strip().lower() == "qty"
@@ -4357,6 +4387,7 @@ def _fetch_pos_top_items(
                 order_by=order_by,
             )
     else:
+        # تجميع كامل للفترة (أو فرع محدد) ثم Top-N
         sales_rows = _fetch_pos_item_sales_agg(
             date_from,
             date_to,
@@ -4564,6 +4595,7 @@ def fetch_top_sales_items(
     order_by: str = "sales",
     force_fast: bool | None = None,
     quick: bool = False,
+    fast_sample: bool = False,
 ) -> list[dict]:
     """أكثر الأصناف مبيعاً خلال الفترة — SELECT فقط."""
     if not oracle_enabled():
@@ -4575,9 +4607,11 @@ def fetch_top_sales_items(
     fast = True if force_fast is None else bool(force_fast)
     mode = "gross" if fast else "net"
     qtag = "q1" if quick else "q0"
+    stag = "s1" if fast_sample else "s0"
     cache_key = (
-        f"sales:items:v13:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:{mode}:{order}:{qtag}"
+        f"sales:items:v15:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:"
+        f"{mode}:{order}:{qtag}:{stag}"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -4593,6 +4627,7 @@ def fetch_top_sales_items(
             skip_returns=fast,
             order_by=order,
             quick=bool(quick),
+            fast_sample=bool(fast_sample),
         )
     else:
         rows = _fetch_bill_top_items(

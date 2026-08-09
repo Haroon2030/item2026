@@ -278,6 +278,49 @@
         </p>
       </section>
     </div>
+
+    {% if items_api_url %}{{ items_api_url|json_script:"sales-items-url" }}{% endif %}
+    <section
+      class="dash-panel dash-panel-glass sales-ov-panel sales-ov-items"
+      id="sales-items-panel"
+      aria-label="أعلى أصناف الإرجاع"
+    >
+      <div class="dash-panel-head">
+        <div>
+          <h3>أعلى أصناف الإرجاع</h3>
+          <p class="sales-ov-sub" id="sales-items-sub">نقاط البيع · جاري التحميل…</p>
+        </div>
+        <span class="result-pill" id="sales-items-pill">…</span>
+      </div>
+      <div class="table-wrap sales-ov-scroll">
+        <table class="data-table sales-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الصنف</th>
+              <th>فواتير المرتجع</th>
+              <th>الكمية</th>
+              <th>قيمة المرتجع</th>
+              <th>الحصة</th>
+            </tr>
+          </thead>
+          <tbody id="sales-items-body">
+            <tr>
+              <td colspan="6" class="sales-empty sales-ov-loading">جاري تحميل أعلى أصناف الإرجاع…</td>
+            </tr>
+          </tbody>
+          <tfoot id="sales-items-foot" hidden>
+            <tr class="sales-grand-row">
+              <td colspan="2">الإجمالي</td>
+              <td class="mono" id="sales-items-tot-inv">0</td>
+              <td class="mono" id="sales-items-tot-qty">0</td>
+              <td class="mono sales-amt" id="sales-items-tot-sales">0.00</td>
+              <td class="mono">100%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
   </section>
 {% endif %}
 {% endblock %}
@@ -285,4 +328,5 @@
 {% block extra_js %}
 <script src="/static/js/sales-returns-donut.js?v=1" defer></script>
 <script src="/static/js/sales-groups-loader.js?v=6" defer></script>
+<script src="/static/js/sales-top-items-loader.js?v=8" defer></script>
 {% endblock %}

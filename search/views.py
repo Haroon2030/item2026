@@ -1005,6 +1005,7 @@ def browse_sales(request):
                 'error': str(exc),
                 'browsed': False,
                 'groups_api_url': '',
+                'items_api_url': '',
             },
         )
 
@@ -1053,6 +1054,7 @@ def browse_sales(request):
         dashboard = None
 
     groups_api_url = ''
+    items_api_url = ''
     if dashboard is not None:
         qs = {
             'date_from': date_from.isoformat(),
@@ -1063,6 +1065,7 @@ def browse_sales(request):
         if selected_group:
             qs['group'] = selected_group
         groups_api_url = f"{reverse('browse_sales_groups_api')}?{urlencode(qs)}"
+        items_api_url = f"{reverse('browse_sales_top_items_api')}?{urlencode(qs)}"
 
     return render(
         request,
@@ -1080,6 +1083,7 @@ def browse_sales(request):
             'error': error,
             'browsed': dashboard is not None,
             'groups_api_url': groups_api_url,
+            'items_api_url': items_api_url,
         },
     )
 
@@ -1118,6 +1122,44 @@ def browse_sales_groups_api(request):
         return JsonResponse({'ok': True, 'groups': payload})
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_groups_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_top_items_api(request):
+    """تحميل لاحق لأعلى أصناف الإرجاع من نقاط البيع."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    group_code = str(request.GET.get('group') or '').strip()
+
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_top_items
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'},
+                status=400,
+            )
+        payload = build_sales_top_items(
+            date_from,
+            date_to,
+            branch_code=branch_code,
+            group_code=group_code,
+            limit=20,
+        )
+        return JsonResponse({'ok': True, 'items': payload})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_top_items_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
 
