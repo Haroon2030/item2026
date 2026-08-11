@@ -75,9 +75,12 @@
     var legend = "";
     list.forEach(function (row, i) {
       var color = DONUT_COLORS[i % DONUT_COLORS.length];
+      var rate = row.share_display || "";
       legend +=
         '<li class="branch-donut-legend-item" style="--i: ' + i + '"' +
-        ' title="' + esc(row.name) + " — " + esc(row.amount_display) + '">' +
+        ' title="' + esc(row.name) + " — مرتجع " + esc(row.amount_display) +
+        " من إجمالي " + esc(row.gross_total_display || "") +
+        " (" + esc(rate) + ')">' +
         '<span class="branch-donut-swatch" style="background:' + color + '" aria-hidden="true"></span>' +
         '<span class="branch-donut-legend-body">' +
         '<span class="branch-donut-legend-name">' + esc(row.name) + "</span>" +
@@ -85,7 +88,7 @@
         esc(row.amount_display) +
         " · " + esc(String(row.invoice_count || 0)) + " مرتجع" +
         "</span></span>" +
-        '<span class="branch-donut-pct mono">' + esc(row.share_display || "") + "</span></li>";
+        '<span class="branch-donut-pct mono">' + esc(rate) + "</span></li>";
     });
 
     board.innerHTML =

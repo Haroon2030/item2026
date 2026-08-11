@@ -448,28 +448,6 @@
       });
   }
 
-  function dbgIngest(hypothesisId, location, message, data) {
-    // #region agent log
-    try {
-      fetch("http://127.0.0.1:7361/ingest/6dc6cc60-90e1-49df-bf37-a884bbc549aa", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "e1de1c",
-        },
-        body: JSON.stringify({
-          sessionId: "e1de1c",
-          hypothesisId: hypothesisId || "D",
-          location: location,
-          message: message,
-          data: data || {},
-          timestamp: Date.now(),
-        }),
-      }).catch(function () {});
-    } catch (e) {}
-    // #endregion
-  }
-
   function finishSignals() {
     try {
       window.dispatchEvent(new Event("sales-groups-first"));
@@ -497,34 +475,16 @@
       );
     }, 1000);
 
-    dbgIngest("D", "sales-groups-loader.js:loadSingle:start", "fetch groups start", {
-      url: String(url || "").slice(0, 180),
-      tryNo: tryNo,
-    });
-
     fetchJson(url, 420 * 1000)
       .then(function (data) {
         clearInterval(tick);
         finishSignals();
-        dbgIngest("A", "sales-groups-loader.js:loadSingle:ok", "fetch groups ok", {
-          elapsed_ms: Date.now() - started,
-          rows: data && data.groups && (data.groups.rows || []).length,
-          source: data && data.groups && data.groups.cache && data.groups.cache.source,
-          matched: data && data.groups && data.groups.matched,
-          warning: data && data.groups && String(data.groups.warning || "").slice(0, 200),
-          server_debug: data && data._debug,
-        });
         render(data, Date.now() - started);
         fetchSqlMonthsThenReload(url, data, started);
       })
       .catch(function (err) {
         clearInterval(tick);
         var msg = friendlyFetchError(err);
-        dbgIngest("A", "sales-groups-loader.js:loadSingle:err", "fetch groups failed", {
-          elapsed_ms: Date.now() - started,
-          error: String((err && err.message) || msg || "").slice(0, 300),
-          tryNo: tryNo,
-        });
         if (isRetryableError(err, msg) && tryNo < maxTries) {
           setLoading(
             body,

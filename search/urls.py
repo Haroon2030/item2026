@@ -7,6 +7,11 @@ urlpatterns = [
     path('browse/', views.browse_groups, name='browse_groups'),
     path('inventory/', views.browse_inventory, name='browse_inventory'),
     path('purchases/', views.browse_purchases, name='browse_purchases'),
+    path(
+        'purchases/turnover/',
+        views.browse_vendor_turnover,
+        name='browse_vendor_turnover',
+    ),
     path('purchases/compare/', views.browse_pr_compare, name='browse_pr_compare'),
     path(
         'purchases/compare/request/',

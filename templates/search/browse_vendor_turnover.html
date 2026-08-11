@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}{% if item_detail %}أصناف المورد — {{ item_detail.vendor_name }}{% else %}دوران مخزون الموردين{% endif %}{% endblock %}
+{% block page_class %}sales-dash purchase-dash vendor-turnover-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="دوران مخزون الموردين">
+  <div class="dash-head-copy">
+    {% if item_detail %}
+      <h2>أصناف المورد</h2>
+      <p>{{ item_detail.vendor_name }} · {{ item_detail.vendor_code }} — {{ item_detail.period_label }}</p>
+    {% else %}
+      <h2>دوران مخزون الموردين</h2>
+      <p>حركة الكمية خلال الفترة: الوارد من الشراء مقابل المباع — لتحديد استحقاق السداد</p>
+    {% endif %}
+  </div>
+  {% if item_detail and back_list_url %}
+    <a class="btn-ghost" href="{{ back_list_url }}">← رجوع للموردين</a>
+  {% endif %}
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if item_detail %}
+  <section class="vt-kpis" aria-label="ملخص أصناف المورد">
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-vendors">
+      <span class="dash-kpi-label">الأصناف</span>
+      <strong class="dash-kpi-value mono">{{ item_detail.kpis.item_count_display }}</strong>
+      <span class="dash-kpi-hint">{{ item_detail.vendor_code }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-recv">
+      <span class="dash-kpi-label">وارد كرتون</span>
+      <strong class="dash-kpi-value mono">{{ item_detail.kpis.recv_qty_display }}</strong>
+      <span class="dash-kpi-hint">صافي توريد المورد</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-sold">
+      <span class="dash-kpi-label">مباع كرتون</span>
+      <strong class="dash-kpi-value mono">{{ item_detail.kpis.sold_qty_display }}</strong>
+      <span class="dash-kpi-hint">منسوب لتوريد المورد</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-turn">
+      <span class="dash-kpi-label">الدوران</span>
+      <strong class="dash-kpi-value mono">{{ item_detail.kpis.turnover_display }}</strong>
+      <span class="dash-kpi-hint">مباع ÷ وارد</span>
+    </article>
+  </section>
+
+  <form method="get" action="{% url 'browse_vendor_turnover' %}" class="purchase-filter dash-panel-glass vt-items-toolbar">
+    <input type="hidden" name="view" value="items">
+    <input type="hidden" name="vendor" value="{{ item_detail.vendor_code }}">
+    <input type="hidden" name="date_from" value="{{ date_from }}">
+    <input type="hidden" name="date_to" value="{{ date_to }}">
+    {% if selected_branch %}<input type="hidden" name="branch" value="{{ selected_branch }}">{% endif %}
+    <button type="submit" class="btn-ghost vt-excel-btn" name="export" value="excel">Excel</button>
+    <a class="btn-ghost" href="{{ back_list_url }}">رجوع</a>
+  </form>
+
+  <section class="dash-panel vt-table-panel vt-items-panel" aria-label="جدول أصناف المورد">
+    <div class="dash-panel-head">
+      <div>
+        <h3>ورقة الأصناف</h3>
+        <p class="sales-ov-sub">الاسم · رقم الصنف · أكبر عبوة · نسبة تمثيل الصنف من وارد المورد</p>
+      </div>
+      <span class="result-pill">{{ item_detail.rows|length }}</span>
+    </div>
+    <div class="table-wrap vt-sheet-wrap">
+      <table class="vt-sheet">
+        <thead>
+          <tr>
+            <th class="vt-sheet-num">#</th>
+            <th class="vt-sheet-code">رقم الصنف</th>
+            <th class="vt-sheet-name">الاسم</th>
+            <th class="vt-sheet-pack">أكبر عبوة</th>
+            <th class="vt-sheet-unit">وحدة العبوة</th>
+            <th class="mono">وارد كرتون</th>
+            <th class="mono">نسبة من المورد</th>
+            <th class="mono">مباع كرتون</th>
+            <th class="mono">متبقي</th>
+            <th class="mono">الدوران</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in item_detail.rows %}
+            <tr>
+              <td class="vt-sheet-num mono">{{ forloop.counter }}</td>
+              <td class="vt-sheet-code mono">{{ row.item_code }}</td>
+              <td class="vt-sheet-name" title="{{ row.item_name }}">{{ row.item_name }}</td>
+              <td class="mono">{{ row.pack_size_display }}</td>
+              <td>{{ row.pack_unit }}</td>
+              <td class="mono">{{ row.recv_qty_display }}</td>
+              <td class="mono vt-share-cell">{{ row.share_display }}</td>
+              <td class="mono">{{ row.sold_qty_display }}</td>
+              <td class="mono">{{ row.remain_qty_display }}</td>
+              <td class="mono">{{ row.turnover_display }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10" class="sales-empty">لا أصناف لهذا المورد في الفترة.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if item_detail.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="3">الإجمالي</td>
+              <td colspan="2">—</td>
+              <td class="mono">{{ item_detail.kpis.recv_qty_display }}</td>
+              <td class="mono">100%</td>
+              <td class="mono">{{ item_detail.kpis.sold_qty_display }}</td>
+              <td class="mono">—</td>
+              <td class="mono">{{ item_detail.kpis.turnover_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+
+{% else %}
+
+{% if report %}
+  <section class="vt-kpis" aria-label="ملخص الدوران">
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-vendors">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-vendors" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </span>
+        الموردون
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.vendor_count_display }}</strong>
+      <span class="dash-kpi-hint">{{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-recv">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-recv" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        وارد كرتون
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.recv_qty_display }}</strong>
+      <span class="dash-kpi-hint">صافي الشراء − المرتجع</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-sold">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-sold" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
+        </span>
+        مباع كرتون
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.sold_qty_display }}</strong>
+      <span class="dash-kpi-hint">منسوب لتوريد الفترة</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-turn">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-turn" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        متوسط الدوران
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.turnover_display }}</strong>
+      <span class="dash-kpi-hint">مباع ÷ وارد</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-due">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-due" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M8 15h4"/></svg>
+        </span>
+        المستحق للموردين
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.due_amt_display }}</strong>
+      <span class="dash-kpi-hint">رصيد دائن − مدين</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-settle">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-settle" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.2 2.2 4.8-5"/></svg>
+        </span>
+        يستحق سداد
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.settle_count }}</strong>
+      <span class="dash-kpi-hint">≥ {{ report.thresholds.settle|floatformat:0 }}%</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-hold">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico vt-ico-hold" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        </span>
+        لا يستحق
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.hold_count }}</strong>
+      <span class="dash-kpi-hint">&lt; {{ report.thresholds.partial|floatformat:0 }}% · جزئي {{ report.kpis.partial_count }}</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_vendor_turnover' %}" class="purchase-filter dash-panel-glass" role="search" id="vt-filter-form">
+  <div class="field">
+    <label for="vt-from">من</label>
+    <input id="vt-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="vt-to">إلى</label>
+    <input id="vt-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="vt-branch">الفرع</label>
+    <select id="vt-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for row in branches %}
+        <option value="{{ row.code }}" {% if row.code == selected_branch %}selected{% endif %}>{{ row.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field purchase-vendor-field">
+    <label for="vt-vendor">المورد</label>
+    <select id="vt-vendor" name="vendor">
+      <option value="">كل الموردين</option>
+      {% for row in vendors %}
+        <option value="{{ row.code }}" {% if row.code == selected_vendor %}selected{% endif %}>{{ row.name }} · {{ row.code }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="vt-decision">الاستحقاق</label>
+    <select id="vt-decision" name="decision">
+      <option value="" {% if not selected_decision %}selected{% endif %}>الكل</option>
+      <option value="settle" {% if selected_decision == 'settle' %}selected{% endif %}>يستحق سداد</option>
+      <option value="partial" {% if selected_decision == 'partial' %}selected{% endif %}>دفعة بسيطة</option>
+      <option value="hold" {% if selected_decision == 'hold' %}selected{% endif %}>لا يستحق سداد</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+  {% if report %}
+    <button type="submit" class="btn-ghost vt-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">
+      Excel
+    </button>
+  {% endif %}
+</form>
+
+{% if report %}
+  <section class="dash-panel vt-table-panel" aria-label="جدول دوران الموردين">
+    <div class="dash-panel-head">
+      <div>
+        <h3>الموردون مرتّبون حسب الاستحقاق</h3>
+        <p class="sales-ov-sub">يستحق أولاً · ثم الأعلى مستحقاً · ثم أعلى دوراناً · اضغط الأصناف للتفصيل</p>
+      </div>
+      <span class="result-pill">{{ report.rows|length }}</span>
+    </div>
+    <div class="table-wrap vt-table-wrap">
+      <table class="data-table sales-table vt-table vt-table-compact">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>المورد</th>
+            <th>الاستحقاق</th>
+            <th class="mono">المستحق</th>
+            <th class="mono">الدوران</th>
+            <th class="mono">وارد كرتون</th>
+            <th class="mono">مباع كرتون</th>
+            <th class="mono">متبقي كرتون</th>
+            <th class="mono">أصناف</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr class="vt-row-{{ row.decision_key }}">
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="vt-name-cell">
+                <strong>{{ row.vendor_name }}</strong>
+                <span class="vt-vendor-code mono">{{ row.vendor_code }}</span>
+              </td>
+              <td>
+                <span class="vt-badge vt-badge-{{ row.decision_key }}" title="{{ row.decision_hint }}">{{ row.decision_label }}</span>
+              </td>
+              <td class="mono vt-due-cell{% if row.due_amt > 0 %} vt-due-pos{% elif row.due_amt < 0 %} vt-due-neg{% endif %}">{{ row.due_amt_display }}</td>
+              <td class="mono vt-turn-cell">{{ row.turnover_display }}</td>
+              <td class="mono">{{ row.recv_qty_display }}</td>
+              <td class="mono">{{ row.sold_qty_display }}</td>
+              <td class="mono">{{ row.remain_qty_display }}</td>
+              <td class="mono">
+                <a
+                  class="vt-items-link"
+                  href="{% url 'browse_vendor_turnover' %}?view=items&amp;vendor={{ row.vendor_code|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch|urlencode }}{% endif %}"
+                  title="عرض أصناف المورد"
+                >{{ row.item_count_display }}</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="sales-empty">لا توريدات مطابقة للفلاتر في الفترة.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="2">الإجمالي</td>
+              <td>—</td>
+              <td class="mono">{{ report.kpis.due_amt_display }}</td>
+              <td class="mono">{{ report.kpis.turnover_display }}</td>
+              <td class="mono">{{ report.kpis.recv_qty_display }}</td>
+              <td class="mono">{{ report.kpis.sold_qty_display }}</td>
+              <td class="mono">—</td>
+              <td class="mono">—</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{% endif %}
+{% endblock %}

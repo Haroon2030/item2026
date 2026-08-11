@@ -50,10 +50,10 @@
         <span class="dash-kpi-ico" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
         </span>
-        مبيعات الجملة (آجل)
+        مبيعات نظام المبيعات
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_sales %}</strong>
-      <span class="dash-kpi-hint mono">صافي · مستند 4 و8 · {{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
+        <span class="dash-kpi-hint mono">آجل + نقدي عملاء غير POS · بدون تكرار نقاط البيع · {{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total">
       <span class="dash-kpi-label">
@@ -172,11 +172,11 @@
       </div>
     </section>
 
-    <section class="dash-panel dash-panel-glass sales-ov-panel" aria-label="مبيعات الجملة حسب الفروع">
+    <section class="dash-panel dash-panel-glass sales-ov-panel" aria-label="مبيعات نظام المبيعات حسب الفروع">
       <div class="dash-panel-head">
         <div>
-          <h3>مبيعات الجملة</h3>
-          <p class="sales-ov-sub">الآجل مستند 4 و8 · صافي بعد المرتجع · ليس تقرير الأصناف</p>
+          <h3>مبيعات نظام المبيعات</h3>
+          <p class="sales-ov-sub">آجل (4/8) + نقدي فواتير يزيد عن نقاط البيع فقط · بلا دمج نقدي POS</p>
         </div>
         <span class="result-pill">{{ dashboard.wholesale.branches|length }}</span>
       </div>
@@ -203,7 +203,7 @@
                 <td class="mono">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="sales-empty">لا مبيعات جملة في الفترة.</td></tr>
+              <tr><td colspan="6" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
             {% endfor %}
           </tbody>
           {% if dashboard.wholesale.branches %}
@@ -299,7 +299,7 @@
         <div class="dash-panel-head">
           <div>
             <h3>الفروع الأكثر مرتجعاً</h3>
-            <p class="sales-ov-sub">نقاط البيع · إجمالي {% money dashboard.top_returns.total_display %}</p>
+            <p class="sales-ov-sub">نسبة المرتجع من مبيعات الفرع (مبيعات + مرتجع) · إجمالي {% money dashboard.top_returns.total_display %}</p>
           </div>
           <span class="result-pill">{{ dashboard.top_returns.count }}</span>
         </div>
@@ -410,8 +410,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-returns-donut.js?v=1" defer></script>
-<script src="/static/js/sales-groups-loader.js?v=30" defer></script>
+<script src="/static/js/sales-returns-donut.js?v=2" defer></script>
+<script src="/static/js/sales-groups-loader.js?v=33" defer></script>
 <script src="/static/js/sales-top-items-loader.js?v=13" defer></script>
 <script src="/static/js/sales-top-users-loader.js?v=3" defer></script>
 {% endblock %}

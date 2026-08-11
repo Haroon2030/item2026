@@ -1052,8 +1052,22 @@ def browse_sales(request):
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales failed: %s', exc)
-        error = f'تعذّر تحليل المبيعات: {exc}'
-        dashboard = None
+        from .sales_dashboard import build_sales_branches_from_cache
+
+        dashboard = build_sales_branches_from_cache(
+            date_from,
+            date_to,
+            branch_code=selected_branch,
+            group_code=selected_group,
+        )
+        if dashboard is not None:
+            error = (
+                'تعذّر الاتصال بأوراكل — عرض أرقام محفوظة مسبقاً. '
+                'تحقق من VPN/الإنترنت ثم حدّث الصفحة.'
+            )
+        else:
+            error = f'تعذّر تحليل المبيعات: {exc}'
+            dashboard = None
 
     groups_api_url = ''
     groups_month_api_url = ''
@@ -1138,6 +1152,23 @@ def browse_sales(request):
 @never_cache
 def browse_sales_groups_api(request):
     """تحميل لاحق لمبيعات المجموعات (تفاصيل الأصناف)."""
+    # #region agent log
+    import time as _dbg_time
+    from .oracle_stock import _agent_dbg
+
+    _dbg_t0 = _dbg_time.monotonic()
+    _agent_dbg(
+        "A",
+        "views.py:browse_sales_groups_api:entry",
+        "groups api entry",
+        {
+            "date_from": str(request.GET.get("date_from") or ""),
+            "date_to": str(request.GET.get("date_to") or ""),
+            "branch": str(request.GET.get("branch") or ""),
+            "group": str(request.GET.get("group") or ""),
+        },
+    )
+    # #endregion
     try:
         date_from, date_to = _parse_sales_dates(
             request.GET.get('date_from'),
@@ -1149,54 +1180,13 @@ def browse_sales_groups_api(request):
     branch_code = str(request.GET.get('branch') or '').strip()
     group_code = str(request.GET.get('group') or '').strip()
 
-    # #region agent log
-    import time as _time
-
-    _t0 = _time.monotonic()
-    _dbg_events = []
-    try:
-        from .oracle_stock import _agent_dbg, _groups_sql_mode
-
-        _dbg_events.append(
-            _agent_dbg(
-                "C",
-                "views.py:browse_sales_groups_api:start",
-                "groups api start",
-                {
-                    "date_from": date_from.isoformat(),
-                    "date_to": date_to.isoformat(),
-                    "mode": _groups_sql_mode(),
-                    "branch": branch_code,
-                    "group": group_code,
-                },
-            )
-        )
-    except Exception:
-        pass
-    # #endregion
-
     try:
         from .oracle_stock import oracle_enabled
         from .sales_dashboard import build_sales_groups
 
         if not oracle_enabled():
-            # #region agent log
-            try:
-                from .oracle_stock import _agent_dbg
-
-                _dbg_events.append(
-                    _agent_dbg(
-                        "C",
-                        "views.py:browse_sales_groups_api:no_oracle",
-                        "oracle disabled",
-                        {},
-                    )
-                )
-            except Exception:
-                pass
-            # #endregion
             return JsonResponse(
-                {'ok': False, 'error': 'أوراكل غير مفعّل.', '_debug': _dbg_events},
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'},
                 status=400,
             )
         # مطابقة إجمالي المجموعات مع صافي نقاط البيع (جدول الفروع)
@@ -1208,48 +1198,40 @@ def browse_sales_groups_api(request):
             reconcile=True,
         )
         # #region agent log
-        try:
-            from .oracle_stock import _agent_dbg
-
-            _dbg_events.append(
-                _agent_dbg(
-                    "A",
-                    "views.py:browse_sales_groups_api:ok",
-                    "groups api ok",
-                    {
-                        "elapsed_ms": int((_time.monotonic() - _t0) * 1000),
-                        "rows": len((payload or {}).get("rows") or []),
-                        "source": ((payload or {}).get("cache") or {}).get("source"),
-                        "matched": (payload or {}).get("matched"),
-                        "incomplete": (payload or {}).get("incomplete"),
-                        "warning": str((payload or {}).get("warning") or "")[:200],
-                    },
-                )
-            )
-        except Exception:
-            pass
+        _agent_dbg(
+            "A",
+            "views.py:browse_sales_groups_api:ok",
+            "groups api ok",
+            {
+                "elapsed_ms": int((_dbg_time.monotonic() - _dbg_t0) * 1000),
+                "rows": len((payload or {}).get("rows") or []),
+                "incomplete": bool((payload or {}).get("incomplete")),
+                "sql_months": len((payload or {}).get("sql_months") or []),
+                "long_range": bool((payload or {}).get("long_range")),
+                "warning": str((payload or {}).get("warning") or "")[:180],
+                "cache_source": str(
+                    ((payload or {}).get("cache") or {}).get("source") or ""
+                ),
+            },
+        )
         # #endregion
-        return JsonResponse({'ok': True, 'groups': payload, '_debug': _dbg_events})
+        return JsonResponse({'ok': True, 'groups': payload})
     except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_sales_groups_api failed: %s', exc)
         # #region agent log
         try:
-            from .oracle_stock import _agent_dbg
-
-            _dbg_events.append(
-                _agent_dbg(
-                    "A",
-                    "views.py:browse_sales_groups_api:exc",
-                    "groups api exception",
-                    {
-                        "elapsed_ms": int((_time.monotonic() - _t0) * 1000),
-                        "error": str(exc)[:300],
-                    },
-                )
+            _agent_dbg(
+                "B",
+                "views.py:browse_sales_groups_api:err",
+                "groups api exception",
+                {
+                    "elapsed_ms": int((_dbg_time.monotonic() - _dbg_t0) * 1000),
+                    "error": str(exc)[:300],
+                },
             )
         except Exception:
             pass
         # #endregion
+        logger.warning('browse_sales_groups_api failed: %s', exc)
         # 200 بدل 5xx حتى لا يحجب البروكسي الرسالة كـ HTTP 502
         return JsonResponse(
             {
@@ -1265,7 +1247,6 @@ def browse_sales_groups_api(request):
                     'warning': str(exc)
                     or 'تعذّر جلب مبيعات المجموعات. أعد المحاولة بعد لحظات.',
                 },
-                '_debug': _dbg_events,
             }
         )
 
@@ -1586,6 +1567,154 @@ def browse_inventory(request):
             'error': error,
         },
     )
+
+@login_required
+@require_GET
+@never_cache
+def browse_vendor_turnover(request):
+    """دوران مخزون الموردين — كمية واردة مقابل مباعة واستحقاق السداد."""
+    from datetime import date
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_vendor = str(request.GET.get('vendor') or '').strip()
+    selected_decision = str(request.GET.get('decision') or '').strip().lower()
+    view_mode = str(request.GET.get('view') or '').strip().lower()
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    if selected_decision not in {'', 'settle', 'partial', 'hold'}:
+        selected_decision = ''
+    report = None
+    item_detail = None
+    error = ''
+    branches: list[dict] = []
+    vendors: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_vendor_turnover.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_vendor': selected_vendor,
+                'selected_decision': selected_decision,
+                'view_mode': view_mode,
+                'branches': [],
+                'vendors': [],
+                'report': None,
+                'item_detail': None,
+                'back_list_url': '',
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_purchases import fetch_purchase_vendor_options
+        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_vendor_turnover import (
+            apply_decision_filter,
+            build_vendor_item_detail,
+            build_vendor_item_detail_excel,
+            build_vendor_turnover,
+            build_vendor_turnover_excel,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن حساب دوران الموردين.'
+        elif view_mode == 'items':
+            if not selected_vendor:
+                error = 'اختر مورداً من الجدول لعرض أصنافه.'
+            else:
+                item_detail = build_vendor_item_detail(
+                    date_from,
+                    date_to,
+                    vendor_code=selected_vendor,
+                    branch_code=selected_branch,
+                )
+                if want_excel and item_detail is not None:
+                    return build_vendor_item_detail_excel(item_detail)
+            with oracle_session():
+                branches = fetch_income_branches()
+                vendors = fetch_purchase_vendor_options(date_from, date_to)
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_vendor not in {row['code'] for row in vendors}:
+                    # أبقِ كود المورد حتى لو لم يظهر في قائمة الفترة
+                    pass
+        else:
+            # التقرير يعمل باستعلامات متوازية (اتصالات مستقلة) — خارج جلسة واحدة
+            report = build_vendor_turnover(
+                date_from,
+                date_to,
+                branch_code=selected_branch,
+                vendor_code=selected_vendor,
+            )
+            if selected_decision and report:
+                report = apply_decision_filter(report, selected_decision)
+            if want_excel and report is not None:
+                return build_vendor_turnover_excel(report)
+            with oracle_session():
+                branches = fetch_income_branches()
+                vendors = fetch_purchase_vendor_options(date_from, date_to)
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_vendor not in {row['code'] for row in vendors}:
+                    selected_vendor = ''
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_vendor_turnover failed: %s', exc)
+        error = f'تعذّر حساب دوران الموردين: {exc}'
+        report = None
+        item_detail = None
+
+    back_qs = {
+        'date_from': date_from.isoformat(),
+        'date_to': date_to.isoformat(),
+    }
+    if selected_branch:
+        back_qs['branch'] = selected_branch
+    if selected_decision:
+        back_qs['decision'] = selected_decision
+    back_list_url = f"{reverse('browse_vendor_turnover')}?{urlencode(back_qs)}"
+
+    return render(
+        request,
+        'search/browse_vendor_turnover.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_vendor': selected_vendor,
+            'selected_decision': selected_decision,
+            'view_mode': view_mode,
+            'branches': branches,
+            'vendors': vendors,
+            'report': report,
+            'item_detail': item_detail,
+            'back_list_url': back_list_url,
+            'error': error,
+        },
+    )
+
 
 @login_required
 @require_GET

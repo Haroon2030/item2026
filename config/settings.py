@@ -87,8 +87,19 @@ CSRF_TRUSTED_ORIGINS = _env_list(
         'https://item.alrsheed.net',
         'http://72.61.107.230:8084',
         'https://72.61.107.230:8443',
+        'http://127.0.0.1:8000',
+        'http://localhost:8000',
     ],
 )
+# محلي دائماً حتى لا يفشل الدخول بعد إعادة تشغيل السيرفر
+for _origin in (
+    'http://127.0.0.1:8000',
+    'http://localhost:8000',
+    'http://127.0.0.1:8080',
+    'http://localhost:8080',
+):
+    if _origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_origin)
 # ادمج مضيفات CSRF تلقائياً
 for host in _hosts_from_origins(CSRF_TRUSTED_ORIGINS):
     if host not in ALLOWED_HOSTS:
@@ -365,8 +376,8 @@ ORACLE = {
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
-# مبيعات المجموعات: full = مسح دقيق (مطابقة أونكس) | light = عيّنة تقريبية أسرع
-GROUPS_SQL_MODE = (_env('GROUPS_SQL_MODE', 'full') or 'full').strip().lower()
+# مبيعات المجموعات: light = أسرع عبر WAN | full = مسح DTL دقيق (بطيء وقد يعلّق السنة)
+GROUPS_SQL_MODE = (_env('GROUPS_SQL_MODE', 'light') or 'light').strip().lower()
 
 LOGGING = {
     'version': 1,

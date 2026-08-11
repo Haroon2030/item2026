@@ -276,7 +276,7 @@ body.login-body .app-backdrop { display: none; }
     box-shadow: inset 0 -3px 0 var(--brand-mid);
   }
 
-  /* السهم يشير لاتجاه الطي؛ ينعكس عند التوسيع */
+  /* ????? ???? ?????? ????? ????? ??? ??????? */
   html.sidebar-collapsed .sidebar-collapse-ico {
     transform: scaleX(-1);
   }
@@ -545,7 +545,7 @@ body.login-body .app-backdrop { display: none; }
   stroke-linejoin: round;
 }
 
-/* Login — modern full-viewport composition */
+/* Login ? modern full-viewport composition */
 body.login-body {
   min-height: 100dvh;
   background:
@@ -1680,7 +1680,7 @@ body.login-body {
   display: none !important;
 }
 
-/* إبقاء نموذج البحث ظاهراً فوق الجدول في صفحة الأصناف */
+/* ????? ????? ????? ?????? ??? ?????? ?? ???? ??????? */
 .page.results-focus.search-keep-form .search-box {
   display: block !important;
   margin-bottom: 0.75rem;
@@ -2144,7 +2144,7 @@ body.login-body {
 }
 
 .table-wrap::after {
-  content: "مرّر الجدول أفقياً لرؤية كل الأعمدة ←";
+  content: "???? ?????? ?????? ????? ?? ??????? ?";
   display: block;
   padding: 0.45rem 1rem 0.7rem;
   color: #5b7394;
@@ -2212,7 +2212,7 @@ body.login-body {
   border-bottom: 0;
 }
 
-/* حدود إكسل لجدول مقارنة المخازن — بعد قواعد data-table حتى لا تُلغى */
+/* ???? ???? ????? ?????? ??????? ? ??? ????? data-table ??? ?? ????? */
 .warehouse-compare-table.data-table {
   border-collapse: collapse;
   border-spacing: 0;
@@ -2363,7 +2363,7 @@ body.login-body {
   font-weight: 500;
 }
 
-/* Browse loading — شريط صغير أنيق */
+/* Browse loading ? ???? ???? ???? */
 .browse-loading {
   position: fixed;
   inset: 0;
@@ -2453,7 +2453,7 @@ body.login-body {
   color: #b3261e;
 }
 
-/* مبيعات — داشبورد واسع */
+/* ?????? ? ??????? ???? */
 body.sales-dash-body {
   background: #fff;
 }
@@ -2948,7 +2948,7 @@ body.sales-dash-body .app-backdrop {
   color: #d7e8ff;
 }
 
-/* تبويبات التحليل (تحميل عند الطلب) */
+/* ??????? ??????? (????? ??? ?????) */
 .dash-analysis-tabs {
   display: flex;
   gap: 0.4rem;
@@ -3024,7 +3024,7 @@ body.sales-dash-body .app-backdrop {
   grid-template-columns: 1fr;
 }
 
-/* الفروع الأكثر إرجاعاً + هامش ربح الفروع جنباً إلى جنب */
+/* ?????? ?????? ??????? + ???? ??? ?????? ????? ??? ??? */
 .dash-branch-margin-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3051,7 +3051,7 @@ body.sales-dash-body .app-backdrop {
   min-height: 0;
 }
 
-/* مرتجعات المجموعات + الأصناف الأكثر إرجاعاً جنباً إلى جنب */
+/* ??????? ????????? + ??????? ?????? ??????? ????? ??? ??? */
 .dash-returns-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3116,7 +3116,7 @@ body.sales-dash-body .app-backdrop {
   min-width: 0;
 }
 
-/* الصفوف تتمرر — الإجمالي ثابت تحتها */
+/* ?????? ????? ? ???????? ???? ????? */
 .dash-margins .margin-scroll,
 .dash-margins-branches .margin-scroll {
   max-height: calc(2.2rem + (19 * 2.05rem));
@@ -3703,7 +3703,7 @@ body.sales-dash-body .app-backdrop {
   cursor: default;
 }
 
-/* شريط التحميل فوق اللوحة دون زيادة ارتفاع اللوحة */
+/* ???? ??????? ??? ?????? ??? ????? ?????? ?????? */
 .page.sales-dash .dash-top-items > #items-loading.dash-loading {
   margin: 0;
   padding: 0.55rem 0.75rem;
@@ -3738,7 +3738,7 @@ body.sales-dash-body .app-backdrop {
   flex-direction: column;
 }
 
-/* رأس + 19 صفًا + صف الإجمالي، والباقي بشريط التمرير */
+/* ??? + 19 ???? + ?? ????????? ??????? ????? ??????? */
 .dash-groups .table-wrap {
   flex: 0 1 auto;
   min-height: 0;
@@ -4038,7 +4038,7 @@ body.sales-dash-body .app-backdrop {
 
 .dash-sellers .seller-meta-code::before,
 .dash-top-items .seller-meta-code::before {
-  content: "·";
+  content: "?";
   margin-inline-end: 0.35rem;
   color: #a0b2c8;
 }
@@ -5149,7 +5149,7 @@ html[dir="rtl"] .seller-fill {
     flex-direction: column;
     align-items: stretch;
   }
-  /* مع النتائج: أبقِ الشريط أفقياً فوق الجدول بدل عمود طويل */
+  /* ?? ???????: ???? ?????? ?????? ??? ?????? ??? ???? ???? */
   .page.results-focus.search-keep-form .search-form {
     flex-direction: row;
     align-items: flex-end;
@@ -5230,7 +5230,7 @@ html[dir="rtl"] .seller-fill {
   }
 }
 
-/* —— Sync progress overlay —— */
+/* ?? Sync progress overlay ?? */
 .sync-progress {
   position: fixed;
   inset: 0;
@@ -5351,7 +5351,7 @@ html[dir="rtl"] .seller-fill {
   to { transform: rotate(-360deg); }
 }
 
-/* —— Barcode camera scanner —— */
+/* ?? Barcode camera scanner ?? */
 .barcode-scanner {
   position: fixed;
   inset: 0;
@@ -5934,7 +5934,7 @@ html.users-modal-open {
   }
 }
 
-/* ——— قياس الأداء ——— */
+/* ??? ???? ?????? ??? */
 .perf-hero {
   display: grid;
   grid-template-columns: minmax(240px, 0.95fr) minmax(0, 1.35fr);
@@ -6163,7 +6163,7 @@ html.users-modal-open {
   white-space: nowrap;
 }
 
-/* رسم دائري مبتكر — الحالية مقابل السابقة */
+/* ??? ????? ????? ? ??????? ????? ??????? */
 .perf-orb {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
@@ -6409,7 +6409,7 @@ html.users-modal-open {
   }
 }
 
-/* رسم فواتير أ مقابل ب */
+/* ??? ?????? ? ????? ? */
 .perf-chart-legend {
   display: inline-flex;
   align-items: center;
@@ -6582,7 +6582,7 @@ html.users-modal-open {
   vertical-align: middle;
 }
 
-/* لوحة أصناف المرتجع — نفس تنسيق perf-inv */
+/* ???? ????? ??????? ? ??? ????? perf-inv */
 .dash-returns-pair #chart-items-board.perf-inv-chart,
 .dash-chart-items #chart-items-board.perf-inv-chart {
   height: min(26rem, 58vh);
@@ -7134,7 +7134,7 @@ html.users-modal-open {
   }
 }
 
-/* —— تحليل المخزون —— */
+/* ?? ????? ??????? ?? */
 .inv-dash .inv-hero-copy h3 {
   margin: 0 0 0.25rem;
   font-size: 1.05rem;
@@ -7433,7 +7433,7 @@ html.users-modal-open {
   font-size: 0.8rem;
 }
 
-/* قائمة منسدلة راقية — تفتح دائماً للأسفل */
+/* ????? ?????? ????? ? ???? ?????? ?????? */
 .inv-dash .inv-select {
   position: relative;
   width: 100%;
@@ -7706,7 +7706,7 @@ html.users-modal-open {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
-  max-width: 0; /* ellipsis مع fixed layout */
+  max-width: 0; /* ellipsis ?? fixed layout */
 }
 
 .inv-dash .inv-table-compact .inv-col-qty,
@@ -7717,10 +7717,10 @@ html.users-modal-open {
   text-overflow: ellipsis !important;
   text-align: end;
   font-variant-numeric: tabular-nums;
-  width: auto !important; /* يتجاوز width:1% من theme */
+  width: auto !important; /* ?????? width:1% ?? theme */
 }
 
-/* نسب أعمدة: اسم | فرع/عدد | أصناف | كمية | قيمة | حصة */
+/* ??? ?????: ??? | ???/??? | ????? | ???? | ???? | ??? */
 .inv-dash .inv-tables-duo .inv-table-compact th:nth-child(1),
 .inv-dash .inv-tables-duo .inv-table-compact td:nth-child(1) {
   width: 26%;
@@ -7780,7 +7780,7 @@ html.users-modal-open {
   color: #0c4a6e !important;
 }
 
-/* عمود الاسم ثابت أثناء التمرير الأفقي — خلفية معتمة لمنع تداخل النص */
+/* ???? ????? ???? ????? ??????? ?????? ? ????? ????? ???? ????? ???? */
 .inv-dash .inv-table-scroll .inv-col-sticky {
   position: sticky;
   inset-inline-start: 0;
@@ -8108,7 +8108,7 @@ html.users-modal-open {
   }
 }
 
-/* لوحة تحليل المشتريات */
+/* ???? ????? ????????? */
 .purchase-dash .purchase-filter {
   display: grid;
   grid-template-columns: repeat(2, minmax(8.5rem, 0.8fr)) repeat(2, minmax(10rem, 1fr)) minmax(14rem, 1.35fr) auto;
@@ -9417,7 +9417,7 @@ html.users-modal-open {
   }
 }
 
-/* —— قائمة الدخل —— */
+/* ?? ????? ????? ?? */
 .income-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -9584,7 +9584,7 @@ html.users-modal-open {
   flex: 0 0 auto;
 }
 
-/* في لوحتي التحليل: الفلتر صف أفقي كامل تحت العنوان حتى لا يتراكب */
+/* ?? ????? ???????: ?????? ?? ???? ???? ??? ??????? ??? ?? ?????? */
 .income-analyst-duo .income-accounts-head .income-scope-filter {
   flex: 1 1 100%;
   order: 3;
@@ -10444,7 +10444,7 @@ html.users-modal-open {
   }
 }
 
-/* ── Site-wide: bold text/numbers (size from html rem base) ── */
+/* ?? Site-wide: bold text/numbers (size from html rem base) ?? */
 body :where(
   p, span, label, a, li, td, th, small, strong, b, em, div,
   button, input, select, textarea, option,
@@ -10473,7 +10473,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   font-variant-numeric: tabular-nums;
 }
 
-/* ——— البحث عن المبيعات: شريط أدوات + ورقة إكسل ——— */
+/* ??? ????? ?? ????????: ???? ????? + ???? ???? ??? */
 .ss-page .ss-shell {
   margin: 0 0 0.85rem;
 }
@@ -10509,7 +10509,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   align-items: end;
 }
 
-/* شريط بحث مبيعات الصنف — صف مضغوط بلا تداخل */
+/* ???? ??? ?????? ????? ? ?? ????? ??? ????? */
 .sales-search-page .ss-toolbar-sales {
   padding: 0.55rem 0.7rem 0.5rem;
 }
@@ -10629,7 +10629,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-/* دائرة الراديو الأصلية ظاهرة وواضحة */
+/* ????? ??????? ??????? ????? ?????? */
 .ss-page .ss-toolbar .scope-option input[type="radio"] {
   position: static !important;
   opacity: 1 !important;
@@ -10647,7 +10647,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   display: none !important;
 }
 
-/* النشط فقط = الراديو المحدد */
+/* ????? ??? = ??????? ?????? */
 .ss-page .ss-toolbar .scope-option:has(> input[type="radio"]:checked) {
   background: #217346 !important;
   color: #fff !important;
@@ -11094,7 +11094,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 }
 
 
-/* —— تحليل المبيعات (نظرة مركّزة) —— */
+/* ?? ????? ???????? (???? ??????) ?? */
 .sales-overview-dash .sales-ov-filter {
   display: flex;
   flex-wrap: wrap;
@@ -11175,7 +11175,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   line-height: 1.25;
 }
 
-/* بطاقات موحّدة الارتفاع — النص يتقلص ليتسع داخل البطاقة */
+/* ?????? ?????? ???????? ? ???? ????? ????? ???? ??????? */
 .sales-overview-dash .sales-ov-kpis > .dash-kpi-card {
   container-type: inline-size;
   container-name: sales-kpi;
@@ -11317,7 +11317,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   min-height: 0;
 }
 
-/* صف أصناف الإرجاع + أكثر المستخدمين — عرض وارتفاع متساويان */
+/* ?? ????? ??????? + ???? ?????????? ? ??? ??????? ???????? */
 .sales-overview-dash .sales-ov-items-row {
   grid-column: 1 / -1;
   display: grid;
@@ -11352,7 +11352,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   min-width: 0;
 }
 
-/* تلوين احترافي: المبلغ أخضر · التكلفة/المرتجع كهرماني · الحصة أزرق */
+/* ????? ???????: ?????? ???? ? ???????/??????? ??????? ? ????? ???? */
 .sales-overview-dash .sales-table th.sales-col-amt,
 .sales-overview-dash .sales-table td.sales-col-amt {
   background: #eafaf0 !important;
@@ -11591,7 +11591,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   }
 }
 
-/* �� �������� (�������) �� */
+/* ?? ???????? (???????) ?? */
 .suppliers-dash .suppliers-filter {
   display: flex;
   flex-wrap: wrap;
@@ -11674,7 +11674,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   font-weight: 600;
 }
 
-/* احتواء الجدول: خط أصغر وحشوة أضيق واسم مقصوص — بلا تمرير أفقي */
+/* ?????? ??????: ?? ???? ????? ???? ???? ????? ? ??? ????? ???? */
 .suppliers-dash .suppliers-table {
   width: 100%;
   table-layout: auto;
@@ -11687,7 +11687,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   white-space: nowrap;
 }
 
-/* عمود الاسم يلتف حول المحتوى — بلا فراغ زائد داخل الخلية */
+/* ???? ????? ???? ??? ??????? ? ??? ???? ???? ???? ?????? */
 .suppliers-dash .suppliers-table .suppliers-name {
   width: 1%;
   max-width: none;
@@ -11696,7 +11696,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   font-weight: 700;
 }
 
-/* تثبيت عمودَي # والمورد عند التمرير الأفقي */
+/* ????? ?????? # ??????? ??? ??????? ?????? */
 .page.sales-dash.suppliers-dash .suppliers-table th:nth-child(1),
 .page.sales-dash.suppliers-dash .suppliers-table td:nth-child(1) {
   position: sticky;
@@ -11714,7 +11714,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   box-shadow: -6px 0 8px -6px rgba(15, 23, 42, 0.2);
 }
 
-/* كل الخلايا بخلفية بيضاء صلبة — ثبات كامل بلا شفافية عند التمرير */
+/* ?? ??????? ?????? ????? ???? ? ???? ???? ??? ?????? ??? ??????? */
 .page.sales-dash.suppliers-dash .suppliers-table tbody td {
   background: #fff !important;
 }
@@ -11727,7 +11727,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   background: #fff !important;
 }
 
-/* الأعمدة الملوّنة تبقى ملوّنة فوق الأبيض */
+/* ??????? ???????? ???? ?????? ??? ?????? */
 .page.sales-dash.suppliers-dash .suppliers-table tbody td.sup-col-buy {
   background: #fef7e8 !important;
 }
@@ -11752,7 +11752,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   background: #dcedfa !important;
 }
 
-/* زوايا الرأس: فوق التثبيت العمودي والأفقي معاً */
+/* ????? ?????: ??? ??????? ??????? ??????? ???? */
 .page.sales-dash.suppliers-dash .suppliers-scroll thead th:nth-child(1),
 .page.sales-dash.suppliers-dash .suppliers-scroll thead th:nth-child(2) {
   z-index: 5;
@@ -11771,7 +11771,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   color: #475569;
 }
 
-/* تلوين الأعمدة: التوريد/التكلفة كهرماني · السداد أخضر · المخزون أزرق فاتح */
+/* ????? ???????: ???????/??????? ??????? ? ?????? ???? ? ??????? ???? ???? */
 .suppliers-dash .suppliers-table td.sup-col-buy {
   background: #fef7e8;
   color: #92400e;
@@ -11837,4 +11837,485 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   .suppliers-dash .suppliers-kpis {
     grid-template-columns: 1fr;
   }
+}
+
+/* ?? ????? ????? ???????? ?? */
+.vendor-turnover-dash .vt-kpis {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 0 0 0.9rem;
+}
+
+.vendor-turnover-dash .vt-kpi {
+  min-height: 5.4rem;
+  gap: 0.2rem;
+}
+
+.vendor-turnover-dash .vt-kpi .dash-kpi-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #334155;
+}
+
+.vendor-turnover-dash .vt-kpi .dash-kpi-ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 8px;
+  color: #fff;
+}
+
+.vendor-turnover-dash .vt-kpi .dash-kpi-ico svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.vendor-turnover-dash .vt-ico-vendors {
+  background: linear-gradient(145deg, #e0a14a, #c07a22);
+  box-shadow: 0 4px 10px rgba(192, 122, 34, 0.28);
+}
+.vendor-turnover-dash .vt-ico-recv {
+  background: linear-gradient(145deg, #3f8fd8, #1d6bb8);
+  box-shadow: 0 4px 10px rgba(29, 107, 184, 0.28);
+}
+.vendor-turnover-dash .vt-ico-sold {
+  background: linear-gradient(145deg, #00897b, #00695c);
+  box-shadow: 0 4px 10px rgba(0, 137, 123, 0.28);
+}
+.vendor-turnover-dash .vt-ico-turn {
+  background: linear-gradient(145deg, #7e57c2, #5e35b1);
+  box-shadow: 0 4px 10px rgba(94, 53, 177, 0.28);
+}
+.vendor-turnover-dash .vt-ico-settle {
+  background: linear-gradient(145deg, #23b268, #12854b);
+  box-shadow: 0 4px 10px rgba(18, 133, 75, 0.28);
+}
+.vendor-turnover-dash .vt-ico-due {
+  background: linear-gradient(145deg, #5c6bc0, #3949ab);
+  box-shadow: 0 4px 10px rgba(57, 73, 171, 0.28);
+}
+.vendor-turnover-dash .vt-ico-hold {
+  background: linear-gradient(145deg, #e53935, #b71c1c);
+  box-shadow: 0 4px 10px rgba(183, 28, 28, 0.28);
+}
+
+.vendor-turnover-dash .vt-kpi-vendors {
+  border-color: rgba(192, 122, 34, 0.42) !important;
+  background: linear-gradient(145deg, #fff8ef, #f3dfc0) !important;
+  box-shadow: 0 10px 24px rgba(192, 122, 34, 0.14);
+}
+.vendor-turnover-dash .vt-kpi-recv {
+  border-color: rgba(29, 107, 184, 0.38) !important;
+  background: linear-gradient(145deg, #f3f8ff, #d7e8fb) !important;
+  box-shadow: 0 10px 24px rgba(29, 107, 184, 0.12);
+}
+.vendor-turnover-dash .vt-kpi-sold {
+  border-color: rgba(0, 105, 92, 0.38) !important;
+  background: linear-gradient(145deg, #f0faf8, #cfeae5) !important;
+  box-shadow: 0 10px 24px rgba(0, 105, 92, 0.12);
+}
+.vendor-turnover-dash .vt-kpi-turn {
+  border-color: rgba(94, 53, 177, 0.36) !important;
+  background: linear-gradient(145deg, #f7f3ff, #e0d4f7) !important;
+  box-shadow: 0 10px 24px rgba(94, 53, 177, 0.12);
+}
+.vendor-turnover-dash .vt-kpi-settle {
+  border-color: rgba(18, 133, 75, 0.4) !important;
+  background: linear-gradient(145deg, #f0faf4, #cfeeda) !important;
+  box-shadow: 0 10px 24px rgba(18, 133, 75, 0.12);
+}
+.vendor-turnover-dash .vt-kpi-due {
+  border-color: rgba(57, 73, 171, 0.36) !important;
+  background: linear-gradient(145deg, #f4f5ff, #d9ddf8) !important;
+  box-shadow: 0 10px 24px rgba(57, 73, 171, 0.12);
+}
+.vendor-turnover-dash .vt-kpi-hold {
+  border-color: rgba(183, 28, 28, 0.36) !important;
+  background: linear-gradient(145deg, #fff5f5, #f6d4d4) !important;
+  box-shadow: 0 10px 24px rgba(183, 28, 28, 0.12);
+}
+
+.vendor-turnover-dash .vt-kpi-vendors .dash-kpi-value { color: #9a6214; }
+.vendor-turnover-dash .vt-kpi-recv .dash-kpi-value { color: #1d6bb8; }
+.vendor-turnover-dash .vt-kpi-sold .dash-kpi-value { color: #00695c; }
+.vendor-turnover-dash .vt-kpi-turn .dash-kpi-value { color: #5e35b1; }
+.vendor-turnover-dash .vt-kpi-due .dash-kpi-value { color: #3949ab; }
+.vendor-turnover-dash .vt-kpi-settle .dash-kpi-value { color: #0f6b45; }
+.vendor-turnover-dash .vt-kpi-hold .dash-kpi-value { color: #b71c1c; }
+
+.vendor-turnover-dash .vt-due-pos { color: #1b5e20; font-weight: 700; }
+.vendor-turnover-dash .vt-due-neg { color: #b71c1c; font-weight: 700; }
+
+.vendor-turnover-dash .vt-kpi .dash-kpi-value {
+  overflow: hidden;
+  font-size: clamp(0.9rem, 1.2vw, 1.18rem);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vendor-turnover-dash .vt-kpi .dash-kpi-hint {
+  font-size: 0.68rem;
+  color: #5f738c;
+}
+
+.vendor-turnover-dash .vt-vendor-code {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: #6b7c93;
+  font-weight: 600;
+}
+
+.vendor-turnover-dash .vt-bar-wrap {
+  position: relative;
+  min-width: 6.5rem;
+  height: 1.35rem;
+  border-radius: 6px;
+  background: rgba(70, 90, 120, 0.1);
+  overflow: hidden;
+}
+
+.vendor-turnover-dash .vt-bar {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.vendor-turnover-dash .vt-bar-settle { background: #1f9d6a; }
+.vendor-turnover-dash .vt-bar-partial { background: #c9851a; }
+.vendor-turnover-dash .vt-bar-hold { background: #b45353; }
+
+.vendor-turnover-dash .vt-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #1a2b3c;
+  text-shadow: 0 0 4px rgba(255,255,255,0.7);
+}
+
+.vendor-turnover-dash .vt-badge {
+  display: inline-block;
+  padding: 0.22rem 0.55rem;
+  border-radius: 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.vendor-turnover-dash .vt-badge-settle {
+  background: rgba(31, 157, 106, 0.15);
+  color: #0f6b45;
+}
+
+.vendor-turnover-dash .vt-badge-partial {
+  background: rgba(201, 133, 26, 0.16);
+  color: #8a5a0a;
+}
+
+.vendor-turnover-dash .vt-badge-hold {
+  background: rgba(180, 83, 83, 0.14);
+  color: #8a3030;
+}
+
+.vendor-turnover-dash .vt-table-panel { margin-top: 0.85rem; }
+
+@media (max-width: 1280px) {
+  .vendor-turnover-dash .vt-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .vendor-turnover-dash .vt-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .vendor-turnover-dash .vt-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ?? ????? ????????: ???? ????? ?? */
+.vendor-turnover-dash .vt-table-compact {
+  font-size: 0.78rem;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.vendor-turnover-dash .vt-table-compact th,
+.vendor-turnover-dash .vt-table-compact td {
+  padding: 0.28rem 0.4rem !important;
+  line-height: 1.25;
+  vertical-align: middle;
+}
+.vendor-turnover-dash .vt-name-cell {
+  max-width: 14rem;
+}
+.vendor-turnover-dash .vt-name-cell strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vendor-turnover-dash .vt-vendor-code {
+  display: block;
+  margin-top: 0.05rem;
+  font-size: 0.65rem;
+  color: #6b7c93;
+  font-weight: 600;
+}
+.vendor-turnover-dash .vt-turn-cell {
+  font-weight: 800;
+  min-width: 3.5rem;
+}
+.vendor-turnover-dash .vt-badge {
+  padding: 0.12rem 0.4rem;
+  font-size: 0.68rem;
+}
+.vendor-turnover-dash .vt-row-settle { background: transparent; }
+.vendor-turnover-dash .vt-row-partial { background: transparent; }
+.vendor-turnover-dash .vt-row-hold { background: transparent; }
+.vendor-turnover-dash .vt-excel-btn {
+  min-height: 2.15rem;
+  padding-inline: 0.9rem;
+  font-weight: 700;
+}
+.page.vendor-turnover-dash .vt-table-wrap {
+  max-height: min(70vh, 42rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #d5e0ee;
+  border-radius: 8px;
+  background: #ffffff;
+  isolation: isolate;
+}
+.page.vendor-turnover-dash .vt-table-panel,
+.page.vendor-turnover-dash .vt-items-panel {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 8px 20px rgba(29, 79, 145, 0.08);
+}
+.page.vendor-turnover-dash .vt-table-panel .table-wrap,
+.page.vendor-turnover-dash .vt-table-panel .data-table,
+.page.vendor-turnover-dash .vt-items-panel .table-wrap,
+.page.vendor-turnover-dash .vt-items-panel .data-table,
+.page.vendor-turnover-dash .vt-table-compact {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.page.vendor-turnover-dash .vt-table-compact {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.page.vendor-turnover-dash .vt-table-wrap thead th,
+.page.vendor-turnover-dash .vt-table-compact thead th,
+.page.vendor-turnover-dash .data-table.vt-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: #1e3a5f !important;
+  background-color: #1e3a5f !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody td {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr:nth-child(even) td {
+  background: #f3f6fb !important;
+  background-color: #f3f6fb !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr:hover td {
+  background: #e8f0fa !important;
+  background-color: #e8f0fa !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-settle td {
+  background: #eaf8f1 !important;
+  background-color: #eaf8f1 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-settle:nth-child(even) td {
+  background: #e1f3ea !important;
+  background-color: #e1f3ea !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-partial td {
+  background: #fff8e8 !important;
+  background-color: #fff8e8 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-partial:nth-child(even) td {
+  background: #fff3d9 !important;
+  background-color: #fff3d9 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-hold td {
+  background: #fff0f0 !important;
+  background-color: #fff0f0 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-hold:nth-child(even) td {
+  background: #ffe4e4 !important;
+  background-color: #ffe4e4 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-settle:hover td {
+  background: #d7efe3 !important;
+  background-color: #d7efe3 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-partial:hover td {
+  background: #ffecc2 !important;
+  background-color: #ffecc2 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tbody tr.vt-row-hold:hover td {
+  background: #ffd4d4 !important;
+  background-color: #ffd4d4 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tfoot td,
+.page.vendor-turnover-dash .vt-table-compact tfoot .sales-grand-row td {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: #1e3a5f !important;
+  background-color: #1e3a5f !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border-top: 2px solid #16304f !important;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.18);
+  font-weight: 800;
+  opacity: 1 !important;
+}
+.page.vendor-turnover-dash .vt-table-compact tfoot .vt-due-cell,
+.page.vendor-turnover-dash .vt-table-compact tfoot .vt-due-pos,
+.page.vendor-turnover-dash .vt-table-compact tfoot .vt-due-neg,
+.page.vendor-turnover-dash .vt-table-compact tfoot .vt-turn-cell,
+.page.vendor-turnover-dash .vt-table-compact tfoot .mono {
+  color: #ffffff !important;
+}
+.vendor-turnover-dash .vt-row-settle,
+.vendor-turnover-dash .vt-row-partial,
+.vendor-turnover-dash .vt-row-hold {
+  background: transparent;
+}
+
+.vendor-turnover-dash .vt-items-panel ~ .vt-kpis,
+.vendor-turnover-dash .vt-kpis:has(.vt-kpi-vendors):not(:has(.vt-kpi-due)) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.vendor-turnover-dash .vt-items-link {
+  color: #1d4f91;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vendor-turnover-dash .vt-items-link:hover {
+  color: #0f3a6e;
+}
+
+.vendor-turnover-dash .vt-items-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.vendor-turnover-dash .vt-sheet-wrap {
+  max-height: min(75vh, 46rem);
+  overflow: auto;
+  border: 1px solid #c5d3e4;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.vendor-turnover-dash .vt-sheet {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.76rem;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+}
+
+.vendor-turnover-dash .vt-sheet th,
+.vendor-turnover-dash .vt-sheet td {
+  border-inline-end: 1px solid #d7e2ef;
+  border-bottom: 1px solid #d7e2ef;
+  padding: 0.32rem 0.5rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.vendor-turnover-dash .vt-sheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #1e3a5f;
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 1px 0 #16304f;
+}
+
+.vendor-turnover-dash .vt-sheet tbody tr:nth-child(even) td {
+  background: #f7fafc;
+}
+
+.vendor-turnover-dash .vt-sheet tbody tr:hover td {
+  background: #eef5ff;
+}
+
+.vendor-turnover-dash .vt-sheet-num {
+  min-width: 2.2rem;
+  text-align: center;
+}
+
+.vendor-turnover-dash .vt-sheet-code {
+  font-weight: 700;
+  color: #1d4f91;
+}
+
+.vendor-turnover-dash .vt-sheet-name {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: #1f2a37;
+}
+
+.vendor-turnover-dash .vt-share-cell {
+  font-weight: 800;
+  color: #0f6b45;
+}
+
+.vendor-turnover-dash .vt-sheet tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: #e8eef6;
+  font-weight: 800;
 }

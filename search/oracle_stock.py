@@ -730,6 +730,16 @@ def _hung_ok(alias: str = "p") -> str:
     return f"({alias}.HUNG IS NULL OR {alias}.HUNG = 0)"
 
 
+def _pos_dtl_net_sql(alias: str = "d") -> str:
+    """إجمالي بند POS بأسلوب أونكس (شامل الضريبة): I_PRICE_VAT×QTY − DIS_AMT.
+
+    يوضع في NET_TOTAL ويُصفَّر VAT_TOTAL في استعلامات المجموعات لأن
+    sales_total = NET + VAT — هكذا نطابق تقرير أونكس بدون فرق تقريب.
+    """
+    a = alias
+    return f"(NVL({a}.I_PRICE_VAT, 0) * NVL({a}.I_QTY, 0) - NVL({a}.DIS_AMT, 0))"
+
+
 def _pos_mst_ok(alias: str = "p") -> str:
     """POS رأس فاتورة: غير معلّق + مبلغ منطقي (يستبعد بيانات تالفة)."""
     return f"{_hung_ok(alias)} AND {_bill_amt_ok(alias, 'BILL_AMT')}"
@@ -2766,6 +2776,7 @@ def _branch_names() -> dict[str, str]:
 
 # نقاط البيع من جدول POS الحقيقي؛ الآجل من فواتير المبيعات العامة.
 # أونكس = أنواع مستند تقرير «مبيعات الأصناف» في أونكس (1 و5).
+# نظام المبيعات (غير POS) = نقدي + آجل من IAS_BILL (1،4،5،8).
 SALES_SYSTEMS: dict[str, dict] = {
     "pos": {
         "label": "نقاط البيع",
@@ -2781,6 +2792,13 @@ SALES_SYSTEMS: dict[str, dict] = {
         "label": "أونكس",
         "source": "bill",
         "doc_types": _ONIX_ITEM_SALES_DOC_TYPES,
+        "require_cash": False,
+    },
+    "sales_bill": {
+        # نقدي فواتير (1/5) + آجل (4/8) من IAS_BILL — ليس جدول نقاط البيع.
+        "label": "نظام المبيعات",
+        "source": "bill",
+        "doc_types": (1, 4, 5, 8),
         "require_cash": False,
     },
 }
@@ -4058,8 +4076,8 @@ def _fetch_pos_one_group_by_branch(
                     m.BILL_NO,
                     NVL(m.BILL_SRL, 0) AS BILL_SRL,
                     SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
-                    SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
-                    SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                    SUM({_pos_dtl_net_sql("d")}) AS NET_TOTAL,
+                    SUM(0) AS VAT_TOTAL
                 FROM {pos}.IAS_POS_BILL_DTL d
                 JOIN {pos}.IAS_POS_BILL_MST m
                   ON m.BILL_NO = d.BILL_NO
@@ -4079,17 +4097,22 @@ def _fetch_pos_one_group_by_branch(
         )
         rows = _assemble_group_rows(sales_rows, {}, by_branch=True)
         # #region agent log
+        _sales_tot = round(
+            sum(float(r.get("sales_total") or 0) for r in (rows or [])), 2
+        )
         _agent_dbg(
-            "F",
+            "M",
             "oracle_stock.py:_fetch_pos_one_group_by_branch:ok",
-            "group-by-branch ok",
+            "group-by-branch ok I_PRICE_VAT",
             {
                 "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
                 "branches": len(rows or []),
                 "invoices": sum(int(r.get("invoice_count") or 0) for r in (rows or [])),
-                "sales_total": round(
-                    sum(float(r.get("sales_total") or 0) for r in (rows or [])), 2
-                ),
+                "sales_total": _sales_tot,
+                "formula": "I_PRICE_VAT*QTY-DIS_AMT",
+                "vs_onix_11257114": round(_sales_tot - 11257114.36, 2)
+                if str(gcode) == "26" and str(brn) == "6"
+                else None,
             },
         )
         # #endregion
@@ -4438,8 +4461,8 @@ def _fetch_pos_group_totals(
                     m.BILL_NO AS BILL_NO,
                     NVL(m.BILL_SRL, 0) AS BILL_SRL,
                     SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
-                    SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
-                    SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                    SUM({_pos_dtl_net_sql("d")}) AS NET_TOTAL,
+                    SUM(0) AS VAT_TOTAL
                 FROM {pos}.IAS_POS_BILL_MST m
                 JOIN {pos}.IAS_POS_BILL_DTL d
                   ON d.BILL_NO = m.BILL_NO
@@ -4460,8 +4483,8 @@ def _fetch_pos_group_totals(
                     TO_CHAR(d.I_CODE) AS ITEM_CODE,
                     {branch_sel}
                     SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
-                    SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
-                    SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                    SUM({_pos_dtl_net_sql("d")}) AS NET_TOTAL,
+                    SUM(0) AS VAT_TOTAL
                 FROM {pos}.IAS_POS_BILL_MST m
                 JOIN {pos}.IAS_POS_BILL_DTL d
                   ON d.BILL_NO = m.BILL_NO
@@ -4497,8 +4520,8 @@ def _fetch_pos_group_totals(
                 m.BILL_NO,
                 NVL(m.BILL_SRL, 0) AS BILL_SRL,
                 SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
-                SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
-                SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                SUM({_pos_dtl_net_sql("d")}) AS NET_TOTAL,
+                SUM(0) AS VAT_TOTAL
             FROM {pos}.IAS_POS_BILL_DTL d
             JOIN {pos}.IAS_POS_BILL_MST m
               ON m.BILL_NO = d.BILL_NO
@@ -4536,8 +4559,8 @@ def _fetch_pos_group_totals(
                     m.BRN_NO,
                     m.RT_BILL_NO,
                     SUM(NVL(d.I_QTY, 0)) AS RET_QTY,
-                    SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS RET_NET,
-                    SUM(NVL(d.VAT_AMT, 0)) AS RET_VAT
+                    SUM({_pos_dtl_net_sql("d")}) AS RET_NET,
+                    SUM(0) AS RET_VAT
                 FROM {pos}.IAS_POS_RT_BILL_DTL d
                 JOIN {pos}.IAS_POS_RT_BILL_MST m
                   ON m.RT_BILL_NO = d.RT_BILL_NO
@@ -4708,7 +4731,7 @@ def _groups_cache_key(
     split_by_branch: bool,
     mode: str,
     *,
-    version: str = "v21",
+    version: str = "v23",
 ) -> str:
     return (
         f"sales:groups:{version}:{system}:{_as_date(date_from).isoformat()}:"
@@ -4727,8 +4750,8 @@ def _groups_cache_lookup(
     *,
     allow_stale: bool = True,
 ):
-    """يقرأ v21 ثم v20/v19 للتوافق مع كاش سابق."""
-    for ver in ("v21", "v20", "v19"):
+    """يقرأ v23 فقط — صيغة I_PRICE_VAT الشاملة؛ لا نعيد استخدام كاش أقدم."""
+    for ver in ("v23",):
         key = _groups_cache_key(
             system,
             date_from,
@@ -4787,7 +4810,7 @@ def _groups_month_json_key(
 ) -> str:
     """مفتاح JSON لشهر واحد: نتيجة SQL مخزّنة ثم تُجمَّع لاحقاً."""
     return (
-        f"sales:groups:monthjson:v1:{system}:"
+        f"sales:groups:monthjson:v2:{system}:"
         f"{_as_date(date_from).isoformat()}:{_as_date(date_to).isoformat()}:"
         f"{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
@@ -5428,8 +5451,31 @@ def fetch_group_sales_totals(
 
     # فترات طويلة: كاش كامل أولاً — وإلا عيّنة خفيفة دفعة واحدة (لا مسح DTL عبر WAN)
     if long_range:
+        # #region agent log
+        _agent_dbg(
+            "D",
+            "oracle_stock.py:fetch_group_sales_totals:long_range",
+            "long_range branch",
+            {
+                "months": len(months),
+                "sql_mode": _groups_sql_mode(),
+                "fast": fast,
+                "brn": brn,
+                "gcode": gcode,
+                "split_by_branch": split_by_branch,
+            },
+        )
+        # #endregion
         merged_chk, missing_chk = _monthly_merge()
         if merged_chk is not None and not missing_chk:
+            # #region agent log
+            _agent_dbg(
+                "D",
+                "oracle_stock.py:fetch_group_sales_totals:monthly_complete",
+                "monthly merge complete",
+                {"rows": len(merged_chk)},
+            )
+            # #endregion
             return _return_complete(merged_chk)
 
         period_hit = _period_cached(allow_stale=True)
@@ -5442,6 +5488,17 @@ def fetch_group_sales_totals(
             and _groups_sql_mode() == "light"
             and not split_by_branch
         ):
+            # #region agent log
+            _agent_dbg(
+                "A",
+                "oracle_stock.py:fetch_group_sales_totals:light_path",
+                "entering light oneshot path",
+                {
+                    "has_display": display is not None,
+                    "missing_months": len(missing_chk or []),
+                },
+            )
+            # #endregion
             if display is not None and not missing_chk:
                 return _return_complete(
                     merged_chk if merged_chk is not None else display
@@ -5456,8 +5513,24 @@ def fetch_group_sales_totals(
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("light groups oneshot failed: %s", exc)
+                # #region agent log
+                _agent_dbg(
+                    "B",
+                    "oracle_stock.py:fetch_group_sales_totals:light_err",
+                    "light oneshot exception",
+                    {"error": str(exc)[:300]},
+                )
+                # #endregion
                 rows_light = []
             if rows_light:
+                # #region agent log
+                _agent_dbg(
+                    "A",
+                    "oracle_stock.py:fetch_group_sales_totals:light_ok",
+                    "light oneshot returned rows",
+                    {"rows": len(rows_light)},
+                )
+                # #endregion
                 return _return_complete(rows_light)
             if display is not None:
                 return _return_partial(
@@ -5508,42 +5581,22 @@ def fetch_group_sales_totals(
                 merged_chk if merged_chk is not None else display
             )
 
-        # لا كاش (وضع full): تفرّع فروع على كامل الفترة
-        rows: list[dict] = []
-        try:
-            if conf.get("source") == "pos":
-                rows = _fetch_pos_group_totals(
-                    date_from,
-                    date_to,
-                    branch_code=brn,
-                    group_code=gcode,
-                    by_branch=split_by_branch,
-                    skip_returns=fast,
-                    _allow_fanout=not bool(brn),
-                    _month_split=False,
-                    _force_full=True,
-                )
-            else:
-                with oracle_session():
-                    rows = _fetch_bill_group_totals(
-                        date_from,
-                        date_to,
-                        conf,
-                        brn,
-                        gcode,
-                        by_branch=split_by_branch,
-                        skip_returns=fast,
-                    )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("oneshot period groups fetch failed: %s", exc)
-            rows = []
-
-        if rows:
-            return _return_complete(rows)
-
-        # فشل الدفعة: حاول أحدث شهر كحد أدنى
+        # لا كاش كامل: لا نعلّق على oneshot سنة كاملة عبر WAN (504/سقوط).
+        # أعد جزئي + دفّئ الشهور في الخلفية / عبر واجهة sql_months.
+        # #region agent log
+        _agent_dbg(
+            "D",
+            "oracle_stock.py:fetch_group_sales_totals:skip_full_oneshot",
+            "skip blocking full oneshot; return partial",
+            {
+                "sql_mode": _groups_sql_mode(),
+                "has_display": display is not None,
+                "months": len(months),
+            },
+        )
+        # #endregion
         newest = months[-1] if months else None
-        if newest:
+        if newest and display is None:
             try:
                 rows = _fetch_one_month_group_totals(
                     system=system,
@@ -5569,6 +5622,12 @@ def fetch_group_sales_totals(
                     missing,
                     note="عرض أحدث شهر — بقية الشهور تُجهَّز في الخلفية",
                 )
+        if display is not None:
+            return _return_partial(
+                display,
+                list(missing_chk or months),
+                note="كاش جزئي — يُكمَّل بالشهور دون تعليق الطلب",
+            )
         return _return_partial(
             [],
             list(months),

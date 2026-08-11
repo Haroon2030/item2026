@@ -43,6 +43,9 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
         invoices = int(row.get("invoice_count") or 0)
         returns = round(float(row.get("return_total") or 0), 2)
         share_pct, share_display = _share(sales, total_sales)
+        gross = round(float(row.get("gross_total") or 0), 2)
+        if gross <= 0:
+            gross = round(max(sales, 0.0) + returns, 2)
         out.append(
             {
                 "branch_code": str(row.get("branch_code") or "").strip(),
@@ -57,6 +60,8 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
                 "return_total_display": _money(returns),
                 "sales_total": sales,
                 "sales_total_display": _money(sales),
+                "gross_total": gross,
+                "gross_total_display": _money(gross),
                 "avg_basket": round(float(row.get("avg_basket") or 0), 2),
                 "avg_basket_display": _money(row.get("avg_basket") or 0),
                 "share_pct": share_pct,
@@ -217,36 +222,162 @@ def _filter_branch_rows(rows: list[dict], branch_code: str) -> list[dict]:
     ]
 
 
+def _combined_channel_totals(
+    pos_raw: list[dict],
+    credit_raw: list[dict],
+    cash_raw: list[dict],
+) -> tuple[float, int]:
+    """إجمالي بلا تكرار: لكل فرع max(POS، نقدي الفواتير) + الآجل."""
+    pos_map = {
+        str(r.get("branch_code") or "").strip(): r for r in (pos_raw or [])
+    }
+    credit_map = {
+        str(r.get("branch_code") or "").strip(): r for r in (credit_raw or [])
+    }
+    cash_map = {
+        str(r.get("branch_code") or "").strip(): r for r in (cash_raw or [])
+    }
+    codes = {c for c in (set(pos_map) | set(credit_map) | set(cash_map)) if c}
+    sales = 0.0
+    invoices = 0
+    for code in codes:
+        p = pos_map.get(code) or {}
+        w = credit_map.get(code) or {}
+        c = cash_map.get(code) or {}
+        pos_sales = float(p.get("sales_total") or 0)
+        cash_sales = float(c.get("sales_total") or 0)
+        credit_sales = float(w.get("sales_total") or 0)
+        sales += max(pos_sales, cash_sales) + credit_sales
+        pos_inv = int(p.get("invoice_count") or 0)
+        cash_inv = int(c.get("invoice_count") or 0)
+        credit_inv = int(w.get("invoice_count") or 0)
+        if pos_inv > 0:
+            invoices += pos_inv + credit_inv
+        else:
+            invoices += cash_inv + credit_inv
+    return round(sales, 2), invoices
+
+
+def _sales_system_excluding_pos(
+    pos_raw: list[dict],
+    cash_raw: list[dict],
+    credit_raw: list[dict],
+) -> list[dict]:
+    """نظام المبيعات بلا تكرار POS: آجل (4/8) + نقدي فواتير يزيد عن نقاط البيع فقط.
+
+    مستند 1/5 في IAS_BILL غالباً انعكاس نقاط البيع — لا يُعرض كاملاً مع POS.
+    """
+    pos_map = {
+        str(r.get("branch_code") or "").strip(): r for r in (pos_raw or [])
+    }
+    cash_map = {
+        str(r.get("branch_code") or "").strip(): r for r in (cash_raw or [])
+    }
+    credit_map = {
+        str(r.get("branch_code") or "").strip(): r for r in (credit_raw or [])
+    }
+    codes = {c for c in (set(cash_map) | set(credit_map)) if c}
+    out: list[dict] = []
+    for code in codes:
+        p = pos_map.get(code) or {}
+        c = cash_map.get(code) or {}
+        w = credit_map.get(code) or {}
+        pos_sales = float(p.get("sales_total") or 0)
+        cash_sales = float(c.get("sales_total") or 0)
+        credit_sales = float(w.get("sales_total") or 0)
+        extra_cash = max(0.0, round(cash_sales - pos_sales, 2))
+        sales = round(credit_sales + extra_cash, 2)
+        credit_inv = int(w.get("invoice_count") or 0)
+        cash_inv = int(c.get("invoice_count") or 0)
+        if pos_sales > 0:
+            # فواتير الآجل فقط + لا نضاعف فواتير POS المنعكسة
+            invoices = credit_inv
+            returns = round(float(w.get("return_total") or 0), 2)
+            return_count = int(w.get("return_count") or 0)
+        else:
+            invoices = credit_inv + cash_inv
+            returns = round(
+                float(w.get("return_total") or 0)
+                + float(c.get("return_total") or 0),
+                2,
+            )
+            return_count = int(w.get("return_count") or 0) + int(
+                c.get("return_count") or 0
+            )
+        if sales <= 0 and invoices <= 0 and returns <= 0:
+            continue
+        name = (
+            str(
+                w.get("branch_name")
+                or c.get("branch_name")
+                or p.get("branch_name")
+                or code
+            ).strip()
+            or code
+        )
+        out.append(
+            {
+                "branch_code": code,
+                "branch_name": name,
+                "invoice_count": invoices,
+                "return_count": return_count,
+                "return_total": returns,
+                "net_invoice_count": max(0, invoices - return_count),
+                "gross_total": round(sales + returns, 2),
+                "net_total": sales,
+                "vat_total": 0.0,
+                "sales_total": sales,
+                "avg_basket": round(sales / invoices, 2) if invoices else 0.0,
+            }
+        )
+    out.sort(key=lambda r: float(r.get("sales_total") or 0), reverse=True)
+    return out
+
+
 def _top_return_branches(pos_branches: list[dict], *, limit: int = 12) -> dict[str, Any]:
-    """أعلى فروع مرتجعاً من بيانات نقاط البيع الجاهزة (بدون استعلام إضافي)."""
-    ranked = sorted(
-        (r for r in pos_branches if float(r.get("return_total") or 0) > 0),
-        key=lambda r: (
-            -float(r.get("return_total") or 0),
-            str(r.get("branch_name") or ""),
-        ),
-    )[: max(1, min(int(limit or 12), 20))]
-    total = round(sum(float(r.get("return_total") or 0) for r in ranked), 2)
+    """أعلى فروع مرتجعاً — النسبة = مرتجع الفرع ÷ (مبيعاته + مرتجعه)."""
     chart_rows: list[dict] = []
-    for row in ranked:
+    for row in pos_branches or []:
         amount = round(float(row.get("return_total") or 0), 2)
-        share_pct, share_display = _share(amount, total)
+        if amount <= 0:
+            continue
+        sales_net = round(float(row.get("sales_total") or 0), 2)
+        gross = round(float(row.get("gross_total") or 0), 2)
+        if gross <= 0:
+            # صافي المبيعات + المرتجع = إجمالي حركة الفرع قبل خصم المرتجع
+            gross = round(max(sales_net, 0.0) + amount, 2)
+        rate_pct, rate_display = _share(amount, gross)
         chart_rows.append(
             {
                 "code": row.get("branch_code") or "",
                 "name": row.get("branch_name") or row.get("branch_code") or "—",
                 "amount": amount,
                 "amount_display": _money(amount),
+                "sales_total": sales_net,
+                "sales_total_display": _money(sales_net),
+                "gross_total": gross,
+                "gross_total_display": _money(gross),
                 "invoice_count": int(row.get("return_count") or 0),
-                "share_pct": share_pct,
-                "share_display": share_display,
+                "share_pct": rate_pct,
+                "share_display": rate_display,
             }
         )
+    chart_rows.sort(
+        key=lambda r: (
+            -float(r.get("share_pct") or 0),
+            -float(r.get("amount") or 0),
+            str(r.get("name") or ""),
+        )
+    )
+    lim = max(1, min(int(limit or 12), 20))
+    chart_rows = chart_rows[:lim]
+    total = round(sum(float(r.get("amount") or 0) for r in chart_rows), 2)
     return {
         "rows": chart_rows,
         "total": total,
         "total_display": _money(total),
         "count": len(chart_rows),
+        "rate_basis": "branch_gross",
     }
 
 
@@ -320,7 +451,11 @@ def _rank_highlights(
             "name": str(best.get("name") or best.get("code") or "—"),
             "code": str(best.get("code") or ""),
             "value_display": str(best.get("amount_display") or "0.00"),
-            "hint": f"{int(best.get('invoice_count') or 0):,} فاتورة مرتجع",
+            "hint": (
+                f"{int(best.get('invoice_count') or 0):,} مرتجع"
+                f" · {best.get('share_display') or '—'}"
+                f" من مبيعات الفرع"
+            ),
             "pending": False,
         }
 
@@ -332,33 +467,78 @@ def _rank_highlights(
     }
 
 
-def build_sales_branches(
+def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
+    from .oracle_stock import (
+        _as_date,
+        _sales_cache_get,
+        _sales_cache_get_stale,
+        _skip_mst_returns,
+    )
+
+    key = (
+        f"sales:branches:v7:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:"
+        f"r{int(not _skip_mst_returns(date_from, date_to))}"
+    )
+    hit = _sales_cache_get(key)
+    if hit is not None:
+        return hit
+    return _sales_cache_get_stale(key)
+
+
+def _assemble_sales_branches_dashboard(
+    pos_raw: list[dict],
+    credit_raw: list[dict],
+    cash_raw: list[dict],
     date_from,
     date_to,
     *,
     branch_code: str = "",
     group_code: str = "",
+    from_cache: bool = False,
 ) -> dict[str, Any]:
-    """فروع نقاط البيع + الجملة (سريع — من رأس الفاتورة).
-
-    فلتر الفرع يُطبَّق على جداول الفروع.
-    فلتر المجموعة يُمرَّر لجدول المجموعات فقط (رأس الفاتورة بلا مجموعة).
-    """
-    from .oracle_stock import fetch_branch_sales_totals, oracle_session
-
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
 
-    with oracle_session():
-        pos_raw = fetch_branch_sales_totals(date_from, date_to, system="pos")
-        wholesale_raw = fetch_branch_sales_totals(
-            date_from, date_to, system="wholesale"
-        )
-        onix_raw = fetch_branch_sales_totals(date_from, date_to, system="onix")
-
     pos_raw = _filter_branch_rows(pos_raw, brn)
-    wholesale_raw = _filter_branch_rows(wholesale_raw, brn)
-    onix_raw = _filter_branch_rows(onix_raw, brn)
+    credit_raw = _filter_branch_rows(credit_raw, brn)
+    cash_raw = _filter_branch_rows(cash_raw, brn)
+    onix_raw = list(cash_raw)
+
+    wholesale_raw = _sales_system_excluding_pos(pos_raw, cash_raw, credit_raw)
+
+    if not from_cache:
+        # #region agent log
+        try:
+            from .oracle_stock import _agent_dbg
+
+            b6p = next(
+                (r for r in pos_raw if str(r.get("branch_code")) == "6"), {}
+            )
+            b6c = next(
+                (r for r in cash_raw if str(r.get("branch_code")) == "6"), {}
+            )
+            b6w = next(
+                (r for r in credit_raw if str(r.get("branch_code")) == "6"), {}
+            )
+            b6o = next(
+                (r for r in wholesale_raw if str(r.get("branch_code")) == "6"),
+                {},
+            )
+            _agent_dbg(
+                "A",
+                "sales_dashboard.py:build_sales_branches:dedupe",
+                "branch6 sales system after POS dedupe",
+                {
+                    "pos": float(b6p.get("sales_total") or 0),
+                    "cash_1_5": float(b6c.get("sales_total") or 0),
+                    "credit_4_8": float(b6w.get("sales_total") or 0),
+                    "panel": float(b6o.get("sales_total") or 0),
+                },
+            )
+        except Exception:
+            pass
+        # #endregion
 
     pos_branches, pos_totals = _format_branch_rows(pos_raw)
     wholesale_branches, wholesale_totals = _format_branch_rows(wholesale_raw)
@@ -367,15 +547,11 @@ def build_sales_branches(
     top_returns = _top_return_branches(pos_branches)
     ranks = _rank_highlights(pos_branches, top_returns)
 
-    combined_sales = round(
-        float(pos_totals["sales_total"]) + float(wholesale_totals["sales_total"]),
-        2,
-    )
-    combined_invoices = int(pos_totals["invoice_count"]) + int(
-        wholesale_totals["invoice_count"]
+    combined_sales, combined_invoices = _combined_channel_totals(
+        pos_raw, credit_raw, cash_raw
     )
 
-    return {
+    payload = {
         "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
         "scope_label": _scope_label(brn, gcode),
         "branch_code": brn,
@@ -406,6 +582,87 @@ def build_sales_branches(
             "combined_invoices": f"{combined_invoices:,}",
         },
     }
+    if from_cache:
+        payload["from_cache"] = True
+    return payload
+
+
+def build_sales_branches_from_cache(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+) -> dict[str, Any] | None:
+    """عند انقطاع أوراكل: أرقام الفروع من الكاش المحلي إن وُجدت."""
+    pos_raw = _cached_branch_totals(date_from, date_to, "pos")
+    credit_raw = _cached_branch_totals(date_from, date_to, "wholesale")
+    cash_raw = _cached_branch_totals(date_from, date_to, "onix")
+    if pos_raw is None and credit_raw is None and cash_raw is None:
+        return None
+    # #region agent log
+    try:
+        from .oracle_stock import _agent_dbg
+
+        _agent_dbg(
+            "G",
+            "sales_dashboard.py:build_sales_branches_from_cache",
+            "oracle down — serving branch cache",
+            {
+                "pos_rows": len(pos_raw or []),
+                "credit_rows": len(credit_raw or []),
+                "cash_rows": len(cash_raw or []),
+            },
+        )
+    except Exception:
+        pass
+    # #endregion
+    return _assemble_sales_branches_dashboard(
+        list(pos_raw or []),
+        list(credit_raw or []),
+        list(cash_raw or []),
+        date_from,
+        date_to,
+        branch_code=branch_code,
+        group_code=group_code,
+        from_cache=True,
+    )
+
+
+def build_sales_branches(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+) -> dict[str, Any]:
+    """فروع نقاط البيع + الجملة (سريع — من رأس الفاتورة).
+
+    فلتر الفرع يُطبَّق على جداول الفروع.
+    فلتر المجموعة يُمرَّر لجدول المجموعات فقط (رأس الفاتورة بلا مجموعة).
+    """
+    from .oracle_stock import fetch_branch_sales_totals, oracle_session
+
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+
+    with oracle_session():
+        pos_raw = fetch_branch_sales_totals(date_from, date_to, system="pos")
+        # آجل نظام المبيعات (4/8) + نقدي فواتير (1/5) منفصلين ثم نفك تكرار POS
+        credit_raw = fetch_branch_sales_totals(
+            date_from, date_to, system="wholesale"
+        )
+        cash_raw = fetch_branch_sales_totals(date_from, date_to, system="onix")
+
+    return _assemble_sales_branches_dashboard(
+        pos_raw,
+        credit_raw,
+        cash_raw,
+        date_from,
+        date_to,
+        branch_code=brn,
+        group_code=gcode,
+    )
 
 
 def peek_sales_groups(
@@ -418,7 +675,16 @@ def peek_sales_groups(
     """مجموعات من الكاش فقط — لزرع الصفحة فوراً بلا انتظار أوراكل."""
     from datetime import date as _date
 
-    from .oracle_stock import peek_group_sales_totals, sales_long_range
+    from .oracle_stock import (
+        _as_date,
+        _merge_available_monthly_group_cache,
+        _month_spans,
+        _sales_cache_get,
+        _sales_cache_get_stale,
+        _skip_mst_returns,
+        peek_group_sales_totals,
+        sales_long_range,
+    )
 
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
@@ -436,7 +702,72 @@ def peek_sales_groups(
     )
     if raw is None:
         return None
+
+    # هل شهور الفترة مكتملة في كاش المجموعات؟
+    months = _month_spans(date_from, date_to)
+    _merged, missing = _merge_available_monthly_group_cache(
+        system="pos",
+        date_from=date_from,
+        date_to=date_to,
+        brn=brn,
+        gcode=gcode,
+        split_by_branch=by_branch,
+        mode="gross",
+    )
+    incomplete = bool(missing) and len(months) >= 2
+
+    # طابق إجمالي الزرع مع كاش الفروع إن وُجد (حتى لا يظهر فرق مع جدول الفروع)
+    matched = False
+    pos_total = None
+    raw_total = round(sum(float(r.get("sales_total") or 0) for r in raw), 2)
+    if not by_branch and raw:
+        br_key = (
+            f"sales:branches:v7:pos:{_as_date(date_from).isoformat()}:"
+            f"{_as_date(date_to).isoformat()}:"
+            f"r{int(not _skip_mst_returns(date_from, date_to))}"
+        )
+        br_rows = _sales_cache_get(br_key)
+        if br_rows is None:
+            br_rows = _sales_cache_get_stale(br_key)
+        if brn and br_rows is not None:
+            br_rows = [
+                r
+                for r in br_rows
+                if str(r.get("branch_code") or "").strip() == brn
+            ]
+        if br_rows is not None:
+            pos_total = round(
+                sum(float(r.get("sales_total") or 0) for r in br_rows), 2
+            )
+            raw = _reconcile_group_sales_to_target(raw, pos_total)
+            matched = abs(
+                round(sum(float(r.get("sales_total") or 0) for r in raw), 2)
+                - pos_total
+            ) < 0.05
+            # #region agent log
+            try:
+                from .oracle_stock import _agent_dbg
+
+                _agent_dbg(
+                    "F",
+                    "sales_dashboard.py:peek_sales_groups:reconcile",
+                    "peek reconciled to branch cache",
+                    {
+                        "raw_total": raw_total,
+                        "pos_total": pos_total,
+                        "matched": matched,
+                        "incomplete": incomplete,
+                        "missing_months": len(missing or []),
+                    },
+                )
+            except Exception:
+                pass
+            # #endregion
+
     rows, totals = _format_group_rows(raw, by_branch=by_branch)
+    if matched and pos_total is not None:
+        totals["sales_total"] = pos_total
+        totals["sales_total_display"] = _money(pos_total)
     payload = {
         "rows": rows,
         "totals": totals,
@@ -444,10 +775,24 @@ def peek_sales_groups(
         "scope_label": _scope_label(brn, gcode),
         "from_cache": True,
         "by_branch": by_branch,
-        "matched": False,
-        "incomplete": False,
-        "cache": {"source": "json"},
+        "matched": matched and not incomplete,
+        "incomplete": incomplete and not by_branch,
+        "cache": {
+            "source": "json",
+            "months_ready": max(0, len(months) - len(missing or [])),
+            "months_total": len(months),
+        },
+        "raw_total": raw_total,
+        "raw_total_display": _money(raw_total),
     }
+    if pos_total is not None:
+        payload["pos_total"] = pos_total
+        payload["pos_total_display"] = _money(pos_total)
+    if incomplete and not by_branch:
+        payload["warning"] = (
+            f"جزئي JSON {payload['cache']['months_ready']}/{len(months)} — "
+            "الإجمالي مطابق للفروع؛ التوزيع يُكمَّل مع الشهور"
+        )
     if sales_long_range(date_from, date_to):
         payload["long_range"] = True
     return payload
@@ -511,13 +856,9 @@ def build_sales_groups(
         sum(float(r.get("sales_total") or 0) for r in (groups_raw or [])), 2
     )
 
-    # مجموع المجموعات = صافي بطاقة/جدول نقاط البيع (مرجع المالك)
+    # مجموع المجموعات = صافي جدول نقاط البيع (حتى لو الشهور ناقصة — التوزيع يُنسَب)
     do_reconcile = (
-        bool(reconcile)
-        and not gcode
-        and not by_branch
-        and bool(groups_raw)
-        and (not incomplete or months_complete)
+        bool(reconcile) and not gcode and not by_branch and bool(groups_raw)
     )
     if do_reconcile:
         try:
@@ -531,7 +872,12 @@ def build_sales_groups(
                 "E",
                 "sales_dashboard.py:build_sales_groups:reconcile:start",
                 "reconcile start",
-                {"raw_groups_total": raw_groups_total},
+                {
+                    "raw_groups_total": raw_groups_total,
+                    "incomplete": incomplete,
+                    "months_ready": months_ready,
+                    "months_total": months_total,
+                },
             )
             # #endregion
             with oracle_session():
@@ -549,7 +895,7 @@ def build_sales_groups(
                 sum(float(r.get("sales_total") or 0) for r in groups_raw), 2
             )
             matched = abs(after - pos_total) < 0.05
-            incomplete = False
+            # لا تُلغِ incomplete هنا — التوزيع قد يبقى تقريبياً حتى تكتمل الشهور
             # #region agent log
             _agent_dbg(
                 "E",
@@ -559,6 +905,7 @@ def build_sales_groups(
                     "elapsed_ms": int((_time.monotonic() - _rt0) * 1000),
                     "pos_total": pos_total,
                     "matched": matched,
+                    "incomplete": incomplete,
                 },
             )
             # #endregion
@@ -568,11 +915,15 @@ def build_sales_groups(
                     f"{_money(pos_total)} بعد المطابقة"
                 )
             elif matched and abs(before - after) >= 1 and not warning:
-                # توضيح صامت في الكاش فقط — الواجهة تعرض المطابق
                 logger.info(
                     "groups reconciled %s → %s (POS net)",
                     before,
                     after,
+                )
+            if incomplete and matched and not warning:
+                warning = (
+                    f"جزئي JSON {months_ready}/{months_total or '?'} — "
+                    "الإجمالي مطابق للفروع؛ التوزيع يُكمَّل مع الشهور"
                 )
         except Exception as exc:  # noqa: BLE001
             # #region agent log
@@ -592,6 +943,25 @@ def build_sales_groups(
             if not warning:
                 warning = "تم العرض بدون مطابقة ملخص الفروع"
     elif incomplete and not warning:
+        # #region agent log
+        try:
+            from .oracle_stock import _agent_dbg
+
+            _agent_dbg(
+                "F",
+                "sales_dashboard.py:build_sales_groups:reconcile:skipped",
+                "reconcile skipped",
+                {
+                    "reason": "no_rows_or_by_branch",
+                    "incomplete": incomplete,
+                    "raw_groups_total": raw_groups_total,
+                    "gcode": gcode,
+                    "by_branch": by_branch,
+                },
+            )
+        except Exception:
+            pass
+        # #endregion
         warning = (
             f"جزئي JSON {months_ready}/{months_total or '?'} — "
             "الإجمالي غير مطابق للفروع حتى تكتمل الشهور"
@@ -608,8 +978,8 @@ def build_sales_groups(
         "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
         "scope_label": _scope_label(brn, gcode),
         "incomplete": incomplete and not by_branch,
-        "matched": bool(matched) and not incomplete,
-        "exact": (not incomplete) and groups_source != "sample",
+        "matched": bool(matched),
+        "exact": (not incomplete) and groups_source != "sample" and bool(matched),
         "by_branch": by_branch,
         "cache": {
             "source": groups_source,
