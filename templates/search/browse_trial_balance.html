@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}ميزان المراجعة{% endblock %}
+{% block page_class %}sales-dash income-dash trial-balance-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="ميزان المراجعة">
+  <div class="dash-head-copy">
+    <h2>ميزان المراجعة</h2>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert {% if report %}alert-warn{% else %}alert-error{% endif %}" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="income-kpi-grid" aria-label="ملخص الميزان">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
+        </span>
+        عدد السجلات
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.totals.row_count_display }}</strong>
+      <span class="dash-kpi-hint">{{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M12 19l-4-4M12 19l4-4"/></svg>
+        </span>
+        إجمالي المدين
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.totals.debit_display %}</strong>
+      <span class="dash-kpi-hint">{{ report.currency }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-exp">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-exp" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg>
+        </span>
+        إجمالي الدائن
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.totals.credit_display %}</strong>
+      <span class="dash-kpi-hint">{{ report.currency }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-net {% if report.totals.balanced %}is-up{% else %}is-down{% endif %}">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-net" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
+        </span>
+        {{ report.totals.balance_label|default:"الرصيد" }}
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.totals.balance_abs_display|default:report.totals.balance_display }}</strong>
+      <span class="dash-kpi-hint income-kpi-net-meta">
+        <span class="income-kpi-pct {% if report.totals.balanced %}is-up{% else %}is-down{% endif %}">
+          {% if report.totals.balanced %}متوازن{% else %}فرق مدين − دائن{% endif %}
+        </span>
+      </span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_trial_balance' %}" class="income-filter-bar tb-filter-bar" role="search" aria-label="فلاتر ميزان المراجعة">
+  <div class="income-filter-bar-main">
+    <div class="income-filter-period" role="group" aria-label="الفترة">
+      <span class="income-filter-period-label">الفترة</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="tb-from">من</label>
+          <input id="tb-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">—</span>
+        <div class="income-filter-field">
+          <label for="tb-to">إلى</label>
+          <input id="tb-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+        </div>
+      </div>
+    </div>
+    <div class="income-filter-field">
+      <label for="tb-branch">الفرع</label>
+      <select id="tb-branch" name="branch">
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="tb-view">العرض</label>
+      <select id="tb-view" name="view">
+        <option value="summary" {% if view_mode == 'summary' %}selected{% endif %}>أرصدة نهائية</option>
+        <option value="analytic" {% if view_mode == 'analytic' %}selected{% endif %}>تحليلي</option>
+        <option value="detail" {% if view_mode == 'detail' %}selected{% endif %}>مع الحركة</option>
+      </select>
+    </div>
+    <div class="income-filter-field income-filter-posted">
+      <label for="tb-posted">الترحيل</label>
+      <select id="tb-posted" name="posted">
+        <option value="0" {% if not posted_only %}selected{% endif %}>الكل</option>
+        <option value="1" {% if posted_only %}selected{% endif %}>مرحّل فقط</option>
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="tb-hide-zero">الصفرية</label>
+      <select id="tb-hide-zero" name="hide_zero">
+        <option value="1" {% if hide_zero %}selected{% endif %}>إخفاء</option>
+        <option value="0" {% if not hide_zero %}selected{% endif %}>إظهار</option>
+      </select>
+    </div>
+  </div>
+  <div class="tb-filter-actions">
+    <button type="submit" class="btn-primary income-filter-submit">عرض</button>
+    {% if report %}
+      <button type="submit" class="btn-ghost tb-excel-btn" name="export" value="excel" title="تصدير إلى Excel">Excel</button>
+    {% endif %}
+  </div>
+</form>
+
+{% if report %}
+  <section class="income-duo" aria-label="الميزان وفوارق الفروع">
+    <section class="dash-panel dash-panel-glass perf-panel income-accounts-panel" aria-label="جدول ميزان المراجعة">
+      <div class="dash-panel-head tb-panel-head">
+        <div class="tb-panel-head-top">
+          <div class="tb-panel-head-copy">
+            <h3>{{ report.report_title }}</h3>
+            <p class="tb-panel-meta">
+              <span>{{ report.group_by_label }}</span>
+              <span class="tb-meta-sep" aria-hidden="true">·</span>
+              <span>{{ report.period_label }}</span>
+              {% if report.fetched_at %}
+                <span class="tb-meta-sep" aria-hidden="true">·</span>
+                <span>جلب {{ report.fetched_at }}</span>
+              {% endif %}
+            </p>
+          </div>
+          <span class="result-pill">{{ report.totals.row_count_display }} سجل</span>
+        </div>
+      </div>
+      <div class="income-account-shell">
+        <div class="income-account-scroll tb-main-scroll">
+          {% if report.mode == 'detail' %}
+            <table class="data-table sales-table income-account-table tb-income-table tb-detail-table" aria-label="ميزان مراجعة تفصيلي">
+              <thead>
+                <tr>
+                  <th>الرقم</th>
+                  <th>الاسم</th>
+                  <th>النوع</th>
+                  <th>التحليلي</th>
+                  <th>الفرع</th>
+                  <th>العملة</th>
+                  <th>افتتاحي مدين</th>
+                  <th>افتتاحي دائن</th>
+                  <th>حركة مدين</th>
+                  <th>حركة دائن</th>
+                  <th>ختامي مدين</th>
+                  <th>ختامي دائن</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in report.rows %}
+                  <tr>
+                    <td class="mono">{{ row.account_code }}</td>
+                    <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
+                    <td class="mono">{{ row.dtl_typ }}</td>
+                    <td class="income-name-cell" title="{{ row.dtl_name }}">{% if row.dtl_code %}<span class="mono">{{ row.dtl_code }}</span> {% endif %}{{ row.dtl_name }}</td>
+                    <td class="income-name-cell">{{ row.branch_name }}</td>
+                    <td class="mono">{{ row.currency }}</td>
+                    <td class="mono">{{ row.open_dr_display }}</td>
+                    <td class="mono">{{ row.open_cr_display }}</td>
+                    <td class="mono">{{ row.mv_dr_display }}</td>
+                    <td class="mono">{{ row.mv_cr_display }}</td>
+                    <td class="mono">{{ row.close_dr_display }}</td>
+                    <td class="mono">{{ row.close_cr_display }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="12">لا أرصدة مطابقة للفلاتر في الفترة.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% elif report.mode == 'analytic' %}
+            <table class="data-table sales-table income-account-table tb-income-table tb-analytic-table" aria-label="ميزان مراجعة تحليلي">
+              <thead>
+                <tr>
+                  <th>الرقم</th>
+                  <th>الاسم</th>
+                  <th>النوع</th>
+                  <th>رقم التحليلي</th>
+                  <th>اسم التحليلي</th>
+                  <th>الفرع</th>
+                  <th>العملة</th>
+                  <th>مدين</th>
+                  <th>دائن</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in report.rows %}
+                  <tr>
+                    <td class="mono">{{ row.account_code }}</td>
+                    <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
+                    <td class="mono">{{ row.dtl_typ }}</td>
+                    <td class="mono tb-dtl-code-cell">{% if row.dtl_code %}{{ row.dtl_code }}{% endif %}</td>
+                    <td class="income-name-cell" title="{{ row.dtl_name }}">{% if row.dtl_name %}{{ row.dtl_name }}{% endif %}</td>
+                    <td class="income-name-cell">{{ row.branch_name }}</td>
+                    <td class="mono">{{ row.currency }}</td>
+                    <td class="mono">{{ row.debit_display }}</td>
+                    <td class="mono">{{ row.credit_display }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="9">لا أرصدة مطابقة للفلاتر في الفترة.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <table class="data-table sales-table income-account-table tb-income-table" aria-label="ميزان المراجعة — أرصدة نهائية">
+              <colgroup>
+                <col class="income-col-code">
+                <col class="income-col-name">
+                <col class="tb-col-branch">
+                <col class="income-col-cur">
+                <col class="income-col-num">
+                <col class="income-col-num">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>الرقم</th>
+                  <th>الاسم</th>
+                  <th>الفرع المستفيد</th>
+                  <th>العملة</th>
+                  <th>مدين</th>
+                  <th>دائن</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in report.rows %}
+                  <tr>
+                    <td class="mono">
+                      {{ row.account_code }}
+                      {% if row.branch_code %}<span class="tb-b-code">{{ row.branch_code }}</span>{% endif %}
+                    </td>
+                    <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
+                    <td class="income-name-cell">{{ row.branch_name }}</td>
+                    <td class="mono">{{ row.currency }}</td>
+                    <td class="mono">{{ row.debit_display }}</td>
+                    <td class="mono">{{ row.credit_display }}</td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="6">لا أرصدة مطابقة للفلاتر في الفترة.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+        {% if report.rows %}
+          <div class="income-account-foot" aria-label="إجماليات الميزان">
+            <table class="data-table sales-table income-account-table income-account-foot-table">
+              <colgroup>
+                {% if report.mode == 'detail' %}
+                  <col><col><col><col><col><col>
+                  <col class="income-col-num"><col class="income-col-num">
+                  <col class="income-col-num"><col class="income-col-num">
+                  <col class="income-col-num"><col class="income-col-num">
+                {% elif report.mode == 'analytic' %}
+                  <col><col><col><col><col><col><col>
+                  <col class="income-col-num"><col class="income-col-num">
+                {% else %}
+                  <col class="income-col-code">
+                  <col class="income-col-name">
+                  <col class="tb-col-branch">
+                  <col class="income-col-cur">
+                  <col class="income-col-num">
+                  <col class="income-col-num">
+                {% endif %}
+              </colgroup>
+              <tbody>
+                <tr class="income-tfoot-total">
+                  <td colspan="{% if report.mode == 'detail' %}6{% elif report.mode == 'analytic' %}7{% else %}4{% endif %}">
+                    الإجمالي ({{ report.totals.row_count_display }}) · {{ report.currency }}
+                  </td>
+                  {% if report.mode == 'detail' %}
+                    <td class="mono income-foot-num">{{ report.totals.open_dr_display }}</td>
+                    <td class="mono income-foot-num">{{ report.totals.open_cr_display }}</td>
+                    <td class="mono income-foot-num">{{ report.totals.mv_dr_display }}</td>
+                    <td class="mono income-foot-num">{{ report.totals.mv_cr_display }}</td>
+                  {% endif %}
+                  <td class="mono income-foot-num">{{ report.totals.debit_display }}</td>
+                  <td class="mono income-foot-num">{{ report.totals.credit_display }}</td>
+                </tr>
+                <tr class="income-tfoot-net {% if report.totals.balanced %}is-up{% else %}is-down{% endif %}">
+                  <td colspan="{% if report.mode == 'detail' %}10{% elif report.mode == 'analytic' %}7{% else %}4{% endif %}">
+                    {{ report.totals.balance_label }}
+                  </td>
+                  <td class="mono income-foot-num">{{ report.totals.balance_dr_display }}</td>
+                  <td class="mono income-foot-num">{{ report.totals.balance_cr_display }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    {% if report.branch_gaps %}
+      <section class="dash-panel dash-panel-glass perf-panel income-branch-panel" aria-label="فارق الرصيد لكل فرع">
+        <div class="dash-panel-head">
+          <h3>الفروع · فارق الرصيد النهائي</h3>
+          <span class="result-pill">{{ report.branch_gaps|length }} فرع</span>
+        </div>
+        <p class="income-rank-period">{{ report.period_label }} · رصيد = مدين − دائن</p>
+        <div class="income-rank-chart" role="list">
+          {% for g in report.branch_gaps %}
+            <div class="income-rank-row is-{{ g.net_kind }}" role="listitem" style="--bar-pct: {{ g.bar_pct }}%; --i: {{ forloop.counter0 }}">
+              <span class="income-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <div class="income-rank-body">
+                <div class="income-rank-head">
+                  <strong class="income-rank-name" title="{{ g.branch_name }}">
+                    {% if g.branch_code %}<span class="tb-b-code">{{ g.branch_code }}</span> {% endif %}{{ g.branch_name }}
+                  </strong>
+                  <span class="income-rank-amt mono">{{ g.balance_label }} {{ g.net_display }}</span>
+                </div>
+                <div class="income-rank-track" aria-hidden="true">
+                  <span class="income-rank-fill"></span>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

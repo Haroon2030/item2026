@@ -26,6 +26,12 @@ class SecurityHeadersMiddleware:
             'Permissions-Policy',
             'geolocation=(), microphone=(), camera=(self), payment=()',
         )
+        # صفحات HTML لا تُخزَّن — حتى يظهر إصدار التطبيق الجديد فور الدخول
+        content_type = (response.get('Content-Type') or '').lower()
+        if 'text/html' in content_type:
+            response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
         # السماح بـ media من نفس المصدر للكاميرا
         response.headers.setdefault(
             'Content-Security-Policy',
@@ -35,7 +41,7 @@ class SecurityHeadersMiddleware:
                 "media-src 'self' blob:; "
                 "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
                 "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
                 "connect-src 'self'; "
                 "worker-src 'self' blob:; "
                 "frame-ancestors 'none'; "

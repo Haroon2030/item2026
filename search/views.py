@@ -1671,14 +1671,39 @@ def browse_vendor_turnover(request):
     try:
         from .oracle_income import fetch_income_branches
         from .oracle_purchases import fetch_purchase_vendor_options
-        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_stock import (
+            _friendly_connect_error,
+            _is_connect_timeout,
+            _is_disconnect_error,
+            oracle_enabled,
+            oracle_session,
+        )
         from .oracle_vendor_turnover import (
             apply_decision_filter,
             build_vendor_item_detail,
             build_vendor_item_detail_excel,
             build_vendor_turnover,
             build_vendor_turnover_excel,
+            peek_vendor_item_detail,
+            peek_vendor_turnover,
         )
+
+        # #region agent log
+        from .oracle_stock import _agent_dbg
+
+        _agent_dbg(
+            'VT1',
+            'views.py:browse_vendor_turnover:start',
+            'vendor turnover request',
+            {
+                'view_mode': view_mode,
+                'date_from': date_from.isoformat(),
+                'date_to': date_to.isoformat(),
+                'branch': selected_branch or '',
+                'vendor': selected_vendor or '',
+            },
+        )
+        # #endregion
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن حساب دوران الموردين.'
@@ -1686,46 +1711,183 @@ def browse_vendor_turnover(request):
             if not selected_vendor:
                 error = 'اختر مورداً من الجدول لعرض أصنافه.'
             else:
-                item_detail = build_vendor_item_detail(
-                    date_from,
-                    date_to,
-                    vendor_code=selected_vendor,
-                    branch_code=selected_branch,
-                )
+                try:
+                    item_detail = build_vendor_item_detail(
+                        date_from,
+                        date_to,
+                        vendor_code=selected_vendor,
+                        branch_code=selected_branch,
+                    )
+                except Exception as item_exc:  # noqa: BLE001
+                    cached_items = peek_vendor_item_detail(
+                        date_from,
+                        date_to,
+                        vendor_code=selected_vendor,
+                        branch_code=selected_branch,
+                    )
+                    # #region agent log
+                    _agent_dbg(
+                        'VT2',
+                        'views.py:browse_vendor_turnover:items_fail',
+                        'item detail failed',
+                        {
+                            'exc_type': type(item_exc).__name__,
+                            'is_timeout': _is_connect_timeout(item_exc),
+                            'has_cache': cached_items is not None,
+                        },
+                    )
+                    # #endregion
+                    if cached_items is not None and (
+                        _is_connect_timeout(item_exc)
+                        or _is_disconnect_error(item_exc)
+                    ):
+                        item_detail = cached_items
+                        error = (
+                            'تعذّر الاتصال بأوراكل — عرض أصناف محفوظة مسبقاً. '
+                            'تحقق من VPN/الإنترنت ثم حدّث الصفحة.'
+                        )
+                    else:
+                        raise
                 if want_excel and item_detail is not None:
                     return build_vendor_item_detail_excel(item_detail)
-            with oracle_session():
-                branches = fetch_income_branches()
-                vendors = fetch_purchase_vendor_options(date_from, date_to)
-                if selected_branch not in {row['code'] for row in branches}:
-                    selected_branch = ''
-                if selected_vendor not in {row['code'] for row in vendors}:
-                    # أبقِ كود المورد حتى لو لم يظهر في قائمة الفترة
-                    pass
+            try:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    vendors = fetch_purchase_vendor_options(date_from, date_to)
+                    if selected_branch not in {row['code'] for row in branches}:
+                        selected_branch = ''
+            except Exception as opt_exc:  # noqa: BLE001
+                logger.warning(
+                    'browse_vendor_turnover options failed: %s', opt_exc
+                )
         else:
             # التقرير يعمل باستعلامات متوازية (اتصالات مستقلة) — خارج جلسة واحدة
-            report = build_vendor_turnover(
-                date_from,
-                date_to,
-                branch_code=selected_branch,
-                vendor_code=selected_vendor,
-            )
+            try:
+                report = build_vendor_turnover(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    vendor_code=selected_vendor,
+                )
+            except Exception as turn_exc:  # noqa: BLE001
+                cached = peek_vendor_turnover(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    vendor_code=selected_vendor,
+                )
+                # #region agent log
+                _agent_dbg(
+                    'VT3',
+                    'views.py:browse_vendor_turnover:fail',
+                    'turnover build failed',
+                    {
+                        'exc_type': type(turn_exc).__name__,
+                        'is_timeout': _is_connect_timeout(turn_exc),
+                        'is_disconnect': _is_disconnect_error(turn_exc),
+                        'has_cache': cached is not None,
+                        'friendly': _friendly_connect_error(turn_exc)[:120],
+                    },
+                )
+                # #endregion
+                if cached is not None and (
+                    _is_connect_timeout(turn_exc)
+                    or _is_disconnect_error(turn_exc)
+                ):
+                    report = cached
+                    error = (
+                        'تعذّر الاتصال بأوراكل — عرض أرقام محفوظة مسبقاً. '
+                        'تحقق من VPN/الإنترنت ثم حدّث الصفحة.'
+                    )
+                elif _is_connect_timeout(turn_exc) or _is_disconnect_error(
+                    turn_exc
+                ):
+                    # إعادة محاولة واحدة بعد تصفير المجمّع — الشبكة غالباً متقطعة
+                    import time
+
+                    from .oracle_stock import _reset_pool
+
+                    _reset_pool()
+                    time.sleep(1.5)
+                    # #region agent log
+                    _agent_dbg(
+                        'VT5',
+                        'views.py:browse_vendor_turnover:retry',
+                        'retrying turnover after timeout',
+                        {
+                            'date_from': date_from.isoformat(),
+                            'date_to': date_to.isoformat(),
+                        },
+                    )
+                    # #endregion
+                    try:
+                        report = build_vendor_turnover(
+                            date_from,
+                            date_to,
+                            branch_code=selected_branch,
+                            vendor_code=selected_vendor,
+                        )
+                        # #region agent log
+                        _agent_dbg(
+                            'VT6',
+                            'views.py:browse_vendor_turnover:retry_ok',
+                            'retry succeeded',
+                            {
+                                'rows': len((report or {}).get('rows') or []),
+                            },
+                        )
+                        # #endregion
+                    except Exception as retry_exc:  # noqa: BLE001
+                        # #region agent log
+                        _agent_dbg(
+                            'VT7',
+                            'views.py:browse_vendor_turnover:retry_fail',
+                            'retry failed',
+                            {
+                                'exc_type': type(retry_exc).__name__,
+                                'is_timeout': _is_connect_timeout(retry_exc),
+                            },
+                        )
+                        # #endregion
+                        raise retry_exc from turn_exc
+                else:
+                    raise
             if selected_decision and report:
                 report = apply_decision_filter(report, selected_decision)
             if want_excel and report is not None:
                 return build_vendor_turnover_excel(report)
-            with oracle_session():
-                branches = fetch_income_branches()
-                vendors = fetch_purchase_vendor_options(date_from, date_to)
-                if selected_branch not in {row['code'] for row in branches}:
-                    selected_branch = ''
-                if selected_vendor not in {row['code'] for row in vendors}:
-                    selected_vendor = ''
+            try:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    vendors = fetch_purchase_vendor_options(date_from, date_to)
+                    if selected_branch not in {row['code'] for row in branches}:
+                        selected_branch = ''
+                    if selected_vendor not in {row['code'] for row in vendors}:
+                        selected_vendor = ''
+            except Exception as opt_exc:  # noqa: BLE001
+                logger.warning(
+                    'browse_vendor_turnover options failed: %s', opt_exc
+                )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_vendor_turnover failed: %s', exc)
+        # #region agent log
+        try:
+            from .oracle_stock import _agent_dbg, _is_connect_timeout
+
+            _agent_dbg(
+                'VT4',
+                'views.py:browse_vendor_turnover:outer',
+                'outer failure',
+                {
+                    'exc_type': type(exc).__name__,
+                    'is_timeout': _is_connect_timeout(exc),
+                    'msg': str(exc)[:160],
+                },
+            )
+        except Exception:
+            pass
+        # #endregion
         error = f'تعذّر حساب دوران الموردين: {exc}'
-        report = None
-        item_detail = None
 
     back_qs = {
         'date_from': date_from.isoformat(),
@@ -2169,6 +2331,387 @@ def browse_income(request):
             'branches': branches,
             'cost_centers': cost_centers,
             'statement': statement,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_trial_balance(request):
+    """ميزان المراجعة — أرصدة نهائية / تفصيلي تحليلي من قيود أوراكل."""
+    from datetime import date as date_cls
+    from datetime import datetime
+
+    error = ''
+    report = None
+    branches: list[dict] = []
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    view_raw = str(request.GET.get('view') or 'summary').strip().lower()
+    if view_raw in {
+        'detail',
+        'detailed',
+        'movement',
+        'movements',
+        'حركة',
+        'تفصيلي',
+    }:
+        view_mode = 'detail'
+    elif view_raw in {
+        'analytic',
+        'analytical',
+        'تحليلي',
+    }:
+        view_mode = 'analytic'
+    else:
+        view_mode = 'summary'
+    posted_raw = request.GET.get('posted')
+    if posted_raw is None:
+        posted_only = False
+    else:
+        posted_only = str(posted_raw).strip() in ('1', 'true', 'yes', 'on')
+    hide_zero = str(request.GET.get('hide_zero') or '1').strip() not in (
+        '0',
+        'false',
+        'no',
+        'off',
+    )
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+
+    today = date_cls.today()
+    year_start = today.replace(month=1, day=1)
+
+    def parse_one(raw: str | None, fallback: date_cls) -> date_cls:
+        text = (raw or '').strip()
+        if not text:
+            return fallback
+        try:
+            return datetime.strptime(text[:10], '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValidationError('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.') from exc
+
+    try:
+        date_from = parse_one(request.GET.get('date_from'), year_start)
+        date_to = parse_one(request.GET.get('date_to'), today)
+        if date_from > date_to:
+            raise ValidationError('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.')
+        if (date_to - date_from).days > 366:
+            raise ValidationError('الفترة القصوى سنة واحدة.')
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_trial_balance.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': year_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'posted_only': posted_only,
+                'hide_zero': hide_zero,
+                'view_mode': view_mode,
+                'branches': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_stock import (
+            _friendly_connect_error,
+            _is_connect_timeout,
+            _is_disconnect_error,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_trial_balance import (
+            build_trial_balance,
+            build_trial_balance_excel,
+            fetch_income_branches,
+            peek_trial_balance,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض ميزان المراجعة.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                branch_codes = {b['code'] for b in branches}
+                if selected_branch and selected_branch not in branch_codes:
+                    selected_branch = ''
+                # #region agent log
+                try:
+                    import json as _json
+                    import time as _time
+                    from pathlib import Path as _Path
+
+                    _Path('debug-e1de1c.log').open('a', encoding='utf-8').write(
+                        _json.dumps(
+                            {
+                                'sessionId': 'e1de1c',
+                                'runId': 'tb-detail',
+                                'hypothesisId': 'H1',
+                                'location': 'views.browse_trial_balance:entry',
+                                'message': 'trial balance request',
+                                'data': {
+                                    'view_mode': view_mode,
+                                    'branch': selected_branch,
+                                    'date_from': date_from.isoformat(),
+                                    'date_to': date_to.isoformat(),
+                                    'hide_zero': hide_zero,
+                                    'posted_only': posted_only,
+                                    'excel': want_excel,
+                                },
+                                'timestamp': int(_time.time() * 1000),
+                            },
+                            ensure_ascii=False,
+                        )
+                        + '\n'
+                    )
+                except Exception:
+                    pass
+                # #endregion
+                try:
+                    report = build_trial_balance(
+                        date_from,
+                        date_to,
+                        branch_code=selected_branch,
+                        posted_only=posted_only,
+                        hide_zero=hide_zero,
+                        mode=view_mode,
+                        use_cache=False,
+                    )
+                except Exception as tb_exc:  # noqa: BLE001
+                    cached = peek_trial_balance(
+                        date_from,
+                        date_to,
+                        branch_code=selected_branch,
+                        posted_only=posted_only,
+                        hide_zero=hide_zero,
+                        mode=view_mode,
+                    )
+                    if cached is not None and (
+                        _is_connect_timeout(tb_exc)
+                        or _is_disconnect_error(tb_exc)
+                    ):
+                        report = cached
+                        error = (
+                            'تعذّر الاتصال بأوراكل — عرض ميزان محفوظ مسبقاً. '
+                            'تحقق من VPN/الإنترنت ثم حدّث الصفحة.'
+                        )
+                    else:
+                        raise
+                # #region agent log
+                try:
+                    import json as _json
+                    import time as _time
+                    from pathlib import Path as _Path
+
+                    _tot = (report or {}).get('totals') or {}
+                    _rows = (report or {}).get('rows') or []
+                    _sample = _rows[0] if _rows else {}
+                    _Path('debug-e1de1c.log').open('a', encoding='utf-8').write(
+                        _json.dumps(
+                            {
+                                'sessionId': 'e1de1c',
+                                'runId': 'post-fix',
+                                'hypothesisId': 'H-match',
+                                'location': 'views.browse_trial_balance:result',
+                                'message': 'trial balance built',
+                                'data': {
+                                    'mode': (report or {}).get('mode'),
+                                    'row_count': _tot.get('row_count'),
+                                    'debit': _tot.get('debit_display'),
+                                    'credit': _tot.get('credit_display'),
+                                    'balanced': _tot.get('balanced'),
+                                    'balance': _tot.get('balance_display'),
+                                    'onix_target': '3892413.34',
+                                    'gap_vs_onix': round(
+                                        3892413.34 - float(_tot.get('debit') or 0),
+                                        2,
+                                    ),
+                                    'sample_dtl': {
+                                        'account_code': _sample.get('account_code'),
+                                        'dtl_code': _sample.get('dtl_code'),
+                                        'dtl_name': (_sample.get('dtl_name') or '')[:40],
+                                        'dtl_typ': _sample.get('dtl_typ'),
+                                    }
+                                    if view_mode == 'detail'
+                                    else None,
+                                },
+                                'timestamp': int(_time.time() * 1000),
+                            },
+                            ensure_ascii=False,
+                        )
+                        + '\n'
+                    )
+                except Exception:
+                    pass
+                # #endregion
+            if want_excel and report is not None:
+                return build_trial_balance_excel(report)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_trial_balance failed: %s', exc)
+        # #region agent log
+        try:
+            import json as _json
+            import time as _time
+            from pathlib import Path as _Path
+
+            _Path('debug-e1de1c.log').open('a', encoding='utf-8').write(
+                _json.dumps(
+                    {
+                        'sessionId': 'e1de1c',
+                        'runId': 'tb-detail',
+                        'hypothesisId': 'H3',
+                        'location': 'views.browse_trial_balance:error',
+                        'message': 'trial balance failed',
+                        'data': {'error': str(exc)[:300], 'view_mode': view_mode},
+                        'timestamp': int(_time.time() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + '\n'
+            )
+        except Exception:
+            pass
+        # #endregion
+        try:
+            from .oracle_stock import _friendly_connect_error
+
+            error = f'تعذّر تحميل ميزان المراجعة: {_friendly_connect_error(exc)}'
+        except Exception:
+            error = f'تعذّر تحميل ميزان المراجعة: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_trial_balance.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': year_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'posted_only': posted_only,
+            'hide_zero': hide_zero,
+            'view_mode': view_mode,
+            'branches': branches,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_expense_dist(request):
+    """توزيع المصاريف على الأقسام — مراكز التكلفة 202–240."""
+    from datetime import date as date_cls
+    from datetime import datetime
+
+    error = ''
+    report = None
+    branches: list[dict] = []
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    posted_raw = request.GET.get('posted')
+    if posted_raw is None:
+        posted_only = False
+    else:
+        posted_only = str(posted_raw).strip() in ('1', 'true', 'yes', 'on')
+    hide_zero_raw = request.GET.get('hide_zero')
+    if hide_zero_raw is None:
+        hide_zero = True
+    else:
+        hide_zero = str(hide_zero_raw).strip() in ('1', 'true', 'yes', 'on')
+    view_mode = str(request.GET.get('view') or 'summary').strip().lower()
+    if view_mode not in ('summary', 'detail'):
+        view_mode = 'summary'
+
+    today = date_cls.today()
+    year_start = today.replace(month=1, day=1)
+
+    def parse_one(raw: str | None, fallback: date_cls) -> date_cls:
+        text = (raw or '').strip()
+        if not text:
+            return fallback
+        try:
+            return datetime.strptime(text[:10], '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValidationError('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.') from exc
+
+    try:
+        date_from = parse_one(request.GET.get('date_from'), year_start)
+        date_to = parse_one(request.GET.get('date_to'), today)
+        if date_from > date_to:
+            raise ValidationError('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.')
+        if (date_to - date_from).days > 366:
+            raise ValidationError('الفترة القصوى سنة واحدة.')
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_expense_dist.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': year_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'posted_only': posted_only,
+                'hide_zero': hide_zero,
+                'view_mode': view_mode,
+                'branches': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_expense_dist import build_expense_distribution
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض توزيع المصاريف.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                branch_codes = {b['code'] for b in branches}
+                if selected_branch and selected_branch not in branch_codes:
+                    selected_branch = ''
+                report = build_expense_distribution(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    posted_only=posted_only,
+                    hide_zero=hide_zero,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_expense_dist failed: %s', exc)
+        error = f'تعذّر تحميل توزيع المصاريف: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_expense_dist.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': year_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'posted_only': posted_only,
+            'hide_zero': hide_zero,
+            'view_mode': view_mode,
+            'branches': branches,
+            'report': report,
             'error': error,
         },
     )

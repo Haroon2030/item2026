@@ -2144,7 +2144,7 @@ body.login-body {
 }
 
 .table-wrap::after {
-  content: "مرّر الجدول أفقياً لرؤية كل الأعمدة ←";
+  content: "???? ?????? ?????? ????? ?? ??????? ?";
   display: block;
   padding: 0.45rem 1rem 0.7rem;
   color: #5b7394;
@@ -4038,7 +4038,7 @@ body.sales-dash-body .app-backdrop {
 
 .dash-sellers .seller-meta-code::before,
 .dash-top-items .seller-meta-code::before {
-  content: "·";
+  content: "?";
   margin-inline-end: 0.35rem;
   color: #a0b2c8;
 }
@@ -10056,6 +10056,12 @@ html.users-modal-open {
   color: #b34040;
 }
 
+.income-account-foot-table tr.income-tfoot-net.is-down td.income-foot-num,
+.trial-balance-dash .income-account-foot-table tr.income-tfoot-net.is-down td.mono {
+  color: #c62828 !important;
+  font-weight: 800;
+}
+
 .income-tfoot-net-amt {
   text-align: center;
   white-space: nowrap;
@@ -12572,5 +12578,443 @@ a.sidebar-brand-lockup {
   .welcome-card {
     animation: none;
     transition: none;
+  }
+}
+
+/* ????? ???????? ? ???? ??????? ????? ????? ????? */
+/* ????? ???????? ? ???? ????? ????? */
+.trial-balance-dash .tb-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.65rem 0.85rem;
+}
+
+.trial-balance-dash .tb-filter-bar .income-filter-bar-main {
+  display: grid;
+  grid-template-columns:
+    minmax(15.5rem, 1.35fr)
+    minmax(8.5rem, 1fr)
+    minmax(7.5rem, 0.9fr)
+    minmax(6.5rem, 0.75fr)
+    minmax(5.5rem, 0.65fr);
+  align-items: end;
+  gap: 0.55rem 0.7rem;
+  flex: unset;
+}
+
+.trial-balance-dash .tb-filter-bar .income-filter-field select,
+.trial-balance-dash .tb-filter-bar .income-filter-field input[type="date"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.trial-balance-dash .tb-filter-bar .income-filter-period-fields {
+  width: 100%;
+}
+
+.trial-balance-dash .tb-filter-bar .income-filter-period-fields .income-filter-field {
+  flex: 1 1 0;
+}
+
+.trial-balance-dash .tb-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.trial-balance-dash .tb-excel-btn {
+  min-height: 2.35rem;
+  padding-inline: 0.95rem;
+  font-weight: 700;
+  border: 1px solid #86efac;
+  background: #ecfdf5;
+  color: #166534;
+  border-radius: 0.65rem;
+}
+
+@media (max-width: 1100px) {
+  .trial-balance-dash .tb-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .trial-balance-dash .tb-filter-bar .income-filter-bar-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trial-balance-dash .tb-filter-bar .income-filter-period {
+    grid-column: 1 / -1;
+  }
+
+  .trial-balance-dash .tb-filter-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .trial-balance-dash .tb-filter-bar .income-filter-bar-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.trial-balance-dash .income-account-shell {
+  overflow: hidden;
+}
+
+.trial-balance-dash .tb-main-scroll {
+  max-height: min(58vh, 600px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.trial-balance-dash .tb-income-table {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.page.sales-dash.trial-balance-dash .tb-income-table thead th,
+.trial-balance-dash .dash-panel-glass .tb-income-table thead th,
+.trial-balance-dash .tb-income-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  color: #12345f;
+  font-weight: 800;
+  opacity: 1 !important;
+  background: #dbe8f8 !important;
+  background-color: #dbe8f8 !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-clip: border-box !important;
+  box-shadow: 0 1px 0 #9eb6d4;
+}
+
+.page.sales-dash.trial-balance-dash .tb-income-table thead th::after,
+.trial-balance-dash .tb-income-table thead th::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #dbe8f8;
+  pointer-events: none;
+}
+
+.trial-balance-dash .tb-income-table th,
+.trial-balance-dash .tb-income-table td {
+  white-space: nowrap;
+}
+
+.trial-balance-dash .tb-income-table .income-name-cell {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trial-balance-dash .tb-analytic-table {
+  min-width: 58rem;
+}
+
+.trial-balance-dash .tb-detail-table {
+  min-width: 72rem;
+}
+
+.trial-balance-dash .tb-analytic-table .tb-dtl-code-cell {
+  color: #1d4f91;
+  font-weight: 800;
+}
+
+.trial-balance-dash .tb-col-branch {
+  width: 8.5rem;
+}
+
+.trial-balance-dash .tb-b-code {
+  display: inline-block;
+  margin-inline-start: 0.25rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #1d4f91;
+  background: #e4eefb;
+}
+
+.trial-balance-dash .tb-corrupt-badge {
+  display: inline-block;
+  margin-inline-start: 0.3rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #8a1f1f;
+  background: #f8dede;
+  border: 1px solid #e7b0b0;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.trial-balance-dash .tb-row-corrupt td {
+  background: #fff5f5;
+}
+
+.trial-balance-dash .tb-row-corrupt .mono {
+  color: #7a1d1d;
+  font-weight: 700;
+}
+
+.trial-balance-dash .tb-corrupt-banner {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid #e7b0b0;
+  background: #fff1f1;
+  color: #7a1d1d;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.trial-balance-dash .income-account-foot {
+  overflow-x: auto;
+}
+
+.trial-balance-dash .income-account-foot-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.trial-balance-dash .income-accounts-head .income-scope-filter {
+  flex-wrap: wrap;
+}
+
+.trial-balance-dash .tb-panel-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  padding-bottom: 0.75rem;
+}
+
+.trial-balance-dash .tb-panel-head-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.trial-balance-dash .tb-panel-head-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.trial-balance-dash .tb-panel-head-copy h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.trial-balance-dash .tb-panel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  margin: 0.28rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #5a7394;
+  line-height: 1.4;
+}
+
+.trial-balance-dash .tb-meta-sep {
+  opacity: 0.55;
+}
+
+.trial-balance-dash .tb-panel-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(8.5rem, 0.9fr) auto;
+  gap: 0.55rem;
+  align-items: end;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #d5e2f0;
+  border-radius: 10px;
+  background: #f4f8fd;
+}
+
+.trial-balance-dash .tb-tool-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.trial-balance-dash .tb-tool-label {
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: #6a829e;
+  letter-spacing: 0.02em;
+}
+
+.trial-balance-dash .tb-tool-field select {
+  width: 100%;
+  height: 2.05rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid #c5d5e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #12345f;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.trial-balance-dash .tb-tool-submit {
+  height: 2.05rem;
+  padding: 0 1rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .trial-balance-dash .tb-panel-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .trial-balance-dash .tb-tool-submit {
+    width: 100%;
+  }
+}
+
+.trial-balance-dash .income-rank-row.is-debit .income-rank-amt {
+  color: #9a3412;
+}
+
+.trial-balance-dash .income-rank-row.is-credit .income-rank-amt {
+  color: #0b7a45;
+}
+
+.trial-balance-dash .income-rank-row.is-balanced .income-rank-amt {
+  color: #1d4f91;
+}
+
+.trial-balance-dash .income-rank-row.is-debit .income-rank-fill {
+  background: linear-gradient(90deg, #f0a060, #c2410c);
+}
+
+.trial-balance-dash .income-rank-row.is-credit .income-rank-fill {
+  background: linear-gradient(90deg, #2bc978, #1a9a55);
+}
+
+.trial-balance-dash .income-rank-row.is-balanced .income-rank-fill {
+  background: linear-gradient(90deg, #7eb6ef, #2f6fbd);
+}
+
+/* ?? ????? ???????? ??? ??????? ?? */
+.expense-dist-dash .ed-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.expense-dist-dash .ed-kpi-top .dash-kpi-hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.expense-dist-dash .ed-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.expense-dist-dash .ed-filter .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 8.5rem;
+}
+
+.expense-dist-dash .ed-filter .field label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #3a5578;
+}
+
+.expense-dist-dash .ed-filter .field input,
+.expense-dist-dash .ed-filter .field select {
+  min-height: 2.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #c5d4e8;
+  border-radius: 0.55rem;
+  background: #fff;
+  font: inherit;
+  color: #12345f;
+}
+
+.expense-dist-dash .ed-panel {
+  margin-bottom: 1.25rem;
+}
+
+.expense-dist-dash .ed-scroll {
+  max-height: min(70vh, 42rem);
+  overflow: auto;
+}
+
+.expense-dist-dash .ed-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.expense-dist-dash .ed-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #e8f0fa;
+  color: #12345f;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.expense-dist-dash .ed-num {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+
+.expense-dist-dash .ed-bar-cell {
+  min-width: 7rem;
+  vertical-align: middle;
+}
+
+.expense-dist-dash .ed-bar {
+  display: block;
+  height: 0.55rem;
+  width: var(--pct, 0%);
+  max-width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2f6fed, #5b8def);
+}
+
+.expense-dist-dash .ed-total-row td {
+  font-weight: 800;
+  background: #e8f0fa;
+  border-top: 2px solid #9bb6d6;
+}
+
+@media (max-width: 900px) {
+  .expense-dist-dash .ed-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

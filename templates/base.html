@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-app-ver="{{ app_client_version }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <title>{% block title %}منصة التحليل{% endblock %}</title>
   <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/static/img/favicon.ico" sizes="any">
@@ -12,8 +14,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Tajawal:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=360">
-  <link rel="stylesheet" href="/static/css/theme-v2.css?v=47">
+  <link rel="stylesheet" href="/static/css/style.css?v={{ app_client_version }}">
+  <link rel="stylesheet" href="/static/css/theme-v2.css?v={{ app_client_version }}">
+  <script src="/static/js/force-refresh.js?v={{ app_client_version }}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <script>
@@ -155,13 +158,13 @@
           </div>
         </div>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_suppliers' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_trial_balance' or request.resolver_match.url_name == 'browse_expense_dist' or request.resolver_match.url_name == 'browse_suppliers' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_suppliers' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_trial_balance' or request.resolver_match.url_name == 'browse_expense_dist' or request.resolver_match.url_name == 'browse_suppliers' %}true{% else %}false{% endif %}"
             title="المالية"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -172,6 +175,14 @@
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_income' %}is-active{% endif %}" href="{% url 'browse_income' %}" title="قائمة الدخل">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V9M12 16V5M17 16v-3"/><path d="M4 5h16"/></svg>
               <span>قائمة الدخل</span>
+            </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_trial_balance' %}is-active{% endif %}" href="{% url 'browse_trial_balance' %}" title="ميزان المراجعة">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/><path d="M16 16l2 2 4-4"/></svg>
+              <span>ميزان المراجعة</span>
+            </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_expense_dist' %}is-active{% endif %}" href="{% url 'browse_expense_dist' %}" title="توزيع المصاريف على الأقسام">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V10M12 16V6M17 16v-5"/><circle cx="7" cy="7" r="1.5"/><circle cx="12" cy="4" r="1.5"/><circle cx="17" cy="9" r="1.5"/></svg>
+              <span>توزيع المصاريف</span>
             </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_suppliers' %}is-active{% endif %}" href="{% url 'browse_suppliers' %}" title="الموردون">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -216,7 +227,7 @@
     </main>
   </div>
 
-  <script src="/static/js/sidebar.js?v=2" defer></script>
+  <script src="/static/js/sidebar.js?v={{ app_client_version }}" defer></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

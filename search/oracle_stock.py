@@ -246,9 +246,10 @@ def _merge_group_total_parts(parts: list, *, by_branch: bool) -> list[dict]:
 
 
 def _is_connect_timeout(exc: BaseException) -> bool:
-    text = str(exc or "").upper()
-    return any(
-        token in text
+    text = str(exc or "")
+    upper = text.upper()
+    if any(
+        token in upper
         for token in (
             "ORA-12170",
             "ORA-12541",
@@ -263,13 +264,25 @@ def _is_connect_timeout(exc: BaseException) -> bool:
             "CONNECTION REFUSED",
             "NETWORK",
         )
+    ):
+        return True
+    # رسائل الواجهة العربية بعد التحويل عبر _friendly_connect_error
+    return any(
+        token in text
+        for token in (
+            "مهلة الشبكة",
+            "انتهت مهلة",
+            "تعذّر الاتصال بأوراكل",
+            "تعذر الاتصال بأوراكل",
+        )
     )
 
 
 def _is_disconnect_error(exc: BaseException) -> bool:
-    text = str(exc or "").upper()
-    return any(
-        token in text
+    text = str(exc or "")
+    upper = text.upper()
+    if any(
+        token in upper
         for token in (
             "DPY-1001",
             "DPI-1010",
@@ -283,7 +296,9 @@ def _is_disconnect_error(exc: BaseException) -> bool:
             "CONNECTION WAS CLOSED",
             "NOT LOGGED ON",
         )
-    )
+    ):
+        return True
+    return "انقطع الاتصال بأوراكل" in text
 
 
 def _friendly_connect_error(exc: BaseException) -> str:
@@ -298,14 +313,16 @@ def _friendly_connect_error(exc: BaseException) -> str:
 
 
 def _connect_kwargs() -> dict:
-    """خيارات اتصال مشتركة للمجمّع والاتصال المباشر — بلا إعادة محاولة لتفادي البطء."""
+    """خيارات اتصال مشتركة للمجمّع والاتصال المباشر."""
     cfg = _cfg()
     tcp_timeout = max(5, int(cfg.get("TCP_CONNECT_TIMEOUT") or 20))
     call_ms = max(30_000, int(cfg.get("CALL_TIMEOUT_MS") or 120_000))
+    retry_count = max(0, min(5, int(cfg.get("RETRY_COUNT") or 0)))
+    retry_delay = max(0, min(10, int(cfg.get("RETRY_DELAY") or 0)))
     return {
         "tcp_connect_timeout": tcp_timeout,
-        "retry_count": 0,
-        "retry_delay": 0,
+        "retry_count": retry_count,
+        "retry_delay": retry_delay,
         "call_timeout_ms": call_ms,
     }
 
@@ -590,39 +607,67 @@ def _get_pool():
 
 
 def _connect():
-    """اتصال أوراكل مرة واحدة — بلا حلقات إعادة محاولة."""
+    """اتصال أوراكل مع إعادة محاولة قصيرة عند مهلة الشبكة/VPN."""
+    import time
+
     import oracledb
 
     opts = _connect_kwargs()
-    pool = _get_pool()
-    if pool is not None:
+    retries = int(opts.get("retry_count") or 0)
+    delay = float(opts.get("retry_delay") or 0)
+    last_exc: BaseException | None = None
+
+    for attempt in range(retries + 1):
+        pool = _get_pool()
+        if pool is not None:
+            try:
+                conn = pool.acquire()
+                setattr(conn, "_from_pool", True)
+                setattr(conn, "_pool_ref", pool)
+                _apply_call_timeout(conn)
+                return conn
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning(
+                    "Oracle pool acquire failed (attempt %s/%s): %s",
+                    attempt + 1,
+                    retries + 1,
+                    exc,
+                )
+                if _is_connect_timeout(exc) or _is_disconnect_error(exc):
+                    _reset_pool()
+                else:
+                    break
         try:
-            conn = pool.acquire()
-            setattr(conn, "_from_pool", True)
-            setattr(conn, "_pool_ref", pool)
+            user, password, dsn = _oracle_dsn()
+            conn = oracledb.connect(
+                user=user,
+                password=password,
+                dsn=dsn,
+                tcp_connect_timeout=opts["tcp_connect_timeout"],
+                retry_count=0,
+                retry_delay=0,
+            )
+            setattr(conn, "_from_pool", False)
+            setattr(conn, "_pool_ref", None)
             _apply_call_timeout(conn)
             return conn
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Oracle pool acquire failed: %s", exc)
-            if _is_connect_timeout(exc):
-                _reset_pool()
-    try:
-        user, password, dsn = _oracle_dsn()
-        conn = oracledb.connect(
-            user=user,
-            password=password,
-            dsn=dsn,
-            tcp_connect_timeout=opts["tcp_connect_timeout"],
-            retry_count=0,
-            retry_delay=0,
-        )
-        setattr(conn, "_from_pool", False)
-        setattr(conn, "_pool_ref", None)
-        _apply_call_timeout(conn)
-        return conn
-    except Exception as exc:  # noqa: BLE001
-        raise OracleStockError(_friendly_connect_error(exc)) from exc
+            last_exc = exc
+            logger.warning(
+                "Oracle direct connect failed (attempt %s/%s): %s",
+                attempt + 1,
+                retries + 1,
+                exc,
+            )
+            if not (_is_connect_timeout(exc) or _is_disconnect_error(exc)):
+                break
+        if attempt < retries and delay > 0:
+            time.sleep(delay)
 
+    raise OracleStockError(
+        _friendly_connect_error(last_exc or Exception("connect failed"))
+    )
 
 def _release_conn(conn) -> None:
     if conn is None:

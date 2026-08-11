@@ -26,6 +26,65 @@ from .oracle_stock import (
 _CACHE_TTL = 1800
 _PACK_CACHE_TTL = 86400
 
+
+def _turnover_cache_key(
+    d_from,
+    d_to,
+    *,
+    branch_code: str = "",
+    vendor_code: str = "",
+    limit: int = 1500,
+) -> str:
+    brn = str(branch_code or "").strip()
+    vendor = str(vendor_code or "").strip()
+    lim = max(1, min(int(limit or 1500), 5000))
+    return (
+        f"vendor:turnover:v8:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"{brn}:{vendor}:{lim}"
+    )
+
+
+def peek_vendor_turnover(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    vendor_code: str = "",
+    limit: int = 1500,
+) -> dict[str, Any] | None:
+    """قراءة تقرير دوران محفوظ دون الاتصال بأوراكل."""
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    cached = cache.get(
+        _turnover_cache_key(
+            d_from,
+            d_to,
+            branch_code=branch_code,
+            vendor_code=vendor_code,
+            limit=limit,
+        )
+    )
+    return cached if isinstance(cached, dict) else None
+
+
+def peek_vendor_item_detail(
+    date_from,
+    date_to,
+    *,
+    vendor_code: str,
+    branch_code: str = "",
+) -> dict[str, Any] | None:
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    vendor = str(vendor_code or "").strip()
+    brn = str(branch_code or "").strip()
+    cache_key = (
+        f"vendor:turnover:items:v1:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"{brn}:{vendor}"
+    )
+    cached = cache.get(cache_key)
+    return cached if isinstance(cached, dict) else None
+
 # عتبات استحقاق السداد حسب نسبة دوران الكمية
 _SETTLE_PCT = 80.0
 _PARTIAL_PCT = 40.0
@@ -501,9 +560,8 @@ def build_vendor_turnover(
     brn = str(branch_code or "").strip()
     vendor = str(vendor_code or "").strip()
     lim = max(1, min(int(limit or 1500), 5000))
-    cache_key = (
-        f"vendor:turnover:v8:{d_from.isoformat()}:{d_to.isoformat()}:"
-        f"{brn}:{vendor}:{lim}"
+    cache_key = _turnover_cache_key(
+        d_from, d_to, branch_code=brn, vendor_code=vendor, limit=lim
     )
     cached = cache.get(cache_key)
     if cached is not None:
@@ -514,7 +572,7 @@ def build_vendor_turnover(
         "d_to_excl": d_to + timedelta(days=1),
     }
 
-    # استعلامات متوازية: توريد/مرتجع/مبيعات/مرتجع مبيعات + رصيد مستحق + عبوات
+    # عمال أقل لتقليل ضغط الاتصالات على الشبكات البطيئة / VPN
     pi_rows, pr_rows, sold_rows, ret_rows, due_map, packs = _run_parallel(
         [
             lambda: _fetch_pi_rows(date_params, brn, vendor),
@@ -524,7 +582,7 @@ def build_vendor_turnover(
             lambda: _fetch_vendor_due_map(date_params, brn, vendor),
             _item_max_pack_map,
         ],
-        max_workers=6,
+        max_workers=3,
         timeout_sec=240.0,
     )
     if not isinstance(packs, dict):
@@ -716,7 +774,7 @@ def build_vendor_item_detail(
             lambda: _fetch_pos_returns(date_params, brn),
             _item_max_pack_map,
         ],
-        max_workers=5,
+        max_workers=3,
         timeout_sec=240.0,
     )
     if not isinstance(packs_all, dict):

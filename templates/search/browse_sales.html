@@ -410,8 +410,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/sales-returns-donut.js?v=2" defer></script>
-<script src="/static/js/sales-groups-loader.js?v=33" defer></script>
-<script src="/static/js/sales-top-items-loader.js?v=13" defer></script>
-<script src="/static/js/sales-top-users-loader.js?v=3" defer></script>
+<script src="/static/js/sales-returns-donut.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/sales-groups-loader.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/sales-top-items-loader.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/sales-top-users-loader.js?v={{ app_client_version }}" defer></script>
 {% endblock %}

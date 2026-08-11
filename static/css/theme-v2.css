@@ -1183,6 +1183,22 @@ select:focus {
   color: #78350f !important;
 }
 
+/* ميزان المراجعة: رأس أعمدة ثابت — خلفية معتمة بالكامل (ليست شفافة الزجاج) */
+.page.sales-dash.trial-balance-dash .tb-main-scroll thead th,
+.page.sales-dash.trial-balance-dash .dash-panel-glass .tb-income-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 8 !important;
+  background: #dbe8f8 !important;
+  background-color: #dbe8f8 !important;
+  background-image: none !important;
+  color: #12345f !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 0 #9eb6d4;
+}
+
 .page.sales-dash.inv-dash .inv-table-scroll thead th.inv-col-share {
   background: #dbeafe !important;
   color: #0c4a6e !important;

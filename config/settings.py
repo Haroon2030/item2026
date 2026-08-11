@@ -162,6 +162,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'search.context_processors.app_client',
             ],
         },
     },
@@ -221,6 +222,8 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'login'
+# غيّر القيمة (أو APP_CLIENT_VERSION في البيئة) بعد كل نشر لإجبار تحديث المتصفح
+APP_CLIENT_VERSION = _env('APP_CLIENT_VERSION', '2026.08.12.01')
 
 AUTHENTICATION_BACKENDS = [
     'search.auth_backend.UsernameOrPhoneBackend',
@@ -362,7 +365,7 @@ ORACLE = {
     'SCHEMA': _env('ORACLE_SCHEMA', ''),
     'CLIENT_LIB_DIR': _env('ORACLE_CLIENT_LIB_DIR', ''),
     # مهلة فتح TCP بالثواني — قصيرة حتى لا يعلّق الواجهة عند انقطاع VPN
-    'TCP_CONNECT_TIMEOUT': int(_env('ORACLE_TCP_CONNECT_TIMEOUT', '20') or '20'),
+    'TCP_CONNECT_TIMEOUT': int(_env('ORACLE_TCP_CONNECT_TIMEOUT', '30') or '30'),
     'RETRY_COUNT': int(_env('ORACLE_RETRY_COUNT', '3') or '3'),
     'RETRY_DELAY': int(_env('ORACLE_RETRY_DELAY', '2') or '2'),
     # دقائق: فحص الاتصالات الخاملة في المجمع

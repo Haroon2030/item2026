@@ -49,6 +49,16 @@ urlpatterns = [
     path('sales/search/', views.sales_search, name='sales_search'),
     path('sales/performance/', views.browse_performance, name='browse_performance'),
     path('income/', views.browse_income, name='browse_income'),
+    path(
+        'income/trial-balance/',
+        views.browse_trial_balance,
+        name='browse_trial_balance',
+    ),
+    path(
+        'income/expense-dist/',
+        views.browse_expense_dist,
+        name='browse_expense_dist',
+    ),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
     path('users/', user_views.user_list, name='user_list'),
     path('users/add/', user_views.user_create, name='user_create'),
