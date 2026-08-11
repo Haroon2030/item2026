@@ -12396,3 +12396,181 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   background: #e8eef6;
   font-weight: 800;
 }
+
+/* ?? ?????? ???????? (?????) ?? */
+.welcome-dash .welcome-hero {
+  display: grid;
+  gap: 1.35rem;
+  padding: 0.35rem 0 1.2rem;
+  min-height: min(72vh, 38rem);
+  align-content: center;
+}
+
+.welcome-hero-copy {
+  max-width: 40rem;
+  animation: welcome-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.welcome-kicker {
+  margin: 0 0 0.55rem;
+  font-family: "Tajawal", var(--font);
+  font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+  font-weight: 800;
+  color: #12345f;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.welcome-greeting {
+  margin: 0 0 0.85rem;
+  font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+  font-weight: 700;
+  color: #3a5578;
+  line-height: 1.35;
+}
+
+.welcome-name {
+  color: #1d4f91;
+  font-weight: 800;
+}
+
+.welcome-role-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.85rem;
+  animation: welcome-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.welcome-role-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #5b7394;
+}
+
+.welcome-role {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f7a45;
+  background: rgba(35, 178, 104, 0.14);
+  border: 1px solid rgba(140, 210, 170, 0.7);
+}
+
+.welcome-role.is-staff {
+  color: #1d4f91;
+  background: rgba(61, 124, 196, 0.14);
+  border-color: rgba(160, 190, 230, 0.75);
+}
+
+.welcome-sub {
+  margin: 0;
+  color: #5b7394;
+  font-size: 0.92rem;
+  font-weight: 600;
+  animation: welcome-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
+}
+
+.welcome-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  animation: welcome-rise 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both;
+}
+
+.welcome-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 0.95rem;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid rgba(201, 220, 240, 0.9);
+  border-radius: 16px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.92), rgba(232, 242, 252, 0.55));
+  box-shadow: 0 8px 20px rgba(29, 79, 145, 0.06);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.welcome-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(61, 124, 196, 0.45);
+  box-shadow: 0 12px 24px rgba(29, 79, 145, 0.12);
+}
+
+.welcome-card-ico {
+  width: 2.15rem;
+  height: 2.15rem;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #fff;
+  background: linear-gradient(145deg, #3d7cc4, #1d4f91);
+  margin-bottom: 0.2rem;
+}
+
+.welcome-card-ico svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.welcome-card strong {
+  font-size: 0.98rem;
+  color: #12345f;
+}
+
+.welcome-card > span:last-child {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #5b7394;
+  line-height: 1.35;
+}
+
+a.sidebar-brand-lockup {
+  text-decoration: none;
+  color: inherit;
+}
+
+@keyframes welcome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 960px) {
+  .welcome-shortcuts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .welcome-shortcuts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-hero-copy,
+  .welcome-role-line,
+  .welcome-sub,
+  .welcome-shortcuts,
+  .welcome-card {
+    animation: none;
+    transition: none;
+  }
+}

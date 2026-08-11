@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Tajawal:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=359">
+  <link rel="stylesheet" href="/static/css/style.css?v=360">
   <link rel="stylesheet" href="/static/css/theme-v2.css?v=47">
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -37,7 +37,7 @@
 
     <aside class="sidebar" id="app-sidebar" aria-label="القائمة الرئيسية">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-lockup">
+        <a class="sidebar-brand-lockup" href="{% url 'home' %}" title="الصفحة الرئيسية">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M5 19V12" />
@@ -50,7 +50,7 @@
             <p class="brand">منصة التحليل</p>
             <p class="brand-sub">لوحة التحكم</p>
           </div>
-        </div>
+        </a>
         <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-controls="app-sidebar" aria-expanded="true" aria-label="طي الشريط الجانبي" title="طي الشريط">
           <svg class="sidebar-collapse-ico" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M15 6l-6 6 6 6"/>
@@ -63,6 +63,10 @@
 
       <nav class="sidebar-nav">
         <p class="sidebar-section-label">الأقسام</p>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'home' %}is-active{% endif %}" href="{% url 'home' %}" title="الرئيسية">
+          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5L12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/></svg>
+          <span>الرئيسية</span>
+        </a>
         <div
           class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' %} is-open is-current{% endif %}"
           data-sidebar-group

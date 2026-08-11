@@ -30,6 +30,42 @@ from .validators import ValidationError, looks_like_item_code, resolve_group, re
 
 logger = logging.getLogger(__name__)
 
+
+def _welcome_user_context(user) -> dict:
+    """اسم العرض واسم الدور لشاشة الترحيب."""
+    profile = getattr(user, 'profile', None)
+    display_name = (
+        ((profile.display_name if profile else '') or '').strip()
+        or (user.first_name or '').strip()
+        or (user.username or '').strip()
+        or 'مستخدم'
+    )
+    role_name = ((profile.role_name if profile else '') or '').strip()
+    if not role_name:
+        role_name = 'مدير النظام' if user.is_staff else 'مستخدم'
+    return {
+        'display_name': display_name,
+        'role_name': role_name,
+        'is_staff': bool(user.is_staff),
+    }
+
+
+@login_required
+@never_cache
+def home(request):
+    """الصفحة الرئيسية بعد الدخول — ترحيب باسم الدور."""
+    ctx = _welcome_user_context(request.user)
+    return render(
+        request,
+        'search/home.html',
+        {
+            'display_name': ctx['display_name'],
+            'role_name': ctx['role_name'],
+            'is_staff_user': ctx['is_staff'],
+        },
+    )
+
+
 def _fetch_suppliers_safe(item_code: str) -> list[dict]:
     """جلب موردي الصنف من أوراكل (قراءة فقط) دون تعطيل نتيجة البحث عند الفشل."""
     code = str(item_code or '').strip()

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}مرحباً — منصة التحليل{% endblock %}
+{% block page_class %}sales-dash welcome-dash{% endblock %}
+{% block body_class %}sales-dash-body welcome-body{% endblock %}
+
+{% block content %}
+<section class="welcome-hero" aria-label="شاشة الترحيب">
+  <div class="welcome-hero-copy">
+    <p class="welcome-kicker">منصة التحليل</p>
+    <h1 class="welcome-greeting">
+      مرحباً{% if display_name %}، <span class="welcome-name">{{ display_name }}</span>{% endif %}
+    </h1>
+    <p class="welcome-role-line">
+      <span class="welcome-role-label">الدور</span>
+      <span class="welcome-role{% if is_staff_user %} is-staff{% endif %}">{{ role_name }}</span>
+    </p>
+    <p class="welcome-sub">اختر قسماً من القائمة أو من الاختصارات أدناه للبدء</p>
+  </div>
+
+  <nav class="welcome-shortcuts" aria-label="اختصارات سريعة">
+    <a class="welcome-card" href="{% url 'browse_sales' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+      </span>
+      <strong>المبيعات</strong>
+      <span>تحليل المبيعات والأداء</span>
+    </a>
+    <a class="welcome-card" href="{% url 'browse_inventory' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+      </span>
+      <strong>المخزون</strong>
+      <span>تحليل المخزون والمجموعات</span>
+    </a>
+    <a class="welcome-card" href="{% url 'item_search' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      </span>
+      <strong>بحث الأصناف</strong>
+      <span>بحث بالباركود أو الاسم</span>
+    </a>
+    <a class="welcome-card" href="{% url 'browse_purchases' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 9H8L6 6z"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M6 6L5 3H2"/></svg>
+      </span>
+      <strong>المشتريات</strong>
+      <span>تحليل المشتريات والموردين</span>
+    </a>
+  </nav>
+</section>
+{% endblock %}

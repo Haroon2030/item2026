@@ -89,13 +89,33 @@ class NameSearchTests(TestCase):
 
 class AuthenticationTests(TestCase):
     def test_anonymous_user_is_redirected_to_login(self):
-        response = self.client.get(reverse('item_search'))
+        response = self.client.get(reverse('home'))
 
         self.assertRedirects(
             response,
-            f"{reverse('login')}?next={reverse('item_search')}",
+            f"{reverse('login')}?next={reverse('home')}",
             fetch_redirect_response=False,
         )
+
+    def test_home_shows_role_name_after_login(self):
+        user = get_user_model().objects.create_user(
+            username='0505555555',
+            password='StrongPassword123!',
+            first_name='سارة',
+            is_staff=True,
+        )
+        UserProfile.objects.create(
+            user=user,
+            display_name='سارة',
+            phone='0505555555',
+            role_name='مدير فرع',
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'سارة')
+        self.assertContains(response, 'مدير فرع')
+        self.assertContains(response, 'منصة التحليل')
 
     def test_sync_endpoint_requires_login(self):
         response = self.client.post(reverse('sync_barcodes'))
