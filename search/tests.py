@@ -254,6 +254,7 @@ class UserManagementTests(TestCase):
             {
                 'name': 'موظف',
                 'phone': '0503333333',
+                'role_name': 'محاسب',
                 'password': 'EmployeePass123!',
             },
         )
@@ -261,6 +262,7 @@ class UserManagementTests(TestCase):
         user = get_user_model().objects.get(username='0503333333')
         self.assertEqual(user.first_name, 'موظف')
         self.assertEqual(user.profile.phone, '0503333333')
+        self.assertEqual(user.profile.role_name, 'محاسب')
 
     def test_staff_can_edit_and_delete_user(self):
         target = get_user_model().objects.create_user(
@@ -275,12 +277,14 @@ class UserManagementTests(TestCase):
             {
                 'name': 'محدث',
                 'phone': '0504444444',
+                'role_name': 'مدير فرع',
                 'password': '',
             },
         )
         self.assertRedirects(response, reverse('user_list'))
         target.refresh_from_db()
         self.assertEqual(target.first_name, 'محدث')
+        self.assertEqual(target.profile.role_name, 'مدير فرع')
 
         response = self.client.post(reverse('user_delete', args=[target.pk]))
         self.assertRedirects(response, reverse('user_list'))

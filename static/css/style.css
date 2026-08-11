@@ -2144,7 +2144,7 @@ body.login-body {
 }
 
 .table-wrap::after {
-  content: "???? ?????? ?????? ????? ?? ??????? ?";
+  content: "مرّر الجدول أفقياً لرؤية كل الأعمدة ←";
   display: block;
   padding: 0.45rem 1rem 0.7rem;
   color: #5b7394;
@@ -4038,7 +4038,7 @@ body.sales-dash-body .app-backdrop {
 
 .dash-sellers .seller-meta-code::before,
 .dash-top-items .seller-meta-code::before {
-  content: "?";
+  content: "·";
   margin-inline-end: 0.35rem;
   color: #a0b2c8;
 }
@@ -5700,6 +5700,7 @@ html.users-modal-open {
 
 .users-field-name label { color: #1d4f91; }
 .users-field-phone label { color: #0f7a45; }
+.users-field-role label { color: #6d28d9; }
 .users-field-pass label { color: #9a5b12; }
 
 .user-form input {
@@ -5722,6 +5723,11 @@ html.users-modal-open {
 .users-field-phone input:focus {
   border-color: #23b268;
   outline: 3px solid rgba(35, 178, 104, 0.16);
+}
+
+.users-field-role input:focus {
+  border-color: #8b5cf6;
+  outline: 3px solid rgba(139, 92, 246, 0.16);
 }
 
 .users-field-pass input:focus {
@@ -5755,6 +5761,14 @@ html.users-modal-open {
 
 .users-table-wrap {
   padding: 0 0.35rem 0.55rem;
+  overflow-x: auto;
+}
+
+.users-dash .users-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .users-dash .users-table th {
@@ -5811,21 +5825,39 @@ html.users-modal-open {
 }
 
 .users-col-num {
-  width: 2.4rem;
+  width: 3.2rem;
   text-align: center;
   color: #1d4f91;
   font-weight: 800;
 }
 
-.users-dash .users-table th.users-col-num {
+.users-col-name {
+  width: 34%;
+}
+
+.users-col-role {
+  width: 22%;
+}
+
+.users-col-phone {
+  width: 18%;
+}
+
+.users-col-actions {
+  width: 9.5rem;
+}
+
+.users-dash .users-table th.users-col-num,
+.users-dash .users-table td.users-col-num {
   text-align: center;
 }
 
 .users-name {
   color: #12345f;
   font-size: 0.9rem;
-  line-height: 1;
-  max-width: 9rem;
+  line-height: 1.2;
+  min-width: 0;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -5861,6 +5893,28 @@ html.users-modal-open {
   color: #0f7a45;
   font-weight: 800;
   line-height: 1;
+}
+
+.users-role {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 1.55rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: #5b21b6;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.users-role.is-staff-role {
+  color: #1d4f91;
+  background: rgba(61, 124, 196, 0.14);
+  border-color: rgba(160, 190, 230, 0.75);
 }
 
 .users-table .actions-cell {
@@ -11642,6 +11696,29 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   font-size: 0.75rem;
   color: #64748b;
   font-weight: 600;
+}
+
+.suppliers-dash .suppliers-head-actions,
+.suppliers-dash .dash-panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
+}
+
+.suppliers-dash .suppliers-excel-form {
+  margin: 0;
+  padding: 0;
+}
+
+.suppliers-dash .suppliers-excel-btn,
+.suppliers-dash .suppliers-filter .suppliers-excel-btn {
+  min-height: 2.15rem;
+  padding-inline: 0.9rem;
+  font-weight: 700;
+  border: 1px solid #86efac;
+  background: #ecfdf5;
+  color: #166534;
 }
 
 .suppliers-dash .suppliers-scroll {

@@ -18,10 +18,31 @@ def _is_staff(user) -> bool:
 
 
 def _user_rows(request):
-    users = User.objects.select_related('profile').order_by('first_name', 'username')
+    users = list(User.objects.select_related('profile').all())
+
+    def _sort_key(user):
+        profile = getattr(user, 'profile', None)
+        name = (
+            (profile.display_name if profile else '')
+            or user.first_name
+            or user.username
+            or ''
+        ).strip()
+        # أنت أولاً · ثم المدراء · ثم حسب الاسم
+        return (
+            0 if user.pk == request.user.pk else 1,
+            0 if user.is_staff else 1,
+            name.casefold(),
+            user.username or '',
+        )
+
+    users.sort(key=_sort_key)
     rows = []
     for user in users:
         profile = getattr(user, 'profile', None)
+        role_name = ((profile.role_name if profile else '') or '').strip()
+        if not role_name:
+            role_name = 'مدير النظام' if user.is_staff else 'مستخدم'
         rows.append(
             {
                 'id': user.pk,
@@ -29,6 +50,7 @@ def _user_rows(request):
                 or user.first_name
                 or user.username,
                 'phone': (profile.phone if profile else '') or user.username,
+                'role_name': role_name,
                 'is_self': user.pk == request.user.pk,
                 'is_staff': user.is_staff,
             }

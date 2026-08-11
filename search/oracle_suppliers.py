@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
 from datetime import date, timedelta
+from html import escape
 from typing import Any
 
 from django.core.cache import cache
+from django.http import HttpResponse
 
 from .oracle_stock import (
     OracleStockError,
@@ -299,3 +302,128 @@ def build_suppliers_report(
     }
     cache.set(cache_key, payload, _CACHE_TTL)
     return payload
+
+
+def _supplier_row_kind(row: dict) -> str:
+    inv = int(row.get("invoice_count") or 0)
+    pay = int(row.get("pay_count") or 0)
+    if inv > 0 and pay > 0:
+        return "both"
+    if inv > 0:
+        return "inv_only"
+    if pay > 0:
+        return "pay_only"
+    return "none"
+
+
+def build_suppliers_excel(report: dict[str, Any]) -> HttpResponse:
+    """Excel (HTML/XML) — نفس ترتيب الجدول مع ألوان الأعمدة."""
+    rows = report.get("rows") or []
+    totals = report.get("totals") or {}
+    period = escape(str(report.get("period_label") or ""))
+    scope = str(report.get("scope") or "all")
+    scope_labels = {
+        "all": "الكل",
+        "both": "توريد وسداد معاً",
+        "inv_only": "توريد بدون سداد",
+        "pay_only": "سداد بدون توريد",
+    }
+    scope_label = escape(scope_labels.get(scope, scope))
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    buf.write(
+        "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
+        "xmlns:x=\"urn:schemas-microsoft-com:office:excel\" "
+        "xmlns=\"http://www.w3.org/TR/REC-html40\">"
+        "<head><meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>الموردون</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>"
+        "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;}"
+        "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "th.buy{background:#fdeecd;color:#92400e;}"
+        "th.stock{background:#dcedfa;color:#0c4a6e;}"
+        "th.pay{background:#d7f3e3;color:#166534;}"
+        "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
+        "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
+        "td.buy{background:#fef7e8;color:#92400e;font-weight:700;}"
+        "td.stock{background:#eef6fd;color:#0c4a6e;font-weight:700;}"
+        "td.pay{background:#eafaf0;color:#166534;font-weight:700;}"
+        "tr.both td{background:#f0fdf4;}"
+        "tr.both td.buy{background:#fef7e8;}"
+        "tr.both td.stock{background:#eef6fd;}"
+        "tr.both td.pay{background:#eafaf0;}"
+        "tr.inv_only td{background:#fefce8;}"
+        "tr.inv_only td.buy{background:#fde68a;}"
+        "tr.pay_only td{background:#eff6ff;}"
+        "tr.pay_only td.pay{background:#dbeafe;}"
+        "tr.even td{background:#f8fafc;}"
+        "tr.foot td{background:#e2e8f0;font-weight:700;}"
+        "tr.foot td.buy{background:#fdeecd;}"
+        "tr.foot td.stock{background:#dcedfa;}"
+        "tr.foot td.pay{background:#d7f3e3;}"
+        "caption{font-size:13px;font-weight:700;margin-bottom:6px;text-align:right;}"
+        ".sub{font-size:10px;color:#475569;font-weight:400;}"
+        "</style></head><body dir=\"rtl\">"
+    )
+    buf.write(
+        f"<caption>جدول الموردين — {period}"
+        f'<br><span class="sub">مرتب حسب إجمالي السداد · {scope_label}</span></caption>'
+    )
+    buf.write(
+        "<table>"
+        "<thead><tr>"
+        "<th>#</th><th>كود المورد</th><th>المورد</th>"
+        "<th>الفواتير</th><th class=\"buy\">إجمالي التوريد</th><th>آخر توريد</th>"
+        "<th>رصيد الكمية</th><th class=\"stock\">قيمة المخزون</th>"
+        "<th class=\"pay\">إجمالي السداد</th><th>آخر سداد</th>"
+        "</tr></thead><tbody>"
+    )
+    for i, row in enumerate(rows, 1):
+        kind = _supplier_row_kind(row)
+        even = " even" if i % 2 == 0 and kind == "none" else ""
+        buf.write(f'<tr class="{kind}{even}">')
+        buf.write(f'<td class="int">{i}</td>')
+        buf.write(f"<td>{escape(str(row.get('code') or ''))}</td>")
+        buf.write(f"<td>{escape(str(row.get('name') or ''))}</td>")
+        buf.write(f'<td class="int">{int(row.get("invoice_count") or 0)}</td>')
+        buf.write(
+            f'<td class="num buy">{float(row.get("purchase_total") or 0):.2f}</td>'
+        )
+        buf.write(f"<td>{escape(str(row.get('last_bill_date') or '—'))}</td>")
+        buf.write(f'<td class="num">{float(row.get("stock_qty") or 0):.2f}</td>')
+        buf.write(
+            f'<td class="num stock">{float(row.get("stock_value") or 0):.2f}</td>'
+        )
+        buf.write(f'<td class="num pay">{float(row.get("pay_total") or 0):.2f}</td>')
+        buf.write(f"<td>{escape(str(row.get('last_pay_date') or '—'))}</td>")
+        buf.write("</tr>")
+    buf.write(
+        '<tr class="foot">'
+        "<td></td><td></td><td>الإجمالي</td>"
+        f'<td class="int">{int(totals.get("invoice_count") or 0)}</td>'
+        f'<td class="num buy">{float(totals.get("purchase_total") or 0):.2f}</td>'
+        "<td>—</td><td>—</td>"
+        f'<td class="num stock">{float(totals.get("stock_value") or 0):.2f}</td>'
+        f'<td class="num pay">{float(totals.get("pay_total") or 0):.2f}</td>'
+        "<td>—</td></tr>"
+    )
+    buf.write("</tbody></table></body></html>")
+
+    safe_period = (
+        str(report.get("period_label") or "export")
+        .replace(" ", "")
+        .replace("→", "_")
+        .replace("->", "_")
+        .replace(":", "-")
+        .replace("/", "-")
+    )
+    filename = f"suppliers_{safe_period}.xls"
+    resp = HttpResponse(
+        buf.getvalue(), content_type="application/vnd.ms-excel; charset=utf-8"
+    )
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp

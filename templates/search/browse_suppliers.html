@@ -82,6 +82,9 @@
     <input id="sup-q" type="search" name="q" value="{{ q }}" placeholder="رقم أو اسم المورد" autocomplete="off">
   </div>
   <button type="submit" class="btn-primary">عرض</button>
+  {% if report %}
+    <button type="submit" class="btn-ghost suppliers-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">Excel</button>
+  {% endif %}
 </form>
 
 {% if report %}

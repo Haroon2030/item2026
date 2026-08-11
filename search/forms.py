@@ -44,6 +44,17 @@ class AppUserForm(forms.Form):
             }
         ),
     )
+    role_name = forms.CharField(
+        label='اسم الدور',
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                'placeholder': 'مثل: محاسب · مدير فرع · مشرف',
+                'autocomplete': 'organization-title',
+            }
+        ),
+    )
     password = forms.CharField(
         label='كلمة السر',
         required=False,
@@ -74,6 +85,9 @@ class AppUserForm(forms.Form):
             ).strip()
             self.fields['phone'].initial = (
                 (profile.phone if profile else '') or ''
+            ).strip()
+            self.fields['role_name'].initial = (
+                (profile.role_name if profile else '') or ''
             ).strip()
 
     def clean_name(self) -> str:
@@ -117,6 +131,16 @@ class AppUserForm(forms.Form):
             raise forms.ValidationError('هذا الرقم مستخدم كمُعرّف دخول مسبقاً.')
         return phone
 
+    def clean_role_name(self) -> str:
+        role = (self.cleaned_data.get('role_name') or '').strip()
+        if not role:
+            return ''
+        from .validators import contains_sql_injection
+
+        if contains_sql_injection(role):
+            raise forms.ValidationError('اسم الدور يحتوي رموزاً غير مسموحة.')
+        return role[:100]
+
     def clean_password(self) -> str:
         password = (self.cleaned_data.get('password') or '').strip()
         if not password:
@@ -131,6 +155,7 @@ class AppUserForm(forms.Form):
     def save(self) -> User:
         name = self.cleaned_data['name']
         phone = self.cleaned_data['phone']
+        role_name = self.cleaned_data.get('role_name') or ''
         password = self.cleaned_data.get('password') or ''
         bootstrap = _bootstrap_username()
         preserved_username = False
@@ -159,7 +184,11 @@ class AppUserForm(forms.Form):
 
         profile, _ = UserProfile.objects.update_or_create(
             user=user,
-            defaults={'phone': phone, 'display_name': name},
+            defaults={
+                'phone': phone,
+                'display_name': name,
+                'role_name': role_name,
+            },
         )
 
         # region agent log

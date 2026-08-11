@@ -1399,6 +1399,11 @@ def browse_suppliers(request):
         limit = int(request.GET.get('limit') or 5000)
     except (TypeError, ValueError):
         limit = 5000
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+    }
     report = None
     error = ''
     branches: list[dict] = []
@@ -1429,7 +1434,7 @@ def browse_suppliers(request):
     try:
         from .oracle_income import fetch_income_branches
         from .oracle_stock import oracle_enabled, oracle_session
-        from .oracle_suppliers import build_suppliers_report
+        from .oracle_suppliers import build_suppliers_excel, build_suppliers_report
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن عرض الموردين.'
@@ -1446,6 +1451,8 @@ def browse_suppliers(request):
                     scope=scope,
                     limit=limit,
                 )
+                if want_excel and report is not None:
+                    return build_suppliers_excel(report)
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_suppliers failed: %s', exc)
         error = f'تعذّر تحميل تقرير الموردين: {exc}'
