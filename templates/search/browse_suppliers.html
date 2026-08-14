@@ -139,11 +139,11 @@
               <td colspan="2">الإجمالي</td>
               <td class="mono">{{ report.totals.invoice_count_display }}</td>
               <td class="mono sup-col-buy">{% money report.totals.purchase_total_display %}</td>
-              <td class="mono">—</td>
-              <td class="mono">—</td>
+              <td></td>
+              <td></td>
               <td class="mono sup-col-stock">{% money report.totals.stock_value_display %}</td>
               <td class="mono sup-col-pay">{% money report.totals.pay_total_display %}</td>
-              <td class="mono">—</td>
+              <td></td>
             </tr>
           </tfoot>
         {% endif %}

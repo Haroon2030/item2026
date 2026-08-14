@@ -13,9 +13,16 @@
     return desktopMq.matches;
   }
 
+  function isCollapsed() {
+    return isDesktop() && document.documentElement.classList.contains("sidebar-collapsed");
+  }
+
   function setMobileOpen(open) {
     document.body.classList.toggle("sidebar-open", open);
-    if (openBtn) openBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (openBtn) {
+      openBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      openBtn.setAttribute("aria-label", open ? "إغلاق القائمة" : "فتح القائمة");
+    }
     if (scrim) {
       if (open) scrim.removeAttribute("hidden");
       else scrim.setAttribute("hidden", "");
@@ -45,8 +52,17 @@
     }
   }
 
-  // Sync early <html> class with button state
-  setCollapsed(readCollapsed());
+  function syncViewport() {
+    if (isDesktop()) {
+      setMobileOpen(false);
+      setCollapsed(readCollapsed());
+    } else {
+      setMobileOpen(false);
+      document.documentElement.classList.remove("sidebar-collapsed");
+    }
+  }
+
+  syncViewport();
 
   if (collapseBtn) {
     collapseBtn.addEventListener("click", function () {
@@ -57,7 +73,8 @@
 
   if (openBtn) {
     openBtn.addEventListener("click", function () {
-      setMobileOpen(true);
+      if (isDesktop()) return;
+      setMobileOpen(!document.body.classList.contains("sidebar-open"));
     });
   }
   if (closeBtn) {
@@ -74,25 +91,23 @@
     if (e.key === "Escape") setMobileOpen(false);
   });
 
-  function onViewportChange() {
-    if (isDesktop()) {
-      setMobileOpen(false);
-      setCollapsed(readCollapsed());
-    }
-  }
+  sidebar.querySelectorAll("a.sidebar-link").forEach(function (link) {
+    link.addEventListener("click", function () {
+      if (!isDesktop()) setMobileOpen(false);
+    });
+  });
+
   if (desktopMq.addEventListener) {
-    desktopMq.addEventListener("change", onViewportChange);
+    desktopMq.addEventListener("change", syncViewport);
   } else if (desktopMq.addListener) {
-    desktopMq.addListener(onViewportChange);
+    desktopMq.addListener(syncViewport);
   }
 
-  // أقسام فرعية في الشريط الجانبي
   sidebar.querySelectorAll("[data-sidebar-group]").forEach(function (group) {
     var toggle = group.querySelector(".sidebar-group-toggle");
     if (!toggle) return;
     toggle.addEventListener("click", function () {
-      // عند طي الشريط: افتح أول رابط فرعي بدلاً من الطي/الفتح
-      if (document.documentElement.classList.contains("sidebar-collapsed")) {
+      if (isCollapsed()) {
         var first = group.querySelector(".sidebar-sublink");
         if (first && first.href) {
           window.location.href = first.href;

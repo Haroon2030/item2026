@@ -22,6 +22,7 @@ Thumbs.db
 *.swp
 .cursor/
 .vscode/
+.client-version
 
 # تجارب مؤقتة
 _shot_*.png

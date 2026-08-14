@@ -4,6 +4,7 @@ Django settings — مع إعدادات أمان قابلة للضبط عبر ا
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -222,8 +223,48 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'login'
-# غيّر القيمة (أو APP_CLIENT_VERSION في البيئة) بعد كل نشر لإجبار تحديث المتصفح
-APP_CLIENT_VERSION = _env('APP_CLIENT_VERSION', '2026.08.12.01')
+
+
+def _ui_fingerprint() -> str:
+    """بصمة سريعة لملفات الواجهة — تتغيّر بعد أي تعديل CSS/JS/HTML."""
+    digest = hashlib.sha1()
+    for folder in (BASE_DIR / 'static', BASE_DIR / 'templates'):
+        if not folder.exists():
+            continue
+        for path in sorted(folder.rglob('*')):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in {'.css', '.js', '.html', '.svg', '.ico', '.png'}:
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            digest.update(path.relative_to(BASE_DIR).as_posix().encode())
+            digest.update(b'\0')
+            digest.update(str(int(stat.st_mtime_ns)).encode())
+            digest.update(b'\0')
+            digest.update(str(stat.st_size).encode())
+            digest.update(b'\n')
+    return digest.hexdigest()[:12]
+
+
+def _app_client_version() -> str:
+    explicit = os.environ.get('APP_CLIENT_VERSION', '').strip()
+    if explicit:
+        return explicit
+    for stamp in (Path('/tmp/app-client-version'), BASE_DIR / '.client-version'):
+        try:
+            text = stamp.read_text(encoding='utf-8').strip()
+        except OSError:
+            continue
+        if text:
+            return text
+    return _ui_fingerprint() or '1'
+
+
+# يُولَّد تلقائياً عند تشغيل حاوية الإنتاج حتى يُحدَّث المتصفح من أول دخول
+APP_CLIENT_VERSION = _app_client_version()
 
 AUTHENTICATION_BACKENDS = [
     'search.auth_backend.UsernameOrPhoneBackend',

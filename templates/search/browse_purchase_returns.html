@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}مردود المشتريات الشهري{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مردود المشتريات الشهري">
+  <div class="dash-head-copy">
+    <h2>مردود المشتريات الشهري</h2>
+    <p>مرتجعات فواتير الشراء الآجلة — فلترة بالمجموعة والفرع والبحث بالاسم، مع تصدير Excel</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات مردود المشتريات">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
+      <span class="dash-kpi-label">إجمالي المردود</span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.total_display %}</strong>
+      <span class="dash-kpi-hint">شامل الضريبة · {{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-net">
+      <span class="dash-kpi-label">صافي الأسطر</span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.line_net_display %}</strong>
+      <span class="dash-kpi-hint">كمية × سعر − خصم</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vat">
+      <span class="dash-kpi-label">الضريبة</span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.vat_amt_display %}</strong>
+      <span class="dash-kpi-hint">من رؤوس مستندات المردود</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
+      <span class="dash-kpi-label">مستندات المردود</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.doc_count }}</strong>
+      <span class="dash-kpi-hint">{{ report.kpis.line_count_display }} سطر · {{ report.kpis.item_count }} صنف</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vendors">
+      <span class="dash-kpi-label">الموردون</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.vendor_count }}</strong>
+      <span class="dash-kpi-hint">مورد في نتائج الفلتر</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
+      <span class="dash-kpi-label">إجمالي الكمية</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.qty_display }}</strong>
+      <span class="dash-kpi-hint">كمية مرتجعة</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_purchase_returns' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="pr-from">من</label>
+    <input id="pr-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="pr-to">إلى</label>
+    <input id="pr-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="pr-branch">الفرع</label>
+    <select id="pr-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="pr-group">المجموعة</label>
+    <select id="pr-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field pr-q-field">
+    <label for="pr-q">بحث بالاسم / الكود</label>
+    <input id="pr-q" type="search" name="q" value="{{ q }}" placeholder="صنف أو مورد…" maxlength="80" autocomplete="off">
+  </div>
+  {% if selected_vendor %}<input type="hidden" name="vendor" value="{{ selected_vendor }}">{% endif %}
+  <button type="submit" class="btn-primary">عرض</button>
+  <button type="submit" class="btn-ghost vt-excel-btn" name="export" value="excel" title="تصدير إلى Excel">Excel</button>
+</form>
+
+{% if report %}
+  {% if not selected_vendor %}
+  <div class="income-duo pr-returns-duo">
+  <section class="dash-panel dash-panel-glass ed-panel" aria-label="الموردون حسب المردود">
+    <div class="dash-panel-head">
+      <div>
+        <h3>الموردون حسب المردود</h3>
+        <p class="sales-ov-sub">{{ report.period_label }} · مردود آجل فقط · مرتب حسب القيمة · اضغط على المورد لعرض أصنافه · مستثنى مردود الفاتورة الكاملة</p>
+      </div>
+      <span class="result-pill"><span id="pr-vendors-loaded">{{ vendors|slice:":20"|length }}</span> من {{ vendors|length }} مورد</span>
+    </div>
+    <div class="table-wrap pr-vendors-wrap" id="pr-vendors-wrap">
+      <table class="data-table sales-table pr-returns-table pr-vendors-table" id="pr-vendors-table" aria-label="مردود المشتريات حسب المورد">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>اسم المورد</th>
+            <th>المستندات</th>
+            <th>الأصناف</th>
+            <th>الكمية</th>
+            <th class="pr-col-amt">القيمة</th>
+            <th>النسبة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in vendors %}
+            <tr class="pr-vendor-row" data-href="?date_from={{ date_from }}&date_to={{ date_to }}&branch={{ selected_branch }}&group={{ selected_group }}&q={{ q|urlencode }}&vendor={{ v.vendor_code }}" tabindex="0" role="link" aria-label="تفاصيل مردود {{ v.vendor_name }}">
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="pr-vendor" title="{{ v.vendor_code }} — {{ v.vendor_name }}">
+                {{ v.vendor_name }}
+                <small class="mono">#{{ v.vendor_code }}</small>
+              </td>
+              <td class="mono">{{ v.doc_count }}</td>
+              <td class="mono">{{ v.item_count }}</td>
+              <td class="mono">{{ v.qty_display }}</td>
+              <td class="mono pr-col-amt">{{ v.amount_display }}</td>
+              <td class="mono">{{ v.pct_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="sales-empty">لا مردود ضمن الفلتر المحدد</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if vendors %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="4">الإجمالي (حسب الفلتر)</td>
+              <td class="mono">{{ report.kpis.qty_display }}</td>
+              <td class="mono pr-col-amt">{{ report.kpis.line_net_display }}</td>
+              <td class="mono">100%</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+      <div class="pr-loader pr-done" id="pr-vendors-done" hidden>تم عرض كل الموردين</div>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel income-branch-panel pr-branch-panel" aria-label="الفروع الأكثر إرجاعًا">
+    <div class="dash-panel-head">
+      <h3>الفروع · الأكثر إرجاعًا</h3>
+      <span class="result-pill">{{ branch_rows|length }} فرع</span>
+    </div>
+    <p class="income-rank-period">{{ report.period_label }} · صافي قيمة المردود</p>
+    <div class="income-rank-chart pr-branch-rank" role="list">
+      {% for row in branch_rows %}
+        <div class="income-rank-row is-loss" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
+          <span class="income-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+          <div class="income-rank-body">
+            <div class="income-rank-head">
+              <strong class="income-rank-name" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
+              <span class="income-rank-amt mono">{{ row.amount_display }}</span>
+            </div>
+            <div class="income-rank-track" aria-hidden="true">
+              <span class="income-rank-fill"></span>
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="sales-empty">لا فروع ضمن الفترة.</p>
+      {% endfor %}
+    </div>
+  </section>
+  </div>
+  {% else %}
+  <section class="dash-panel dash-panel-glass ed-panel" aria-label="تفاصيل مردود المورد">
+    <div class="dash-panel-head">
+      <div>
+        <h3>
+          <a class="pr-back-link" href="?date_from={{ date_from }}&date_to={{ date_to }}&branch={{ selected_branch }}&group={{ selected_group }}&q={{ q|urlencode }}">→ كل الموردين</a>
+          تفاصيل مردود: {{ report.vendor_name|default:selected_vendor }}
+        </h3>
+        <p class="sales-ov-sub">{{ report.period_label }} · مرتب من الأحدث · اسحب للأسفل لتحميل المزيد</p>
+      </div>
+      <span class="result-pill"><span id="pr-loaded-count">{{ report.rows|length }}</span> من {{ report.kpis.line_count_display }} سطر</span>
+    </div>
+    <div class="table-wrap pr-returns-scroll" id="pr-returns-scroll">
+      <table class="data-table sales-table pr-returns-table" aria-label="مردود المشتريات"
+             data-api="{% url 'browse_purchase_returns_api' %}"
+             data-date-from="{{ date_from }}" data-date-to="{{ date_to }}"
+             data-branch="{{ selected_branch }}" data-group="{{ selected_group }}"
+             data-vendor="{{ selected_vendor }}"
+             data-q="{{ q }}" data-page-size="{{ report.page_size }}"
+             data-total="{{ report.kpis.line_count }}">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>التاريخ / المستند</th>
+            <th>الفرع</th>
+            <th>الصنف</th>
+            <th>المجموعة</th>
+            <th>الكمية</th>
+            <th class="pr-col-amt">القيمة</th>
+          </tr>
+        </thead>
+        <tbody id="pr-returns-body">
+          {% for row in report.rows %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="mono pr-doc">
+                {{ row.doc_date }}
+                <small class="mono">#{{ row.doc_no }}</small>
+              </td>
+              <td class="pr-branch" title="{{ row.branch_name }}">{{ row.branch_code }} — {{ row.branch_name }}</td>
+              <td class="pr-item" title="{{ row.item_name }}">
+                {{ row.item_name }}
+                <small class="mono">#{{ row.item_code }}</small>
+              </td>
+              <td class="pr-group" title="{{ row.group_name }}">{{ row.group_name }}</td>
+              <td class="mono">{{ row.qty_display }}</td>
+              <td class="mono pr-col-amt">{{ row.amount_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="sales-empty">لا مردود لهذا المورد ضمن الفلتر المحدد</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="5">إجمالي المورد</td>
+              <td class="mono">{{ report.kpis.qty_display }}</td>
+              <td class="mono pr-col-amt">{{ report.kpis.line_net_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+      <div class="pr-loader" id="pr-loader" hidden>جارٍ تحميل المزيد…</div>
+      <div class="pr-loader pr-done" id="pr-done" hidden>تم عرض كل الأسطر</div>
+    </div>
+  </section>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  <script src="/static/js/purchase-returns-loader.js?v={{ app_client_version }}" defer></script>
+{% endblock %}

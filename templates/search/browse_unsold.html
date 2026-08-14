@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}رصيد بلا مبيعات{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash unsold-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="رصيد بلا مبيعات">
+  <div class="dash-head-copy">
+    <h2>رصيد بلا حركة مبيعات</h2>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات الرصيد بلا مبيعات">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
+      <span class="dash-kpi-label">قيمة الرصيد الراكد</span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.net_display %}</strong>
+      <span class="dash-kpi-hint">كمية × متوسط التكلفة · {{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
+      <span class="dash-kpi-label">الكمية الموجودة</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.qty_display }}</strong>
+      <span class="dash-kpi-hint">رصيد المخازن المحددة بلا بيع</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
+      <span class="dash-kpi-label">الأصناف</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.item_count }}</strong>
+      <span class="dash-kpi-hint">{{ report.kpis.line_count_display }} سطر صنف×مخزن</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vendors">
+      <span class="dash-kpi-label">الفروع المتأثرة</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.branch_count }}</strong>
+      <span class="dash-kpi-hint">فرع فيه رصيد بلا مبيعات</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_unsold' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="us-from">من</label>
+    <input id="us-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="us-to">إلى</label>
+    <input id="us-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="us-branch">الفرع</label>
+    <select id="us-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="us-group">المجموعة</label>
+    <select id="us-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field pr-q-field">
+    <label for="us-q">بحث بالاسم / الكود</label>
+    <input id="us-q" type="search" name="q" value="{{ q }}" placeholder="اسم الصنف أو كوده…" maxlength="80" autocomplete="off">
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <div class="income-duo unsold-duo">
+  <section class="dash-panel dash-panel-glass ed-panel" aria-label="أصناف لها رصيد بلا مبيعات">
+    <div class="dash-panel-head">
+      <div>
+        <h3>الرصيد بلا مبيعات</h3>
+        <p class="sales-ov-sub">{{ report.period_label }} · مرتبة حسب قيمة الرصيد · اسحب داخل الجدول للنزول</p>
+      </div>
+      <span class="result-pill"><span id="us-loaded-count">{{ report.rows|length }}</span> / {{ report.kpis.line_count_display }} سطر</span>
+    </div>
+    <div class="table-wrap pr-vendors-wrap" id="us-returns-wrap">
+      <table
+        class="data-table sales-table pr-returns-table pr-vendors-table unsold-table"
+        id="us-items-table"
+        aria-label="أصناف لها رصيد بلا مبيعات"
+        data-api="{% url 'browse_unsold_api' %}"
+        data-total="{{ report.kpis.line_count }}"
+        data-page-size="{{ report.page_size }}"
+        data-date-from="{{ date_from }}"
+        data-date-to="{{ date_to }}"
+        data-branch="{{ selected_branch }}"
+        data-group="{{ selected_group }}"
+        data-q="{{ q }}"
+      >
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الصنف</th>
+            <th>المجموعة</th>
+            <th>المخزن</th>
+            <th>الفرع</th>
+            <th>الكمية</th>
+            <th class="pr-col-amt">قيمة الرصيد</th>
+          </tr>
+        </thead>
+        <tbody id="us-items-body">
+          {% for row in report.rows %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="pr-item" title="{{ row.item_name }}">
+                {{ row.item_name }}
+                <small class="mono">#{{ row.item_code }}</small>
+              </td>
+              <td class="pr-group" title="{{ row.group_name }}">{{ row.group_name }}</td>
+              <td class="pr-wh" title="{{ row.warehouse_name }}">{{ row.warehouse_code }} — {{ row.warehouse_name }}</td>
+              <td class="pr-branch" title="{{ row.branch_name }}">{{ row.branch_code }} — {{ row.branch_name }}</td>
+              <td class="mono">{{ row.qty_display }}</td>
+              <td class="mono pr-col-amt">{{ row.net_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7" class="sales-empty">لا أصناف برصيد بلا مبيعات ضمن الفلتر المحدد</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="5">الإجمالي (حسب الفلتر)</td>
+              <td class="mono">{{ report.kpis.qty_display }}</td>
+              <td class="mono pr-col-amt">{{ report.kpis.net_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+      <p id="us-loader" class="sales-ov-sub us-loader" hidden>جاري تحميل المزيد…</p>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel income-branch-panel pr-branch-panel" aria-label="الفروع حسب الرصيد بلا مبيعات">
+    <div class="dash-panel-head">
+      <h3>الفروع · الأعلى رصيدًا راكدًا</h3>
+      <span class="result-pill">{{ report.branch_rows|length }} فرع</span>
+    </div>
+    <p class="income-rank-period">{{ report.period_label }} · قيمة رصيد بلا حركة مبيعات</p>
+    <div class="income-rank-chart pr-branch-rank" role="list">
+      {% for row in report.branch_rows %}
+        <div class="income-rank-row is-loss" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
+          <span class="income-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+          <div class="income-rank-body">
+            <div class="income-rank-head">
+              <strong class="income-rank-name" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
+              <span class="income-rank-amt mono">{{ row.net_display }}</span>
+            </div>
+            <div class="income-rank-track" aria-hidden="true">
+              <span class="income-rank-fill"></span>
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="sales-empty">لا فروع ضمن الفترة.</p>
+      {% endfor %}
+    </div>
+  </section>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  <script src="/static/js/unsold-loader.js?v={{ app_client_version }}" defer></script>
+{% endblock %}

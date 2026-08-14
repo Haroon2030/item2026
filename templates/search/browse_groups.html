@@ -107,7 +107,12 @@
             — صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}
           {% endif %}
         </span>
-        <a class="btn-new-search" href="{% url 'browse_groups' %}?warehouse={{ warehouse|urlencode }}">اختيار جديد</a>
+        <div class="results-topbar-actions">
+          <a class="btn-ghost browse-excel-btn" href="{% url 'browse_groups' %}?warehouse={{ warehouse|urlencode }}&group={{ group|urlencode }}&export=excel" title="سحب كل الأصناف إلى Excel ملون">
+            Excel
+          </a>
+          <a class="btn-new-search" href="{% url 'browse_groups' %}?warehouse={{ warehouse|urlencode }}">اختيار جديد</a>
+        </div>
       </div>
 
       <div class="panel panel-blue name-results browse-results">

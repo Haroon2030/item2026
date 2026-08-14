@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}الأصول{% endblock %}
+{% block page_class %}sales-dash income-dash assets-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="الأصول">
+  <div class="dash-head-copy">
+    <h2>الأصول المسجّلة على الفروع</h2>
+    <p>سجل الأصول الثابتة حسب الفرع والمجموعة · التكلفة والإهلاك والقيمة الدفترية</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="income-kpi-grid assets-kpis" aria-label="مؤشرات الأصول">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
+        </span>
+        عدد الأصول
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.asset_count_display }}</strong>
+      <span class="dash-kpi-hint">أصل مسجّل حسب الفلتر</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </span>
+        التكلفة
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.cost_display %}</strong>
+      <span class="dash-kpi-hint">رصيد تكلفة الأصول</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-exp">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-exp" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M12 19l-4-4M12 19l4-4"/></svg>
+        </span>
+        مجمع الإهلاك
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.depr_display %}</strong>
+      <span class="dash-kpi-hint">إهلاك متراكم</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-net">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-net" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
+        </span>
+        القيمة الدفترية
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.book_display %}</strong>
+      <span class="dash-kpi-hint">{{ report.kpis.branch_count }} فرع</span>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_assets' %}" class="assets-filter dash-panel-glass" role="search">
+  <div class="assets-filter-fields">
+    <div class="field">
+      <label for="as-branch">الفرع</label>
+      <select id="as-branch" name="branch">
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="as-group">مجموعة الأصل</label>
+      <select id="as-group" name="group">
+        <option value="">كل المجموعات</option>
+        {% for g in groups %}
+          <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field assets-q-field">
+      <label for="as-q">بحث بالاسم / الكود</label>
+      <input id="as-q" type="search" name="q" value="{{ q }}" placeholder="اسم الأصل أو كوده…" maxlength="80" autocomplete="off">
+    </div>
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+  {% if report %}
+    <button type="submit" class="btn-ghost assets-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">Excel</button>
+  {% endif %}
+</form>
+
+{% if report %}
+  <div class="income-duo assets-duo">
+    <section class="dash-panel dash-panel-glass assets-list-panel" aria-label="سجل الأصول">
+      <div class="dash-panel-head">
+        <div>
+          <h3>سجل الأصول</h3>
+          <p class="sales-ov-sub">مرتبة حسب التكلفة من الأكبر إلى الأصغر · اسحب داخل الجدول للنزول</p>
+        </div>
+        <span class="result-pill">{{ report.kpis.asset_count_display }} أصل</span>
+      </div>
+      <div class="table-wrap assets-list-wrap">
+        <table class="data-table sales-table assets-table" aria-label="الأصول المسجّلة على الفروع">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الأصل</th>
+              <th>المجموعة</th>
+              <th>الفرع</th>
+              <th>تاريخ الشراء</th>
+              <th class="pr-col-amt assets-th-cost">التكلفة</th>
+              <th class="pr-col-amt assets-th-depr">الإهلاك</th>
+              <th class="pr-col-amt assets-th-book">القيمة الدفترية</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.rows %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td class="pr-item" title="{{ row.asset_name }}">
+                  {{ row.asset_name }}
+                  <small class="mono">#{{ row.asset_code }}</small>
+                </td>
+                <td class="pr-group" title="{{ row.group_name }}">{{ row.group_name }}</td>
+                <td class="pr-branch" title="{{ row.branch_name }}">{{ row.branch_code }} — {{ row.branch_name }}</td>
+                <td class="mono">{{ row.purchase_date }}</td>
+                <td class="mono pr-col-amt assets-td-cost">{{ row.cost_display }}</td>
+                <td class="mono pr-col-amt assets-td-depr">{{ row.depr_display }}</td>
+                <td class="mono pr-col-amt assets-td-book">{{ row.book_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8" class="sales-empty">لا أصول مسجّلة ضمن الفلتر المحدد</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if report.rows %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td colspan="5">الإجمالي (حسب الفلتر)</td>
+                <td class="mono pr-col-amt assets-td-cost">{{ report.kpis.cost_display }}</td>
+                <td class="mono pr-col-amt assets-td-depr">{{ report.kpis.depr_display }}</td>
+                <td class="mono pr-col-amt assets-td-book">{{ report.kpis.book_display }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass assets-branch-panel" aria-label="إحصائيات الفروع">
+      <div class="dash-panel-head">
+        <div>
+          <h3>إحصائيات الفروع</h3>
+          <p class="sales-ov-sub">من الأكبر إلى الأصغر حسب التكلفة</p>
+        </div>
+        <span class="result-pill">{{ report.branch_rows|length }} فرع</span>
+      </div>
+      <div class="assets-branch-list" role="list">
+        {% for row in report.branch_rows %}
+          <article class="assets-br-card" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
+            <span class="assets-br-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+            <div class="assets-br-body">
+              <div class="assets-br-head">
+                <strong class="assets-br-name" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
+                <span class="assets-br-count mono">{{ row.count_display }}</span>
+              </div>
+              <div class="assets-br-meta">
+                <span class="assets-chip assets-chip-cost" title="التكلفة">{{ row.cost_display }}</span>
+                <span class="assets-chip assets-chip-book" title="القيمة الدفترية">{% money row.book_display %}</span>
+                <span class="assets-chip assets-chip-depr" title="الإهلاك">{{ row.depr_display }}</span>
+              </div>
+              <div class="assets-br-track" aria-hidden="true">
+                <span class="assets-br-fill"></span>
+              </div>
+            </div>
+          </article>
+        {% empty %}
+          <p class="sales-empty">لا فروع ضمن الفلتر.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+{% endif %}
+{% endblock %}

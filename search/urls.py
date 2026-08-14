@@ -7,7 +7,23 @@ urlpatterns = [
     path('items/', views.item_search, name='item_search'),
     path('browse/', views.browse_groups, name='browse_groups'),
     path('inventory/', views.browse_inventory, name='browse_inventory'),
+    path('inventory/unsold/', views.browse_unsold, name='browse_unsold'),
+    path(
+        'inventory/unsold/api/rows/',
+        views.browse_unsold_api,
+        name='browse_unsold_api',
+    ),
     path('purchases/', views.browse_purchases, name='browse_purchases'),
+    path(
+        'purchases/returns/',
+        views.browse_purchase_returns,
+        name='browse_purchase_returns',
+    ),
+    path(
+        'purchases/returns/api/rows/',
+        views.browse_purchase_returns_api,
+        name='browse_purchase_returns_api',
+    ),
     path(
         'purchases/turnover/',
         views.browse_vendor_turnover,
@@ -48,17 +64,23 @@ urlpatterns = [
     path('suppliers/', views.browse_suppliers, name='browse_suppliers'),
     path('sales/search/', views.sales_search, name='sales_search'),
     path('sales/performance/', views.browse_performance, name='browse_performance'),
+    path(
+        'sales/no-supply/',
+        views.browse_sold_no_supply,
+        name='browse_sold_no_supply',
+    ),
+    path(
+        'sales/no-supply/api/rows/',
+        views.browse_sold_no_supply_api,
+        name='browse_sold_no_supply_api',
+    ),
     path('income/', views.browse_income, name='browse_income'),
     path(
         'income/trial-balance/',
         views.browse_trial_balance,
         name='browse_trial_balance',
     ),
-    path(
-        'income/expense-dist/',
-        views.browse_expense_dist,
-        name='browse_expense_dist',
-    ),
+    path('income/assets/', views.browse_assets, name='browse_assets'),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
     path('users/', user_views.user_list, name='user_list'),
     path('users/add/', user_views.user_create, name='user_create'),

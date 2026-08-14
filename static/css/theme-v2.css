@@ -149,13 +149,12 @@ body {
 }
 
 .sidebar-brand .brand-mark svg {
-  width: 1.2rem;
-  height: 1.2rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.85;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.sidebar-brand .brand-mark .brand-bar {
+  fill: #fff;
 }
 
 .sidebar-brand .sidebar-collapse,
@@ -2386,6 +2385,135 @@ body.inv-dash-body .app-backdrop {
   }
   .dash-head-copy h2 {
     font-size: 1.28rem;
+  }
+
+  .page,
+  .page.has-sidebar,
+  .page.sales-dash,
+  .page.sales-dash.has-sidebar,
+  .income-duo,
+  .assets-duo,
+  .sns-duo,
+  .dash-grid,
+  .dash-panel,
+  .dash-panel-glass,
+  .perf-panel,
+  .income-branch-panel,
+  .income-accounts-panel,
+  .income-account-shell {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .table-wrap,
+  .inv-table-scroll,
+  .users-table-wrap,
+  .pr-compare-table-wrap,
+  .pr-compare-sheet-wrap,
+  .margin-scroll,
+  .suppliers-scroll,
+  .assets-list-wrap,
+  .tb-main-scroll,
+  .income-account-scroll,
+  .income-analyst-scroll,
+  .income-cash-scroll,
+  .income-top-scroll,
+  .pr-returns-scroll,
+  .pr-vendors-wrap,
+  .purchase-table-scroll,
+  .sales-ov-scroll,
+  .vt-sheet-wrap,
+  .vt-table-wrap {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-gutter: auto;
+  }
+
+  .data-table,
+  .sales-table,
+  .cashier-bills-table,
+  .users-table,
+  .browse-price-table,
+  .income-account-table,
+  .perf-compare-table,
+  .pr-compare-table,
+  .tb-income-table,
+  .tb-analytic-table,
+  .tb-detail-table,
+  .assets-table,
+  .suppliers-table,
+  .pr-returns-table,
+  .pr-vendors-table {
+    min-width: 100% !important;
+    width: max-content !important;
+    max-width: none !important;
+  }
+
+  .data-table th,
+  .data-table td,
+  .sales-table th,
+  .sales-table td,
+  .cashier-bills-table th,
+  .cashier-bills-table td,
+  .income-account-table th,
+  .income-account-table td,
+  .tb-income-table th,
+  .tb-income-table td,
+  .assets-table th,
+  .assets-table td,
+  .suppliers-table th,
+  .suppliers-table td {
+    padding: 0.38rem 0.42rem !important;
+    font-size: 0.74rem !important;
+  }
+
+  .page.sales-dash .sales-table td:nth-child(2),
+  .page.sales-dash .sales-table th:nth-child(2),
+  .data-table td:nth-child(2),
+  .data-table th:nth-child(2),
+  .pr-item,
+  .suppliers-name,
+  .income-name-cell,
+  .assets-table .pr-item {
+    max-width: 11.5rem !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .data-table td.mono,
+  .data-table .sales-amt,
+  .data-table .money,
+  .sales-table td.mono,
+  .sales-table .sales-amt,
+  .sales-table .money {
+    white-space: nowrap !important;
+    overflow: visible !important;
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .data-table th,
+  .data-table td,
+  .sales-table th,
+  .sales-table td {
+    padding: 0.32rem 0.34rem !important;
+    font-size: 0.7rem !important;
+  }
+
+  .page.sales-dash .sales-table td:nth-child(2),
+  .page.sales-dash .sales-table th:nth-child(2),
+  .data-table td:nth-child(2),
+  .pr-item,
+  .suppliers-name,
+  .income-name-cell {
+    max-width: 8.5rem !important;
   }
 }
 

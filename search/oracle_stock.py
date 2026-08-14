@@ -984,29 +984,118 @@ def _pick_cost(row: dict) -> Any:
     return row.get("COST") if row.get("COST") is not None else row.get("I_CWTAVG")
 
 
+def _fmt_browse_qty(value: float) -> str:
+    text = f"{float(value):.6f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def _row_to_stock(row: dict) -> dict:
+    """صف مخزون للعرض: الكمية بوحدة أكبر عبوة؛ التكلفة كما في أونكس (I_CWTAVG لوحدة المخزون)."""
     code = str(row.get("I_CODE") or "").strip()
     qty = row.get("QTY")
     if qty is None:
         qty = row.get("AVL_QTY")
     cost = _pick_cost(row)
+    stock_unit = str(row.get("ITM_UNT") or "").strip()
+    try:
+        stock_psz = float(
+            row.get("STOCK_P_SIZE")
+            if row.get("STOCK_P_SIZE") is not None
+            else row.get("P_SIZE")
+            or 1
+        )
+    except (TypeError, ValueError):
+        stock_psz = 1.0
+    if stock_psz <= 0:
+        stock_psz = 1.0
+    try:
+        max_psz = float(row.get("MAX_P_SIZE") or 0)
+    except (TypeError, ValueError):
+        max_psz = 0.0
+    max_unit = str(row.get("MAX_UNT") or "").strip()
+
+    unit = stock_unit
+    qty_out = qty
+    stock_qty = qty  # كمية وحدة المخزون لحساب تكلفة الصنف = كما في أونكس
+    # الكمية فقط تُحوَّل لأكبر عبوة — لا نضرب التكلفة (I_CWTAVG تبقى لوحدة التخزين)
+    if max_psz > stock_psz + 1e-9 and max_unit and qty is not None:
+        try:
+            qf = float(qty)
+            base_qty = qf * stock_psz
+            stock_qty = base_qty if stock_psz != 1 else qf
+            qty_out = _fmt_browse_qty(base_qty / max_psz)
+            unit = max_unit
+        except (TypeError, ValueError):
+            pass
+
+    cost_out = "" if cost is None else str(cost).strip()
     return {
         "code": code,
         "name": str(row.get("I_NAME") or "").strip(),
-        "unit": str(row.get("ITM_UNT") or "").strip(),
-        "quantity": "" if qty is None else str(qty),
-        "avg_cost": "" if cost is None else str(cost),
-        "cost": "" if cost is None else str(cost),
+        "unit": unit,
+        "quantity": "" if qty_out is None else str(qty_out),
+        "stock_qty": "" if stock_qty is None else str(stock_qty),
+        "avg_cost": cost_out,
+        "cost": cost_out,
         "barcode": "",
         "inactive": int(row.get("INACTIVE") or 0),
+        "pack_size": max_psz if max_psz > stock_psz else stock_psz,
         "_source": "oracle",
     }
+
+
+def fetch_item_max_pack_map(item_codes: list[str] | None = None) -> dict[str, dict[str, Any]]:
+    """أكبر عبوة + اسمها لكل صنف من IAS_ITM_DTL. {code: {pack, unit}}."""
+    codes = [str(c or "").strip() for c in (item_codes or []) if str(c or "").strip()]
+    schema = _schema()
+    out: dict[str, dict[str, Any]] = {}
+    if not codes:
+        return out
+    chunk = 900
+    for i in range(0, len(codes), chunk):
+        part = codes[i : i + chunk]
+        binds = {f"c{n}": part[n] for n in range(len(part))}
+        in_list = ", ".join(f":c{n}" for n in range(len(part)))
+        rows = _fetch_all(
+            f"""
+            SELECT TO_CHAR(x.I_CODE) AS I_CODE,
+                   x.P_SIZE AS P_SIZE,
+                   NVL(TRIM(x.ITM_UNT), '') AS ITM_UNT
+            FROM (
+                SELECT d.I_CODE,
+                       d.P_SIZE,
+                       d.ITM_UNT,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY d.I_CODE
+                         ORDER BY NVL(d.P_SIZE, 0) DESC, d.ITM_UNT
+                       ) AS RN
+                FROM {schema}.IAS_ITM_DTL d
+                WHERE TO_CHAR(d.I_CODE) IN ({in_list})
+                  AND NVL(d.P_SIZE, 0) > 0
+            ) x
+            WHERE x.RN = 1
+            """,
+            binds,
+        )
+        for row in rows or []:
+            code = str(row.get("I_CODE") or "").strip()
+            if not code:
+                continue
+            try:
+                psz = float(row.get("P_SIZE") or 0)
+            except (TypeError, ValueError):
+                psz = 0.0
+            out[code] = {
+                "pack": psz,
+                "unit": str(row.get("ITM_UNT") or "").strip(),
+            }
+    return out
 
 
 def fetch_oracle_group_stock(warehouse: str, group_code: str) -> list[dict]:
     """
     صفوف مخزون مجموعة بمخزن بكمية > 0 من أوراكل، بما فيها غير النشط.
-    صف لكل وحدة تخزين — مثل تقرير أونكس (الصنف بوحدتين يظهر مرتين).
+    صف واحد لكل صنف بالكمية بوحدة أكبر عبوة (إن وُجدت في IAS_ITM_DTL).
     SELECT فقط.
     """
     schema = _schema()
@@ -1017,18 +1106,53 @@ def fetch_oracle_group_stock(warehouse: str, group_code: str) -> list[dict]:
 
     sql = f"""
         SELECT
-            w.I_CODE AS I_CODE,
-            m.I_NAME AS I_NAME,
-            w.ITM_UNT AS ITM_UNT,
-            w.AVL_QTY AS QTY,
-            NVL(w.I_CWTAVG, w.PRIMARY_COST) AS COST,
-            NVL(m.INACTIVE, 0) AS INACTIVE
-        FROM {schema}.IAS_ITM_WCODE w
-        JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
-        WHERE TO_CHAR(w.W_CODE) = TO_CHAR(:wh)
-          AND TO_CHAR(m.G_CODE) = TO_CHAR(:g)
-          AND NVL(w.AVL_QTY, 0) > 0
-        ORDER BY m.I_NAME, w.I_CODE, NVL(w.P_SIZE, 1), w.ITM_UNT
+            s.I_CODE AS I_CODE,
+            s.I_NAME AS I_NAME,
+            s.ITM_UNT AS ITM_UNT,
+            s.QTY AS QTY,
+            s.COST AS COST,
+            s.INACTIVE AS INACTIVE,
+            s.STOCK_P_SIZE AS STOCK_P_SIZE,
+            p.MAX_UNT AS MAX_UNT,
+            p.MAX_P_SIZE AS MAX_P_SIZE
+        FROM (
+            SELECT
+                w.I_CODE,
+                m.I_NAME,
+                w.ITM_UNT,
+                w.AVL_QTY AS QTY,
+                NVL(w.I_CWTAVG, w.PRIMARY_COST) AS COST,
+                NVL(m.INACTIVE, 0) AS INACTIVE,
+                NVL(w.P_SIZE, 1) AS STOCK_P_SIZE,
+                ROW_NUMBER() OVER (
+                    PARTITION BY w.I_CODE
+                    ORDER BY NVL(w.P_SIZE, 1), w.ITM_UNT
+                ) AS RN
+            FROM {schema}.IAS_ITM_WCODE w
+            JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
+            WHERE TO_CHAR(w.W_CODE) = TO_CHAR(:wh)
+              AND TO_CHAR(m.G_CODE) = TO_CHAR(:g)
+              AND NVL(w.AVL_QTY, 0) > 0
+        ) s
+        LEFT JOIN (
+            SELECT
+                d.I_CODE,
+                d.ITM_UNT AS MAX_UNT,
+                d.P_SIZE AS MAX_P_SIZE,
+                ROW_NUMBER() OVER (
+                    PARTITION BY d.I_CODE
+                    ORDER BY NVL(d.P_SIZE, 0) DESC, d.ITM_UNT
+                ) AS RN
+            FROM {schema}.IAS_ITM_DTL d
+            WHERE NVL(d.P_SIZE, 0) > 0
+              AND d.I_CODE IN (
+                  SELECT m2.I_CODE
+                  FROM {schema}.IAS_ITM_MST m2
+                  WHERE TO_CHAR(m2.G_CODE) = TO_CHAR(:g)
+              )
+        ) p ON p.I_CODE = s.I_CODE AND p.RN = 1
+        WHERE s.RN = 1
+        ORDER BY s.I_NAME, s.I_CODE
     """
     rows = _fetch_all(sql, {"wh": wh, "g": g})
     return [_row_to_stock(r) for r in rows]

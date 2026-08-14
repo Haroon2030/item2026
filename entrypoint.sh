@@ -44,6 +44,14 @@ python manage.py collectstatic --noinput
 # فهرس العبوة/الباركود: إن كان فارغاً نزامنه قبل فتح الموقع
 python manage.py ensure_barcode_index || echo "WARN: auto sync skipped/failed"
 
+# إصدار الواجهة: كل تشغيل حاوية بعد الرفع = رقم جديد → أول دخول يحدّث الكاش
+if [ "${APP_CLIENT_VERSION_LOCK:-}" != "1" ]; then
+  APP_CLIENT_VERSION="$(date -u +%Y%m%d%H%M%S)"
+  export APP_CLIENT_VERSION
+  printf '%s\n' "$APP_CLIENT_VERSION" > /tmp/app-client-version
+  echo "APP_CLIENT_VERSION=${APP_CLIENT_VERSION}"
+fi
+
 # تشغيل مباشر ومستقر (HTTPS عبر Dokploy/Traefik على الدومين)
 exec gunicorn config.wsgi:application \
   --bind "0.0.0.0:${PORT:-8000}" \

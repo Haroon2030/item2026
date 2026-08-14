@@ -12,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .api_client import (
     ApiClientError,
+    build_browse_groups_excel,
     compare_item_across_warehouses,
     compute_inventory_stock_cost,
     enrich_group_browse,
@@ -650,7 +651,7 @@ def _priced_items_for_group(
     مسار التصفح الدقيق: أصناف بكمية > 0 + كاش فقط عند اكتمال الجلب.
     """
     qty_src = (getattr(settings, 'STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
-    cache_key = f'browse_stocked:v14:{qty_src}:{warehouse}:{group_code}:{len(all_items)}'
+    cache_key = f'browse_stocked:v16:{qty_src}:{warehouse}:{group_code}:{len(all_items)}'
     cached = cache.get(cache_key)
     if isinstance(cached, dict) and 'stocked' in cached and cached.get('counts', {}).get('complete'):
         return cached['stocked'], cached.get('counts') or {}, ''
@@ -777,6 +778,29 @@ def browse_groups(request):
             error = (
                 f'الجلب غير مكتمل: تعذّر {fetch_failed} صنف — '
                 'الإجمالي غير معتمد. أعد التحميل.'
+            )
+
+        want_excel = str(request.GET.get('export') or '').strip().lower() in {
+            'xls',
+            'excel',
+            'xlsx',
+            '1',
+            'true',
+        }
+        if want_excel and stocked:
+            wh_name = next(
+                (w['name'] for w in warehouses if w['code'] == warehouse),
+                warehouse,
+            )
+            return build_browse_groups_excel(
+                items=stocked,
+                warehouse=warehouse,
+                warehouse_name=wh_name,
+                group_code=group_code,
+                group_name=group_name,
+                stock_cost_total=stock_cost_total,
+                catalog_count=catalog_count,
+                qty_source=qty_source,
             )
 
         paginator = Paginator(stocked, 10)
@@ -2020,6 +2044,337 @@ def browse_purchases(request):
         },
     )
 
+
+@login_required
+@require_GET
+@never_cache
+def browse_purchase_returns(request):
+    """مردود المشتريات الشهري — فلاتر الفرع والمجموعة والبحث بالاسم + Excel."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_vendor = str(request.GET.get('vendor') or '').strip()[:40]
+    q = str(request.GET.get('q') or '').strip()[:80]
+    want_excel = str(request.GET.get('export') or '').strip().lower() in (
+        'excel',
+        'xls',
+        '1',
+    )
+    report = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+    vendors: list[dict] = []
+    branch_rows: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_purchase_returns.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_group': selected_group,
+                'selected_vendor': selected_vendor,
+                'q': q,
+                'branches': [],
+                'groups': [],
+                'vendors': [],
+                'branch_rows': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_purchases import (
+            build_purchase_returns_excel,
+            build_purchase_returns_report,
+            fetch_purchase_returns_branches,
+            fetch_purchase_returns_vendors,
+        )
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض مردود المشتريات.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                vendors = fetch_purchase_returns_vendors(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    q=q,
+                )
+                if selected_vendor and selected_vendor not in {
+                    row['vendor_code'] for row in vendors
+                }:
+                    selected_vendor = ''
+                branch_rows = fetch_purchase_returns_branches(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    q=q,
+                    vendor_code=selected_vendor,
+                )
+                report = build_purchase_returns_report(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    q=q,
+                    vendor_code=selected_vendor,
+                )
+                if want_excel and report:
+                    return build_purchase_returns_excel(
+                        date_from,
+                        date_to,
+                        branch_code=selected_branch,
+                        group_code=selected_group,
+                        q=q,
+                        vendor_code=selected_vendor,
+                    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_purchase_returns failed: %s', exc)
+        error = f'تعذّر تحميل مردود المشتريات: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_purchase_returns.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'selected_vendor': selected_vendor,
+            'q': q,
+            'branches': branches,
+            'groups': groups,
+            'vendors': vendors,
+            'branch_rows': branch_rows,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_unsold(request):
+    """رصيد في مخازن محددة بلا حركة مبيعات — فلترة بالفرع والمجموعة والبحث."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    q = str(request.GET.get('q') or '').strip()[:80]
+    report = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_unsold.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_group': selected_group,
+                'q': q,
+                'branches': [],
+                'groups': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_unsold import build_unsold_report, excluded_unsold_group_codes
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                skip_groups = excluded_unsold_group_codes()
+                branches = fetch_income_branches()
+                groups = [
+                    row
+                    for row in fetch_sales_group_options()
+                    if row['code'] not in skip_groups
+                ]
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                report = build_unsold_report(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    q=q,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_unsold failed: %s', exc)
+        error = f'تعذّر تحميل تقرير الرصيد بلا مبيعات: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_unsold.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'q': q,
+            'branches': branches,
+            'groups': groups,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+def browse_unsold_api(request):
+    """صفحة إضافية من أصناف الرصيد بلا مبيعات للتمرير اللانهائي."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    try:
+        offset = max(0, int(request.GET.get('offset') or 0))
+        limit = min(max(1, int(request.GET.get('limit') or 50)), 200)
+    except (TypeError, ValueError):
+        offset, limit = 0, 50
+
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_unsold import fetch_unsold_items
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400
+            )
+        with oracle_session():
+            rows = fetch_unsold_items(
+                date_from,
+                date_to,
+                branch_code=str(request.GET.get('branch') or '').strip(),
+                group_code=str(request.GET.get('group') or '').strip(),
+                q=str(request.GET.get('q') or '').strip()[:80],
+                offset=offset,
+                limit=limit,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_unsold_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+    return JsonResponse({'ok': True, 'rows': rows, 'offset': offset, 'limit': limit})
+
+
+@login_required
+@require_GET
+def browse_purchase_returns_api(request):
+    """صفحة إضافية من أسطر مردود المشتريات للتمرير اللانهائي."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    try:
+        offset = max(0, int(request.GET.get('offset') or 0))
+        limit = min(max(1, int(request.GET.get('limit') or 50)), 200)
+    except (TypeError, ValueError):
+        offset, limit = 0, 50
+
+    try:
+        from .oracle_purchases import fetch_purchase_returns_rows
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400
+            )
+        with oracle_session():
+            rows = fetch_purchase_returns_rows(
+                date_from,
+                date_to,
+                branch_code=str(request.GET.get('branch') or '').strip(),
+                group_code=str(request.GET.get('group') or '').strip(),
+                q=str(request.GET.get('q') or '').strip()[:80],
+                vendor_code=str(request.GET.get('vendor') or '').strip()[:40],
+                offset=offset,
+                limit=limit,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_purchase_returns_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+    return JsonResponse({'ok': True, 'rows': rows, 'offset': offset, 'limit': limit})
+
+
 @login_required
 @require_GET
 @never_cache
@@ -2612,106 +2967,206 @@ def browse_trial_balance(request):
 @login_required
 @require_GET
 @never_cache
-def browse_expense_dist(request):
-    """توزيع المصاريف على الأقسام — مراكز التكلفة 202–240."""
-    from datetime import date as date_cls
-    from datetime import datetime
-
-    error = ''
-    report = None
-    branches: list[dict] = []
+def browse_assets(request):
+    """الأصول الثابتة المسجّلة على الفروع مع إحصائيات كل فرع."""
     selected_branch = str(request.GET.get('branch') or '').strip()
-    posted_raw = request.GET.get('posted')
-    if posted_raw is None:
-        posted_only = False
-    else:
-        posted_only = str(posted_raw).strip() in ('1', 'true', 'yes', 'on')
-    hide_zero_raw = request.GET.get('hide_zero')
-    if hide_zero_raw is None:
-        hide_zero = True
-    else:
-        hide_zero = str(hide_zero_raw).strip() in ('1', 'true', 'yes', 'on')
-    view_mode = str(request.GET.get('view') or 'summary').strip().lower()
-    if view_mode not in ('summary', 'detail'):
-        view_mode = 'summary'
-
-    today = date_cls.today()
-    year_start = today.replace(month=1, day=1)
-
-    def parse_one(raw: str | None, fallback: date_cls) -> date_cls:
-        text = (raw or '').strip()
-        if not text:
-            return fallback
-        try:
-            return datetime.strptime(text[:10], '%Y-%m-%d').date()
-        except ValueError as exc:
-            raise ValidationError('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.') from exc
+    selected_group = str(request.GET.get('group') or '').strip()
+    q = str(request.GET.get('q') or '').strip()[:80]
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        'xls',
+        'excel',
+        'xlsx',
+    }
+    report = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
 
     try:
-        date_from = parse_one(request.GET.get('date_from'), year_start)
-        date_to = parse_one(request.GET.get('date_to'), today)
-        if date_from > date_to:
-            raise ValidationError('تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.')
-        if (date_to - date_from).days > 366:
-            raise ValidationError('الفترة القصوى سنة واحدة.')
+        from .oracle_assets import (
+            build_assets_excel,
+            build_assets_report,
+            excluded_asset_branch_codes,
+            fetch_asset_groups,
+        )
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض الأصول.'
+        else:
+            with oracle_session():
+                skip_brn = excluded_asset_branch_codes()
+                branches = [
+                    row
+                    for row in fetch_income_branches()
+                    if row['code'] not in skip_brn
+                ]
+                groups = fetch_asset_groups()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                report = build_assets_report(
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    q=q,
+                )
+                if want_excel and report is not None:
+                    return build_assets_excel(report)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_assets failed: %s', exc)
+        error = f'تعذّر تحميل الأصول: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_assets.html',
+        {
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'q': q,
+            'branches': branches,
+            'groups': groups,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sold_no_supply(request):
+    """أصناف تُباع بلا مشتريات على الفرع ولا تحويل وارد إليه."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    q = str(request.GET.get('q') or '').strip()[:80]
+    report = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
     except ValidationError as exc:
         return render(
             request,
-            'search/browse_expense_dist.html',
+            'search/browse_sold_no_supply.html',
             {
                 'date_from': (request.GET.get('date_from') or '')[:10],
                 'date_to': (request.GET.get('date_to') or '')[:10],
-                'default_from': year_start.isoformat(),
+                'default_from': month_start.isoformat(),
                 'default_to': today.isoformat(),
                 'selected_branch': selected_branch,
-                'posted_only': posted_only,
-                'hide_zero': hide_zero,
-                'view_mode': view_mode,
+                'selected_group': selected_group,
+                'q': q,
                 'branches': [],
+                'groups': [],
                 'report': None,
                 'error': str(exc),
             },
         )
 
     try:
-        from .oracle_expense_dist import build_expense_distribution
         from .oracle_income import fetch_income_branches
-        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_sold_no_supply import build_sold_no_supply_report
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
 
         if not oracle_enabled():
-            error = 'أوراكل غير مفعّل — لا يمكن عرض توزيع المصاريف.'
+            error = 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
         else:
             with oracle_session():
                 branches = fetch_income_branches()
-                branch_codes = {b['code'] for b in branches}
-                if selected_branch and selected_branch not in branch_codes:
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
                     selected_branch = ''
-                report = build_expense_distribution(
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                report = build_sold_no_supply_report(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
-                    posted_only=posted_only,
-                    hide_zero=hide_zero,
+                    group_code=selected_group,
+                    q=q,
                 )
     except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_expense_dist failed: %s', exc)
-        error = f'تعذّر تحميل توزيع المصاريف: {exc}'
+        logger.warning('browse_sold_no_supply failed: %s', exc)
+        error = f'تعذّر تحميل بيع بلا توريد: {exc}'
         report = None
 
     return render(
         request,
-        'search/browse_expense_dist.html',
+        'search/browse_sold_no_supply.html',
         {
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
-            'default_from': year_start.isoformat(),
+            'default_from': month_start.isoformat(),
             'default_to': today.isoformat(),
             'selected_branch': selected_branch,
-            'posted_only': posted_only,
-            'hide_zero': hide_zero,
-            'view_mode': view_mode,
+            'selected_group': selected_group,
+            'q': q,
             'branches': branches,
+            'groups': groups,
             'report': report,
             'error': error,
         },
     )
+
+
+@login_required
+@require_GET
+def browse_sold_no_supply_api(request):
+    """صفحة إضافية من أصناف البيع بلا توريد."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    try:
+        offset = max(0, int(request.GET.get('offset') or 0))
+        limit = min(max(1, int(request.GET.get('limit') or 80)), 200)
+    except (TypeError, ValueError):
+        offset, limit = 0, 80
+
+    try:
+        from .oracle_sold_no_supply import fetch_sold_no_supply_items
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse(
+                {'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400
+            )
+        with oracle_session():
+            rows = fetch_sold_no_supply_items(
+                date_from,
+                date_to,
+                branch_code=str(request.GET.get('branch') or '').strip(),
+                group_code=str(request.GET.get('group') or '').strip(),
+                q=str(request.GET.get('q') or '').strip()[:80],
+                offset=offset,
+                limit=limit,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sold_no_supply_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+    return JsonResponse({'ok': True, 'rows': rows, 'offset': offset, 'limit': limit})

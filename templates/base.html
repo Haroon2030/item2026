@@ -7,21 +7,43 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>{% block title %}منصة التحليل{% endblock %}</title>
-  <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
-  <link rel="icon" href="/static/img/favicon.ico" sizes="any">
-  <link rel="icon" href="/static/img/favicon-32.png" type="image/png" sizes="32x32">
-  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+  <link rel="icon" href="/static/img/favicon.svg?v={{ app_client_version }}" type="image/svg+xml">
+  <link rel="icon" href="/static/img/favicon.ico?v={{ app_client_version }}" sizes="any">
+  <link rel="icon" href="/static/img/favicon-32.png?v={{ app_client_version }}" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png?v={{ app_client_version }}">
+  <link rel="icon" href="/static/img/android-chrome-192.png?v={{ app_client_version }}" type="image/png" sizes="192x192">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Tajawal:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css?v={{ app_client_version }}">
   <link rel="stylesheet" href="/static/css/theme-v2.css?v={{ app_client_version }}">
+  <script>
+    (function () {
+      try {
+        fetch("/client-version/", { cache: "no-store", credentials: "same-origin" })
+          .then(function (r) { return r.ok ? r.text() : ""; })
+          .then(function (v) {
+            v = (v || "").trim();
+            if (!v) return;
+            if (localStorage.getItem("app-client-ver") === v) return;
+            if (sessionStorage.getItem("app-force-reload:" + v) === "1") return;
+            sessionStorage.setItem("app-force-reload:" + v, "1");
+            var u = new URL(location.href);
+            u.searchParams.set("_cv", v);
+            location.replace(u.href);
+          });
+      } catch (e) {}
+    })();
+  </script>
   <script src="/static/js/force-refresh.js?v={{ app_client_version }}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <script>
     try {
-      if (localStorage.getItem("sidebar-collapsed") === "1") {
+      if (
+        localStorage.getItem("sidebar-collapsed") === "1" &&
+        window.matchMedia("(min-width: 901px)").matches
+      ) {
         document.documentElement.classList.add("sidebar-collapsed");
       }
     } catch (e) {}
@@ -43,10 +65,16 @@
         <a class="sidebar-brand-lockup" href="{% url 'home' %}" title="الصفحة الرئيسية">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M5 19V12" />
-              <path d="M10 19V8" />
-              <path d="M15 19v-6" />
-              <path d="M20 19V5" />
+              <defs>
+                <linearGradient id="brandGrow" x1="19.1" y1="4.4" x2="19.1" y2="20.4" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#3ee08a"/>
+                  <stop offset="30%" stop-color="#fff"/>
+                </linearGradient>
+              </defs>
+              <rect class="brand-bar" x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6"/>
+              <rect class="brand-bar" x="8.1" y="10.2" width="3.2" height="10.2" rx="1.6"/>
+              <rect class="brand-bar" x="12.8" y="7.6" width="3.2" height="12.8" rx="1.6"/>
+              <rect x="17.5" y="4.4" width="3.2" height="16" rx="1.6" fill="url(#brandGrow)"/>
             </svg>
           </span>
           <div class="brand-copy">
@@ -71,13 +99,13 @@
           <span>الرئيسية</span>
         </a>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %}true{% else %}false{% endif %}"
             title="المخزون"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
@@ -93,16 +121,20 @@
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7v7H4zM13 6h7v4h-7zM13 12h7v6h-7zM4 15h7v3H4z"/></svg>
               <span>مخزون المجموعات</span>
             </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_unsold' %}is-active{% endif %}" href="{% url 'browse_unsold' %}" title="رصيد بلا مبيعات">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h2l2 10h10l2-7H7"/><path d="M18 4l3 3-3 3"/><path d="M21 7h-6"/></svg>
+              <span>رصيد بلا مبيعات</span>
+            </a>
           </div>
         </div>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_purchase_returns' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_purchase_returns' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' %}true{% else %}false{% endif %}"
             title="المشتريات"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h2l2 10h10l2-7H7"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M12 3v8M9 6l3-3 3 3"/></svg>
@@ -118,6 +150,10 @@
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M8 16V9M12 16V7M16 16v-5M20 16V8"/><path d="M3 19h18"/></svg>
               <span>تحليل المشتريات</span>
             </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_returns' %}is-active{% endif %}" href="{% url 'browse_purchase_returns' %}" title="مردود المشتريات الشهري">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h13"/><path d="M12 7l5 5-5 5"/><path d="M21 5v14"/></svg>
+              <span>مردود المشتريات الشهري</span>
+            </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_vendor_turnover' %}is-active{% endif %}" href="{% url 'browse_vendor_turnover' %}" title="دوران مخزون الموردين">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
               <span>دوران الموردين</span>
@@ -129,13 +165,13 @@
           </div>
         </div>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'browse_sales' or request.resolver_match.url_name == 'browse_performance' or request.resolver_match.url_name == 'sales_search' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_sales' or request.resolver_match.url_name == 'browse_performance' or request.resolver_match.url_name == 'sales_search' or request.resolver_match.url_name == 'browse_sold_no_supply' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'browse_sales' or request.resolver_match.url_name == 'browse_performance' or request.resolver_match.url_name == 'sales_search' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_sales' or request.resolver_match.url_name == 'browse_performance' or request.resolver_match.url_name == 'sales_search' or request.resolver_match.url_name == 'browse_sold_no_supply' %}true{% else %}false{% endif %}"
             title="المبيعات"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
@@ -155,16 +191,20 @@
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V10M18 20V4M6 20v-4"/><path d="M4 20h16"/></svg>
               <span>تحليل الأداء</span>
             </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_sold_no_supply' %}is-active{% endif %}" href="{% url 'browse_sold_no_supply' %}" title="أصناف تُباع بلا مشتريات ولا تحويل وارد">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16V9M13 16V6"/><path d="M18 8l3 3-3 3"/></svg>
+              <span>بيع بلا توريد</span>
+            </a>
           </div>
         </div>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_trial_balance' or request.resolver_match.url_name == 'browse_expense_dist' or request.resolver_match.url_name == 'browse_suppliers' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_trial_balance' or request.resolver_match.url_name == 'browse_assets' or request.resolver_match.url_name == 'browse_suppliers' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_trial_balance' or request.resolver_match.url_name == 'browse_expense_dist' or request.resolver_match.url_name == 'browse_suppliers' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_income' or request.resolver_match.url_name == 'browse_trial_balance' or request.resolver_match.url_name == 'browse_assets' or request.resolver_match.url_name == 'browse_suppliers' %}true{% else %}false{% endif %}"
             title="المالية"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -180,9 +220,9 @@
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/><path d="M16 16l2 2 4-4"/></svg>
               <span>ميزان المراجعة</span>
             </a>
-            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_expense_dist' %}is-active{% endif %}" href="{% url 'browse_expense_dist' %}" title="توزيع المصاريف على الأقسام">
-              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V10M12 16V6M17 16v-5"/><circle cx="7" cy="7" r="1.5"/><circle cx="12" cy="4" r="1.5"/><circle cx="17" cy="9" r="1.5"/></svg>
-              <span>توزيع المصاريف</span>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_assets' %}is-active{% endif %}" href="{% url 'browse_assets' %}" title="الأصول المسجّلة على الفروع">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10l8-5 8 5v9H4z"/><path d="M9 19v-6h6v6"/></svg>
+              <span>الأصول</span>
             </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_suppliers' %}is-active{% endif %}" href="{% url 'browse_suppliers' %}" title="الموردون">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -227,7 +267,14 @@
     </main>
   </div>
 
+  {% if request.user.is_authenticated %}
+    <button type="button" class="scroll-edge-btn" id="scroll-edge-btn" hidden aria-label="النزول للأسفل" title="النزول للأسفل">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+  {% endif %}
+
   <script src="/static/js/sidebar.js?v={{ app_client_version }}" defer></script>
+  <script src="/static/js/scroll-edge.js?v={{ app_client_version }}" defer></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

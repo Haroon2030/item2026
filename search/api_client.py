@@ -1475,7 +1475,7 @@ def enrich_group_browse(
                     'unit': stock.get('unit') or '',
                     'g_code': group_code,
                 }
-                # الكمية والتكلفة من أوراكل فقط — السعر المعروض من API إن وُجد
+                # الكمية بوحدة أكبر عبوة؛ التكلفة I_CWTAVG كما أونكس (وحدة المخزون)
                 stock_unit = str(stock.get('unit') or '').strip()
                 price = ''
                 for prow in price_map.get(code) or []:
@@ -1483,6 +1483,7 @@ def enrich_group_browse(
                         price = str(prow.get('price') or '').strip()
                         break
                 if not price:
+                    # بدون ضرب تقديري — فقط سعر مسجّل لنفس وحدة العرض أو أول سعر متاح
                     for prow in price_map.get(code) or []:
                         price = str(prow.get('price') or '').strip()
                         if price:
@@ -1495,6 +1496,13 @@ def enrich_group_browse(
                 row['price'] = price
                 row['avg_cost'] = str(stock.get('avg_cost') or stock.get('cost') or '').strip()
                 row['quantity'] = str(stock.get('quantity') or '').strip()
+                # كمية المخزون الأصلية لحساب تكلفة الصنف = AVL_QTY × I_CWTAVG
+                row['stock_qty'] = str(
+                    stock.get('stock_qty')
+                    if stock.get('stock_qty') not in (None, '')
+                    else stock.get('quantity')
+                    or ''
+                ).strip()
                 if stock.get('inactive'):
                     row['inactive'] = True
                 stocked.append(row)
@@ -1535,6 +1543,15 @@ def enrich_group_browse(
             fetch_warehouse_stock(wh, failed_codes, max_workers=min(8, max_workers))
         )
 
+    pack_map: dict[str, dict] = {}
+    try:
+        from .oracle_stock import fetch_item_max_pack_map, use_oracle_stock
+
+        if use_oracle_stock():
+            pack_map = fetch_item_max_pack_map(unique_codes) or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Max pack map skipped during browse enrich: %s', exc)
+
     stocked = []
     zero_count = 0
     fetch_failed = 0
@@ -1564,6 +1581,30 @@ def enrich_group_browse(
             row['pricing_unit'] = summary['unit']
         if stock.get('name') and not row.get('name'):
             row['name'] = stock['name']
+
+        # عرض أكبر عبوة بدل الحبة — التكلفة تبقى كما من المخزون (لا ضرب × P_SIZE)
+        pack_info = pack_map.get(code) or {}
+        try:
+            max_psz = float(pack_info.get('pack') or 0)
+        except (TypeError, ValueError):
+            max_psz = 0.0
+        max_unit = str(pack_info.get('unit') or '').strip()
+        qf = _to_float(row.get('quantity'))
+        row['stock_qty'] = str(row.get('quantity') or '').strip()
+        if max_psz > 1 and max_unit and qf is not None and qf > 0:
+            stock_unit = str(row.get('pricing_unit') or row.get('unit') or '').strip()
+            if stock_unit != max_unit:
+                pack_qty = qf / max_psz
+                row['quantity'] = f'{pack_qty:.6f}'.rstrip('0').rstrip('.') or '0'
+                pack_price = ''
+                for prow in prices:
+                    if str(prow.get('unit') or '').strip() == max_unit:
+                        pack_price = str(prow.get('price') or '').strip()
+                        break
+                if pack_price:
+                    row['price'] = pack_price
+                row['unit'] = max_unit
+                row['pricing_unit'] = max_unit
         stocked.append(row)
 
     return stocked, {
@@ -1578,14 +1619,15 @@ def enrich_group_browse(
 
 def compute_inventory_stock_cost(items: list[dict]) -> dict:
     """
-    إجمالي تكلفة المخزون = Σ (الكمية × التكلفة) لنفس الوحدة المخزنية.
-    المصدر: أوراكل (IAS_ITM_WCODE) أو API (Avl_Qty بعد التخصيم).
-    يتجاهل الأصناف بلا كمية رقمية أو بلا تكلفة، والكمية السالبة.
+    إجمالي تكلفة المخزون = Σ (كمية المخزون × I_CWTAVG) كما في أونكس.
+    إن وُجدت stock_qty (بعد تحويل العرض لأكبر عبوة) تُستخدم بدل الكمية المعروضة.
     """
     total = 0.0
     used = 0
     for item in items:
-        qty = _to_float(item.get('quantity'))
+        qty = _to_float(item.get('stock_qty'))
+        if qty is None:
+            qty = _to_float(item.get('quantity'))
         cost = _to_float(item.get('avg_cost') or item.get('cost'))
         if qty is None or cost is None or qty < 0 or cost < 0:
             item['line_cost'] = ''
@@ -1600,6 +1642,164 @@ def compute_inventory_stock_cost(items: list[dict]) -> dict:
         'used_count': used,
         'skipped_count': max(0, len(items) - used),
     }
+
+
+def build_browse_groups_excel(
+    *,
+    items: list[dict],
+    warehouse: str,
+    warehouse_name: str = '',
+    group_code: str = '',
+    group_name: str = '',
+    stock_cost_total: str = '',
+    catalog_count: int = 0,
+    qty_source: str = '',
+) -> Any:
+    """تصدير مخزون المجموعة إلى Excel ملون (HTML/XML يفتح في Excel)."""
+    import io
+    import re
+    from html import escape
+
+    from django.http import HttpResponse
+
+    def _num(value: Any) -> float | None:
+        return _to_float(value)
+
+    def _cell_num(value: Any, css: str = 'num', digits: int = 2) -> str:
+        n = _num(value)
+        if n is None:
+            return f'<td class="{css}">—</td>'
+        return f'<td class="{css}">{n:.{digits}f}</td>'
+
+    wh_label = escape(
+        (warehouse_name or '').strip() or str(warehouse or '').strip() or '—'
+    )
+    wh_code = escape(str(warehouse or '').strip() or '—')
+    g_label = escape((group_name or '').strip() or str(group_code or '').strip() or '—')
+    g_code = escape(str(group_code or '').strip() or '—')
+    src = 'أوراكل' if str(qty_source or '').lower() == 'oracle' else 'API'
+    sheet = (str(group_name or group_code or 'مخزون')[:28]).strip() or 'مخزون'
+    # اسم ورقة Excel بدون محارف ممنوعة
+    sheet = re.sub(r'[\\/*?:\[\]]', '-', sheet)
+
+    buf = io.StringIO()
+    buf.write('\ufeff')
+    buf.write(
+        '<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+        'xmlns:x="urn:schemas-microsoft-com:office:excel" '
+        'xmlns="http://www.w3.org/TR/REC-html40">'
+        '<head><meta charset="utf-8">'
+        '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>'
+        f'<x:ExcelWorksheet><x:Name>{escape(sheet)}</x:Name>'
+        '<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>'
+        '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->'
+        '<style>'
+        'table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}'
+        'th,td{border:1px solid #94a3b8;padding:5px 8px;white-space:nowrap;vertical-align:middle;}'
+        'th{background:#1e3a5f;color:#fff;font-weight:700;text-align:center;}'
+        'th.unit{background:#0c4a6e;}'
+        'th.price{background:#92400e;}'
+        'th.cost{background:#334155;}'
+        'th.qty{background:#166534;}'
+        'th.line{background:#1d4ed8;}'
+        'td.num{mso-number-format:\'\\#\\,\\#\\#0\\.00\';text-align:left;}'
+        'td.qty{mso-number-format:\'\\#\\,\\#\\#0\\.000\';background:#eafaf0;color:#166534;font-weight:700;}'
+        'td.price{background:#fef7e8;color:#92400e;font-weight:700;}'
+        'td.cost{background:#f1f5f9;color:#334155;}'
+        'td.line{background:#dbeafe;color:#1e3a8a;font-weight:800;}'
+        'td.unit{background:#e0f2fe;color:#0c4a6e;font-weight:700;text-align:center;}'
+        'td.code{font-family:Consolas,monospace;color:#1e3a5f;font-weight:700;}'
+        'td.idx{mso-number-format:\'\\#\\,\\#\\#0\';color:#64748b;text-align:center;}'
+        'tr.even td{background:#f8fafc;}'
+        'tr.even td.qty{background:#eafaf0;}'
+        'tr.even td.price{background:#fef7e8;}'
+        'tr.even td.cost{background:#f1f5f9;}'
+        'tr.even td.line{background:#dbeafe;}'
+        'tr.even td.unit{background:#e0f2fe;}'
+        'tr.foot td{background:#e2e8f0;font-weight:800;}'
+        'tr.foot td.line{background:#93c5fd;}'
+        'tr.foot td.qty{background:#86efac;}'
+        'caption{font-size:14px;font-weight:800;margin-bottom:8px;text-align:right;color:#0f172a;}'
+        '.sub{font-size:10px;color:#475569;font-weight:400;}'
+        '</style></head><body dir="rtl">'
+    )
+    buf.write(
+        f'<caption>مخزون المجموعة — {g_label}'
+        f'<br><span class="sub">'
+        f'المخزن: {wh_label} ({wh_code}) · المجموعة: {g_code}'
+        f' · أصناف بكمية: {len(items)}'
+        f' · كتالوج: {int(catalog_count or 0)}'
+        f' · المصدر: {src}'
+        f' · الوحدة = أكبر عبوة عند توفرها'
+        f'</span></caption>'
+    )
+    buf.write(
+        '<table><thead><tr>'
+        '<th>#</th><th>رقم الصنف</th><th>الاسم</th>'
+        '<th class="unit">الوحدة</th>'
+        '<th class="price">السعر</th>'
+        '<th class="cost">التكلفة</th>'
+        '<th class="qty">الكمية</th>'
+        '<th class="line">تكلفة الصنف</th>'
+        '</tr></thead><tbody>'
+    )
+
+    qty_sum = 0.0
+    line_sum = 0.0
+    qty_used = 0
+    line_used = 0
+    for i, item in enumerate(items or [], 1):
+        even = ' even' if i % 2 == 0 else ''
+        unit = str(item.get('pricing_unit') or item.get('unit') or '').strip() or '—'
+        qn = _num(item.get('quantity'))
+        ln = _num(item.get('line_cost'))
+        if qn is not None:
+            qty_sum += qn
+            qty_used += 1
+        if ln is not None:
+            line_sum += ln
+            line_used += 1
+        buf.write(f'<tr class="{even.strip()}">')
+        buf.write(f'<td class="idx">{i}</td>')
+        buf.write(f'<td class="code">{escape(str(item.get("code") or ""))}</td>')
+        buf.write(f'<td>{escape(str(item.get("name") or "—"))}</td>')
+        buf.write(f'<td class="unit">{escape(unit)}</td>')
+        buf.write(_cell_num(item.get('price'), 'num price', 2))
+        buf.write(_cell_num(item.get('avg_cost') or item.get('cost'), 'num cost', 4))
+        if qn is None:
+            buf.write('<td class="qty">—</td>')
+        else:
+            buf.write(f'<td class="num qty">{qn:.3f}</td>')
+        if ln is None:
+            buf.write('<td class="line">—</td>')
+        else:
+            buf.write(f'<td class="num line">{ln:.2f}</td>')
+        buf.write('</tr>')
+
+    total_display = stock_cost_total or (f'{line_sum:.2f}' if line_used else '—')
+    total_n = _num(total_display)
+    buf.write('<tr class="foot">')
+    buf.write(f'<td colspan="3">الإجمالي — {len(items)} صنف</td>')
+    buf.write('<td class="unit">—</td><td class="price">—</td><td class="cost">—</td>')
+    if qty_used:
+        buf.write(f'<td class="num qty">{qty_sum:.3f}</td>')
+    else:
+        buf.write('<td class="qty">—</td>')
+    if total_n is not None:
+        buf.write(f'<td class="num line">{total_n:.2f}</td>')
+    else:
+        buf.write(f'<td class="line">{escape(str(total_display))}</td>')
+    buf.write('</tr></tbody></table></body></html>')
+
+    safe_g = re.sub(r'[^\w\-]+', '_', str(group_code or 'group'), flags=re.UNICODE)[:40]
+    safe_w = re.sub(r'[^\w\-]+', '_', str(warehouse or 'wh'), flags=re.UNICODE)[:20]
+    filename = f'browse_group_{safe_g}_wh{safe_w}.xls'
+    resp = HttpResponse(
+        buf.getvalue().encode('utf-8'),
+        content_type='application/vnd.ms-excel; charset=utf-8',
+    )
+    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return resp
 
 
 def _rows_to_item_dicts(rows) -> list[dict]:

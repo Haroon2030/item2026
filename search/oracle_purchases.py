@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
 from datetime import timedelta
+from html import escape
 from typing import Any
 
 from django.core.cache import cache
+from django.http import HttpResponse
 
 from .oracle_stock import (
     OracleStockError,
@@ -645,3 +648,591 @@ def build_purchase_dashboard(
     }
     cache.set(cache_key, result, _CACHE_TTL)
     return result
+
+
+_RETURNS_ROW_LIMIT = 8000
+_RETURNS_PAGE_SIZE = 50
+
+
+def _returns_where(
+    d_from,
+    d_to,
+    *,
+    branch: str,
+    group: str,
+    query: str,
+    vendor: str = "",
+) -> tuple[str, dict[str, Any]]:
+    where, params = _detail_filters(
+        d_from,
+        d_to,
+        branch_code=branch,
+        group_code=group,
+        purchase=False,
+    )
+    vendor = str(vendor or "").strip()
+    if vendor:
+        where = f"({where}) AND TO_CHAR(r.V_CODE) = :vendor_code"
+        params["vendor_code"] = vendor
+    # مردود آجل فقط — استبعاد النقدي (CASH_NO يُملأ في المردود النقدي)
+    where = f"({where}) AND r.CASH_NO IS NULL"
+    # استثناء مردود الفاتورة الكاملة: مستند مردود مرتبط بفاتورة أصلية
+    # ويطابقها بعدد السطور وصافي القيمة
+    schema = _schema()
+    where = (
+        f"({where}) AND r.RT_BILL_SER NOT IN ("
+        "SELECT RT_BILL_SER FROM ("
+        "SELECT x.RT_BILL_SER, x.RL, x.RN,"
+        f" (SELECT COUNT(*) FROM {schema}.IAS_PI_BILL_DTL p"
+        "   WHERE p.BILL_SER = x.PI_SER) AS PL,"
+        f" (SELECT SUM(NVL(p.I_QTY,0)*NVL(p.I_PRICE,0)-NVL(p.DIS_AMT,0))"
+        f"   FROM {schema}.IAS_PI_BILL_DTL p"
+        "   WHERE p.BILL_SER = x.PI_SER) AS PN"
+        " FROM ("
+        "SELECT d2.RT_BILL_SER, d2.BILL_SER AS PI_SER,"
+        "       COUNT(*) AS RL,"
+        "       SUM(NVL(d2.I_QTY,0)*NVL(d2.I_PRICE,0)-NVL(d2.DIS_AMT,0)) AS RN"
+        f" FROM {schema}.IAS_PR_BILL_MST r2"
+        f" JOIN {schema}.IAS_PR_BILL_DTL d2"
+        "   ON d2.RT_BILL_NO = r2.RT_BILL_NO"
+        "  AND d2.RT_BILL_SER = r2.RT_BILL_SER"
+        "  AND d2.RT_BILL_DOC_TYPE = r2.RT_BILL_DOC_TYPE"
+        " WHERE r2.RT_BILL_DATE >= :d_from"
+        "   AND r2.RT_BILL_DATE < :d_to_excl"
+        "   AND NVL(r2.HUNG, 0) = 0"
+        "   AND d2.BILL_SER IS NOT NULL"
+        " GROUP BY d2.RT_BILL_SER, d2.BILL_SER"
+        ") x)"
+        " WHERE PL = RL AND ABS(PN - RN) < 0.02)"
+    )
+    if query:
+        params["q_like"] = f"%{query}%"
+        where = (
+            f"({where}) AND ("
+            "UPPER(TO_CHAR(d.I_CODE)) LIKE UPPER(:q_like) "
+            "OR UPPER(NVL(i.I_NAME, ' ')) LIKE UPPER(:q_like) "
+            "OR UPPER(NVL(r.V_NAME, ' ')) LIKE UPPER(:q_like) "
+            "OR UPPER(TO_CHAR(NVL(r.V_CODE, ' '))) LIKE UPPER(:q_like)"
+            ")"
+        )
+    return where, params
+
+
+_RETURNS_LINE_NET = "NVL(d.I_QTY, 0) * NVL(d.I_PRICE, 0) - NVL(d.DIS_AMT, 0)"
+
+
+def fetch_purchase_returns_vendors(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+    q: str = "",
+) -> list[dict]:
+    """ملخص مردود المشتريات مجمّعًا حسب المورد (صف واحد لكل مورد)."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    branch = str(branch_code or "").strip()
+    group = str(group_code or "").strip()
+    query = str(q or "").strip()[:80]
+    cache_key = (
+        f"purchases:returns:vendors:v3:{d_from}:{d_to}:{branch}:{group}:{query.lower()}"
+    )
+    cached = cache.get(cache_key)
+    if isinstance(cached, list):
+        return cached
+
+    schema = _schema()
+    where, params = _returns_where(
+        d_from, d_to, branch=branch, group=group, query=query
+    )
+    rows_raw = _fetch_all(
+        f"""
+        SELECT NVL(TO_CHAR(r.V_CODE), '') AS V_CODE,
+               MAX(NVL(NULLIF(TRIM(r.V_NAME), ''), TO_CHAR(r.V_CODE))) AS V_NAME,
+               COUNT(DISTINCT r.RT_BILL_SER) AS DOC_COUNT,
+               COUNT(DISTINCT TO_CHAR(d.I_CODE)) AS ITEM_COUNT,
+               COUNT(*) AS LINE_COUNT,
+               COUNT(DISTINCT TO_CHAR(r.BRN_NO)) AS BRANCH_COUNT,
+               ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+               ROUND(SUM({_RETURNS_LINE_NET}), 2) AS AMOUNT
+        FROM {schema}.IAS_PR_BILL_MST r
+        JOIN {schema}.IAS_PR_BILL_DTL d
+          ON d.RT_BILL_NO = r.RT_BILL_NO
+         AND d.RT_BILL_SER = r.RT_BILL_SER
+         AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
+        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE {where}
+        GROUP BY NVL(TO_CHAR(r.V_CODE), '')
+        ORDER BY AMOUNT DESC
+        """,
+        params,
+    )
+    total = sum(float(r.get("AMOUNT") or 0) for r in rows_raw)
+    rows: list[dict] = []
+    for raw in rows_raw:
+        amount = round(float(raw.get("AMOUNT") or 0), 2)
+        pct = round((amount / total * 100.0), 1) if abs(total) > 0.0005 else 0.0
+        rows.append(
+            {
+                "vendor_code": str(raw.get("V_CODE") or "").strip(),
+                "vendor_name": str(raw.get("V_NAME") or "").strip() or "—",
+                "doc_count": int(raw.get("DOC_COUNT") or 0),
+                "item_count": int(raw.get("ITEM_COUNT") or 0),
+                "line_count": int(raw.get("LINE_COUNT") or 0),
+                "branch_count": int(raw.get("BRANCH_COUNT") or 0),
+                "qty_total": round(float(raw.get("QTY_TOTAL") or 0), 2),
+                "qty_display": _qty(raw.get("QTY_TOTAL") or 0),
+                "amount": amount,
+                "amount_display": _money(amount),
+                "pct": pct,
+                "pct_display": f"{pct:.1f}%",
+            }
+        )
+    try:
+        cache.set(cache_key, rows, _CACHE_TTL)
+    except Exception:
+        pass
+    return rows
+
+
+def fetch_purchase_returns_branches(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+    q: str = "",
+    vendor_code: str = "",
+) -> list[dict]:
+    """الفروع الأكثر إرجاعًا — مجمّعة حسب الفرع مرتبة تنازليًا بالقيمة."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    branch = str(branch_code or "").strip()
+    group = str(group_code or "").strip()
+    vendor = str(vendor_code or "").strip()
+    query = str(q or "").strip()[:80]
+    cache_key = (
+        f"purchases:returns:branches:v2:{d_from}:{d_to}:{branch}:{group}:{vendor}:{query.lower()}"
+    )
+    cached = cache.get(cache_key)
+    if isinstance(cached, list):
+        return cached
+
+    schema = _schema()
+    where, params = _returns_where(
+        d_from, d_to, branch=branch, group=group, query=query, vendor=vendor
+    )
+    rows_raw = _fetch_all(
+        f"""
+        SELECT NVL(TO_CHAR(r.BRN_NO), '') AS BRN_NO,
+               COUNT(DISTINCT r.RT_BILL_SER) AS DOC_COUNT,
+               COUNT(DISTINCT TO_CHAR(r.V_CODE)) AS VENDOR_COUNT,
+               ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+               ROUND(SUM({_RETURNS_LINE_NET}), 2) AS AMOUNT
+        FROM {schema}.IAS_PR_BILL_MST r
+        JOIN {schema}.IAS_PR_BILL_DTL d
+          ON d.RT_BILL_NO = r.RT_BILL_NO
+         AND d.RT_BILL_SER = r.RT_BILL_SER
+         AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
+        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE {where}
+        GROUP BY NVL(TO_CHAR(r.BRN_NO), '')
+        ORDER BY AMOUNT DESC
+        """,
+        params,
+    )
+    branch_names = _branch_names()
+    max_amount = max((float(r.get("AMOUNT") or 0) for r in rows_raw), default=0.0)
+    rows: list[dict] = []
+    for raw in rows_raw:
+        brn = str(raw.get("BRN_NO") or "").strip()
+        amount = round(float(raw.get("AMOUNT") or 0), 2)
+        bar_pct = round(amount / max_amount * 100.0, 1) if max_amount > 0 else 0.0
+        rows.append(
+            {
+                "branch_code": brn,
+                "branch_name": branch_names.get(brn) or brn or "—",
+                "doc_count": int(raw.get("DOC_COUNT") or 0),
+                "vendor_count": int(raw.get("VENDOR_COUNT") or 0),
+                "qty_total": round(float(raw.get("QTY_TOTAL") or 0), 2),
+                "qty_display": _qty(raw.get("QTY_TOTAL") or 0),
+                "amount": amount,
+                "amount_display": _money(amount),
+                "bar_pct": bar_pct,
+            }
+        )
+    try:
+        cache.set(cache_key, rows, _CACHE_TTL)
+    except Exception:
+        pass
+    return rows
+
+
+def _returns_map_rows(detail_rows: list[dict]) -> list[dict]:
+    branch_names = _branch_names()
+    rows: list[dict] = []
+    for raw in detail_rows:
+        brn = str(raw.get("BRN_NO") or "").strip()
+        qty = round(float(raw.get("QTY") or 0), 2)
+        price = round(float(raw.get("PRICE") or 0), 2)
+        disc = round(float(raw.get("DISC") or 0), 2)
+        amount = round(float(raw.get("AMOUNT") or 0), 2)
+        rows.append(
+            {
+                "doc_date": str(raw.get("DOC_DATE") or "").strip() or "—",
+                "doc_no": str(raw.get("DOC_NO") or "").strip(),
+                "doc_ser": str(raw.get("DOC_SER") or "").strip(),
+                "branch_code": brn,
+                "branch_name": branch_names.get(brn) or brn or "—",
+                "vendor_code": str(raw.get("V_CODE") or "").strip(),
+                "vendor_name": str(raw.get("V_NAME") or "").strip() or "—",
+                "group_code": str(raw.get("G_CODE") or "").strip(),
+                "group_name": str(raw.get("G_NAME") or "").strip() or "—",
+                "item_code": str(raw.get("I_CODE") or "").strip(),
+                "item_name": str(raw.get("I_NAME") or "").strip() or "—",
+                "qty": qty,
+                "qty_display": _qty(qty),
+                "price": price,
+                "price_display": _money(price),
+                "disc": disc,
+                "disc_display": _money(disc),
+                "amount": amount,
+                "amount_display": _money(amount),
+            }
+        )
+    return rows
+
+
+def fetch_purchase_returns_rows(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+    q: str = "",
+    vendor_code: str = "",
+    offset: int = 0,
+    limit: int = _RETURNS_PAGE_SIZE,
+) -> list[dict]:
+    """صفحة واحدة من أسطر مردود المشتريات (الأحدث أولاً)."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    branch = str(branch_code or "").strip()
+    group = str(group_code or "").strip()
+    vendor = str(vendor_code or "").strip()
+    query = str(q or "").strip()[:80]
+    try:
+        offset = max(0, int(offset))
+        limit = min(max(1, int(limit)), 500)
+    except (TypeError, ValueError):
+        offset, limit = 0, _RETURNS_PAGE_SIZE
+
+    schema = _schema()
+    where, params = _returns_where(
+        d_from, d_to, branch=branch, group=group, query=query, vendor=vendor
+    )
+    params = {**params, "off": offset, "lim": limit}
+
+    detail_rows = _fetch_all(
+        f"""
+        SELECT TO_CHAR(r.RT_BILL_DATE, 'YYYY-MM-DD') AS DOC_DATE,
+               TO_CHAR(r.RT_BILL_NO) AS DOC_NO,
+               TO_CHAR(r.RT_BILL_SER) AS DOC_SER,
+               NVL(TO_CHAR(r.BRN_NO), '') AS BRN_NO,
+               NVL(TO_CHAR(r.V_CODE), '') AS V_CODE,
+               NVL(NULLIF(TRIM(r.V_NAME), ''), TO_CHAR(r.V_CODE)) AS V_NAME,
+               NVL(TO_CHAR(i.G_CODE), '') AS G_CODE,
+               NVL(g.G_A_NAME, NVL(TO_CHAR(i.G_CODE), '—')) AS G_NAME,
+               TO_CHAR(d.I_CODE) AS I_CODE,
+               NVL(NULLIF(TRIM(i.I_NAME), ''), TO_CHAR(d.I_CODE)) AS I_NAME,
+               ROUND(NVL(d.I_QTY, 0), 2) AS QTY,
+               ROUND(NVL(d.I_PRICE, 0), 2) AS PRICE,
+               ROUND(NVL(d.DIS_AMT, 0), 2) AS DISC,
+               ROUND({_RETURNS_LINE_NET}, 2) AS AMOUNT
+        FROM {schema}.IAS_PR_BILL_MST r
+        JOIN {schema}.IAS_PR_BILL_DTL d
+          ON d.RT_BILL_NO = r.RT_BILL_NO
+         AND d.RT_BILL_SER = r.RT_BILL_SER
+         AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
+        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        LEFT JOIN {schema}.GROUP_DETAILS g ON g.G_CODE = i.G_CODE
+        WHERE {where}
+        ORDER BY r.RT_BILL_DATE DESC, r.RT_BILL_NO DESC, d.I_CODE
+        OFFSET :off ROWS FETCH NEXT :lim ROWS ONLY
+        """,
+        params,
+    )
+    return _returns_map_rows(detail_rows)
+
+
+def build_purchase_returns_report(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+    q: str = "",
+    vendor_code: str = "",
+) -> dict[str, Any]:
+    """ملخص مردود المشتريات + أول صفحة أسطر (التحميل التالي عبر API)."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    branch = str(branch_code or "").strip()
+    group = str(group_code or "").strip()
+    vendor = str(vendor_code or "").strip()
+    query = str(q or "").strip()[:80]
+    cache_key = (
+        f"purchases:returns:v7:{d_from}:{d_to}:{branch}:{group}:{vendor}:{query.lower()}"
+    )
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
+    schema = _schema()
+    where, params = _returns_where(
+        d_from, d_to, branch=branch, group=group, query=query, vendor=vendor
+    )
+
+    summary_rows = _fetch_all(
+        f"""
+        SELECT COUNT(DISTINCT r.RT_BILL_SER) AS DOC_COUNT,
+               COUNT(DISTINCT TO_CHAR(r.V_CODE)) AS VENDOR_COUNT,
+               COUNT(DISTINCT TO_CHAR(d.I_CODE)) AS ITEM_COUNT,
+               COUNT(*) AS LINE_COUNT,
+               ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+               ROUND(SUM({_RETURNS_LINE_NET}), 2) AS NET_AMOUNT
+        FROM {schema}.IAS_PR_BILL_MST r
+        JOIN {schema}.IAS_PR_BILL_DTL d
+          ON d.RT_BILL_NO = r.RT_BILL_NO
+         AND d.RT_BILL_SER = r.RT_BILL_SER
+         AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
+        LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE {where}
+        """,
+        params,
+    )
+    summary = summary_rows[0] if summary_rows else {}
+
+    # إجمالي رأس الفاتورة (صافي + ضريبة) لنفس نطاق الفواتير المطابقة للفلتر
+    header_rows = _fetch_all(
+        f"""
+        SELECT ROUND(SUM(NVL(x.BILL_AMT, 0)), 2) AS BILL_AMT,
+               ROUND(SUM(NVL(x.VAT_AMT, 0)), 2) AS VAT_AMT
+        FROM (
+            SELECT DISTINCT r.RT_BILL_NO, r.RT_BILL_SER, r.RT_BILL_DOC_TYPE,
+                   r.BILL_AMT, r.VAT_AMT
+            FROM {schema}.IAS_PR_BILL_MST r
+            JOIN {schema}.IAS_PR_BILL_DTL d
+              ON d.RT_BILL_NO = r.RT_BILL_NO
+             AND d.RT_BILL_SER = r.RT_BILL_SER
+             AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
+            LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE {where}
+        ) x
+        """,
+        params,
+    )
+    header = header_rows[0] if header_rows else {}
+    bill_amt = round(float(header.get("BILL_AMT") or 0), 2)
+    vat_amt = round(float(header.get("VAT_AMT") or 0), 2)
+    total_with_vat = round(bill_amt + vat_amt, 2)
+
+    rows = fetch_purchase_returns_rows(
+        d_from,
+        d_to,
+        branch_code=branch,
+        group_code=group,
+        q=query,
+        vendor_code=vendor,
+        offset=0,
+        limit=_RETURNS_PAGE_SIZE,
+    )
+
+    vendor_name = ""
+    if vendor:
+        vrows = _fetch_all(
+            f"""
+            SELECT MAX(NVL(NULLIF(TRIM(r.V_NAME), ''), TO_CHAR(r.V_CODE))) AS V_NAME
+            FROM {schema}.IAS_PR_BILL_MST r
+            WHERE TO_CHAR(r.V_CODE) = :v_lookup
+              AND ROWNUM = 1
+            """,
+            {"v_lookup": vendor},
+        )
+        vendor_name = str((vrows[0] if vrows else {}).get("V_NAME") or "").strip()
+
+    line_count = int(summary.get("LINE_COUNT") or 0)
+    result = {
+        "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
+        "page_size": _RETURNS_PAGE_SIZE,
+        "q": query,
+        "vendor_code": vendor,
+        "vendor_name": vendor_name,
+        "kpis": {
+            "doc_count": int(summary.get("DOC_COUNT") or 0),
+            "vendor_count": int(summary.get("VENDOR_COUNT") or 0),
+            "item_count": int(summary.get("ITEM_COUNT") or 0),
+            "line_count": line_count,
+            "line_count_display": f"{line_count:,}",
+            "qty_total": round(float(summary.get("QTY_TOTAL") or 0), 2),
+            "qty_display": _qty(summary.get("QTY_TOTAL") or 0),
+            "line_net": round(float(summary.get("NET_AMOUNT") or 0), 2),
+            "line_net_display": _money(summary.get("NET_AMOUNT") or 0),
+            "bill_amt": bill_amt,
+            "bill_amt_display": _money(bill_amt),
+            "vat_amt": vat_amt,
+            "vat_amt_display": _money(vat_amt),
+            "total_amount": total_with_vat,
+            "total_display": _money(total_with_vat),
+        },
+        "rows": rows,
+        "filters": {
+            "branch": branch,
+            "group": group,
+            "vendor": vendor,
+            "q": query,
+        },
+    }
+    try:
+        cache.set(cache_key, result, _CACHE_TTL)
+    except Exception:
+        pass
+    return result
+
+
+def build_purchase_returns_excel(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    group_code: str = "",
+    q: str = "",
+    vendor_code: str = "",
+) -> HttpResponse:
+    """تصدير مردود المشتريات إلى Excel (HTML) — كل أسطر الفترة."""
+    report = build_purchase_returns_report(
+        date_from, date_to, branch_code=branch_code, group_code=group_code,
+        q=q, vendor_code=vendor_code,
+    )
+    rows = fetch_purchase_returns_rows(
+        date_from,
+        date_to,
+        branch_code=branch_code,
+        group_code=group_code,
+        q=q,
+        vendor_code=vendor_code,
+        offset=0,
+        limit=_RETURNS_ROW_LIMIT,
+    )
+    kpis = report.get("kpis") or {}
+    period = escape(str(report.get("period_label") or ""))
+    q = escape(str(report.get("q") or ""))
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    buf.write(
+        "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
+        "xmlns:x=\"urn:schemas-microsoft-com:office:excel\" "
+        "xmlns=\"http://www.w3.org/TR/REC-html40\">"
+        "<head><meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>مردود المشتريات</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>"
+        "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;}"
+        "th{background:#7f1d1d;color:#fff;font-weight:700;}"
+        "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
+        "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
+        "tr.even td{background:#fef2f2;}"
+        "tr.foot td{background:#fee2e2;font-weight:700;}"
+        "caption{font-size:13px;font-weight:700;margin-bottom:6px;text-align:right;}"
+        ".sub{font-size:10px;color:#475569;font-weight:400;}"
+        "</style></head><body dir=\"rtl\">"
+    )
+    q_note = f" · بحث: {q}" if q else ""
+    buf.write(
+        f"<caption>مردود المشتريات الشهري — {period}"
+        f'<br><span class="sub">مستندات {int(kpis.get("doc_count") or 0):,} · '
+        f'أصناف {int(kpis.get("item_count") or 0):,} · '
+        f'إجمالي شامل الضريبة {_money(kpis.get("total_amount") or 0)}'
+        f"{q_note}</span></caption>"
+    )
+    buf.write(
+        "<table><thead><tr>"
+        "<th>#</th><th>التاريخ</th><th>رقم المستند</th><th>الفرع</th>"
+        "<th>المورد</th><th>المجموعة</th><th>كود الصنف</th><th>اسم الصنف</th>"
+        "<th>الكمية</th><th>السعر</th><th>الخصم</th><th>الصافي</th>"
+        "</tr></thead><tbody>"
+    )
+    for i, row in enumerate(rows, 1):
+        even = " class=\"even\"" if i % 2 == 0 else ""
+        branch_label = escape(
+            f"{row.get('branch_code') or ''} — {row.get('branch_name') or ''}".strip(" —")
+        )
+        vendor_label = escape(
+            f"{row.get('vendor_code') or ''} — {row.get('vendor_name') or ''}".strip(" —")
+        )
+        group_label = escape(
+            f"{row.get('group_code') or ''} — {row.get('group_name') or ''}".strip(" —")
+        )
+        buf.write(f"<tr{even}>")
+        buf.write(f'<td class="int">{i}</td>')
+        buf.write(f"<td>{escape(str(row.get('doc_date') or ''))}</td>")
+        buf.write(f"<td>{escape(str(row.get('doc_no') or ''))}</td>")
+        buf.write(f"<td>{branch_label}</td>")
+        buf.write(f"<td>{vendor_label}</td>")
+        buf.write(f"<td>{group_label}</td>")
+        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
+        buf.write(f'<td class="num">{float(row.get("qty") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(row.get("price") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(row.get("disc") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(row.get("amount") or 0):.2f}</td>')
+        buf.write("</tr>")
+    buf.write(
+        '<tr class="foot">'
+        "<td></td><td></td><td></td><td></td><td></td><td></td><td></td>"
+        "<td>الإجمالي (أسطر ظاهرة)</td>"
+        f'<td class="num">{float(kpis.get("qty_total") or 0):.2f}</td>'
+        "<td></td><td></td>"
+        f'<td class="num">{float(kpis.get("line_net") or 0):.2f}</td>'
+        "</tr>"
+    )
+    buf.write("</tbody></table></body></html>")
+
+    safe_period = (
+        str(report.get("period_label") or "export")
+        .replace(" ", "")
+        .replace("→", "_")
+        .replace("->", "_")
+        .replace(":", "-")
+        .replace("/", "-")
+    )
+    filename = f"purchase_returns_{safe_period}.xls"
+    resp = HttpResponse(
+        buf.getvalue(), content_type="application/vnd.ms-excel; charset=utf-8"
+    )
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
