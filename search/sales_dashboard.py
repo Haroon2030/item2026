@@ -32,6 +32,66 @@ def _scope_label(branch_code: str, group_code: str) -> str:
     return " · ".join(parts) if parts else "كل الفروع والمجموعات"
 
 
+def _empty_pos_branch_row(code: str, name: str) -> dict[str, Any]:
+    label = str(name or code or "").strip() or str(code or "—")
+    return {
+        "branch_code": str(code or "").strip(),
+        "branch_name": label,
+        "invoice_count": 0,
+        "return_count": 0,
+        "return_total": 0.0,
+        "sales_total": 0.0,
+        "gross_total": 0.0,
+        "avg_basket": 0.0,
+    }
+
+
+def _pos_known_branches() -> dict[str, str]:
+    """فروع التشغيل الظاهرة في فلتر المخازن — لإظهار من بلا مبيعات."""
+    try:
+        from .oracle_stock import fetch_warehouse_options
+
+        warehouses = fetch_warehouse_options(active_only=True)
+    except Exception:
+        warehouses = []
+    out: dict[str, str] = {}
+    for w in warehouses or []:
+        code = str(w.get("branch_code") or "").strip()
+        if not code:
+            continue
+        name = str(w.get("branch_name") or code).strip() or code
+        out.setdefault(code, name)
+    if out:
+        return out
+    try:
+        from .oracle_stock import _branch_names
+
+        return dict(_branch_names() or {})
+    except Exception:
+        return {}
+
+
+def _pad_missing_pos_branches(
+    pos_raw: list[dict],
+    known_branches: dict[str, str],
+    selected: str = "",
+) -> list[dict]:
+    """أضف فروعاً بلا حركة POS في الفترة بمبالغ صفرية."""
+    rows = list(pos_raw or [])
+    have = {str(r.get("branch_code") or "").strip() for r in rows}
+    have.discard("")
+    names = dict(known_branches or {})
+    brn = str(selected or "").strip()
+    if brn:
+        if brn not in have:
+            rows.append(_empty_pos_branch_row(brn, names.get(brn) or brn))
+        return rows
+    for code, name in names.items():
+        if code and code not in have:
+            rows.append(_empty_pos_branch_row(code, name))
+    return rows
+
+
 def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
     total_sales = round(sum(float(r.get("sales_total") or 0) for r in rows), 2)
     total_invoices = sum(int(r.get("invoice_count") or 0) for r in rows)
@@ -42,10 +102,17 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
         sales = round(float(row.get("sales_total") or 0), 2)
         invoices = int(row.get("invoice_count") or 0)
         returns = round(float(row.get("return_total") or 0), 2)
+        return_count = int(row.get("return_count") or 0)
         share_pct, share_display = _share(sales, total_sales)
         gross = round(float(row.get("gross_total") or 0), 2)
         if gross <= 0:
             gross = round(max(sales, 0.0) + returns, 2)
+        no_sales = (
+            invoices == 0
+            and return_count == 0
+            and abs(sales) < 0.005
+            and abs(returns) < 0.005
+        )
         out.append(
             {
                 "branch_code": str(row.get("branch_code") or "").strip(),
@@ -54,8 +121,8 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
                 ).strip(),
                 "invoice_count": invoices,
                 "invoice_count_display": f"{invoices:,}",
-                "return_count": int(row.get("return_count") or 0),
-                "return_count_display": f"{int(row.get('return_count') or 0):,}",
+                "return_count": return_count,
+                "return_count_display": f"{return_count:,}",
                 "return_total": returns,
                 "return_total_display": _money(returns),
                 "sales_total": sales,
@@ -66,9 +133,20 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
                 "avg_basket_display": _money(row.get("avg_basket") or 0),
                 "share_pct": share_pct,
                 "share_display": share_display,
+                "no_sales": no_sales,
             }
         )
+    out.sort(
+        key=lambda r: (
+            1 if r.get("no_sales") else 0,
+            -float(r.get("sales_total") or 0),
+            -int(r.get("invoice_count") or 0),
+            str(r.get("branch_name") or ""),
+            str(r.get("branch_code") or ""),
+        )
+    )
     avg_basket = round(total_sales / total_invoices, 2) if total_invoices else 0.0
+    active_count = sum(1 for r in out if not r.get("no_sales"))
     totals = {
         "sales_total": total_sales,
         "sales_total_display": _money(total_sales),
@@ -80,8 +158,8 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
         "return_count_display": f"{total_return_bills:,}",
         "avg_basket": avg_basket,
         "avg_basket_display": _money(avg_basket),
-        "branch_count": len(out),
-        "branch_count_display": f"{len(out):,}",
+        "branch_count": active_count,
+        "branch_count_display": f"{active_count:,}",
     }
     return out, totals
 
@@ -540,7 +618,9 @@ def _assemble_sales_branches_dashboard(
             pass
         # #endregion
 
-    pos_branches, pos_totals = _format_branch_rows(pos_raw)
+    pos_branches, pos_totals = _format_branch_rows(
+        _pad_missing_pos_branches(pos_raw, _pos_known_branches(), brn)
+    )
     wholesale_branches, wholesale_totals = _format_branch_rows(wholesale_raw)
     _onix_branches, onix_totals = _format_branch_rows(onix_raw)
     groups = _empty_groups()

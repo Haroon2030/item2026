@@ -145,7 +145,7 @@
           </thead>
           <tbody>
             {% for row in dashboard.pos.branches %}
-              <tr>
+              <tr{% if row.no_sales %} class="sales-zero-row"{% endif %}>
                 <td class="mono">{{ forloop.counter }}</td>
                 <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
                 <td class="mono">{{ row.invoice_count_display }}</td>

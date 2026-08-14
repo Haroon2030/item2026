@@ -12132,6 +12132,18 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   background: #e6f6ee !important;
 }
 
+.sales-overview-dash .sales-table tbody tr.sales-zero-row td {
+  color: #b91c1c;
+  background: #fef2f2 !important;
+  font-weight: 800;
+}
+
+.sales-overview-dash .sales-table tbody tr.sales-zero-row .sales-amt,
+.sales-overview-dash .sales-table tbody tr.sales-zero-row .money,
+.sales-overview-dash .sales-table tbody tr.sales-zero-row .sar-symbol {
+  color: #b91c1c !important;
+}
+
 .sales-overview-dash .sales-ov-loading {
   color: #47617f !important;
   font-weight: 700;
