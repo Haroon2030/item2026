@@ -33,16 +33,18 @@ class SecurityHeadersMiddleware:
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
         path = (request.path or '')
-        if path == '/app' or path.startswith('/app/'):
+        is_mobile_app = path == '/app' or path.startswith('/app/')
+        if is_mobile_app:
             csp = (
-                "default-src 'self'; "
+                "default-src 'self' blob: data:; "
                 "img-src 'self' data: blob:; "
                 "media-src 'self' blob:; "
                 "style-src 'self' 'unsafe-inline'; "
                 "font-src 'self' data:; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
-                "connect-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
+                "connect-src 'self' blob:; "
                 "worker-src 'self' blob:; "
+                "child-src 'self' blob:; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'"
@@ -62,7 +64,7 @@ class SecurityHeadersMiddleware:
                 "form-action 'self'"
             )
         response.headers.setdefault('Content-Security-Policy', csp)
-        if not settings.DEBUG:
+        if not settings.DEBUG and not is_mobile_app:
             response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         return response
 
