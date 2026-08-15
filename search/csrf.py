@@ -30,8 +30,9 @@ def csrf_failure(request, reason=''):
 
     path = (request.path or '').rstrip('/').lower()
     is_login = path.endswith('login')
+    is_api = '/api/' in path
 
-    if _wants_json(request) and not is_login:
+    if is_api or (_wants_json(request) and not is_login):
         return JsonResponse({'ok': False, 'error': message}, status=403)
 
     try:

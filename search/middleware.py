@@ -105,10 +105,14 @@ class RateLimitMiddleware:
         return True
 
     def _login_blocked_response(self, request):
-        wants_json = 'application/json' in (request.headers.get('Accept') or '')
+        wants_json = (
+            'application/json' in (request.headers.get('Accept') or '')
+            or 'application/json' in (request.headers.get('Content-Type') or '')
+            or '/api/' in (request.path or '').lower()
+        )
         message = 'محاولات دخول كثيرة. انتظر دقيقة ثم أعد المحاولة.'
         if wants_json:
-            return JsonResponse({'error': message}, status=429)
+            return JsonResponse({'ok': False, 'error': message}, status=429)
         html = (
             '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'

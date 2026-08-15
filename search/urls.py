@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import user_views, views
+from . import mobile_api, user_views, views
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -82,6 +82,20 @@ urlpatterns = [
     ),
     path('income/assets/', views.browse_assets, name='browse_assets'),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
+    path('api/mobile/login/', mobile_api.mobile_login, name='mobile_login'),
+    path('api/mobile/logout/', mobile_api.mobile_logout, name='mobile_logout'),
+    path('api/mobile/me/', mobile_api.mobile_me, name='mobile_me'),
+    path('api/mobile/filters/', mobile_api.mobile_filters, name='mobile_filters'),
+    path(
+        'api/mobile/sales/daily/',
+        mobile_api.mobile_sales_daily,
+        name='mobile_sales_daily',
+    ),
+    path(
+        'api/mobile/sales/groups/',
+        mobile_api.mobile_sales_groups,
+        name='mobile_sales_groups',
+    ),
     path('users/', user_views.user_list, name='user_list'),
     path('users/add/', user_views.user_create, name='user_create'),
     path('users/<int:user_id>/edit/', user_views.user_edit, name='user_edit'),
