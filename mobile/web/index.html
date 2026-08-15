@@ -37,24 +37,51 @@
 <body>
   <div id="boot">
     <strong>مبيعات الرشيد</strong>
-    <span>جاري التحميل…</span>
+    <span id="boot-msg">جاري التحميل…</span>
   </div>
   <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.unregister(); });
+      });
+    }
+    function bootMsg(text) {
+      var el = document.getElementById('boot-msg');
+      if (el) el.textContent = text;
+    }
+    setTimeout(function () {
+      if (document.getElementById('boot')) {
+        bootMsg('ما زال التحميل جارياً… تحقق من الشبكة ثم حدّث الصفحة.');
+      }
+    }, 20000);
     {{flutter_js}}
     {{flutter_build_config}}
     _flutter.loader.load({
       config: {
         renderer: "canvaskit",
+        useLocalCanvasKit: true,
+        canvasKitBaseUrl: "canvaskit/",
         suppressMultithreadingWarning: true,
       },
       onEntrypointLoaded: async function (engineInitializer) {
-        const appRunner = await engineInitializer.initializeEngine({
-          renderer: "canvaskit",
-        });
-        const boot = document.getElementById("boot");
-        if (boot) boot.remove();
-        await appRunner.runApp();
+        try {
+          bootMsg('جاري تجهيز التطبيق…');
+          const appRunner = await engineInitializer.initializeEngine({
+            renderer: "canvaskit",
+            useLocalCanvasKit: true,
+            canvasKitBaseUrl: "canvaskit/",
+          });
+          const boot = document.getElementById("boot");
+          if (boot) boot.remove();
+          await appRunner.runApp();
+        } catch (err) {
+          bootMsg('تعذّر فتح التطبيق. حدّث الصفحة.');
+          console.error(err);
+        }
       }
+    }).catch(function (err) {
+      bootMsg('تعذّر فتح التطبيق. حدّث الصفحة.');
+      console.error(err);
     });
   </script>
 </body>
