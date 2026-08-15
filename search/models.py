@@ -23,27 +23,6 @@ class UserProfile(models.Model):
         return f'{self.display_name} ({self.phone})'
 
 
-class MobileAuthToken(models.Model):
-    """رمز دخول تطبيق الموبايل (يُخزَّن هاشه فقط)."""
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='mobile_tokens',
-    )
-    key_hash = models.CharField(max_length=64, unique=True, db_index=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    last_used_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField(db_index=True)
-
-    class Meta:
-        verbose_name = 'رمز موبايل'
-        verbose_name_plural = 'رموز الموبايل'
-
-    def __str__(self) -> str:
-        return f'{self.user_id} · {self.key_hash[:8]}'
-
-
 class ItemBarcode(models.Model):
     """ربط الباركود برقم الصنف من GetAllItems."""
 

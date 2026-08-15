@@ -32,36 +32,21 @@ class SecurityHeadersMiddleware:
             response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
-        path = (request.path or '')
-        is_mobile_app = path == '/app' or path.startswith('/app/')
-        if is_mobile_app:
-            csp = (
-                "default-src 'self'; "
-                "img-src 'self' data:; "
-                "style-src 'self' 'unsafe-inline'; "
-                "font-src 'self'; "
-                "script-src 'self' 'unsafe-inline'; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'; "
-                "base-uri 'self'; "
-                "form-action 'self'"
-            )
-        else:
-            csp = (
-                "default-src 'self'; "
-                "img-src 'self' data: blob:; "
-                "media-src 'self' blob:; "
-                "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
-                "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self' 'unsafe-inline'; "
-                "connect-src 'self'; "
-                "worker-src 'self' blob:; "
-                "frame-ancestors 'none'; "
-                "base-uri 'self'; "
-                "form-action 'self'"
-            )
+        csp = (
+            "default-src 'self'; "
+            "img-src 'self' data: blob:; "
+            "media-src 'self' blob:; "
+            "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "script-src 'self' 'unsafe-inline'; "
+            "connect-src 'self'; "
+            "worker-src 'self' blob:; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
         response.headers.setdefault('Content-Security-Policy', csp)
-        if not settings.DEBUG and not is_mobile_app:
+        if not settings.DEBUG:
             response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         return response
 
