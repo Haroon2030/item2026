@@ -36,15 +36,12 @@ class SecurityHeadersMiddleware:
         is_mobile_app = path == '/app' or path.startswith('/app/')
         if is_mobile_app:
             csp = (
-                "default-src 'self' blob: data:; "
-                "img-src 'self' data: blob:; "
-                "media-src 'self' blob:; "
+                "default-src 'self'; "
+                "img-src 'self' data:; "
                 "style-src 'self' 'unsafe-inline'; "
-                "font-src 'self' data:; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; "
-                "connect-src 'self' blob:; "
-                "worker-src 'self' blob:; "
-                "child-src 'self' blob:; "
+                "font-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "connect-src 'self'; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'"
