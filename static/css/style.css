@@ -722,6 +722,21 @@ body.login-body {
   font-weight: 500;
 }
 
+.login-mobile-link {
+  margin: 0.7rem 0 0;
+}
+
+.login-mobile-link a {
+  color: #1d4f91;
+  font-weight: 800;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+.login-mobile-link a:hover {
+  text-decoration: underline;
+}
+
 .login-error {
   display: flex;
   align-items: center;

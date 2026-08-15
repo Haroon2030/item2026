@@ -8,6 +8,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
+from search.mobile_web import mobile_web_app
+
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class AppLoginView(auth_views.LoginView):
@@ -32,6 +34,8 @@ def client_version(_request):
 
 
 urlpatterns = [
+    path('app/', mobile_web_app, name='mobile_web'),
+    path('app/<path:asset>', mobile_web_app, name='mobile_web_asset'),
     path('client-version/', client_version, name='client_version'),
     path(
         'login/',

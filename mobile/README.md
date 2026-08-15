@@ -31,7 +31,11 @@ flutter pub get
 
 ## التشغيل
 
-الإنتاج (المصدر الحي):
+على الآيفون (Safari) بعد النشر:
+
+https://item.alrsheed.net/app/
+
+الإنتاج (المصدر الحي) من الكمبيوتر:
 
 ```bash
 flutter run --dart-define=API_BASE=https://item.alrsheed.net

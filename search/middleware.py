@@ -32,10 +32,23 @@ class SecurityHeadersMiddleware:
             response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
-        # السماح بـ media من نفس المصدر للكاميرا
-        response.headers.setdefault(
-            'Content-Security-Policy',
-            (
+        path = (request.path or '')
+        if path == '/app' or path.startswith('/app/'):
+            csp = (
+                "default-src 'self'; "
+                "img-src 'self' data: blob:; "
+                "media-src 'self' blob:; "
+                "style-src 'self' 'unsafe-inline'; "
+                "font-src 'self' data:; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
+                "connect-src 'self'; "
+                "worker-src 'self' blob:; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'"
+            )
+        else:
+            csp = (
                 "default-src 'self'; "
                 "img-src 'self' data: blob:; "
                 "media-src 'self' blob:; "
@@ -47,8 +60,8 @@ class SecurityHeadersMiddleware:
                 "frame-ancestors 'none'; "
                 "base-uri 'self'; "
                 "form-action 'self'"
-            ),
-        )
+            )
+        response.headers.setdefault('Content-Security-Policy', csp)
         if not settings.DEBUG:
             response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         return response
