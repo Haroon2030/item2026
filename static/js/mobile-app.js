@@ -165,15 +165,17 @@
       });
   }
 
-  function kpi(label, value, hint) {
+  function kpi(label, value, hint, tone) {
     return (
-      '<div class="m-kpi"><span>' +
+      '<article class="m-kpi m-kpi-' +
+      (tone || "n") +
+      '"><span>' +
       esc(label) +
       "</span><b>" +
       esc(value || "0") +
       "</b>" +
       (hint ? "<em>" + esc(hint) + "</em>" : "") +
-      "</div>"
+      "</article>"
     );
   }
 
@@ -185,7 +187,7 @@
       .map(function (row) {
         var pct = Math.max(0, Math.min(100, Number(row.share_pct) || 0));
         return (
-          '<div class="m-tile' +
+          '<article class="m-tile' +
           (row.no_sales ? " dim" : "") +
           '"><div class="m-tile-row"><span>' +
           esc(row.name) +
@@ -199,16 +201,18 @@
           esc(row.returns_display) +
           '</small><div class="m-bar"><i style="width:' +
           pct +
-          '%"></i></div><small>' +
+          '%"></i></div><small class="m-share">' +
           esc(row.share_display) +
-          "</small></div>"
+          "</small></article>"
         );
       })
       .join("");
   }
 
   function dailyView() {
-    if (state.loading && !state.daily) return '<p class="m-center">جاري التحميل…</p>';
+    if (state.loading && !state.daily) {
+      return '<div class="m-center"><div class="m-load"></div>جاري التحميل…</div>';
+    }
     if (state.error && !state.daily) {
       return (
         '<p class="m-center">' +
@@ -225,49 +229,74 @@
       html += '<div class="m-warn">عرض أرقام محفوظة — تعذّر الاتصال بأوراكل الآن.</div>';
     }
     html +=
+      '<section class="m-hero"><span>' +
+      esc(d.period_label || "صافي المبيعات") +
+      "</span><b>" +
+      esc(k.combined_sales_display || k.pos_sales_display || "0") +
+      "</b><em>" +
+      esc(k.combined_invoices_display || k.pos_invoices_display || "0") +
+      " فاتورة عبر القنوات" +
+      (d.scope_label ? " · " + esc(d.scope_label) : "") +
+      "</em></section>";
+    html +=
       '<div class="m-kpis">' +
-      kpi("مبيعات نقاط البيع", k.pos_sales_display, (k.pos_invoices_display || "0") + " فاتورة · " + (k.pos_branches || 0) + " فرع") +
-      kpi("مرتجع نقاط البيع", k.pos_returns_display) +
-      kpi("نظام المبيعات", k.wholesale_sales_display, (k.wholesale_invoices_display || "0") + " فاتورة") +
-      kpi("مبيعات أونكس", k.onix_sales_display) +
+      kpi("نقاط البيع", k.pos_sales_display, (k.pos_invoices_display || "0") + " فاتورة · " + (k.pos_branches || 0) + " فرع", "pos") +
+      kpi("المرتجع", k.pos_returns_display, "", "ret") +
+      kpi("نظام المبيعات", k.wholesale_sales_display, (k.wholesale_invoices_display || "0") + " فاتورة", "wh") +
+      kpi("أونكس", k.onix_sales_display, "", "onix") +
       "</div>";
-    ["top_visit_branch", "top_sales_branch", "top_return_branch"].forEach(function (key) {
-      var r = ranks[key];
+    var rankHtml = "";
+    [
+      ["top_visit_branch", "زيارة"],
+      ["top_sales_branch", "مبيعات"],
+      ["top_return_branch", "مرتجع"],
+    ].forEach(function (pair) {
+      var r = ranks[pair[0]];
       if (!r || !r.name || r.name === "—") return;
-      html +=
-        '<div class="m-tile"><small>' +
-        esc(r.title) +
-        '</small><div class="m-tile-row"><span>' +
+      rankHtml +=
+        '<div class="m-rank"><small>' +
+        esc(r.title || pair[1]) +
+        "</small><b>" +
         esc(r.name) +
-        "</span><span>" +
+        "</b><span>" +
         esc(r.value_display) +
-        "</span></div><small>" +
-        esc(r.hint) +
-        "</small></div>";
+        (r.hint ? " · " + esc(r.hint) : "") +
+        "</span></div>";
     });
-    html += '<div class="m-h">مبيعات الفروع — نقاط البيع</div>' + tiles(d.pos_branches);
+    if (rankHtml) html += '<div class="m-ranks">' + rankHtml + "</div>";
+    html += '<div class="m-h">فروع نقاط البيع</div>' + tiles(d.pos_branches);
     html += '<div class="m-h">نظام المبيعات</div>' + tiles(d.wholesale_branches);
     return html;
   }
 
   function groupsView() {
-    if (state.loading && !state.groups) return '<p class="m-center">جاري التحميل…</p>';
+    if (state.loading && !state.groups) {
+      return '<div class="m-center"><div class="m-load"></div>جاري التحميل…</div>';
+    }
     var g = state.groups;
     if (!g) return '<p class="m-center">لا توجد بيانات لعرضها.</p>';
     var t = g.totals || {};
     var html = "";
     if (g.warning) html += '<div class="m-warn">' + esc(g.warning) + "</div>";
     html +=
+      '<section class="m-hero"><span>مبيعات المجموعات</span><b>' +
+      esc(t.sales_total_display || "0") +
+      "</b><em>" +
+      esc(t.group_count_display || "0") +
+      " مجموعة · كمية " +
+      esc(t.qty_display || "0") +
+      "</em></section>";
+    html +=
       '<div class="m-kpis">' +
-      kpi("مبيعات المجموعات", t.sales_total_display, (t.group_count_display || "0") + " مجموعة") +
-      kpi("الفواتير والكمية", t.invoice_count_display, "كمية " + (t.qty_display || "0")) +
+      kpi("الفواتير", t.invoice_count_display, "", "pos") +
+      kpi("الكمية", t.qty_display, "", "onix") +
       '</div><div class="m-h">توزيع المجموعات</div>';
     var rows = g.rows || [];
     if (!rows.length) html += '<p class="m-center">لا مبيعات مجموعات في الفترة.</p>';
     rows.forEach(function (row) {
       var pct = Math.max(0, Math.min(100, Number(row.share_pct) || 0));
       html +=
-        '<div class="m-tile"><div class="m-tile-row"><span>' +
+        '<article class="m-tile"><div class="m-tile-row"><span>' +
         esc(row.name || row.group_name) +
         "</span><span>" +
         esc(row.sales_total_display) +
@@ -277,16 +306,16 @@
         esc(row.qty_display) +
         '</small><div class="m-bar"><i style="width:' +
         pct +
-        '%"></i></div><small>' +
+        '%"></i></div><small class="m-share">' +
         esc(row.share_display) +
-        "</small></div>";
+        "</small></article>";
     });
     return html;
   }
 
   function loginView() {
     return (
-      '<div class="m-login"><div class="m-brand"><h1>مبيعات الرشيد</h1><p>المبيعات اليومية ومبيعات المجموعات</p></div>' +
+      '<div class="m-login"><div class="m-brand"><div class="m-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6" fill="#c4a574"/><rect x="8.1" y="10.2" width="3.2" height="10.2" rx="1.6" fill="#e8d5b0"/><rect x="12.8" y="7.6" width="3.2" height="12.8" rx="1.6" fill="#fff"/><rect x="17.5" y="4.4" width="3.2" height="16" rx="1.6" fill="#c4a574"/></svg></div><h1>مبيعات الرشيد</h1><p>دفتر المبيعات اليومية والمجموعات</p></div>' +
       '<form class="m-login-card" id="login-form">' +
       '<label class="m-field"><span>المستخدم أو الرقم</span><input id="u" autocomplete="username" value="' +
       esc(state.loginUser) +
@@ -295,7 +324,9 @@
       (state.loginErr ? '<p class="m-err">' + esc(state.loginErr) + "</p>" : "") +
       '<button class="m-btn" type="submit"' +
       (state.busy ? " disabled" : "") +
-      ">دخول</button></form></div>"
+      ">" +
+      (state.busy ? "جاري الدخول…" : "دخول") +
+      "</button></form></div>"
     );
   }
 
@@ -314,11 +345,11 @@
         "</option>";
     });
     return (
-      '<div class="m-shell-head"><h2>' +
+      '<div class="m-shell-head"><div class="m-head-row"><div class="m-head-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6" fill="#c4a574"/><rect x="8.1" y="10.2" width="3.2" height="10.2" rx="1.6" fill="#e8d5b0"/><rect x="12.8" y="7.6" width="3.2" height="12.8" rx="1.6" fill="#fff"/><rect x="17.5" y="4.4" width="3.2" height="16" rx="1.6" fill="#c4a574"/></svg></div><div class="m-head-copy"><h2>' +
       esc(name) +
       "</h2><small>" +
-      esc(role) +
-      '</small><div class="m-actions"><button type="button" id="today">اليوم</button><button type="button" id="out">خروج</button></div>' +
+      esc(role || "مبيعات الرشيد") +
+      '</small></div></div><div class="m-actions"><button type="button" id="today">اليوم</button><button type="button" id="out">خروج</button></div>' +
       '<div class="m-filters"><input id="df" type="date" value="' +
       esc(state.dateFrom) +
       '"><input id="dt" type="date" value="' +
@@ -328,9 +359,9 @@
       '</select></div></div><div class="m-page" id="page"></div>' +
       '<nav class="m-nav"><button type="button" id="tab-daily" class="' +
       (state.tab === "daily" ? "on" : "") +
-      '">اليوم</button><button type="button" id="tab-groups" class="' +
+      '"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 18.2h16v-1.7H4v1.7zm0-5.7h11.2V10.8H4v1.7zM4 5.8v1.7h16V5.8H4z"/></svg><span>اليوم</span></button><button type="button" id="tab-groups" class="' +
       (state.tab === "groups" ? "on" : "") +
-      '">المجموعات</button></nav>'
+      '"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4.2 5.2h6.4v6.4H4.2V5.2zm9.2 0h6.4v3.8h-6.4V5.2zM4.2 13.4h6.4v5.4H4.2v-5.4zm9.2-2.6h6.4v8h-6.4v-8z"/></svg><span>المجموعات</span></button></nav>'
     );
   }
 
