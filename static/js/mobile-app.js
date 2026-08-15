@@ -237,7 +237,7 @@
       html +=
         '<div class="m-tile"><small>' +
         esc(r.title) +
-        "</small><div class="m-tile-row"><span>" +
+        '</small><div class="m-tile-row"><span>' +
         esc(r.name) +
         "</span><span>" +
         esc(r.value_display) +
@@ -261,7 +261,7 @@
       '<div class="m-kpis">' +
       kpi("مبيعات المجموعات", t.sales_total_display, (t.group_count_display || "0") + " مجموعة") +
       kpi("الفواتير والكمية", t.invoice_count_display, "كمية " + (t.qty_display || "0")) +
-      "</div><div class="m-h">توزيع المجموعات</div>";
+      '</div><div class="m-h">توزيع المجموعات</div>';
     var rows = g.rows || [];
     if (!rows.length) html += '<p class="m-center">لا مبيعات مجموعات في الفترة.</p>';
     rows.forEach(function (row) {
@@ -325,7 +325,7 @@
       esc(state.dateTo) +
       '"><select id="br">' +
       branchOpts +
-      "</select></div></div><div class="m-page" id="page"></div>" +
+      '</select></div></div><div class="m-page" id="page"></div>' +
       '<nav class="m-nav"><button type="button" id="tab-daily" class="' +
       (state.tab === "daily" ? "on" : "") +
       '">اليوم</button><button type="button" id="tab-groups" class="' +
