@@ -131,6 +131,7 @@ def _branch_row(row: dict) -> dict[str, Any]:
         'sales_display': str(row.get('sales_total_display') or '0.00'),
         'invoices': int(row.get('invoice_count') or 0),
         'invoices_display': str(row.get('invoice_count_display') or '0'),
+        'returns': float(row.get('return_total') or 0),
         'returns_display': str(row.get('return_total_display') or '0.00'),
         'avg_basket_display': str(row.get('avg_basket_display') or '0.00'),
         'share_pct': float(row.get('share_pct') or 0),
@@ -155,6 +156,8 @@ def _daily_payload(dash: dict, date_from, date_to) -> dict[str, Any]:
     wholesale = dash.get('wholesale') or {}
     ranks = dash.get('ranks') or {}
     pos_totals = pos.get('totals') or {}
+    wholesale_totals = wholesale.get('totals') or {}
+    onix_totals = (dash.get('onix') or {}).get('totals') or {}
     return {
         'date_from': date_from.isoformat(),
         'date_to': date_to.isoformat(),
@@ -162,18 +165,42 @@ def _daily_payload(dash: dict, date_from, date_to) -> dict[str, Any]:
         'scope_label': str(dash.get('scope_label') or ''),
         'from_cache': bool(dash.get('from_cache')),
         'kpis': {
+            'pos_sales': float(pos_totals.get('sales_total') or 0),
             'pos_sales_display': str(kpis.get('pos_sales') or '0.00'),
             'pos_invoices_display': str(kpis.get('pos_invoices') or '0'),
+            'pos_returns': float(pos_totals.get('return_total') or 0),
             'pos_returns_display': str(kpis.get('pos_returns') or '0.00'),
             'pos_branches': int(pos_totals.get('branch_count') or 0),
+            'wholesale_sales': float(wholesale_totals.get('sales_total') or 0),
             'wholesale_sales_display': str(kpis.get('wholesale_sales') or '0.00'),
             'wholesale_invoices_display': str(
                 kpis.get('wholesale_invoices') or '0'
             ),
+            'onix_sales': float(onix_totals.get('sales_total') or 0),
             'onix_sales_display': str(kpis.get('onix_sales') or '0.00'),
             'combined_sales_display': str(kpis.get('combined_sales') or '0.00'),
             'combined_invoices_display': str(
                 kpis.get('combined_invoices') or '0'
+            ),
+        },
+        'pos_totals': {
+            'sales_display': str(pos_totals.get('sales_total_display') or '0.00'),
+            'invoices_display': str(
+                pos_totals.get('invoice_count_display') or '0'
+            ),
+            'returns_display': str(
+                pos_totals.get('return_total_display') or '0.00'
+            ),
+        },
+        'wholesale_totals': {
+            'sales_display': str(
+                wholesale_totals.get('sales_total_display') or '0.00'
+            ),
+            'invoices_display': str(
+                wholesale_totals.get('invoice_count_display') or '0'
+            ),
+            'returns_display': str(
+                wholesale_totals.get('return_total_display') or '0.00'
             ),
         },
         'pos_branches': [

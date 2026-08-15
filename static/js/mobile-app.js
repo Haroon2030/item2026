@@ -165,6 +165,33 @@
       });
   }
 
+  var PALETTE = [
+    "#0e4a6e",
+    "#c4a574",
+    "#0d6b5c",
+    "#8f1d18",
+    "#156089",
+    "#5c4a32",
+    "#3d7a6a",
+    "#a67c52",
+  ];
+
+  function amt(row, key, displayKey) {
+    if (row && row[key] != null && row[key] !== "") {
+      var n = Number(row[key]);
+      if (isFinite(n)) return n;
+    }
+    var s = String((row && row[displayKey]) || "").replace(/,/g, "");
+    var n2 = Number(s);
+    return isFinite(n2) ? n2 : 0;
+  }
+
+  function salesOf(row) {
+    var a = amt(row, "sales", "sales_display");
+    if (a) return a;
+    return amt(row, "sales_total", "sales_total_display");
+  }
+
   function kpi(label, value, hint, tone) {
     return (
       '<article class="m-kpi m-kpi-' +
@@ -179,34 +206,202 @@
     );
   }
 
-  function tiles(rows) {
+  function donut(items, centerLabel) {
+    items = (items || []).filter(function (it) {
+      return it && it.value > 0;
+    });
+    if (!items.length) return "";
+    var total = 0;
+    items.forEach(function (it) {
+      total += it.value;
+    });
+    if (total <= 0) return "";
+    var circ = 2 * Math.PI * 34;
+    var offset = 0;
+    var rings =
+      '<circle cx="50" cy="50" r="34" fill="none" stroke="#efe6d8" stroke-width="12"></circle>';
+    var legend = "";
+    items.forEach(function (it, i) {
+      var color = it.color || PALETTE[i % PALETTE.length];
+      var len = (it.value / total) * circ;
+      rings +=
+        '<circle cx="50" cy="50" r="34" fill="none" stroke="' +
+        color +
+        '" stroke-width="12" stroke-dasharray="' +
+        len.toFixed(2) +
+        " " +
+        circ.toFixed(2) +
+        '" stroke-dashoffset="' +
+        (-offset).toFixed(2) +
+        '" transform="rotate(-90 50 50)"></circle>';
+      offset += len;
+      legend +=
+        '<li><i style="background:' +
+        color +
+        '"></i><span>' +
+        esc(it.label) +
+        "</span><b>" +
+        esc(it.display || Math.round((it.value / total) * 100) + "%") +
+        "</b></li>";
+    });
+    return (
+      '<div class="m-chart"><div class="m-donut-wrap"><svg class="m-donut" viewBox="0 0 100 100" aria-hidden="true">' +
+      rings +
+      '</svg><div class="m-donut-center"><small>' +
+      esc(centerLabel || "") +
+      '</small></div></div><ul class="m-legend">' +
+      legend +
+      "</ul></div>"
+    );
+  }
+
+  function hbars(rows, limit) {
+    var list = (rows || [])
+      .filter(function (row) {
+        return salesOf(row) > 0;
+      })
+      .slice();
+    list.sort(function (a, b) {
+      return salesOf(b) - salesOf(a);
+    });
+    list = list.slice(0, limit || 8);
+    if (!list.length) return "";
+    var max = 0;
+    list.forEach(function (row) {
+      var v = salesOf(row);
+      if (v > max) max = v;
+    });
+    var html = '<div class="m-hbars">';
+    list.forEach(function (row) {
+      var v = salesOf(row);
+      var pct = max > 0 ? Math.max(6, Math.round((v / max) * 100)) : 0;
+      html +=
+        '<div class="m-hbar"><span>' +
+        esc(row.name || row.group_name) +
+        '</span><div class="m-hbar-track"><i style="width:' +
+        pct +
+        '%"></i></div><b>' +
+        esc(row.sales_display || row.sales_total_display || "") +
+        "</b></div>";
+    });
+    return html + "</div>";
+  }
+
+  function card(title, inner) {
+    if (!inner) return "";
+    return (
+      '<section class="m-card"><div class="m-h">' +
+      esc(title) +
+      "</div>" +
+      inner +
+      "</section>"
+    );
+  }
+
+  function slicesFrom(rows, limit) {
+    var list = (rows || [])
+      .map(function (row) {
+        return {
+          label: row.name || row.group_name || "—",
+          value: salesOf(row),
+          display: row.sales_display || row.sales_total_display || "",
+        };
+      })
+      .filter(function (it) {
+        return it.value > 0;
+      });
+    list.sort(function (a, b) {
+      return b.value - a.value;
+    });
+    var top = list.slice(0, limit || 6);
+    var rest = list.slice(limit || 6);
+    var other = 0;
+    rest.forEach(function (it) {
+      other += it.value;
+    });
+    if (other > 0) {
+      top.push({ label: "أخرى", value: other, display: "", color: "#8a7a62" });
+    }
+    return top;
+  }
+
+  function branchTable(rows, totals, withReturns) {
     if (!rows || !rows.length) {
       return '<p class="m-center">لا مبيعات في الفترة.</p>';
     }
-    return rows
-      .map(function (row) {
-        var pct = Math.max(0, Math.min(100, Number(row.share_pct) || 0));
-        return (
-          '<article class="m-tile' +
-          (row.no_sales ? " dim" : "") +
-          '"><div class="m-tile-row"><span>' +
-          esc(row.name) +
-          "</span><span>" +
-          esc(row.sales_display) +
-          "</span></div><small>" +
-          esc(row.invoices_display) +
-          " فاتورة · متوسط سلة " +
-          esc(row.avg_basket_display) +
-          " · مرتجع " +
-          esc(row.returns_display) +
-          '</small><div class="m-bar"><i style="width:' +
-          pct +
-          '%"></i></div><small class="m-share">' +
-          esc(row.share_display) +
-          "</small></article>"
-        );
-      })
-      .join("");
+    var html =
+      '<div class="m-table-wrap"><table class="m-table"><thead><tr><th>#</th><th>الاسم</th><th>المبيعات</th><th>الحصة</th></tr></thead><tbody>';
+    rows.forEach(function (row, i) {
+      var pct = Math.max(0, Math.min(100, Number(row.share_pct) || 0));
+      var meta = esc(row.invoices_display || "0") + " فاتورة";
+      if (withReturns) meta += " · مرتجع " + esc(row.returns_display || "0");
+      html +=
+        "<tr" +
+        (row.no_sales ? ' class="dim"' : "") +
+        '><td class="idx">' +
+        (i + 1) +
+        '</td><td class="name"><b>' +
+        esc(row.name) +
+        "</b><small>" +
+        meta +
+        '</small></td><td class="amt">' +
+        esc(row.sales_display) +
+        '</td><td class="share"><span>' +
+        esc(row.share_display) +
+        '</span><div class="m-bar"><i style="width:' +
+        pct +
+        '%"></i></div></td></tr>';
+    });
+    html += "</tbody>";
+    if (totals) {
+      html +=
+        '<tfoot><tr><td></td><td>الإجمالي · ' +
+        esc(totals.invoices_display || "0") +
+        (withReturns ? " فاتورة · مرتجع " + esc(totals.returns_display || "0") : " فاتورة") +
+        '</td><td class="amt">' +
+        esc(totals.sales_display || "") +
+        "</td><td>100%</td></tr></tfoot>";
+    }
+    return html + "</table></div>";
+  }
+
+  function groupTable(rows, totals) {
+    if (!rows || !rows.length) {
+      return '<p class="m-center">لا مبيعات مجموعات في الفترة.</p>';
+    }
+    var html =
+      '<div class="m-table-wrap"><table class="m-table"><thead><tr><th>#</th><th>المجموعة</th><th>المبيعات</th><th>الحصة</th></tr></thead><tbody>';
+    rows.forEach(function (row, i) {
+      var pct = Math.max(0, Math.min(100, Number(row.share_pct) || 0));
+      html +=
+        '<tr><td class="idx">' +
+        (i + 1) +
+        '</td><td class="name"><b>' +
+        esc(row.name || row.group_name) +
+        "</b><small>" +
+        esc(row.invoice_count_display || "0") +
+        " فاتورة · كمية " +
+        esc(row.qty_display || "0") +
+        '</small></td><td class="amt">' +
+        esc(row.sales_total_display) +
+        '</td><td class="share"><span>' +
+        esc(row.share_display) +
+        '</span><div class="m-bar"><i style="width:' +
+        pct +
+        '%"></i></div></td></tr>';
+    });
+    html += "</tbody>";
+    if (totals) {
+      html +=
+        '<tfoot><tr><td></td><td>الإجمالي · ' +
+        esc(totals.invoice_count_display || "0") +
+        " فاتورة · كمية " +
+        esc(totals.qty_display || "") +
+        '</td><td class="amt">' +
+        esc(totals.sales_total_display || "") +
+        "</td><td>100%</td></tr></tfoot>";
+    }
+    return html + "</table></div>";
   }
 
   function dailyView() {
@@ -245,6 +440,32 @@
       kpi("نظام المبيعات", k.wholesale_sales_display, (k.wholesale_invoices_display || "0") + " فاتورة", "wh") +
       kpi("أونكس", k.onix_sales_display, "", "onix") +
       "</div>";
+    html += card(
+      "توزيع القنوات",
+      donut(
+        [
+          {
+            label: "نقاط البيع",
+            value: amt(k, "pos_sales", "pos_sales_display"),
+            display: k.pos_sales_display,
+            color: "#0e4a6e",
+          },
+          {
+            label: "نظام المبيعات",
+            value: amt(k, "wholesale_sales", "wholesale_sales_display"),
+            display: k.wholesale_sales_display,
+            color: "#c4a574",
+          },
+          {
+            label: "أونكس",
+            value: amt(k, "onix_sales", "onix_sales_display"),
+            display: k.onix_sales_display,
+            color: "#0d6b5c",
+          },
+        ],
+        "القنوات"
+      )
+    );
     var rankHtml = "";
     [
       ["top_visit_branch", "زيارة"],
@@ -264,8 +485,15 @@
         "</span></div>";
     });
     if (rankHtml) html += '<div class="m-ranks">' + rankHtml + "</div>";
-    html += '<div class="m-h">فروع نقاط البيع</div>' + tiles(d.pos_branches);
-    html += '<div class="m-h">نظام المبيعات</div>' + tiles(d.wholesale_branches);
+    html += card(
+      "فروع نقاط البيع · " + (d.pos_branches || []).length + " صف",
+      branchTable(d.pos_branches, d.pos_totals, true)
+    );
+    html += card(
+      "نظام المبيعات · " + (d.wholesale_branches || []).length + " صف",
+      branchTable(d.wholesale_branches, d.wholesale_totals, false)
+    );
+    html += card("أعلى فروع نقاط البيع", hbars(d.pos_branches, 8));
     return html;
   }
 
@@ -276,6 +504,7 @@
     var g = state.groups;
     if (!g) return '<p class="m-center">لا توجد بيانات لعرضها.</p>';
     var t = g.totals || {};
+    var rows = g.rows || [];
     var html = "";
     if (g.warning) html += '<div class="m-warn">' + esc(g.warning) + "</div>";
     html +=
@@ -290,26 +519,13 @@
       '<div class="m-kpis">' +
       kpi("الفواتير", t.invoice_count_display, "", "pos") +
       kpi("الكمية", t.qty_display, "", "onix") +
-      '</div><div class="m-h">توزيع المجموعات</div>';
-    var rows = g.rows || [];
-    if (!rows.length) html += '<p class="m-center">لا مبيعات مجموعات في الفترة.</p>';
-    rows.forEach(function (row) {
-      var pct = Math.max(0, Math.min(100, Number(row.share_pct) || 0));
-      html +=
-        '<article class="m-tile"><div class="m-tile-row"><span>' +
-        esc(row.name || row.group_name) +
-        "</span><span>" +
-        esc(row.sales_total_display) +
-        "</span></div><small>" +
-        esc(row.invoice_count_display) +
-        " فاتورة · كمية " +
-        esc(row.qty_display) +
-        '</small><div class="m-bar"><i style="width:' +
-        pct +
-        '%"></i></div><small class="m-share">' +
-        esc(row.share_display) +
-        "</small></article>";
-    });
+      "</div>";
+    html += card("توزيع المجموعات", donut(slicesFrom(rows, 6), "حصة"));
+    html += card(
+      "المجموعات · " + rows.length + " صف",
+      groupTable(rows, t)
+    );
+    html += card("أعلى المجموعات", hbars(rows, 8));
     return html;
   }
 
