@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}مقارنة طلب تحويل{% endblock %}
+{% block page_class %}sales-dash pr-compare-dash tr-compare-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مقارنة طلب تحويل">
+  <div class="dash-head-copy">
+    <h2>مقارنة طلب التحويل</h2>
+    <p>المخزن المطلوب = الرصيد المتوقع بعد خصم غير المرحّل · المخزن الرئيسي للفرع = الرصيد الحالي بعد الترحيل</p>
+  </div>
+  <a
+    class="sales-view-btn pr-compare-back"
+    href="{% url 'browse_tr_compare' %}?branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+  >رجوع للطلبات</a>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if compare %}
+  <section class="pr-compare-meta dash-panel-glass" aria-label="بيانات الطلب">
+    <div>
+      <span class="pr-compare-meta-label">الطلب</span>
+      <strong class="mono" title="{{ compare.header.tr_type }}/{{ compare.header.tr_ser }}">{{ compare.header.tr_no }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">الفرع</span>
+      <strong>{{ compare.header.branch_name }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">التاريخ والوقت</span>
+      <strong class="mono">{{ compare.header.date_label }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">المخزن المطلوب</span>
+      <strong class="mono" title="#{{ compare.header.from_wh_code }}">{{ compare.header.from_wh_label }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">المخزن الرئيسي</span>
+      <strong class="mono" title="#{{ compare.header.main_wh_code }}">{{ compare.header.main_wh_label }}</strong>
+    </div>
+    {% if compare.header.dest_differs %}
+    <div>
+      <span class="pr-compare-meta-label">مخزن الطلب</span>
+      <strong class="mono" title="#{{ compare.header.to_wh_code }}">{{ compare.header.to_wh_label }}</strong>
+    </div>
+    {% endif %}
+    <div>
+      <span class="pr-compare-meta-label">المستخدم</span>
+      <strong>{{ compare.header.user_name|default:compare.header.user_code }}</strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">الحالة</span>
+      <strong><span class="tr-status is-{{ compare.header.status_kind }}">{{ compare.header.status }}</span></strong>
+    </div>
+    <div>
+      <span class="pr-compare-meta-label">يغطي المطلوب</span>
+      <strong class="mono">{{ compare.source_ok_count }} / {{ compare.item_count }}</strong>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass pr-compare-sheet-panel" aria-label="جدول مقارنة الأصناف">
+    <div class="dash-panel-head">
+      <h3>ورقة المقارنة</h3>
+      <span class="result-pill">{{ compare.item_count }} صنف · ناقص {{ compare.source_short_count }}</span>
+    </div>
+
+    {% if compare.items %}
+      <div class="table-wrap pr-compare-sheet-wrap">
+        <table class="pr-compare-sheet">
+          <thead>
+            <tr>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-num">#</th>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-name">الصنف</th>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-code">الكود</th>
+              <th class="pr-compare-sheet-sticky pr-compare-sheet-unit">الوحدة</th>
+              <th class="pr-compare-sheet-req">مطلوب</th>
+              <th class="pr-compare-sheet-wh" title="{{ compare.header.from_wh_label }}">
+                <span class="pr-compare-sheet-wh-name">{{ compare.header.from_wh_label }}</span>
+                <span class="pr-compare-sheet-wh-branch">المخزن المطلوب</span>
+              </th>
+              <th class="pr-compare-sheet-wh" title="{{ compare.header.main_wh_label }}">
+                <span class="pr-compare-sheet-wh-name">{{ compare.header.main_wh_label }}</span>
+                <span class="pr-compare-sheet-wh-branch">المخزن الرئيسي بعد الترحيل</span>
+              </th>
+              <th class="pr-compare-sheet-count">النقص</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in compare.items %}
+              <tr class="{% if not item.can_cover %}is-empty{% endif %}">
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-num mono">{{ forloop.counter }}</td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-name" title="{{ item.name }}"><strong>{{ item.name }}</strong></td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-code mono">{{ item.code }}</td>
+                <td class="pr-compare-sheet-sticky pr-compare-sheet-unit">{{ item.unit }}</td>
+                <td class="pr-compare-sheet-req mono">{{ item.req_display }}</td>
+                {% if item.source.has_qty %}
+                  <td
+                    class="pr-compare-sheet-qty mono has-qty{% if not item.can_cover %} is-neg{% elif item.source.expected_low %} is-expected{% endif %}"
+                    title="رصيد حالي: {{ item.source.qty_display }}{% if item.source.pending_display %} — غير مرحّل: {{ item.source.pending_display }}{% endif %} — متوقع: {{ item.source.expected_display }}"
+                  >{{ item.source.expected_display }}</td>
+                {% else %}
+                  <td class="pr-compare-sheet-qty is-blank">—</td>
+                {% endif %}
+                {% if item.dest.has_qty %}
+                  <td
+                    class="pr-compare-sheet-qty mono has-qty"
+                    title="رصيد حالي في المخزن الرئيسي: {{ item.dest.qty_display }}{% if item.dest.pending_display %} — غير مرحّل: {{ item.dest.pending_display }}{% endif %} — متوقع: {{ item.dest.expected_display }}"
+                  >{{ item.dest.expected_display }}</td>
+                {% else %}
+                  <td class="pr-compare-sheet-qty is-blank">—</td>
+                {% endif %}
+                <td class="pr-compare-sheet-count mono">{% if item.can_cover %}—{% else %}{{ item.gap_display }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="pr-compare-sheet-note">الأرقام بنفس وحدة الطلب. الأحمر = المخزن المطلوب لا يغطي الكمية. مرّر على الخلية لرؤية الرصيد الحالي وغير المرحّل.</p>
+    {% else %}
+      <p class="sales-empty">لا توجد أصناف في هذا الطلب.</p>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

@@ -32,6 +32,20 @@ def _scope_label(branch_code: str, group_code: str) -> str:
     return " · ".join(parts) if parts else "كل الفروع والمجموعات"
 
 
+# فروع نقاط البيع المعتمدة — تظهر دائماً حتى بلا حركة
+_POS_STORE_TOKENS = (
+    "الدمام",
+    "حائل",
+    "سكاي",
+    "الربو",
+    "خميس",
+    "بريد",
+    "منصور",
+    "الواح",
+)
+_POS_STORE_FALLBACK_CODES = ("1", "6", "7", "8", "12", "18", "19", "20")
+
+
 def _empty_pos_branch_row(code: str, name: str) -> dict[str, Any]:
     label = str(name or code or "").strip() or str(code or "—")
     return {
@@ -46,44 +60,53 @@ def _empty_pos_branch_row(code: str, name: str) -> dict[str, Any]:
     }
 
 
-def _pos_known_branches() -> dict[str, str]:
-    """فروع التشغيل الظاهرة في فلتر المخازن — لإظهار من بلا مبيعات."""
-    try:
-        from .oracle_stock import fetch_warehouse_options
+def _fold_ar_name(name: str) -> str:
+    text = str(name or "")
+    for src, dst in (("ة", "ه"), ("أ", "ا"), ("إ", "ا"), ("آ", "ا"), ("ى", "ي")):
+        text = text.replace(src, dst)
+    while "اا" in text:
+        text = text.replace("اا", "ا")
+    return text
 
-        warehouses = fetch_warehouse_options(active_only=True)
-    except Exception:
-        warehouses = []
-    out: dict[str, str] = {}
-    for w in warehouses or []:
-        code = str(w.get("branch_code") or "").strip()
-        if not code:
-            continue
-        name = str(w.get("branch_name") or code).strip() or code
-        out.setdefault(code, name)
-    if out:
-        return out
+
+def _is_pos_store_name(name: str) -> bool:
+    text = _fold_ar_name(name)
+    return any(token in text for token in _POS_STORE_TOKENS)
+
+
+def _pos_store_branches() -> dict[str, str]:
+    """الدمام، حائل، سكاي، الربوة، الخميس، بريدة، المنصورة، الواحة."""
+    names: dict[str, str] = {}
     try:
         from .oracle_stock import _branch_names
 
-        return dict(_branch_names() or {})
+        names = dict(_branch_names() or {})
     except Exception:
-        return {}
+        names = {}
+    out: dict[str, str] = {}
+    for code, name in names.items():
+        key = str(code or "").strip()
+        if key and _is_pos_store_name(str(name or "")):
+            out[key] = str(name).strip() or key
+    for code in _POS_STORE_FALLBACK_CODES:
+        if code not in out:
+            out[code] = names.get(code) or code
+    return out
 
 
-def _pad_missing_pos_branches(
+def _pad_pos_store_branches(
     pos_raw: list[dict],
-    known_branches: dict[str, str],
+    stores: dict[str, str],
     selected: str = "",
 ) -> list[dict]:
-    """أضف فروعاً بلا حركة POS في الفترة بمبالغ صفرية."""
+    """أضف فروع نقاط البيع بلا حركة كصفوف صفرية — دون مخازن/إدارة."""
     rows = list(pos_raw or [])
     have = {str(r.get("branch_code") or "").strip() for r in rows}
     have.discard("")
-    names = dict(known_branches or {})
+    names = dict(stores or {})
     brn = str(selected or "").strip()
     if brn:
-        if brn not in have:
+        if brn in names and brn not in have:
             rows.append(_empty_pos_branch_row(brn, names.get(brn) or brn))
         return rows
     for code, name in names.items():
@@ -619,7 +642,7 @@ def _assemble_sales_branches_dashboard(
         # #endregion
 
     pos_branches, pos_totals = _format_branch_rows(
-        _pad_missing_pos_branches(pos_raw, _pos_known_branches(), brn)
+        _pad_pos_store_branches(pos_raw, _pos_store_branches(), brn)
     )
     wholesale_branches, wholesale_totals = _format_branch_rows(wholesale_raw)
     _onix_branches, onix_totals = _format_branch_rows(onix_raw)

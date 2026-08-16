@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}طلبات التحويل{% endblock %}
+{% block page_class %}sales-dash pr-compare-dash tr-compare-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="طلبات التحويل">
+  <div class="dash-head-copy">
+    <h2>طلبات التحويل</h2>
+    <p>حدد التاريخ والفرع لعرض الطلبات، ثم قارن الكمية المطلوبة مع رصيد المخزن المطلوب ورصيد المخزن الرئيسي للفرع</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_tr_compare' %}" class="pr-compare-filter" role="search">
+  <div class="pr-compare-filter-grid">
+    <div class="field">
+      <label for="tr-date">التاريخ</label>
+      <input
+        id="tr-date"
+        type="date"
+        name="date"
+        value="{{ selected_date }}"
+        max="{{ today }}"
+        required
+      >
+    </div>
+    <div class="field">
+      <label for="tr-branch">الفرع</label>
+      <div class="pr-compare-select-wrap">
+        <select id="tr-branch" name="branch" required onchange="this.form.warehouse && (this.form.warehouse.value=''); this.form.submit()">
+          <option value="">اختر الفرع</option>
+          {% for b in branches %}
+            <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="tr-warehouse">مخزن الطلب</label>
+      <div class="pr-compare-select-wrap">
+        <select id="tr-warehouse" name="warehouse" {% if not selected_branch %}disabled{% endif %} onchange="this.form.submit()">
+          {% if not selected_branch %}
+            <option value="">اختر الفرع أولاً</option>
+          {% else %}
+            <option value="">كل مخازن الطلب</option>
+            {% for w in warehouses %}
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% empty %}
+              <option value="">لا توجد مخازن لهذا الفرع</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+    </div>
+    <div class="field pr-compare-filter-actions">
+      <label class="sr-only" for="tr-compare-submit">عرض</label>
+      <button id="tr-compare-submit" type="submit" class="btn-primary pr-compare-submit">عرض الطلبات</button>
+    </div>
+  </div>
+  <div class="pr-compare-filter-meta">
+    <span class="pr-compare-chip {% if is_today %}is-today{% endif %}">{{ period_label }}</span>
+    {% if selected_branch %}
+      <span class="pr-compare-chip-muted">{{ requests_today|length }} طلب</span>
+      <span class="pr-compare-chip-muted">{{ warehouses|length }} مخزن للفرع</span>
+    {% endif %}
+    {% if selected_warehouse_name %}
+      <span class="pr-compare-chip is-wh">مخزن الطلب: {{ selected_warehouse }} — {{ selected_warehouse_name }}</span>
+    {% endif %}
+  </div>
+</form>
+
+<section class="dash-panel dash-panel-glass pr-compare-list-panel" aria-label="طلبات التحويل">
+  <div class="dash-panel-head">
+    <h3>طلبات التحويل — {{ period_label }}</h3>
+    <span class="result-pill">{% if selected_branch %}{{ requests_today|length }}{% else %}—{% endif %}</span>
+  </div>
+
+  {% if not selected_branch %}
+    <p class="sales-empty">اختر التاريخ والفرع لعرض الطلبات.</p>
+  {% elif requests_today %}
+    <div class="table-wrap pr-compare-sheet-wrap">
+      <table class="pr-compare-sheet pr-compare-list-sheet">
+        <thead>
+          <tr>
+            <th class="pr-compare-sheet-num">#</th>
+            <th class="pr-compare-list-col-req">رقم المستند</th>
+            <th class="pr-compare-list-col-when">التاريخ والوقت</th>
+            <th>المخزن المطلوب</th>
+            <th>المخزن الرئيسي</th>
+            <th class="pr-compare-list-col-user">المستخدم</th>
+            <th class="pr-compare-list-col-items">الأصناف</th>
+            <th>الحالة</th>
+            <th class="pr-compare-list-col-action">إجراء</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in requests_today %}
+            <tr>
+              <td class="pr-compare-sheet-num mono">{{ forloop.counter }}</td>
+              <td class="pr-compare-list-col-req mono" title="{{ row.tr_type }}/{{ row.tr_no }}/{{ row.tr_ser }}">{{ row.tr_no }}</td>
+              <td class="pr-compare-list-col-when mono">{{ row.date_label }}</td>
+              <td class="mono" title="#{{ row.from_wh_code }}">{{ row.from_wh_label }}</td>
+              <td class="mono" title="#{{ row.main_wh_code }}">{{ row.main_wh_label|default:row.to_wh_label }}</td>
+              <td class="pr-compare-list-col-user" title="{{ row.user_name }} #{{ row.user_code }}">{{ row.user_name|default:row.user_code }}</td>
+              <td class="pr-compare-list-col-items mono">{{ row.item_count }}</td>
+              <td>
+                <span class="tr-status is-{{ row.status_kind }}">{{ row.status }}</span>
+              </td>
+              <td class="pr-compare-list-col-action">
+                <a
+                  class="pr-compare-sheet-link"
+                  href="{% url 'browse_tr_compare_detail' %}?tr_type={{ row.tr_type|urlencode }}&amp;tr_no={{ row.tr_no|urlencode }}&amp;tr_ser={{ row.tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date={{ selected_date|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+                >مقارنة</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="sales-empty">لا توجد طلبات تحويل في {{ period_label }} لهذا الفرع{% if selected_warehouse_name %} ومخزن الطلب {{ selected_warehouse }} — {{ selected_warehouse_name }}{% endif %}.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}نشاط المستخدمين — منصة التحليل{% endblock %}
+{% block page_class %}sales-dash users-dash user-activity-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="users-page" aria-label="نشاط المستخدمين">
+  <section class="dash-head users-dash-head" aria-label="عنوان الصفحة">
+    <div class="dash-head-copy">
+      <h2>نشاط المستخدمين</h2>
+      <p>تسجيل وقت الدخول ووقت الخروج. الخروج يُحفظ عند الضغط على «تسجيل الخروج». إغلاق المتصفح لا يُسجَّل خروجاً.</p>
+    </div>
+    <div class="users-head-actions">
+      <span class="result-pill users-count-pill">{{ online_now }} داخل الآن</span>
+      <a class="sales-view-btn" href="{% url 'user_list' %}">المستخدمون</a>
+    </div>
+  </section>
+
+  <form method="get" action="{% url 'user_activity' %}" class="purchase-filter dash-panel-glass activity-filter" role="search">
+    <div class="field">
+      <label for="act-from">من</label>
+      <input id="act-from" type="date" name="date_from" value="{{ date_from }}" required>
+    </div>
+    <div class="field">
+      <label for="act-to">إلى</label>
+      <input id="act-to" type="date" name="date_to" value="{{ date_to }}" required>
+    </div>
+    <div class="field pr-q-field">
+      <label for="act-q">بحث بالاسم / الرقم</label>
+      <input id="act-q" type="search" name="q" value="{{ q }}" placeholder="اسم المستخدم أو رقمه…" maxlength="80" autocomplete="off">
+    </div>
+    <button type="submit" class="btn-primary">عرض</button>
+  </form>
+
+  <section class="dash-panel dash-panel-glass users-table-panel" aria-label="سجل الجلسات">
+    <div class="dash-panel-head">
+      <h3>سجل الدخول والخروج</h3>
+      <span class="result-pill">{{ session_count }} جلسة · {{ user_count }} مستخدم</span>
+    </div>
+    <div class="table-wrap users-table-wrap">
+      <table class="data-table sales-table users-table activity-table" aria-label="جدول نشاط المستخدمين">
+        <thead>
+          <tr>
+            <th class="users-col-num">#</th>
+            <th class="users-col-name">المستخدم</th>
+            <th class="activity-col-when">دخول</th>
+            <th class="activity-col-when">خروج</th>
+            <th class="activity-col-dur">المدة</th>
+            <th class="activity-col-status">الحالة</th>
+            <th class="activity-col-ip">IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr class="activity-row-{{ row.status }}">
+              <td class="mono users-col-num">{{ forloop.counter }}</td>
+              <td class="users-col-name">
+                <div class="users-name-cell">
+                  <span class="users-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="8" r="3.5"/>
+                      <path d="M5.5 19.5c1.6-3.2 3.9-4.8 6.5-4.8s4.9 1.6 6.5 4.8"/>
+                    </svg>
+                  </span>
+                  <div class="activity-user-copy">
+                    <strong class="users-name" title="{{ row.name }}">{{ row.name }}</strong>
+                    {% if row.phone %}<span class="activity-phone mono" dir="ltr">{{ row.phone }}</span>{% endif %}
+                  </div>
+                </div>
+              </td>
+              <td class="mono activity-col-when" dir="ltr">{{ row.login_display }}</td>
+              <td class="mono activity-col-when" dir="ltr">{% if row.logout_display %}{{ row.logout_display }}{% else %}—{% endif %}</td>
+              <td class="activity-col-dur">{% if row.duration %}{{ row.duration }}{% else %}—{% endif %}</td>
+              <td class="activity-col-status">
+                <span class="row-tag row-tag-{{ row.status }}">{{ row.status_label }}</span>
+              </td>
+              <td class="mono activity-col-ip" dir="ltr">{% if row.ip %}{{ row.ip }}{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="empty-cell">لا جلسات ضمن هذا الفلتر.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

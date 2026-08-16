@@ -13,6 +13,12 @@ urlpatterns = [
         views.browse_unsold_api,
         name='browse_unsold_api',
     ),
+    path('inventory/transfers/', views.browse_tr_compare, name='browse_tr_compare'),
+    path(
+        'inventory/transfers/request/',
+        views.browse_tr_compare_detail,
+        name='browse_tr_compare_detail',
+    ),
     path('purchases/', views.browse_purchases, name='browse_purchases'),
     path(
         'purchases/returns/',
@@ -83,6 +89,7 @@ urlpatterns = [
     path('income/assets/', views.browse_assets, name='browse_assets'),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
     path('users/', user_views.user_list, name='user_list'),
+    path('users/activity/', user_views.user_activity, name='user_activity'),
     path('users/add/', user_views.user_create, name='user_create'),
     path('users/<int:user_id>/edit/', user_views.user_edit, name='user_edit'),
     path('users/<int:user_id>/delete/', user_views.user_delete, name='user_delete'),

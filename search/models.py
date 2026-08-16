@@ -23,6 +23,38 @@ class UserProfile(models.Model):
         return f'{self.display_name} ({self.phone})'
 
 
+class UserActivitySession(models.Model):
+    """جلسة دخول: وقت الدخول ووقت الخروج لكل مستخدم."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='activity_sessions',
+        verbose_name='المستخدم',
+    )
+    user_name = models.CharField('الاسم', max_length=150)
+    user_phone = models.CharField('الرقم', max_length=20, blank=True, default='')
+    login_at = models.DateTimeField('وقت الدخول', db_index=True)
+    logout_at = models.DateTimeField('وقت الخروج', null=True, blank=True, db_index=True)
+    ip_address = models.CharField('عنوان IP', max_length=45, blank=True, default='')
+    user_agent = models.CharField('المتصفح', max_length=300, blank=True, default='')
+    session_key = models.CharField('مفتاح الجلسة', max_length=40, blank=True, default='', db_index=True)
+    source = models.CharField('المصدر', max_length=16, default='web')
+
+    class Meta:
+        verbose_name = 'جلسة مستخدم'
+        verbose_name_plural = 'جلسات المستخدمين'
+        ordering = ['-login_at']
+        indexes = [
+            models.Index(fields=['user', 'login_at'], name='search_uact_user_login_idx'),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.user_name} @ {self.login_at}'
+
+
 class ItemBarcode(models.Model):
     """ربط الباركود برقم الصنف من GetAllItems."""
 

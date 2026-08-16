@@ -1650,6 +1650,7 @@ def browse_vendor_turnover(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_vendor = str(request.GET.get('vendor') or '').strip()
     selected_decision = str(request.GET.get('decision') or '').strip().lower()
+    vendor_q = str(request.GET.get('q') or '').strip()[:80]
     view_mode = str(request.GET.get('view') or '').strip().lower()
     want_excel = str(request.GET.get('export') or '').strip().lower() in {
         '1',
@@ -1682,6 +1683,7 @@ def browse_vendor_turnover(request):
                 'selected_branch': selected_branch,
                 'selected_vendor': selected_vendor,
                 'selected_decision': selected_decision,
+                'vendor_q': vendor_q,
                 'view_mode': view_mode,
                 'branches': [],
                 'vendors': [],
@@ -1704,6 +1706,7 @@ def browse_vendor_turnover(request):
         )
         from .oracle_vendor_turnover import (
             apply_decision_filter,
+            apply_vendor_query,
             build_vendor_item_detail,
             build_vendor_item_detail_excel,
             build_vendor_turnover,
@@ -1878,6 +1881,8 @@ def browse_vendor_turnover(request):
                     raise
             if selected_decision and report:
                 report = apply_decision_filter(report, selected_decision)
+            if vendor_q and report:
+                report = apply_vendor_query(report, vendor_q)
             if want_excel and report is not None:
                 return build_vendor_turnover_excel(report)
             try:
@@ -1921,6 +1926,8 @@ def browse_vendor_turnover(request):
         back_qs['branch'] = selected_branch
     if selected_decision:
         back_qs['decision'] = selected_decision
+    if vendor_q:
+        back_qs['q'] = vendor_q
     back_list_url = f"{reverse('browse_vendor_turnover')}?{urlencode(back_qs)}"
 
     return render(
@@ -1934,6 +1941,7 @@ def browse_vendor_turnover(request):
             'selected_branch': selected_branch,
             'selected_vendor': selected_vendor,
             'selected_decision': selected_decision,
+            'vendor_q': vendor_q,
             'view_mode': view_mode,
             'branches': branches,
             'vendors': vendors,
@@ -2580,6 +2588,225 @@ def browse_pr_compare_detail(request):
             'error': error,
         },
     )
+
+
+def _pr_compare_filters(request):
+    """فلتر تاريخ/فرع/مخزن المشترك بين مقارنات الطلبات."""
+    from datetime import date, datetime
+
+    today = date.today()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    date_raw = str(request.GET.get('date') or '').strip()[:10]
+    selected_date = today
+    if date_raw:
+        try:
+            selected_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = today
+    return today, selected_date, selected_branch, selected_warehouse
+
+
+def _load_branch_warehouses(selected_branch: str, selected_warehouse: str):
+    from .oracle_pr_compare import _norm_code
+    from .oracle_stock import _branch_names, fetch_warehouse_options
+
+    all_warehouses = fetch_warehouse_options(active_only=True)
+    branch_name_map = _branch_names()
+
+    def _branch_label(code: str, fallback: str = '') -> str:
+        raw = str(code or '').strip()
+        if not raw:
+            return fallback or '—'
+        if raw in branch_name_map:
+            return branch_name_map[raw]
+        norm = _norm_code(raw)
+        for key, label in branch_name_map.items():
+            if _norm_code(key) == norm:
+                return label
+        return str(fallback or raw).strip() or raw
+
+    branch_map: dict[str, str] = {}
+    for row in all_warehouses:
+        brn = str(row.get('branch_code') or '').strip()
+        if not brn:
+            continue
+        branch_map[brn] = _branch_label(brn, row.get('branch_name') or '')
+    branches = [
+        {'code': code, 'name': name}
+        for code, name in sorted(branch_map.items(), key=lambda item: (item[1], item[0]))
+    ]
+    if selected_branch and selected_branch not in branch_map:
+        matched = next(
+            (
+                code
+                for code in branch_map
+                if _norm_code(code) == _norm_code(selected_branch)
+            ),
+            '',
+        )
+        selected_branch = matched
+
+    warehouses = (
+        [
+            row
+            for row in all_warehouses
+            if str(row.get('branch_code') or '').strip() == selected_branch
+            or _norm_code(row.get('branch_code')) == _norm_code(selected_branch)
+        ]
+        if selected_branch
+        else []
+    )
+    exact = [
+        row
+        for row in warehouses
+        if str(row.get('branch_code') or '').strip() == selected_branch
+    ]
+    if exact:
+        warehouses = exact
+    warehouses = sorted(
+        warehouses,
+        key=lambda row: (
+            str(row.get('name') or '').strip(),
+            str(row.get('code') or '').strip(),
+        ),
+    )
+    wh_codes = {str(row.get('code') or '').strip() for row in warehouses}
+    if selected_warehouse and selected_warehouse not in wh_codes:
+        selected_warehouse = ''
+    selected_warehouse_name = ''
+    if selected_warehouse:
+        selected_warehouse_name = next(
+            (
+                str(row.get('name') or selected_warehouse)
+                for row in warehouses
+                if str(row.get('code') or '').strip() == selected_warehouse
+            ),
+            selected_warehouse,
+        )
+    return (
+        selected_branch,
+        selected_warehouse,
+        selected_warehouse_name,
+        branches,
+        warehouses,
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_tr_compare(request):
+    """قائمة طلبات التحويل حسب التاريخ لمقارنة المخزن المطلوب مع المخزن الرئيسي للفرع."""
+    today, selected_date, selected_branch, selected_warehouse = _pr_compare_filters(
+        request
+    )
+    requests_today: list[dict] = []
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    selected_warehouse_name = ''
+    error = ''
+
+    try:
+        from .oracle_stock import oracle_enabled, oracle_session
+        from .oracle_tr_compare import fetch_today_transfer_requests
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن مقارنة طلبات التحويل.'
+        else:
+            with oracle_session():
+                (
+                    selected_branch,
+                    selected_warehouse,
+                    selected_warehouse_name,
+                    branches,
+                    warehouses,
+                ) = _load_branch_warehouses(selected_branch, selected_warehouse)
+                if selected_branch:
+                    requests_today = fetch_today_transfer_requests(
+                        branch_code=selected_branch,
+                        day=selected_date,
+                        warehouse_code=selected_warehouse,
+                    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_tr_compare failed: %s', exc)
+        error = f'تعذّر تحميل طلبات التحويل: {exc}'
+        requests_today = []
+
+    is_today = selected_date == today
+    period_label = 'اليوم' if is_today else selected_date.isoformat()
+
+    return render(
+        request,
+        'search/browse_tr_compare.html',
+        {
+            'today': today.isoformat(),
+            'selected_date': selected_date.isoformat(),
+            'period_label': period_label,
+            'is_today': is_today,
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_warehouse_name': selected_warehouse_name,
+            'branches': branches,
+            'warehouses': warehouses,
+            'requests_today': requests_today,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_tr_compare_detail(request):
+    """مقارنة أصناف طلب تحويل مع المخزن المطلوب والمخزن الرئيسي للفرع بعد الترحيل."""
+    tr_type = str(request.GET.get('tr_type') or '').strip()
+    tr_no = str(request.GET.get('tr_no') or '').strip()
+    tr_ser = str(request.GET.get('tr_ser') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_date = str(request.GET.get('date') or '').strip()[:10]
+    compare = None
+    error = ''
+
+    if not (tr_type and tr_no and tr_ser):
+        error = 'معرّف طلب التحويل غير مكتمل.'
+    else:
+        try:
+            from .oracle_stock import oracle_enabled, oracle_session
+            from .oracle_tr_compare import build_transfer_request_compare
+
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن مقارنة الطلب.'
+            else:
+                with oracle_session():
+                    compare = build_transfer_request_compare(
+                        tr_type=tr_type,
+                        tr_no=tr_no,
+                        tr_ser=tr_ser,
+                    )
+                if compare is None:
+                    error = 'طلب التحويل غير موجود أو غير نشط.'
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_tr_compare_detail failed: %s', exc)
+            error = f'تعذّر مقارنة طلب التحويل: {exc}'
+            compare = None
+
+    return render(
+        request,
+        'search/browse_tr_compare_detail.html',
+        {
+            'tr_type': tr_type,
+            'tr_no': tr_no,
+            'tr_ser': tr_ser,
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_date': selected_date,
+            'compare': compare,
+            'error': error,
+        },
+    )
+
 
 @login_required
 @require_GET

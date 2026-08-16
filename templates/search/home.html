@@ -7,45 +7,60 @@
 {% block content %}
 <section class="welcome-hero" aria-label="شاشة الترحيب">
   <div class="welcome-hero-copy">
-    <p class="welcome-kicker">منصة التحليل</p>
-    <h1 class="welcome-greeting">
-      مرحباً{% if display_name %}، <span class="welcome-name">{{ display_name }}</span>{% endif %}
-    </h1>
+    <p class="welcome-kicker">للإدارة العليا</p>
+    <h1 class="welcome-title">منصة التحليل</h1>
+    <p class="welcome-greeting">
+      أهلاً بك{% if display_name %}، <span class="welcome-name">{{ display_name }}</span>{% endif %}
+    </p>
     <p class="welcome-role-line">
-      <span class="welcome-role-label">الدور</span>
+      <span class="welcome-role-label">الصلاحية</span>
       <span class="welcome-role{% if is_staff_user %} is-staff{% endif %}">{{ role_name }}</span>
     </p>
-    <p class="welcome-sub">اختر قسماً من القائمة أو من الاختصارات أدناه للبدء</p>
+    <p class="welcome-sub">تحليل تشغيلي موحّد: صافي المبيعات، أرصدة المخزون، دورة التوريد، ومؤشرات الأداء — قراءة واحدة تدعم قرار الإدارة.</p>
   </div>
 
-  <nav class="welcome-shortcuts" aria-label="اختصارات سريعة">
-    <a class="welcome-card" href="{% url 'browse_sales' %}">
+  <nav class="welcome-shortcuts" aria-label="أقسام المنصة">
+    <a class="welcome-card welcome-card--sales" href="{% url 'browse_sales' %}">
       <span class="welcome-card-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
       </span>
       <strong>المبيعات</strong>
-      <span>تحليل المبيعات والأداء</span>
+      <span>صافي الفروع والقنوات بعد المرتجع</span>
     </a>
-    <a class="welcome-card" href="{% url 'browse_inventory' %}">
+    <a class="welcome-card welcome-card--perf" href="{% url 'browse_performance' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/><path d="M4 20h16"/></svg>
+      </span>
+      <strong>تحليل الأداء</strong>
+      <span>مقارنة الفترات ومؤشرات التشغيل</span>
+    </a>
+    <a class="welcome-card welcome-card--inv" href="{% url 'browse_inventory' %}">
       <span class="welcome-card-ico" aria-hidden="true">
         <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
       </span>
       <strong>المخزون</strong>
-      <span>تحليل المخزون والمجموعات</span>
+      <span>الأرصدة وحركة المجموعات</span>
     </a>
-    <a class="welcome-card" href="{% url 'item_search' %}">
-      <span class="welcome-card-ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
-      </span>
-      <strong>بحث الأصناف</strong>
-      <span>بحث بالباركود أو الاسم</span>
-    </a>
-    <a class="welcome-card" href="{% url 'browse_purchases' %}">
+    <a class="welcome-card welcome-card--purch" href="{% url 'browse_purchases' %}">
       <span class="welcome-card-ico" aria-hidden="true">
         <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 9H8L6 6z"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M6 6L5 3H2"/></svg>
       </span>
       <strong>المشتريات</strong>
-      <span>تحليل المشتريات والموردين</span>
+      <span>التوريد ودورة الموردين</span>
+    </a>
+    <a class="welcome-card welcome-card--income" href="{% url 'browse_income' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </span>
+      <strong>قائمة الدخل</strong>
+      <span>النتيجة المالية للفترة</span>
+    </a>
+    <a class="welcome-card welcome-card--search" href="{% url 'item_search' %}">
+      <span class="welcome-card-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      </span>
+      <strong>بحث الأصناف</strong>
+      <span>الباركود والاسم والوحدة</span>
     </a>
   </nav>
 </section>

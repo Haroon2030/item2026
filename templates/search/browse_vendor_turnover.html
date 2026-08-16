@@ -247,43 +247,72 @@
   <section class="dash-panel vt-table-panel" aria-label="جدول دوران الموردين">
     <div class="dash-panel-head">
       <div>
-        <h3>الموردون مرتّبون حسب الاستحقاق</h3>
-        <p class="sales-ov-sub">يستحق أولاً · ثم الأعلى مستحقاً · ثم أعلى دوراناً · اضغط الأصناف للتفصيل</p>
+        <h3>الموردون حسب الاستحقاق</h3>
+        <p class="sales-ov-sub">حركة الكرتون · الدوران · المستحق والقرار · اضغط الأصناف للتفصيل</p>
       </div>
-      <span class="result-pill">{{ report.rows|length }}</span>
+      <div class="vt-head-tools">
+        <label class="sr-only" for="vt-q">بحث الاسم أو الرقم</label>
+        <input
+          id="vt-q"
+          class="vt-q"
+          form="vt-filter-form"
+          type="search"
+          name="q"
+          value="{{ vendor_q }}"
+          placeholder="بحث الاسم أو الرقم"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <span class="result-pill" id="vt-count" data-total="{{ report.rows|length }}">{{ report.rows|length }}</span>
+      </div>
     </div>
     <div class="table-wrap vt-table-wrap">
-      <table class="data-table sales-table vt-table vt-table-compact">
+      <table class="data-table sales-table vt-table vt-table-compact vt-sheet">
+        <colgroup>
+          <col class="vt-col-idx">
+          <col class="vt-col-name">
+          <col class="vt-col-qty">
+          <col class="vt-col-qty">
+          <col class="vt-col-qty">
+          <col class="vt-col-turn">
+          <col class="vt-col-due">
+          <col class="vt-col-dec">
+          <col class="vt-col-items">
+        </colgroup>
         <thead>
           <tr>
-            <th>#</th>
-            <th>المورد</th>
-            <th>الاستحقاق</th>
-            <th class="mono">المستحق</th>
-            <th class="mono">الدوران</th>
-            <th class="mono">وارد كرتون</th>
-            <th class="mono">مباع كرتون</th>
-            <th class="mono">متبقي كرتون</th>
-            <th class="mono">أصناف</th>
+            <th rowspan="2" class="vt-col-idx">#</th>
+            <th rowspan="2" class="vt-col-name">المورد</th>
+            <th colspan="3" class="vt-g-qty vt-sep">حركة الكرتون</th>
+            <th rowspan="2" class="vt-col-turn vt-sep">الدوران</th>
+            <th colspan="2" class="vt-g-pay vt-sep">السداد</th>
+            <th rowspan="2" class="vt-col-items vt-sep">أصناف</th>
+          </tr>
+          <tr class="vt-subhead">
+            <th class="vt-sep" title="صافي الوارد بالكرتون">وارد</th>
+            <th title="المباع المنسوب لتوريد المورد">مباع</th>
+            <th title="الوارد ناقص المباع">متبقي</th>
+            <th class="vt-sep" title="رصيد دائن − مدين">المستحق</th>
+            <th title="قرار السداد حسب نسبة الدوران">القرار</th>
           </tr>
         </thead>
         <tbody>
           {% for row in report.rows %}
-            <tr class="vt-row-{{ row.decision_key }}">
-              <td class="mono">{{ forloop.counter }}</td>
-              <td class="vt-name-cell">
+            <tr class="vt-row-{{ row.decision_key }}" data-vt-name="{{ row.vendor_name }}" data-vt-code="{{ row.vendor_code }}">
+              <td class="mono vt-num">{{ forloop.counter }}</td>
+              <td class="vt-name-cell" title="{{ row.vendor_name }} · {{ row.vendor_code }}">
                 <strong>{{ row.vendor_name }}</strong>
                 <span class="vt-vendor-code mono">{{ row.vendor_code }}</span>
               </td>
+              <td class="mono vt-num vt-sep">{{ row.recv_qty_display }}</td>
+              <td class="mono vt-num">{{ row.sold_qty_display }}</td>
+              <td class="mono vt-num">{{ row.remain_qty_display }}</td>
+              <td class="mono vt-num vt-turn-cell vt-sep">{{ row.turnover_display }}</td>
+              <td class="mono vt-num vt-due-cell vt-sep{% if row.due_amt > 0 %} vt-due-pos{% elif row.due_amt < 0 %} vt-due-neg{% endif %}">{{ row.due_amt_display }}</td>
               <td>
                 <span class="vt-badge vt-badge-{{ row.decision_key }}" title="{{ row.decision_hint }}">{{ row.decision_label }}</span>
               </td>
-              <td class="mono vt-due-cell{% if row.due_amt > 0 %} vt-due-pos{% elif row.due_amt < 0 %} vt-due-neg{% endif %}">{{ row.due_amt_display }}</td>
-              <td class="mono vt-turn-cell">{{ row.turnover_display }}</td>
-              <td class="mono">{{ row.recv_qty_display }}</td>
-              <td class="mono">{{ row.sold_qty_display }}</td>
-              <td class="mono">{{ row.remain_qty_display }}</td>
-              <td class="mono">
+              <td class="mono vt-num vt-sep">
                 <a
                   class="vt-items-link"
                   href="{% url 'browse_vendor_turnover' %}?view=items&amp;vendor={{ row.vendor_code|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}{% if selected_branch %}&amp;branch={{ selected_branch|urlencode }}{% endif %}"
@@ -296,18 +325,21 @@
               <td colspan="9" class="sales-empty">لا توريدات مطابقة للفلاتر في الفترة.</td>
             </tr>
           {% endfor %}
+            <tr id="vt-empty-search" hidden>
+              <td colspan="9" class="sales-empty">لا مورد يطابق الاسم أو الرقم.</td>
+            </tr>
         </tbody>
         {% if report.rows %}
-          <tfoot>
+          <tfoot id="vt-foot">
             <tr class="sales-grand-row">
               <td colspan="2">الإجمالي</td>
+              <td class="mono vt-num vt-sep">{{ report.kpis.recv_qty_display }}</td>
+              <td class="mono vt-num">{{ report.kpis.sold_qty_display }}</td>
+              <td class="mono vt-num">—</td>
+              <td class="mono vt-num vt-sep">{{ report.kpis.turnover_display }}</td>
+              <td class="mono vt-num vt-sep">{{ report.kpis.due_amt_display }}</td>
               <td>—</td>
-              <td class="mono">{{ report.kpis.due_amt_display }}</td>
-              <td class="mono">{{ report.kpis.turnover_display }}</td>
-              <td class="mono">{{ report.kpis.recv_qty_display }}</td>
-              <td class="mono">{{ report.kpis.sold_qty_display }}</td>
-              <td class="mono">—</td>
-              <td class="mono">—</td>
+              <td class="mono vt-num vt-sep">—</td>
             </tr>
           </tfoot>
         {% endif %}
@@ -317,4 +349,8 @@
 {% endif %}
 
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/vendor-turnover.js?v={{ app_client_version }}" defer></script>
 {% endblock %}

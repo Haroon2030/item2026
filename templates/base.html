@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl" data-app-ver="{{ app_client_version }}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
@@ -99,13 +99,13 @@
           <span>الرئيسية</span>
         </a>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' or request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' or request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %}true{% else %}false{% endif %}"
             title="المخزون"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
@@ -124,6 +124,10 @@
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_unsold' %}is-active{% endif %}" href="{% url 'browse_unsold' %}" title="رصيد بلا مبيعات">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h2l2 10h10l2-7H7"/><path d="M18 4l3 3-3 3"/><path d="M21 7h-6"/></svg>
               <span>رصيد بلا مبيعات</span>
+            </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %}is-active{% endif %}" href="{% url 'browse_tr_compare' %}" title="طلبات التحويل">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z"/><path d="M17 11h4l-3 3 3 3h-4"/><path d="M7 13H3l3-3-3-3h4"/></svg>
+              <span>طلبات التحويل</span>
             </a>
           </div>
         </div>
@@ -231,23 +235,35 @@
           </div>
         </div>
         {% if request.user.is_staff %}
-          <a class="sidebar-link {% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' %}is-active{% endif %}" href="{% url 'user_list' %}" title="إدارة المستخدمين">
-            <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span>إدارة المستخدمين</span>
-          </a>
+          <div
+            class="sidebar-group{% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' or request.resolver_match.url_name == 'user_delete' or request.resolver_match.url_name == 'user_activity' %} is-open is-current{% endif %}"
+            data-sidebar-group
+          >
+            <button
+              type="button"
+              class="sidebar-link sidebar-group-toggle"
+              aria-expanded="{% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' or request.resolver_match.url_name == 'user_delete' or request.resolver_match.url_name == 'user_activity' %}true{% else %}false{% endif %}"
+              title="إدارة المستخدمين"
+            >
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>إدارة المستخدمين</span>
+              <svg class="sidebar-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="sidebar-group-items" role="group" aria-label="إدارة المستخدمين">
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' %}is-active{% endif %}" href="{% url 'user_list' %}" title="المستخدمون">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>المستخدمون</span>
+              </a>
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'user_activity' %}is-active{% endif %}" href="{% url 'user_activity' %}" title="نشاط المستخدمين">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span>نشاط المستخدمين</span>
+              </a>
+            </div>
+          </div>
         {% endif %}
       </nav>
 
       <div class="sidebar-foot">
-        <button type="button" class="sidebar-link sidebar-action btn-refresh" id="btn-refresh" title="تحديث الصفحة" aria-label="تحديث الصفحة">
-          <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M21 2v6h-6"/>
-            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
-            <path d="M3 22v-6h6"/>
-            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-          </svg>
-          <span class="btn-refresh-text">تحديث</span>
-        </button>
         <form method="post" action="{% url 'logout' %}" class="logout-form">
           {% csrf_token %}
           <button type="submit" class="sidebar-link sidebar-action btn-logout" title="تسجيل الخروج">

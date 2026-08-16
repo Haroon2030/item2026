@@ -5,7 +5,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from search.models import UserProfile
+from search.models import UserActivitySession, UserProfile
 from search.validators import contains_sql_injection, sanitize_search_query, ValidationError
 
 
@@ -309,3 +309,209 @@ class UserManagementTests(TestCase):
         response = self.client.post(reverse('user_delete', args=[target.pk]))
         self.assertRedirects(response, reverse('user_list'))
         self.assertFalse(get_user_model().objects.filter(pk=target.pk).exists())
+
+
+class UserActivityTests(TestCase):
+    def setUp(self):
+        self.staff = get_user_model().objects.create_user(
+            username='0501111111',
+            password='StrongPassword123!',
+            first_name='مشرف',
+            is_staff=True,
+        )
+        UserProfile.objects.create(
+            user=self.staff,
+            display_name='مشرف',
+            phone='0501111111',
+        )
+
+    def test_login_and_logout_are_recorded(self):
+        self.assertTrue(self.client.login(username='0501111111', password='StrongPassword123!'))
+        row = UserActivitySession.objects.get(user=self.staff)
+        self.assertIsNotNone(row.login_at)
+        self.assertIsNone(row.logout_at)
+        self.assertEqual(row.user_name, 'مشرف')
+
+        response = self.client.post(reverse('logout'))
+        self.assertEqual(response.status_code, 302)
+        row.refresh_from_db()
+        self.assertIsNotNone(row.logout_at)
+        self.assertGreaterEqual(row.logout_at, row.login_at)
+
+    def test_non_staff_cannot_open_activity_page(self):
+        normal = get_user_model().objects.create_user(
+            username='0502222222',
+            password='StrongPassword123!',
+        )
+        self.client.force_login(normal)
+        response = self.client.get(reverse('user_activity'))
+        self.assertEqual(response.status_code, 302)
+
+    def test_staff_can_open_activity_page(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('user_activity'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'نشاط المستخدمين')
+        self.assertContains(response, 'وقت الدخول')
+
+
+class TransferRequestCompareTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='trcmp',
+            password='StrongPassword123!',
+        )
+        self.client.force_login(self.user)
+
+    def test_list_requires_login(self):
+        self.client.logout()
+        response = self.client.get(reverse('browse_tr_compare'))
+        self.assertEqual(response.status_code, 302)
+
+    @patch('search.oracle_stock.oracle_enabled', return_value=False)
+    def test_list_renders_when_oracle_off(self, _enabled):
+        response = self.client.get(reverse('browse_tr_compare'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'طلبات التحويل')
+        self.assertContains(response, 'أوراكل غير مفعّل')
+
+    def test_detail_requires_complete_id(self):
+        response = self.client.get(reverse('browse_tr_compare_detail'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'معرّف طلب التحويل غير مكتمل')
+
+
+class MainWarehouseForBranchTests(TestCase):
+    @patch('search.oracle_tr_compare.oracle_enabled', return_value=True)
+    @patch('search.oracle_tr_compare._fetch_all')
+    def test_sky_picks_warehouse_60(self, fetch_all, _enabled):
+        from search.oracle_tr_compare import fetch_main_warehouse_for_branch
+
+        fetch_all.return_value = [
+            {'W_CODE': 15, 'W_NAME': 'مخزن 15', 'MAIN_WCODE': 0},
+            {'W_CODE': 60, 'W_NAME': 'مخزن 6 (سكاي مول)', 'MAIN_WCODE': 0},
+            {'W_CODE': 62, 'W_NAME': 'مخزن 62', 'MAIN_WCODE': 0},
+        ]
+        hit = fetch_main_warehouse_for_branch('6')
+        self.assertEqual(hit['code'], '60')
+        self.assertEqual(hit['name'], 'مخزن 6 (سكاي مول)')
+
+    @patch('search.oracle_tr_compare.oracle_enabled', return_value=True)
+    @patch('search.oracle_tr_compare._fetch_all')
+    def test_prefers_times_100_when_times_10_missing(self, fetch_all, _enabled):
+        from search.oracle_tr_compare import fetch_main_warehouse_for_branch
+
+        fetch_all.return_value = [
+            {'W_CODE': 900, 'W_NAME': 'مخزن 9', 'MAIN_WCODE': 0},
+            {'W_CODE': 91, 'W_NAME': 'مخزن 91', 'MAIN_WCODE': 0},
+        ]
+        hit = fetch_main_warehouse_for_branch('9')
+        self.assertEqual(hit['code'], '900')
+
+
+class PosSalesTableTests(TestCase):
+    @patch(
+        'search.sales_dashboard._pos_store_branches',
+        return_value={'6': 'سكاي مول'},
+    )
+    def test_pos_table_keeps_active_store(self, _stores):
+        from datetime import date
+
+        from search.sales_dashboard import _assemble_sales_branches_dashboard
+
+        payload = _assemble_sales_branches_dashboard(
+            [
+                {
+                    'branch_code': '6',
+                    'branch_name': 'سكاي مول',
+                    'invoice_count': 12,
+                    'return_count': 0,
+                    'return_total': 0,
+                    'sales_total': 1500,
+                    'avg_basket': 125,
+                }
+            ],
+            [],
+            [],
+            date(2026, 8, 1),
+            date(2026, 8, 16),
+        )
+        branches = payload['pos']['branches']
+        self.assertEqual([row['branch_code'] for row in branches], ['6'])
+        self.assertFalse(any(row.get('no_sales') for row in branches))
+
+    @patch(
+        'search.sales_dashboard._pos_store_branches',
+        return_value={'6': 'سكاي مول', '18': 'فرع حائل', '7': 'فرع الدمام'},
+    )
+    def test_listed_pos_stores_without_sales_are_red_zeros(self, _stores):
+        from datetime import date
+
+        from search.sales_dashboard import _assemble_sales_branches_dashboard
+
+        payload = _assemble_sales_branches_dashboard(
+            [
+                {
+                    'branch_code': '6',
+                    'branch_name': 'سكاي مول',
+                    'invoice_count': 12,
+                    'return_count': 0,
+                    'return_total': 0,
+                    'sales_total': 1500,
+                    'avg_basket': 125,
+                }
+            ],
+            [],
+            [],
+            date(2026, 8, 1),
+            date(2026, 8, 16),
+        )
+        by_code = {row['branch_code']: row for row in payload['pos']['branches']}
+        self.assertEqual(set(by_code), {'6', '18', '7'})
+        self.assertFalse(by_code['6']['no_sales'])
+        self.assertTrue(by_code['18']['no_sales'])
+        self.assertTrue(by_code['7']['no_sales'])
+        self.assertEqual(by_code['18']['sales_total_display'], '0.00')
+
+    def test_pos_store_name_tokens(self):
+        from search.sales_dashboard import _is_pos_store_name
+
+        self.assertTrue(_is_pos_store_name('فرع الدمام'))
+        self.assertTrue(_is_pos_store_name('سكاي مول'))
+        self.assertTrue(_is_pos_store_name('فرع الربوة'))
+        self.assertTrue(_is_pos_store_name('فرع الوااحة'))
+        self.assertTrue(_is_pos_store_name('خميس مشيط'))
+        self.assertFalse(_is_pos_store_name('الإدارة العامة'))
+        self.assertFalse(_is_pos_store_name('فرع الثلاجة'))
+
+
+class VendorQueryFilterTests(TestCase):
+    def test_matches_name_and_code(self):
+        from search.oracle_vendor_turnover import apply_vendor_query
+
+        report = {
+            'rows': [
+                {
+                    'vendor_code': '1203',
+                    'vendor_name': 'مؤسسة صالح',
+                    'decision_key': 'settle',
+                    'recv_qty': 10,
+                    'sold_qty': 8,
+                    'due_amt': 100,
+                },
+                {
+                    'vendor_code': '88',
+                    'vendor_name': 'شركة الأغذية',
+                    'decision_key': 'hold',
+                    'recv_qty': 4,
+                    'sold_qty': 1,
+                    'due_amt': 20,
+                },
+            ],
+            'kpis': {},
+        }
+        by_name = apply_vendor_query(report, 'صالح')
+        self.assertEqual([r['vendor_code'] for r in by_name['rows']], ['1203'])
+        by_code = apply_vendor_query(report, '88')
+        self.assertEqual([r['vendor_code'] for r in by_code['rows']], ['88'])
+        self.assertEqual(apply_vendor_query(report, 'لا يوجد')['rows'], [])

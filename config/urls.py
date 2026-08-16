@@ -17,6 +17,15 @@ class AppLoginView(auth_views.LoginView):
     redirect_authenticated_user = True
 
 
+class AppLogoutView(auth_views.LogoutView):
+    """يحفظ مفتاح الجلسة قبل flush حتى يُغلق صف النشاط الصحيح."""
+
+    def dispatch(self, request, *args, **kwargs):
+        session = getattr(request, 'session', None)
+        request._activity_session_key = (session.session_key if session else '') or ''
+        return super().dispatch(request, *args, **kwargs)
+
+
 @never_cache
 @require_GET
 def client_version(_request):
@@ -38,7 +47,7 @@ urlpatterns = [
         AppLoginView.as_view(),
         name='login',
     ),
-    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('logout/', AppLogoutView.as_view(), name='logout'),
     path('admin/', admin.site.urls),
     path('', include('search.urls')),
 ]

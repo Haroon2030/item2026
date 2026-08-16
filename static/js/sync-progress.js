@@ -1,19 +1,6 @@
 (function () {
   "use strict";
 
-  var refreshBtn = document.getElementById("btn-refresh");
-  if (refreshBtn) {
-    refreshBtn.addEventListener("click", function () {
-      refreshBtn.classList.add("is-spinning");
-      refreshBtn.disabled = true;
-      window.location.reload();
-    });
-  }
-})();
-
-(function () {
-  "use strict";
-
   var form = document.querySelector(".sync-form");
   if (!form) return;
 

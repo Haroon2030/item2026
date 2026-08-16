@@ -275,8 +275,7 @@
                   <th class="ss-col-num">#</th>
                   <th class="ss-col-name">المورد</th>
                   <th class="ss-col-code">الكود</th>
-                  <th class="ss-col-unit">آخر توريد</th>
-                  <th class="ss-col-unit">النوع</th>
+                  <th class="ss-col-date">آخر توريد</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,8 +284,7 @@
                     <td class="ss-col-num mono">{{ forloop.counter }}</td>
                     <td class="ss-col-name">{{ s.name }}</td>
                     <td class="ss-col-code mono">{{ s.code|default:"—" }}</td>
-                    <td class="ss-col-unit mono">{{ s.last_date|default:"—" }}</td>
-                    <td class="ss-col-unit">{% if s.main %}رئيسي{% else %}—{% endif %}</td>
+                    <td class="ss-col-date mono">{{ s.last_date|default:"—" }}</td>
                   </tr>
                 {% endfor %}
               </tbody>

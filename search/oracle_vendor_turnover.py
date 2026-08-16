@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import io
-from datetime import timedelta
+from datetime import date
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -14,6 +14,7 @@ from .oracle_stock import (
     OracleStockError,
     _as_date,
     _bind_brn,
+    _date_params,
     _fetch_all,
     _hung_ok,
     _pos_owner,
@@ -39,7 +40,7 @@ def _turnover_cache_key(
     vendor = str(vendor_code or "").strip()
     lim = max(1, min(int(limit or 1500), 5000))
     return (
-        f"vendor:turnover:v8:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"vendor:turnover:v10:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{brn}:{vendor}:{lim}"
     )
 
@@ -79,7 +80,7 @@ def peek_vendor_item_detail(
     vendor = str(vendor_code or "").strip()
     brn = str(branch_code or "").strip()
     cache_key = (
-        f"vendor:turnover:items:v1:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"vendor:turnover:items:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{brn}:{vendor}"
     )
     cached = cache.get(cache_key)
@@ -112,7 +113,7 @@ def format_qty(value: Any) -> str:
 
 def _item_max_pack_map() -> dict[str, float]:
     """أكبر عبوة لكل صنف (الوحدة الكبيرة / الكرتون) من IAS_ITM_DTL."""
-    cache_key = "vendor:turnover:maxpack:v1"
+    cache_key = "vendor:turnover:maxpack:v2"
     cached = cache.get(cache_key)
     if isinstance(cached, dict) and cached:
         return cached
@@ -123,7 +124,8 @@ def _item_max_pack_map() -> dict[str, float]:
             SELECT I_CODE AS I_CODE,
                    MAX(P_SIZE) AS MAX_P
             FROM {schema}.IAS_ITM_DTL
-            WHERE NVL(P_SIZE, 0) > 0
+            WHERE P_SIZE IS NOT NULL
+              AND P_SIZE > 1
             GROUP BY I_CODE
             """,
             {},
@@ -196,11 +198,31 @@ def _decision(turnover_pct: float) -> dict[str, str]:
     }
 
 
+def _bind_icode(value: Any):
+    s = _code_str(value)
+    if s.isdigit():
+        try:
+            return int(s)
+        except ValueError:
+            return s
+    return s
+
+
+def _icode_in(codes: list[str]) -> tuple[str, dict[str, Any]]:
+    params: dict[str, Any] = {}
+    keys: list[str] = []
+    for index, code in enumerate(codes):
+        key = f"c{index}"
+        keys.append(f":{key}")
+        params[key] = _bind_icode(code)
+    return ", ".join(keys), params
+
+
 def _pi_filters(brn: str, vendor: str) -> tuple[list[str], dict[str, Any]]:
     filters = [
         "m.BILL_DATE >= :d_from",
         "m.BILL_DATE < :d_to_excl",
-        "NVL(m.HUNG, 0) = 0",
+        _hung_ok("m"),
         "m.V_CODE IS NOT NULL",
         "d.I_CODE IS NOT NULL",
     ]
@@ -218,7 +240,7 @@ def _pr_filters(brn: str, vendor: str) -> tuple[list[str], dict[str, Any]]:
     filters = [
         "r.RT_BILL_DATE >= :d_from",
         "r.RT_BILL_DATE < :d_to_excl",
-        "NVL(r.HUNG, 0) = 0",
+        _hung_ok("r"),
         "r.V_CODE IS NOT NULL",
         "d.I_CODE IS NOT NULL",
     ]
@@ -260,6 +282,77 @@ def _rt_filters(brn: str) -> tuple[list[str], dict[str, Any]]:
     return filters, params
 
 
+def _month_slices(d_from, d_to_excl) -> list[tuple[date, date]]:
+    """فترات شهرية نصف مفتوحة حتى لا تتجاوز مهلة استدعاء أوراكل (120ث)."""
+    start = _as_date(d_from)
+    end = _as_date(d_to_excl)
+    if start >= end:
+        return []
+    slices: list[tuple[date, date]] = []
+    cur = start
+    while cur < end:
+        nxt = date(cur.year + 1, 1, 1) if cur.month == 12 else date(cur.year, cur.month + 1, 1)
+        slices.append((cur, min(nxt, end)))
+        cur = nxt
+    return slices
+
+
+def _merge_item_qty(parts: list[list[dict] | None]) -> list[dict]:
+    merged: dict[str, float] = {}
+    for rows in parts:
+        for row in rows or []:
+            code = _code_str(row.get("I_CODE"))
+            if not code:
+                continue
+            merged[code] = merged.get(code, 0.0) + float(row.get("QTY") or 0)
+    return [{"I_CODE": code, "QTY": qty} for code, qty in merged.items()]
+
+
+def _month_cache_ttl(end: date) -> int:
+    today = date.today()
+    current_month = date(today.year, today.month, 1)
+    return 12 * 3600 if end <= current_month else 20 * 60
+
+
+def _fetch_item_qty_monthly(sql: str, date_params: dict, extra: dict, cache_prefix: str) -> list[dict]:
+    slices = _month_slices(date_params["d_from"], date_params["d_to_excl"])
+    if not slices:
+        return []
+    brn = extra.get("brn", "")
+    parts: list[list[dict] | None] = []
+    missing: list[tuple[date, date, str]] = []
+    for start, end in slices:
+        key = f"{cache_prefix}:{start.isoformat()}:{end.isoformat()}:{brn}"
+        cached = cache.get(key)
+        if isinstance(cached, list):
+            parts.append(cached)
+        else:
+            missing.append((start, end, key))
+
+    def _batch(items: list[tuple[date, date, str]]) -> list[list[dict]]:
+        out: list[list[dict]] = []
+        with oracle_session():
+            for start, end, key in items:
+                rows = _fetch_all(sql, {**extra, "d_from": start, "d_to_excl": end}) or []
+                cache.set(key, rows, _month_cache_ttl(end))
+                out.append(rows)
+        return out
+
+    if missing:
+        workers = min(4, len(missing))
+        batches: list[list[tuple[date, date, str]]] = [[] for _ in range(workers)]
+        for index, item in enumerate(missing):
+            batches[index % workers].append(item)
+        fetched = _run_parallel(
+            [lambda b=batch: _batch(b) for batch in batches],
+            max_workers=workers,
+            timeout_sec=200.0,
+        )
+        for group in fetched:
+            parts.extend(group or [])
+    return _merge_item_qty(parts)
+
+
 def _fetch_pi_rows(date_params: dict, brn: str, vendor: str) -> list[dict]:
     schema = _schema()
     filters, extra = _pi_filters(brn, vendor)
@@ -267,15 +360,13 @@ def _fetch_pi_rows(date_params: dict, brn: str, vendor: str) -> list[dict]:
     with oracle_session():
         return _fetch_all(
             f"""
-            SELECT m.V_CODE AS V_CODE,
-                   MAX(NVL(m.V_NAME, TO_CHAR(m.V_CODE))) AS V_NAME,
+            SELECT /*+ LEADING(m d) USE_NL(d) INDEX(d INDX_SER_PI_BILL_DTL) */
+                   m.V_CODE AS V_CODE,
+                   MAX(m.V_NAME) AS V_NAME,
                    d.I_CODE AS I_CODE,
                    SUM({_BASE_QTY_SQL}) AS QTY
             FROM {schema}.IAS_PI_BILL_MST m
-            JOIN {schema}.IAS_PI_BILL_DTL d
-              ON d.BILL_NO = m.BILL_NO
-             AND d.BILL_SER = m.BILL_SER
-             AND d.BILL_DOC_TYPE = m.BILL_DOC_TYPE
+            JOIN {schema}.IAS_PI_BILL_DTL d ON d.BILL_SER = m.BILL_SER
             WHERE {where}
             GROUP BY m.V_CODE, d.I_CODE
             """,
@@ -290,15 +381,13 @@ def _fetch_pr_rows(date_params: dict, brn: str, vendor: str) -> list[dict]:
     with oracle_session():
         return _fetch_all(
             f"""
-            SELECT r.V_CODE AS V_CODE,
-                   MAX(NVL(r.V_NAME, TO_CHAR(r.V_CODE))) AS V_NAME,
+            SELECT /*+ LEADING(r d) USE_NL(d) */
+                   r.V_CODE AS V_CODE,
+                   MAX(r.V_NAME) AS V_NAME,
                    d.I_CODE AS I_CODE,
                    SUM({_BASE_QTY_SQL}) AS QTY
             FROM {schema}.IAS_PR_BILL_MST r
-            JOIN {schema}.IAS_PR_BILL_DTL d
-              ON d.RT_BILL_NO = r.RT_BILL_NO
-             AND d.RT_BILL_SER = r.RT_BILL_SER
-             AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
+            JOIN {schema}.IAS_PR_BILL_DTL d ON d.RT_BILL_SER = r.RT_BILL_SER
             WHERE {where}
             GROUP BY r.V_CODE, d.I_CODE
             """,
@@ -307,45 +396,38 @@ def _fetch_pr_rows(date_params: dict, brn: str, vendor: str) -> list[dict]:
 
 
 def _fetch_pos_sold(date_params: dict, brn: str) -> list[dict]:
-    """مسح واحد لمبيعات الفترة حسب الصنف — أسرع من IN على آلاف الأصناف."""
+    """قيادة بالتاريخ على رأس POS ثم JOIN التفاصيل على BILL_NO — شهرياً."""
     pos = _pos_owner()
     filters, extra = _pos_filters(brn)
     where = " AND ".join(filters)
-    with oracle_session():
-        return _fetch_all(
-            f"""
-            SELECT d.I_CODE AS I_CODE,
+    sql = f"""
+            SELECT /*+ LEADING(m d) USE_NL(d)
+                       INDEX(m POSBILLMST_BILLDATEUSRBRN)
+                       INDEX(d IAS_POS_INDX_BILL_DTL) */
+                   d.I_CODE AS I_CODE,
                    SUM({_BASE_QTY_SQL}) AS QTY
-            FROM {pos}.IAS_POS_BILL_DTL d
-            JOIN {pos}.IAS_POS_BILL_MST m
-              ON m.BILL_NO = d.BILL_NO
-             AND m.BRN_NO = d.BRN_NO
-             AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+            FROM {pos}.IAS_POS_BILL_MST m
+            JOIN {pos}.IAS_POS_BILL_DTL d ON d.BILL_NO = m.BILL_NO
             WHERE {where}
             GROUP BY d.I_CODE
-            """,
-            {**date_params, **extra},
-        )
+            """
+    return _fetch_item_qty_monthly(sql, date_params, extra, "vt:pos:v1")
 
 
 def _fetch_pos_returns(date_params: dict, brn: str) -> list[dict]:
     pos = _pos_owner()
     filters, extra = _rt_filters(brn)
     where = " AND ".join(filters)
-    with oracle_session():
-        return _fetch_all(
-            f"""
-            SELECT d.I_CODE AS I_CODE,
+    sql = f"""
+            SELECT /*+ LEADING(m d) USE_NL(d) */
+                   d.I_CODE AS I_CODE,
                    SUM({_BASE_QTY_SQL}) AS QTY
-            FROM {pos}.IAS_POS_RT_BILL_DTL d
-            JOIN {pos}.IAS_POS_RT_BILL_MST m
-              ON m.RT_BILL_NO = d.RT_BILL_NO
-             AND m.BRN_NO = d.BRN_NO
+            FROM {pos}.IAS_POS_RT_BILL_MST m
+            JOIN {pos}.IAS_POS_RT_BILL_DTL d ON d.RT_BILL_NO = m.RT_BILL_NO
             WHERE {where}
             GROUP BY d.I_CODE
-            """,
-            {**date_params, **extra},
-        )
+            """
+    return _fetch_item_qty_monthly(sql, date_params, extra, "vt:posrt:v1")
 
 
 def _item_pack_detail_map(item_codes: list[str]) -> dict[str, dict[str, Any]]:
@@ -355,29 +437,28 @@ def _item_pack_detail_map(item_codes: list[str]) -> dict[str, dict[str, Any]]:
         return {}
     schema = _schema()
     out: dict[str, dict[str, Any]] = {}
-    # دفعات لتفادي حدود IN
     chunk = 900
     with oracle_session():
         for i in range(0, len(codes), chunk):
             part = codes[i : i + chunk]
-            binds = {f"c{n}": part[n] for n in range(len(part))}
-            in_list = ", ".join(f":c{n}" for n in range(len(part)))
+            in_list, binds = _icode_in(part)
             rows = _fetch_all(
                 f"""
-                SELECT TO_CHAR(x.I_CODE) AS I_CODE,
+                SELECT x.I_CODE AS I_CODE,
                        x.P_SIZE AS P_SIZE,
-                       NVL(TRIM(x.ITM_UNT), '') AS ITM_UNT
+                       x.ITM_UNT AS ITM_UNT
                 FROM (
                     SELECT d.I_CODE,
                            d.P_SIZE,
                            d.ITM_UNT,
                            ROW_NUMBER() OVER (
                              PARTITION BY d.I_CODE
-                             ORDER BY NVL(d.P_SIZE, 0) DESC, d.ITM_UNT
+                             ORDER BY d.P_SIZE DESC, d.ITM_UNT
                            ) AS RN
                     FROM {schema}.IAS_ITM_DTL d
-                    WHERE TO_CHAR(d.I_CODE) IN ({in_list})
-                      AND NVL(d.P_SIZE, 0) > 0
+                    WHERE d.I_CODE IN ({in_list})
+                      AND d.P_SIZE IS NOT NULL
+                      AND d.P_SIZE > 0
                 ) x
                 WHERE x.RN = 1
                 """,
@@ -408,21 +489,22 @@ def _item_name_map(item_codes: list[str]) -> dict[str, str]:
     with oracle_session():
         for i in range(0, len(codes), chunk):
             part = codes[i : i + chunk]
-            binds = {f"c{n}": part[n] for n in range(len(part))}
-            in_list = ", ".join(f":c{n}" for n in range(len(part)))
+            in_list, binds = _icode_in(part)
             rows = _fetch_all(
                 f"""
-                SELECT TO_CHAR(I_CODE) AS I_CODE,
-                       NVL(NULLIF(TRIM(I_NAME), ''), TO_CHAR(I_CODE)) AS I_NAME
+                SELECT I_CODE AS I_CODE,
+                       I_NAME AS I_NAME
                 FROM {schema}.IAS_ITM_MST
-                WHERE TO_CHAR(I_CODE) IN ({in_list})
+                WHERE I_CODE IN ({in_list})
                 """,
                 binds,
             )
             for row in rows or []:
                 code = _code_str(row.get("I_CODE"))
-                if code:
-                    out[code] = str(row.get("I_NAME") or code).strip() or code
+                if not code:
+                    continue
+                name = str(row.get("I_NAME") or "").strip()
+                out[code] = name or code
     return out
 
 
@@ -491,51 +573,48 @@ def _sold_by_item_cartons(
     return sold_by_item
 
 
-def _fetch_vendor_due_map(date_params: dict, brn: str, vendor: str) -> dict[str, float]:
-    """رصيد المورد المستحق (دائن − مدين) من قيود الموردين — الرصيد الحالي.
-
-    يُقيَّد بموردي فواتير الشراء في نفس فترة/فرع التقرير لتسريع الاستعلام.
-    """
+def _fetch_all_vendor_dues(brn: str) -> dict[str, float]:
+    """رصيد كل الموردين الحالي — لا يعتمد على فترة التقرير فيُكاش 20 دقيقة."""
+    cache_key = f"vt:due:v2:{brn or 'all'}"
+    cached = cache.get(cache_key)
+    if isinstance(cached, dict) and cached:
+        return cached
     schema = _schema()
-    pi_filters, pi_extra = _pi_filters(brn, vendor)
-    # للمورد يكفي وجوده في توريدات الفترة (بدون تفاصيل أصناف)
-    pi_filters = [f for f in pi_filters if f != "d.I_CODE IS NOT NULL"]
-    pi_where = " AND ".join(pi_filters)
-    due_filters = [
-        "p.AC_DTL_TYP = 4",
-        "p.AC_CODE_DTL IS NOT NULL",
-        f"""EXISTS (
-              SELECT 1
-              FROM {schema}.IAS_PI_BILL_MST m
-              WHERE m.V_CODE = p.AC_CODE_DTL
-                AND {pi_where}
-            )""",
-    ]
-    params: dict[str, Any] = {**date_params, **pi_extra}
+    filters = ["p.AC_DTL_TYP = 4", "p.AC_CODE_DTL IS NOT NULL"]
+    params: dict[str, Any] = {}
     if brn:
         params["due_brn"] = _bind_brn(brn)
-        due_filters.append("p.BRN_NO = :due_brn")
-    if vendor:
-        params["due_vendor"] = _bind_vendor(vendor)
-        due_filters.append("p.AC_CODE_DTL = :due_vendor")
-    where = " AND ".join(due_filters)
-    with oracle_session():
-        rows = _fetch_all(
-            f"""
-            SELECT TO_CHAR(p.AC_CODE_DTL) AS V_CODE,
-                   ROUND(SUM(NVL(p.CR_AMT, 0) - NVL(p.DR_AMT, 0)), 2) AS DUE_AMT
-            FROM {schema}.IAS_V_POST_DTL_VNDR_YR p
-            WHERE {where}
-            GROUP BY TO_CHAR(p.AC_CODE_DTL)
-            """,
-            params,
-        )
+        filters.append("p.BRN_NO = :due_brn")
+    try:
+        with oracle_session():
+            rows = _fetch_all(
+                f"""
+                SELECT p.AC_CODE_DTL AS V_CODE,
+                       ROUND(SUM(NVL(p.CR_AMT, 0) - NVL(p.DR_AMT, 0)), 2) AS DUE_AMT
+                FROM {schema}.IAS_V_POST_DTL_VNDR_YR p
+                WHERE {" AND ".join(filters)}
+                GROUP BY p.AC_CODE_DTL
+                """,
+                params,
+            )
+    except Exception:
+        return {}
     out: dict[str, float] = {}
     for row in rows or []:
         code = _code_str(row.get("V_CODE"))
         if code:
             out[code] = round(float(row.get("DUE_AMT") or 0), 2)
+    if out:
+        cache.set(cache_key, out, 20 * 60)
     return out
+
+
+def _fetch_vendor_due_map(vendor_codes: list[str], brn: str) -> dict[str, float]:
+    all_due = _fetch_all_vendor_dues(brn)
+    if not vendor_codes:
+        return all_due
+    wanted = {_code_str(c) for c in vendor_codes if _code_str(c)}
+    return {code: amt for code, amt in all_due.items() if code in wanted}
 
 
 def build_vendor_turnover(
@@ -567,28 +646,24 @@ def build_vendor_turnover(
     if cached is not None:
         return cached
 
-    date_params = {
-        "d_from": d_from,
-        "d_to_excl": d_to + timedelta(days=1),
-    }
+    date_params = _date_params(d_from, d_to)
 
     # عمال أقل لتقليل ضغط الاتصالات على الشبكات البطيئة / VPN
-    pi_rows, pr_rows, sold_rows, ret_rows, due_map, packs = _run_parallel(
+    pi_rows, pr_rows, sold_rows, ret_rows, packs, due_all = _run_parallel(
         [
             lambda: _fetch_pi_rows(date_params, brn, vendor),
             lambda: _fetch_pr_rows(date_params, brn, vendor),
             lambda: _fetch_pos_sold(date_params, brn),
             lambda: _fetch_pos_returns(date_params, brn),
-            lambda: _fetch_vendor_due_map(date_params, brn, vendor),
             _item_max_pack_map,
+            lambda: _fetch_all_vendor_dues(brn),
         ],
-        max_workers=3,
+        max_workers=2,
         timeout_sec=240.0,
     )
     if not isinstance(packs, dict):
         packs = {}
-    if not isinstance(due_map, dict):
-        due_map = {}
+    due_map = due_all if isinstance(due_all, dict) else {}
 
     recv_rows = _net_recv_rows(pi_rows, pr_rows)
     if not recv_rows:
@@ -754,17 +829,14 @@ def build_vendor_item_detail(
     d_to = _as_date(date_to)
     brn = str(branch_code or "").strip()
     cache_key = (
-        f"vendor:turnover:items:v1:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"vendor:turnover:items:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{brn}:{vendor}"
     )
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    date_params = {
-        "d_from": d_from,
-        "d_to_excl": d_to + timedelta(days=1),
-    }
+    date_params = _date_params(d_from, d_to)
     # جلب كل توريدات الفترة (لإسناد المبيعات) + مبيعات + عبوات
     pi_rows, pr_rows, sold_rows, ret_rows, packs_all = _run_parallel(
         [
@@ -774,7 +846,7 @@ def build_vendor_item_detail(
             lambda: _fetch_pos_returns(date_params, brn),
             _item_max_pack_map,
         ],
-        max_workers=3,
+        max_workers=2,
         timeout_sec=240.0,
     )
     if not isinstance(packs_all, dict):
@@ -990,6 +1062,30 @@ def apply_decision_filter(report: dict[str, Any], decision: str) -> dict[str, An
     if not key or not report:
         return report
     rows = [r for r in (report.get("rows") or []) if r.get("decision_key") == key]
+    return _report_with_rows(report, rows)
+
+
+def _fold_vendor_q(text: str) -> str:
+    raw = str(text or "").strip().casefold()
+    for src, dst in (("أ", "ا"), ("إ", "ا"), ("آ", "ا"), ("ة", "ه"), ("ى", "ي")):
+        raw = raw.replace(src, dst)
+    return " ".join(raw.split())
+
+
+def apply_vendor_query(report: dict[str, Any], query: str) -> dict[str, Any]:
+    needle = _fold_vendor_q(query)
+    if not needle or not report:
+        return report
+    rows = []
+    for row in report.get("rows") or []:
+        name = _fold_vendor_q(row.get("vendor_name") or "")
+        code = _fold_vendor_q(row.get("vendor_code") or "")
+        if needle in name or needle in code:
+            rows.append(row)
+    return _report_with_rows(report, rows)
+
+
+def _report_with_rows(report: dict[str, Any], rows: list[dict]) -> dict[str, Any]:
     settle_n = sum(1 for r in rows if r.get("decision_key") == "settle")
     partial_n = sum(1 for r in rows if r.get("decision_key") == "partial")
     hold_n = sum(1 for r in rows if r.get("decision_key") == "hold")
@@ -1052,12 +1148,19 @@ def build_vendor_turnover_excel(report: dict[str, Any]) -> HttpResponse:
     buf.write(f"<caption>دوران مخزون الموردين (كرتون) — {period}</caption>")
     buf.write(
         "<table>"
-        "<thead><tr>"
-        "<th>#</th><th>كود المورد</th><th>المورد</th>"
-        "<th>الاستحقاق</th><th>المستحق</th><th>الدوران %</th>"
-        "<th>وارد كرتون</th><th>مباع كرتون</th><th>متبقي كرتون</th>"
-        "<th>أصناف</th>"
-        "</tr></thead><tbody>"
+        "<thead>"
+        "<tr>"
+        "<th rowspan=\"2\">#</th><th rowspan=\"2\">كود المورد</th><th rowspan=\"2\">المورد</th>"
+        "<th colspan=\"3\">حركة الكرتون</th>"
+        "<th rowspan=\"2\">الدوران %</th>"
+        "<th colspan=\"2\">السداد</th>"
+        "<th rowspan=\"2\">أصناف</th>"
+        "</tr>"
+        "<tr>"
+        "<th>وارد</th><th>مباع</th><th>متبقي</th>"
+        "<th>المستحق</th><th>القرار</th>"
+        "</tr>"
+        "</thead><tbody>"
     )
     for i, row in enumerate(rows, 1):
         key = escape(str(row.get("decision_key") or "hold"))
@@ -1065,23 +1168,24 @@ def build_vendor_turnover_excel(report: dict[str, Any]) -> HttpResponse:
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f"<td>{escape(str(row.get('vendor_code') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('vendor_name') or ''))}</td>")
-        buf.write(
-            f'<td class="dec">{escape(str(row.get("decision_label") or ""))}</td>'
-        )
-        buf.write(f'<td class="num">{float(row.get("due_amt") or 0):.2f}</td>')
-        buf.write(f'<td class="pct">{float(row.get("turnover_pct") or 0):.1f}</td>')
         buf.write(f'<td class="num">{float(row.get("recv_qty") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(row.get("sold_qty") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(row.get("remain_qty") or 0):.2f}</td>')
+        buf.write(f'<td class="pct">{float(row.get("turnover_pct") or 0):.1f}</td>')
+        buf.write(f'<td class="num">{float(row.get("due_amt") or 0):.2f}</td>')
+        buf.write(
+            f'<td class="dec">{escape(str(row.get("decision_label") or ""))}</td>'
+        )
         buf.write(f'<td class="int">{int(row.get("item_count") or 0)}</td>')
         buf.write("</tr>")
     buf.write(
         '<tr class="foot">'
-        "<td></td><td></td><td>الإجمالي</td><td></td>"
-        f'<td class="num">{float(kpis.get("due_amt") or 0):.2f}</td>'
-        f'<td class="pct">{float(kpis.get("turnover_pct") or 0):.1f}</td>'
+        "<td></td><td></td><td>الإجمالي</td>"
         f'<td class="num">{float(kpis.get("recv_qty") or 0):.2f}</td>'
         f'<td class="num">{float(kpis.get("sold_qty") or 0):.2f}</td>'
+        "<td></td>"
+        f'<td class="pct">{float(kpis.get("turnover_pct") or 0):.1f}</td>'
+        f'<td class="num">{float(kpis.get("due_amt") or 0):.2f}</td>'
         "<td></td><td></td></tr>"
     )
     buf.write("</tbody></table></body></html>")
