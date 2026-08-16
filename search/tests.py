@@ -355,6 +355,17 @@ class UserActivityTests(TestCase):
         self.assertContains(response, 'وقت الدخول')
 
 
+class VendorTurnoverBindTests(TestCase):
+    def test_item_and_vendor_codes_bind_as_text(self):
+        from search.oracle_vendor_turnover import _bind_vendor, _icode_in
+
+        _, params = _icode_in(['06100', '2326785'])
+        self.assertEqual(params['c0'], '06100')
+        self.assertEqual(params['c1'], '2326785')
+        self.assertEqual(_bind_vendor('2326785'), '2326785')
+        self.assertIsInstance(_bind_vendor('2326785'), str)
+
+
 class TransferRequestCompareTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(

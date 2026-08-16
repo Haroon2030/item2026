@@ -158,15 +158,8 @@ def _to_carton(base_qty: float, item_code: str, packs: dict[str, float]) -> floa
 
 
 def _bind_vendor(vendor_code: str):
-    s = str(vendor_code or "").strip()
-    if not s:
-        return s
-    if s.isdigit():
-        try:
-            return int(s)
-        except ValueError:
-            return s
-    return s
+    """V_CODE في أوراكل VARCHAR2 — الربط الرقمي يسبب ORA-01722."""
+    return str(vendor_code or "").strip()
 
 
 def _code_str(value: Any) -> str:
@@ -198,23 +191,14 @@ def _decision(turnover_pct: float) -> dict[str, str]:
     }
 
 
-def _bind_icode(value: Any):
-    s = _code_str(value)
-    if s.isdigit():
-        try:
-            return int(s)
-        except ValueError:
-            return s
-    return s
-
-
 def _icode_in(codes: list[str]) -> tuple[str, dict[str, Any]]:
+    """I_CODE VARCHAR2 — يُربط نصاً بدون TO_CHAR على العمود."""
     params: dict[str, Any] = {}
     keys: list[str] = []
     for index, code in enumerate(codes):
         key = f"c{index}"
         keys.append(f":{key}")
-        params[key] = _bind_icode(code)
+        params[key] = _code_str(code)
     return ", ".join(keys), params
 
 
