@@ -329,11 +329,11 @@
           {% if sales_turnover %}
             <div class="ss-turn-kpis" aria-label="ملخص الدوران">
               <article class="ss-turn-card">
-                <span class="ss-turn-label">مباع</span>
+                <span class="ss-turn-label">مباع{% if sales_turnover.unit %} · {{ sales_turnover.unit }}{% endif %}</span>
                 <strong class="mono">{{ sales_turnover.sold_qty_display }}</strong>
               </article>
               <article class="ss-turn-card">
-                <span class="ss-turn-label">رصيد حالي</span>
+                <span class="ss-turn-label">رصيد حالي{% if sales_turnover.unit %} · {{ sales_turnover.unit }}{% endif %}</span>
                 <strong class="mono">{{ sales_turnover.stock_qty_display }}</strong>
               </article>
               <article class="ss-turn-card is-turn">
@@ -361,7 +361,7 @@
                     <th class="ss-col-wh-code">رقم</th>
                     <th class="ss-col-wh sticky-col">المخزن</th>
                     <th class="ss-col-numish">الفواتير</th>
-                    <th class="ss-col-numish">الكمية</th>
+                    <th class="ss-col-numish">الكمية{% if sales_turnover.unit %} · {{ sales_turnover.unit }}{% endif %}</th>
                     <th class="ss-col-money is-total">الإجمالي</th>
                     <th class="ss-col-numish is-ret">مرتجع</th>
                   </tr>
@@ -382,7 +382,7 @@
               </table>
             </div>
           {% endif %}
-          <p class="ss-note">الدوران = المباع ÷ (المباع + الرصيد الحالي) خلال الفترة. المصدر: نقاط البيع غير المعلّقة.</p>
+          <p class="ss-note">الدوران = المباع ÷ (المباع + الرصيد الحالي) خلال الفترة. الكميات بوحدة أكبر عبوة عند توفرها. المصدر: نقاط البيع غير المعلّقة.</p>
         </div>
       {% endif %}
 

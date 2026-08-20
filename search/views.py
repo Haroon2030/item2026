@@ -167,26 +167,34 @@ def _parse_qty_loose(value) -> float | None:
         return None
 
 
-def _item_sales_turnover(sold_qty: float, stock_qty: float | None) -> dict:
+def _item_sales_turnover(
+    sold_qty: float,
+    stock_qty: float | None,
+    *,
+    unit: str = '',
+) -> dict:
     """دوران المبيعات = المباع ÷ (المباع + الرصيد الحالي)."""
     sold = max(0.0, float(sold_qty or 0))
     stock = max(0.0, float(stock_qty or 0)) if stock_qty is not None else None
-    if stock is None:
-        return {
-            'sold_qty': round(sold, 2),
-            'sold_qty_display': f'{sold:,.2f}'.rstrip('0').rstrip('.') if sold else '0',
-            'stock_qty': None,
-            'stock_qty_display': '—',
-            'turnover_pct': None,
-            'turnover_display': '—',
-        }
-    base = sold + stock
-    pct = round((sold / base) * 100.0, 1) if base > 0 else 0.0
+    unit_label = str(unit or '').strip()
 
     def _fmt(n: float) -> str:
         if abs(n - round(n)) < 1e-9:
             return f'{int(round(n)):,}'
         return f'{n:,.2f}'
+
+    if stock is None:
+        return {
+            'sold_qty': round(sold, 2),
+            'sold_qty_display': _fmt(sold) if sold else '0',
+            'stock_qty': None,
+            'stock_qty_display': '—',
+            'turnover_pct': None,
+            'turnover_display': '—',
+            'unit': unit_label,
+        }
+    base = sold + stock
+    pct = round((sold / base) * 100.0, 1) if base > 0 else 0.0
 
     return {
         'sold_qty': round(sold, 2),
@@ -195,7 +203,52 @@ def _item_sales_turnover(sold_qty: float, stock_qty: float | None) -> dict:
         'stock_qty_display': _fmt(stock),
         'turnover_pct': pct,
         'turnover_display': f'{pct:.1f}%',
+        'unit': unit_label,
     }
+
+
+def _qty_to_max_pack(qty: float, max_pack: float) -> float:
+    """حوّل كمية وحدة المخزون/الأساس إلى أكبر عبوة."""
+    pack = float(max_pack or 0)
+    if pack <= 1:
+        return float(qty or 0)
+    return float(qty or 0) / pack
+
+
+def _scale_sales_bundle_to_max_pack(bundle: dict | None, max_pack: float) -> dict | None:
+    """أعد عرض كميات المبيعات بوحدة أكبر عبوة (الأرقام المالية دون تغيير)."""
+    if not bundle or float(max_pack or 0) <= 1:
+        return bundle
+    pack = float(max_pack)
+
+    def _fmt(n: float) -> str:
+        if abs(n - round(n)) < 1e-9:
+            return f'{int(round(n)):,}'
+        return f'{n:,.2f}'
+
+    for row in bundle.get('rows') or []:
+        try:
+            qty = float(row.get('qty') or 0) / pack
+            ret_qty = float(row.get('return_qty') or 0) / pack
+        except (TypeError, ValueError):
+            continue
+        row['qty'] = round(qty, 4)
+        row['qty_display'] = _fmt(qty)
+        row['return_qty'] = round(ret_qty, 4)
+        row['return_qty_display'] = _fmt(ret_qty)
+    totals = bundle.get('totals') or {}
+    try:
+        t_qty = float(totals.get('qty') or 0) / pack
+        t_ret = float(totals.get('return_qty') or 0) / pack
+    except (TypeError, ValueError):
+        return bundle
+    totals['qty'] = round(t_qty, 4)
+    totals['qty_display'] = _fmt(t_qty)
+    totals['return_qty'] = round(t_ret, 4)
+    totals['return_qty_display'] = _fmt(t_ret)
+    bundle['totals'] = totals
+    bundle['qty_unit'] = 'max_pack'
+    return bundle
 
 def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str) -> tuple[list[dict], dict | None]:
     """يربط باركود الوحدات من الفهرس ويختار الصف المطابق (باركود أو وحدة الرصيد/التكلفة)."""
@@ -664,7 +717,55 @@ def item_search(request):
                     stock_qty = _parse_qty_loose(selected_price.get('quantity'))
                     if stock_qty is not None:
                         stock_qty = max(0.0, stock_qty)
-                sales_turnover = _item_sales_turnover(sold_qty, stock_qty)
+
+                max_pack = 0.0
+                max_unit = ''
+                try:
+                    from .oracle_stock import fetch_item_max_pack_map
+
+                    pack_info = (fetch_item_max_pack_map([sales_code]) or {}).get(sales_code) or {}
+                    max_pack = float(pack_info.get('pack') or 0)
+                    max_unit = str(pack_info.get('unit') or '').strip()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning('Item max pack skipped: %s', exc)
+
+                if max_pack > 1:
+                    sold_qty = _qty_to_max_pack(sold_qty, max_pack)
+                    if stock_qty is not None:
+                        sel_unit = str((selected_price or {}).get('unit') or '').strip()
+                        sel_pack = _parse_qty_loose((selected_price or {}).get('pack_size'))
+                        if (
+                            not compare_mode
+                            and selected_price is not None
+                            and (
+                                (sel_unit and max_unit and sel_unit == max_unit)
+                                or (
+                                    sel_pack is not None
+                                    and abs(float(sel_pack) - max_pack) < 1e-9
+                                )
+                            )
+                        ):
+                            # الرصيد معروض أصلاً بأكبر عبوة
+                            pass
+                        elif (
+                            not compare_mode
+                            and selected_price is not None
+                            and sel_pack is not None
+                            and sel_pack > 0
+                            and abs(float(sel_pack) - 1.0) > 1e-9
+                            and abs(float(sel_pack) - max_pack) > 1e-9
+                        ):
+                            # كمية بوحدة وسيطة → أساس ثم أكبر عبوة
+                            stock_qty = (float(stock_qty) * float(sel_pack)) / max_pack
+                        else:
+                            stock_qty = _qty_to_max_pack(stock_qty, max_pack)
+                    sales_bundle = _scale_sales_bundle_to_max_pack(sales_bundle, max_pack)
+
+                sales_turnover = _item_sales_turnover(
+                    sold_qty,
+                    stock_qty,
+                    unit=max_unit if max_pack > 1 else '',
+                )
             except OracleStockError as exc:
                 logger.warning('Item sales turnover skipped: %s', exc)
             except Exception as exc:  # noqa: BLE001
