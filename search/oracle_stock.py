@@ -1931,6 +1931,144 @@ def _supplier_row(row: dict, *, source: str) -> dict:
     }
 
 
+def fetch_company_vendor_options() -> list[dict]:
+    """موردو مجموعة «موردين الشركة» فقط من V_DETAILS / VENDOR_GROUP."""
+    if not oracle_enabled():
+        return []
+    cache_key = "item:company_vendors:v1"
+    hit, cached = _django_lookup_get(cache_key)
+    if hit and isinstance(cached, list):
+        return cached
+
+    schema = _schema()
+    try:
+        rows = _fetch_all(
+            f"""
+            SELECT /*+ LEADING(g v) USE_NL(v) */
+                   v.V_CODE AS V_CODE,
+                   NVL(NULLIF(TRIM(v.V_A_NAME), ''), TO_CHAR(v.V_CODE)) AS V_NAME
+            FROM {schema}.VENDOR_GROUP g
+            JOIN {schema}.V_DETAILS v
+              ON v.V_GROUP_CODE = g.V_GROUP_CODE
+            WHERE g.V_GROUP_A_NAME = :gname
+              AND (v.INACTIVE IS NULL OR v.INACTIVE = 0)
+              AND v.V_CODE IS NOT NULL
+            ORDER BY V_NAME, V_CODE
+            """,
+            {"gname": "موردين الشركة"},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Company vendors by name failed (%s); fallback group 23", exc)
+        try:
+            rows = _fetch_all(
+                f"""
+                SELECT v.V_CODE AS V_CODE,
+                       NVL(NULLIF(TRIM(v.V_A_NAME), ''), TO_CHAR(v.V_CODE)) AS V_NAME
+                FROM {schema}.V_DETAILS v
+                WHERE v.V_GROUP_CODE = 23
+                  AND (v.INACTIVE IS NULL OR v.INACTIVE = 0)
+                  AND v.V_CODE IS NOT NULL
+                ORDER BY V_NAME, V_CODE
+                """,
+                {},
+            )
+        except Exception as exc2:  # noqa: BLE001
+            logger.exception("Company vendor options failed: %s", exc2)
+            return []
+
+    out: list[dict] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        code = str(row.get("V_CODE") or "").strip()
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        name = str(row.get("V_NAME") or code).strip() or code
+        out.append({"code": code, "name": name})
+    return _django_lookup_set(cache_key, out)
+
+
+def fetch_vendor_item_codes(vendor_code: str) -> set[str]:
+    """أصناف المورد من ربط IAS_VNDR_ITM — فهرس VID_VCODE_FK على V_CODE."""
+    if not oracle_enabled():
+        return set()
+    vendor = str(vendor_code or "").strip()
+    if not vendor:
+        return set()
+    cache_key = f"item:vendor_items:v1:{vendor}"
+    hit, cached = _django_lookup_get(cache_key)
+    if hit and isinstance(cached, (set, list, tuple)):
+        return set(cached)
+
+    schema = _schema()
+    try:
+        rows = _fetch_all(
+            f"""
+            SELECT /*+ INDEX(vi VID_VCODE_FK) */
+                   vi.I_CODE AS I_CODE
+            FROM {schema}.IAS_VNDR_ITM vi
+            WHERE vi.V_CODE = :vendor
+              AND vi.I_CODE IS NOT NULL
+            """,
+            {"vendor": vendor},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Vendor item codes failed for %s: %s", vendor, exc)
+        return set()
+
+    out: set[str] = set()
+    for row in rows or []:
+        code = str(row.get("I_CODE") or "").strip()
+        if code.endswith(".0") and code[:-2].replace("-", "", 1).isdigit():
+            code = code[:-2]
+        if code:
+            out.add(code)
+    return set(_django_lookup_set(cache_key, list(out)))
+
+
+def fetch_vendor_item_count(vendor_code: str) -> int:
+    """عدد أصناف المورد من IAS_VNDR_ITM عبر فهرس VID_VCODE_FK."""
+    if not oracle_enabled():
+        return 0
+    vendor = str(vendor_code or "").strip()
+    if not vendor:
+        return 0
+
+    codes_key = f"item:vendor_items:v1:{vendor}"
+    hit_codes, cached_codes = _django_lookup_get(codes_key)
+    if hit_codes and isinstance(cached_codes, (set, list, tuple)):
+        return len(cached_codes)
+
+    cache_key = f"item:vendor_item_count:v1:{vendor}"
+    hit, cached = _django_lookup_get(cache_key)
+    if hit and isinstance(cached, int):
+        return max(0, cached)
+
+    schema = _schema()
+    try:
+        rows = _fetch_all(
+            f"""
+            SELECT /*+ INDEX(vi VID_VCODE_FK) */
+                   COUNT(DISTINCT vi.I_CODE) AS CNT
+            FROM {schema}.IAS_VNDR_ITM vi
+            WHERE vi.V_CODE = :vendor
+              AND vi.I_CODE IS NOT NULL
+            """,
+            {"vendor": vendor},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Vendor item count failed for %s: %s", vendor, exc)
+        return 0
+
+    count = 0
+    if rows:
+        try:
+            count = int(rows[0].get("CNT") or 0)
+        except (TypeError, ValueError):
+            count = 0
+    return int(_django_lookup_set(cache_key, max(0, count)))
+
+
 def fetch_item_suppliers(item_code: str, *, limit: int = 40) -> list[dict]:
     """
     موردو الصنف الذين نُزّل منهم (فواتير شراء)، مع احتياطي من جدول ربط الموردين.

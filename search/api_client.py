@@ -1902,3 +1902,46 @@ def lookup_by_name(name_query: str, limit: int = 50) -> list[dict]:
             best[code] = row
 
     return _rows_to_item_dicts(best[c] for c in ordered)
+
+
+def lookup_by_name_in_codes(
+    name_query: str,
+    allowed_codes: set[str] | list[str],
+    limit: int = 50,
+) -> list[dict]:
+    """بحث بالاسم ضمن مجموعة أصناف محددة (مثل أصناف مورد)."""
+    from .models import ItemBarcode
+
+    q = _normalize_text(name_query)
+    codes = {str(c or "").strip() for c in (allowed_codes or []) if str(c or "").strip()}
+    if len(q) < 2 or not codes:
+        return []
+
+    lim = max(1, min(int(limit or 50), 200))
+    code_list = list(codes)
+    best: dict[str, object] = {}
+    ordered: list[str] = []
+    chunk = 800
+    for i in range(0, len(code_list), chunk):
+        part = code_list[i : i + chunk]
+        rows = (
+            ItemBarcode.objects.filter(item_code__in=part, name__icontains=q)
+            .exclude(name="")
+            .order_by("name", "item_code", "-barcode")[: max(lim * 8, 200)]
+        )
+        for row in rows:
+            code = (row.item_code or "").strip()
+            if not code or code not in codes:
+                continue
+            if code not in best:
+                best[code] = row
+                ordered.append(code)
+                continue
+            prev = best[code]
+            if not (prev.barcode or "").strip() and (row.barcode or "").strip():
+                best[code] = row
+        if len(ordered) >= lim:
+            break
+
+    ordered = ordered[:lim]
+    return _rows_to_item_dicts(best[c] for c in ordered)

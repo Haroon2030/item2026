@@ -68,6 +68,13 @@ def peek_vendor_turnover(
     return cached if isinstance(cached, dict) else None
 
 
+def _items_cache_key(d_from, d_to, brn: str, vendor: str) -> str:
+    return (
+        f"vendor:turnover:items:v3:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"{brn}:{vendor}"
+    )
+
+
 def peek_vendor_item_detail(
     date_from,
     date_to,
@@ -79,11 +86,7 @@ def peek_vendor_item_detail(
     d_to = _as_date(date_to)
     vendor = str(vendor_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = (
-        f"vendor:turnover:items:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
-        f"{brn}:{vendor}"
-    )
-    cached = cache.get(cache_key)
+    cached = cache.get(_items_cache_key(d_from, d_to, brn, vendor))
     return cached if isinstance(cached, dict) else None
 
 # عتبات استحقاق السداد حسب نسبة دوران الكمية
@@ -264,6 +267,125 @@ def _rt_filters(brn: str) -> tuple[list[str], dict[str, Any]]:
         params["brn"] = _bind_brn(brn)
         filters.append("m.BRN_NO = :brn")
     return filters, params
+
+
+def _cost_adj_filters(brn: str) -> tuple[list[str], dict[str, Any]]:
+    """تسوية تكاليف أونكس: STK_ADJUSTMENT.ADJUST_TYPE = 2."""
+    filters = [
+        "m.DOC_DATE >= :d_from",
+        "m.DOC_DATE < :d_to_excl",
+        "m.ADJUST_TYPE = 2",
+        _hung_ok("m"),
+        "d.I_CODE IS NOT NULL",
+    ]
+    params: dict[str, Any] = {}
+    if brn:
+        params["brn"] = _bind_brn(brn)
+        filters.append("m.BRN_NO = :brn")
+    return filters, params
+
+
+def _fetch_cost_adj_rows(date_params: dict, brn: str) -> list[dict[str, Any]]:
+    """بنود تسوية التكاليف في الفترة — تاريخ على الرأس ثم DOC_SER إلى التفاصيل."""
+    brn_key = str(brn or "").strip()
+    cache_key = (
+        f"vt:costadj:v1:{date_params['d_from'].isoformat()}:"
+        f"{date_params['d_to_excl'].isoformat()}:{brn_key}"
+    )
+    cached = cache.get(cache_key)
+    if isinstance(cached, list):
+        return cached
+
+    schema = _schema()
+    filters, extra = _cost_adj_filters(brn_key)
+    where = " AND ".join(filters)
+    with oracle_session():
+        raw = _fetch_all(
+            f"""
+            SELECT /*+ LEADING(m d) USE_NL(d)
+                       INDEX(d INDX_SER_STK_ADJUSTMENT_DET) */
+                   d.I_CODE AS I_CODE,
+                   d.V_CODE AS D_V_CODE,
+                   m.V_CODE AS M_V_CODE,
+                   d.INC_COST AS INC_COST,
+                   m.STK_DESC AS STK_DESC,
+                   m.DOC_DATE AS DOC_DATE,
+                   m.DOC_SER AS DOC_SER
+            FROM {schema}.STK_ADJUSTMENT m
+            JOIN {schema}.STK_ADJUSTMENT_DET d ON d.DOC_SER = m.DOC_SER
+            WHERE {where}
+            """,
+            {**date_params, **extra},
+        )
+    out: list[dict[str, Any]] = []
+    for row in raw or []:
+        code = _code_str(row.get("I_CODE"))
+        if not code:
+            continue
+        inc = row.get("INC_COST")
+        try:
+            inc_cost = float(inc) if inc is not None else None
+        except (TypeError, ValueError):
+            inc_cost = None
+        out.append(
+            {
+                "i_code": code,
+                "v_code": _code_str(row.get("D_V_CODE"))
+                or _code_str(row.get("M_V_CODE")),
+                "inc_cost": inc_cost,
+                "stk_desc": str(row.get("STK_DESC") or "").strip(),
+                "doc_date": row.get("DOC_DATE"),
+                "doc_ser": row.get("DOC_SER"),
+            }
+        )
+    cache.set(cache_key, out, _CACHE_TTL)
+    return out
+
+
+def _index_cost_adj(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    by_item: dict[str, list[dict[str, Any]]] = {}
+    for row in rows or []:
+        code = _code_str(row.get("i_code") or row.get("I_CODE"))
+        if not code:
+            continue
+        by_item.setdefault(code, []).append(row)
+    return by_item
+
+
+def _pick_cost_adj(
+    i_code: str,
+    vendor: str,
+    by_item: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any] | None:
+    """أحدث تسوية للصنف: مطابقة المورد أولاً، وإلا تسوية بلا مورد."""
+    hits = list(by_item.get(_code_str(i_code)) or [])
+    if not hits:
+        return None
+    vend = _code_str(vendor)
+    matched = [h for h in hits if _code_str(h.get("v_code")) == vend]
+    if matched:
+        chosen = matched
+    else:
+        chosen = [h for h in hits if not _code_str(h.get("v_code"))]
+        if not chosen:
+            return None
+    chosen.sort(key=lambda h: str(h.get("doc_date") or ""), reverse=True)
+    latest = chosen[0]
+    docs = {
+        str(h.get("doc_ser"))
+        for h in chosen
+        if h.get("doc_ser") is not None and str(h.get("doc_ser"))
+    }
+    count = len(docs) or len(chosen)
+    inc = latest.get("inc_cost")
+    return {
+        "cost_adj": True,
+        "cost_adj_label": "نعم",
+        "cost_adj_count": count,
+        "cost_adj_cost": inc,
+        "cost_adj_cost_display": _qty(inc) if inc is not None else "",
+        "cost_adj_hint": str(latest.get("stk_desc") or "").strip(),
+    }
 
 
 def _month_slices(d_from, d_to_excl) -> list[tuple[date, date]]:
@@ -812,23 +934,21 @@ def build_vendor_item_detail(
     d_from = _as_date(date_from)
     d_to = _as_date(date_to)
     brn = str(branch_code or "").strip()
-    cache_key = (
-        f"vendor:turnover:items:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
-        f"{brn}:{vendor}"
-    )
+    cache_key = _items_cache_key(d_from, d_to, brn, vendor)
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
     date_params = _date_params(d_from, d_to)
-    # جلب كل توريدات الفترة (لإسناد المبيعات) + مبيعات + عبوات
-    pi_rows, pr_rows, sold_rows, ret_rows, packs_all = _run_parallel(
+    # جلب كل توريدات الفترة (لإسناد المبيعات) + مبيعات + عبوات + تسوية تكاليف
+    pi_rows, pr_rows, sold_rows, ret_rows, packs_all, cost_adj_rows = _run_parallel(
         [
             lambda: _fetch_pi_rows(date_params, brn, ""),
             lambda: _fetch_pr_rows(date_params, brn, ""),
             lambda: _fetch_pos_sold(date_params, brn),
             lambda: _fetch_pos_returns(date_params, brn),
             _item_max_pack_map,
+            lambda: _fetch_cost_adj_rows(date_params, brn),
         ],
         max_workers=2,
         timeout_sec=240.0,
@@ -836,6 +956,9 @@ def build_vendor_item_detail(
     if not isinstance(packs_all, dict):
         packs_all = {}
     packs_all = dict(packs_all)
+    if not isinstance(cost_adj_rows, list):
+        cost_adj_rows = []
+    cost_adj_by_item = _index_cost_adj(cost_adj_rows)
 
     all_recv = _net_recv_rows(pi_rows, pr_rows)
     vend_key = _code_str(vendor)
@@ -861,6 +984,8 @@ def build_vendor_item_detail(
                 "sold_qty_display": "0",
                 "turnover_pct": 0.0,
                 "turnover_display": "0.0%",
+                "cost_adj_count": 0,
+                "cost_adj_count_display": "0",
             },
         }
         cache.set(cache_key, result, _CACHE_TTL)
@@ -911,7 +1036,7 @@ def build_vendor_item_detail(
             round((recv / vendor_recv_total) * 100.0, 1) if vendor_recv_total > 0 else 0.0
         )
         pd = pack_detail.get(i_code) or {}
-        pack_size = float(pd.get("pack") or packs.get(i_code) or 0)
+        pack_size = float(pd.get("pack") or packs_all.get(i_code) or 0)
         pack_unit = str(pd.get("unit") or "").strip()
         if pack_size <= 1:
             pack_label = "—"
@@ -919,6 +1044,14 @@ def build_vendor_item_detail(
         else:
             pack_display = _qty(pack_size)
             pack_label = f"{pack_display} {pack_unit}".strip() if pack_unit else pack_display
+        adj = _pick_cost_adj(i_code, vend_key, cost_adj_by_item) or {
+            "cost_adj": False,
+            "cost_adj_label": "—",
+            "cost_adj_count": 0,
+            "cost_adj_cost": None,
+            "cost_adj_cost_display": "",
+            "cost_adj_hint": "",
+        }
         rows_out.append(
             {
                 "item_code": i_code,
@@ -937,16 +1070,23 @@ def build_vendor_item_detail(
                 "remain_qty_display": _qty(remain),
                 "turnover_pct": turnover,
                 "turnover_display": f"{turnover:.1f}%",
+                **adj,
             }
         )
 
     rows_out.sort(
-        key=lambda r: (-float(r["recv_qty"]), r["item_name"], r["item_code"])
+        key=lambda r: (
+            0 if r.get("cost_adj") else 1,
+            -float(r["recv_qty"]),
+            r["item_name"],
+            r["item_code"],
+        )
     )
     tot_sold = round(sum(float(r["sold_qty"]) for r in rows_out), 2)
     tot_turn = (
         round((tot_sold / vendor_recv_total) * 100.0, 1) if vendor_recv_total > 0 else 0.0
     )
+    cost_adj_n = sum(1 for r in rows_out if r.get("cost_adj"))
     result = {
         "vendor_code": vend_key or vendor,
         "vendor_name": vendor_name,
@@ -962,6 +1102,8 @@ def build_vendor_item_detail(
             "sold_qty_display": _qty(tot_sold),
             "turnover_pct": tot_turn,
             "turnover_display": f"{tot_turn:.1f}%",
+            "cost_adj_count": cost_adj_n,
+            "cost_adj_count_display": f"{cost_adj_n:,}",
         },
     }
     cache.set(cache_key, result, _CACHE_TTL)
@@ -1003,7 +1145,7 @@ def build_vendor_item_detail_excel(detail: dict[str, Any]) -> HttpResponse:
         "<table><thead><tr>"
         "<th>#</th><th>رقم الصنف</th><th>الاسم</th>"
         "<th>أكبر عبوة</th><th>وحدة العبوة</th>"
-        "<th>وارد كرتون</th><th>نسبة من المورد %</th>"
+        "<th>وارد كرتون</th><th>خصم تكليف</th><th>نسبة من المورد %</th>"
         "<th>مباع كرتون</th><th>متبقي</th><th>الدوران %</th>"
         "</tr></thead><tbody>"
     )
@@ -1019,6 +1161,16 @@ def build_vendor_item_detail_excel(detail: dict[str, Any]) -> HttpResponse:
             buf.write(f'<td class="num">{pack:.2f}</td>')
             buf.write(f"<td>{escape(str(row.get('pack_unit') or ''))}</td>")
         buf.write(f'<td class="num">{float(row.get("recv_qty") or 0):.2f}</td>')
+        if row.get("cost_adj"):
+            label = str(row.get("cost_adj_label") or "نعم")
+            cost_txt = str(row.get("cost_adj_cost_display") or "").strip()
+            hint = str(row.get("cost_adj_hint") or "").strip()
+            cell = label if not cost_txt else f"{label} {cost_txt}"
+            if hint:
+                cell = f"{cell} — {hint}"
+            buf.write(f"<td>{escape(cell)}</td>")
+        else:
+            buf.write("<td>—</td>")
         buf.write(f'<td class="pct">{float(row.get("share_pct") or 0):.1f}</td>')
         buf.write(f'<td class="num">{float(row.get("sold_qty") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(row.get("remain_qty") or 0):.2f}</td>')
@@ -1027,6 +1179,7 @@ def build_vendor_item_detail_excel(detail: dict[str, Any]) -> HttpResponse:
     buf.write(
         '<tr class="foot"><td></td><td></td><td>الإجمالي</td><td></td><td></td>'
         f'<td class="num">{float(kpis.get("recv_qty") or 0):.2f}</td>'
+        f'<td>{escape(str(kpis.get("cost_adj_count_display") or kpis.get("cost_adj_count") or "0"))}</td>'
         '<td class="pct">100.0</td>'
         f'<td class="num">{float(kpis.get("sold_qty") or 0):.2f}</td>'
         "<td></td>"

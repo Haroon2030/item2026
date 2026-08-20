@@ -49,6 +49,11 @@
       <strong class="dash-kpi-value mono">{{ item_detail.kpis.turnover_display }}</strong>
       <span class="dash-kpi-hint">مباع ÷ وارد</span>
     </article>
+    <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-costadj">
+      <span class="dash-kpi-label">خصم تكليف</span>
+      <strong class="dash-kpi-value mono">{{ item_detail.kpis.cost_adj_count_display|default:"0" }}</strong>
+      <span class="dash-kpi-hint">أصناف عليها تسوية تكاليف</span>
+    </article>
   </section>
 
   <form method="get" action="{% url 'browse_vendor_turnover' %}" class="purchase-filter dash-panel-glass vt-items-toolbar">
@@ -65,7 +70,7 @@
     <div class="dash-panel-head">
       <div>
         <h3>ورقة الأصناف</h3>
-        <p class="sales-ov-sub">الاسم · رقم الصنف · أكبر عبوة · نسبة تمثيل الصنف من وارد المورد</p>
+        <p class="sales-ov-sub">الاسم · رقم الصنف · أكبر عبوة · خصم تكليف من تسوية أونكس · نسبة تمثيل الصنف من وارد المورد</p>
       </div>
       <span class="result-pill">{{ item_detail.rows|length }}</span>
     </div>
@@ -79,6 +84,7 @@
             <th class="vt-sheet-pack">أكبر عبوة</th>
             <th class="vt-sheet-unit">وحدة العبوة</th>
             <th class="mono">وارد كرتون</th>
+            <th class="mono" title="تسوية تكاليف من أونكس خلال الفترة">خصم تكليف</th>
             <th class="mono">نسبة من المورد</th>
             <th class="mono">مباع كرتون</th>
             <th class="mono">متبقي</th>
@@ -87,13 +93,19 @@
         </thead>
         <tbody>
           {% for row in item_detail.rows %}
-            <tr>
+            <tr{% if row.cost_adj %} class="vt-cost-adj-row"{% endif %}>
               <td class="vt-sheet-num mono">{{ forloop.counter }}</td>
               <td class="vt-sheet-code mono">{{ row.item_code }}</td>
               <td class="vt-sheet-name" title="{{ row.item_name }}">{{ row.item_name }}</td>
               <td class="mono">{{ row.pack_size_display }}</td>
               <td>{{ row.pack_unit }}</td>
               <td class="mono">{{ row.recv_qty_display }}</td>
+              <td class="vt-cost-adj-cell"{% if row.cost_adj %} title="{% if row.cost_adj_hint %}{{ row.cost_adj_hint }}{% endif %}{% if row.cost_adj_count > 1 %} · {{ row.cost_adj_count }} تسوية{% endif %}"{% endif %}>
+                {% if row.cost_adj %}
+                  <span class="vt-cost-adj-yes">{{ row.cost_adj_label }}</span>
+                  {% if row.cost_adj_cost_display %}<span class="mono">{{ row.cost_adj_cost_display }}</span>{% endif %}
+                {% else %}—{% endif %}
+              </td>
               <td class="mono vt-share-cell">{{ row.share_display }}</td>
               <td class="mono">{{ row.sold_qty_display }}</td>
               <td class="mono">{{ row.remain_qty_display }}</td>
@@ -101,7 +113,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="10" class="sales-empty">لا أصناف لهذا المورد في الفترة.</td>
+              <td colspan="11" class="sales-empty">لا أصناف لهذا المورد في الفترة.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -111,6 +123,7 @@
               <td colspan="3">الإجمالي</td>
               <td colspan="2">—</td>
               <td class="mono">{{ item_detail.kpis.recv_qty_display }}</td>
+              <td class="mono">{{ item_detail.kpis.cost_adj_count_display|default:"0" }}</td>
               <td class="mono">100%</td>
               <td class="mono">{{ item_detail.kpis.sold_qty_display }}</td>
               <td class="mono">—</td>

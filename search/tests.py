@@ -366,6 +366,61 @@ class VendorTurnoverBindTests(TestCase):
         self.assertIsInstance(_bind_vendor('2326785'), str)
 
 
+class VendorTurnoverCostAdjTests(TestCase):
+    def test_prefers_matching_vendor_and_skips_other(self):
+        from datetime import datetime
+
+        from search.oracle_vendor_turnover import _index_cost_adj, _pick_cost_adj
+
+        by_item = _index_cost_adj(
+            [
+                {
+                    'i_code': '06100',
+                    'v_code': '999',
+                    'inc_cost': 1.0,
+                    'stk_desc': 'مورد آخر',
+                    'doc_date': datetime(2026, 3, 1),
+                    'doc_ser': 1,
+                },
+                {
+                    'i_code': '06100',
+                    'v_code': '2326785',
+                    'inc_cost': 4.48,
+                    'stk_desc': 'تسوية تكاليف فاتورة شراء',
+                    'doc_date': datetime(2026, 2, 1),
+                    'doc_ser': 2,
+                },
+            ]
+        )
+        hit = _pick_cost_adj('06100', '2326785', by_item)
+        self.assertIsNotNone(hit)
+        self.assertTrue(hit['cost_adj'])
+        self.assertEqual(hit['cost_adj_label'], 'نعم')
+        self.assertEqual(hit['cost_adj_cost'], 4.48)
+        self.assertEqual(hit['cost_adj_count'], 1)
+        self.assertIsNone(_pick_cost_adj('06100', '111', by_item))
+
+    def test_blank_vendor_attaches_when_no_match(self):
+        from search.oracle_vendor_turnover import _index_cost_adj, _pick_cost_adj
+
+        by_item = _index_cost_adj(
+            [
+                {
+                    'i_code': '1001',
+                    'v_code': '',
+                    'inc_cost': None,
+                    'stk_desc': 'خصم 14%',
+                    'doc_date': '2026-04-01',
+                    'doc_ser': 9,
+                }
+            ]
+        )
+        hit = _pick_cost_adj('1001', '2326785', by_item)
+        self.assertTrue(hit['cost_adj'])
+        self.assertEqual(hit['cost_adj_hint'], 'خصم 14%')
+        self.assertEqual(hit['cost_adj_cost_display'], '')
+
+
 class TransferRequestCompareTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(

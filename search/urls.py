@@ -5,6 +5,11 @@ from . import user_views, views
 urlpatterns = [
     path('', views.home, name='home'),
     path('items/', views.item_search, name='item_search'),
+    path(
+        'items/vendor-item-count/',
+        views.item_vendor_item_count,
+        name='item_vendor_item_count',
+    ),
     path('browse/', views.browse_groups, name='browse_groups'),
     path('inventory/', views.browse_inventory, name='browse_inventory'),
     path('inventory/unsold/', views.browse_unsold, name='browse_unsold'),

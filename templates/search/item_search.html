@@ -8,57 +8,114 @@
   <header class="ss-head">
     <div class="ss-head-copy">
       <h2>بحث الأصناف</h2>
-      <p>ابحث بالباركود أو رقم الصنف أو الاسم — مخزن واحد أو مقارنة المخازن</p>
+      <p>ابحث بالباركود أو رقم الصنف أو الاسم — مع التاريخ والفرع والمخزن ودوران المبيعات. عند اختيار مورد يُقتصر البحث على أصنافه فقط.</p>
     </div>
   </header>
 
-  <form method="get" action="{% url 'item_search' %}" class="ss-toolbar" role="search" id="item-search-form">
-    <div class="ss-toolbar-grid is-item">
-      <div class="field scope-field ss-scope" role="radiogroup" aria-label="نطاق البحث">
-        <span class="scope-field-label">النطاق</span>
-        <div class="scope-toggle">
-          <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
-            <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
-            <span>مخزن واحد</span>
-          </label>
-          <label class="scope-option {% if compare_mode %}is-active{% endif %}">
-            <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
-            <span>كل المخازن المختارة</span>
-          </label>
+  <form method="get" action="{% url 'item_search' %}" class="ss-toolbar ss-toolbar-item" role="search" id="item-search-form">
+    <div class="ss-item-layout">
+      <div class="ss-item-row ss-item-row-scope">
+        <div class="field scope-field ss-scope" role="radiogroup" aria-label="نطاق البحث">
+          <span class="scope-field-label">النطاق</span>
+          <div class="scope-toggle">
+            <label class="scope-option {% if not compare_mode %}is-active{% endif %}">
+              <input type="radio" name="scope" value="one" {% if not compare_mode %}checked{% endif %}>
+              <span>مخزن واحد</span>
+            </label>
+            <label class="scope-option {% if compare_mode %}is-active{% endif %}">
+              <input type="radio" name="scope" value="compare" {% if compare_mode %}checked{% endif %}>
+              <span>كل المخازن</span>
+            </label>
+          </div>
         </div>
       </div>
 
-      <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
-        <label for="warehouse">المخزن</label>
-        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
-          {% for wh in warehouses %}
-            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
-          {% endfor %}
-        </select>
+      <div class="ss-item-row ss-item-row-filters">
+        <div class="field date-field ss-date">
+          <label for="date_from">من</label>
+          <input id="date_from" type="date" name="date_from" value="{{ date_from }}" required>
+        </div>
+        <div class="field date-field ss-date">
+          <label for="date_to">إلى</label>
+          <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
+        </div>
+        <div class="field branch-field ss-branch">
+          <label for="branch">الفرع</label>
+          <select id="branch" name="branch" aria-label="اختر الفرع">
+            <option value="">كل الفروع</option>
+            {% for b in branches %}
+              <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
+          <label for="warehouse">المخزن</label>
+          <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+            {% for wh in all_warehouses %}
+              <option
+                value="{{ wh.code }}"
+                data-branch="{{ wh.branch_code }}"
+                {% if wh.code == warehouse %}selected{% endif %}
+                {% if selected_branch and wh.branch_code != selected_branch %}hidden disabled{% endif %}
+              >{{ wh.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
 
-      <div class="field query-field ss-query">
-        <label for="q">الباركود / رقم الصنف / الاسم</label>
-        <div class="query-row">
+      <div class="ss-item-row ss-item-row-search">
+        <div class="field vendor-field ss-vendor">
+          <label for="vendor-filter">
+            المورد
+            <span
+              id="vendor-item-count"
+              class="vendor-item-count{% if not vendor_q %} is-empty{% endif %}"
+              data-count-url="{% url 'item_vendor_item_count' %}"
+              {% if vendor_q %}data-vendor="{{ vendor_q }}"{% endif %}
+            >{% if vendor_q %}{{ vendor_item_count|default:0 }} صنف{% endif %}</span>
+          </label>
+          <div class="vendor-suggest">
+            <input
+              id="vendor-filter"
+              type="search"
+              placeholder="ابحث باسم المورد أو الرقم…"
+              autocomplete="off"
+              spellcheck="false"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="vendor-suggestions"
+              aria-label="بحث المورد"
+              {% if selected_vendor_name %}value="{{ selected_vendor_name }} · {{ vendor_q }}"{% elif vendor_q %}value="{{ vendor_q }}"{% endif %}
+            >
+            <ul id="vendor-suggestions" class="vendor-suggest-list" role="listbox" hidden></ul>
+          </div>
+          <select id="vendor" name="vendor" class="vendor-native" aria-label="موردو الشركة" tabindex="-1">
+            <option value="">كل موردين الشركة</option>
+            {% for v in company_vendors %}
+              <option value="{{ v.code }}" {% if v.code == vendor_q %}selected{% endif %}>{{ v.name }} · {{ v.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field query-field ss-query">
+          <label for="q">الباركود / رقم الصنف / الاسم</label>
           <input id="q" type="search" name="q" value="{{ query }}" placeholder="ابحث ثم Enter…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" autofocus>
+        </div>
+        <div class="ss-actions" aria-label="إجراءات البحث">
           <button type="button" class="btn-scan" id="btn-scan" title="ماسح كاميرا" aria-label="مسح الباركود بالكاميرا">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
+          <button type="submit" class="btn-primary">بحث</button>
         </div>
-      </div>
-
-      <div class="ss-actions">
-        <button type="submit" class="btn-primary">بحث</button>
-      </div>
-
-      <div class="ss-sync">
-        {% if sync_secret_required %}
-          <input form="sync-form" id="sync_secret" type="password" name="sync_secret" placeholder="رمز المزامنة" autocomplete="off" class="sync-secret-input" required>
-        {% endif %}
-        <button type="submit" form="sync-form" class="btn-ghost" id="sync-btn">مزامنة</button>
-        <p class="cache-meta {% if cache_count %}is-ready{% else %}is-empty{% endif %}" id="cache-meta">
-          {% if cache_count %}{{ cache_count|floatformat:0 }} باركود{% else %}فهرس فارغ{% endif %}
-        </p>
+        <div class="ss-sync" aria-label="مزامنة الباركود">
+          {% if sync_secret_required %}
+            <input form="sync-form" id="sync_secret" type="password" name="sync_secret" placeholder="رمز المزامنة" autocomplete="off" class="sync-secret-input" required>
+          {% endif %}
+          <button type="submit" form="sync-form" class="btn-ghost" id="sync-btn">مزامنة</button>
+          <span class="cache-meta {% if cache_count %}is-ready{% else %}is-empty{% endif %}" id="cache-meta">
+            {% if cache_count %}{{ cache_count|floatformat:0 }} باركود{% else %}فهرس فارغ{% endif %}
+          </span>
+        </div>
       </div>
     </div>
   </form>
@@ -159,10 +216,10 @@
               <tr>
                 <td class="ss-col-num mono">{{ forloop.counter }}</td>
                 <td class="ss-col-code mono">
-                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}">{{ item.code }}</a>
+                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;vendor={{ vendor_q|urlencode }}">{{ item.code }}</a>
                 </td>
                 <td class="ss-col-name">
-                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}">{{ item.name }}</a>
+                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;vendor={{ vendor_q|urlencode }}">{{ item.name }}</a>
                 </td>
                 <td class="ss-col-unit">{{ item.unit|default:"—" }}</td>
               </tr>
@@ -262,11 +319,79 @@
         </div>
       {% endif %}
 
+      {% if sales_turnover or sales_bundle %}
+        <div class="ss-sales-turn">
+          <div class="ss-sheet-bar">
+            <strong>دوران الصنف بالمبيعات</strong>
+            <span class="mono">{{ date_from }} → {{ date_to }}</span>
+            <span class="result-pill">نقاط البيع</span>
+          </div>
+          {% if sales_turnover %}
+            <div class="ss-turn-kpis" aria-label="ملخص الدوران">
+              <article class="ss-turn-card">
+                <span class="ss-turn-label">مباع</span>
+                <strong class="mono">{{ sales_turnover.sold_qty_display }}</strong>
+              </article>
+              <article class="ss-turn-card">
+                <span class="ss-turn-label">رصيد حالي</span>
+                <strong class="mono">{{ sales_turnover.stock_qty_display }}</strong>
+              </article>
+              <article class="ss-turn-card is-turn">
+                <span class="ss-turn-label">الدوران</span>
+                <strong class="mono">{{ sales_turnover.turnover_display }}</strong>
+              </article>
+              {% if sales_bundle %}
+                <article class="ss-turn-card">
+                  <span class="ss-turn-label">قيمة المبيعات</span>
+                  <strong class="mono">{{ sales_bundle.totals.sales_total_display }}</strong>
+                </article>
+                <article class="ss-turn-card">
+                  <span class="ss-turn-label">فواتير</span>
+                  <strong class="mono">{{ sales_bundle.totals.invoice_count_display }}</strong>
+                </article>
+              {% endif %}
+            </div>
+          {% endif %}
+          {% if sales_bundle and sales_bundle.rows %}
+            <div class="ss-sheet-wrap">
+              <table class="ss-sheet" aria-label="مبيعات الصنف حسب المخزن">
+                <thead>
+                  <tr>
+                    <th class="ss-col-num">#</th>
+                    <th class="ss-col-wh-code">رقم</th>
+                    <th class="ss-col-wh sticky-col">المخزن</th>
+                    <th class="ss-col-numish">الفواتير</th>
+                    <th class="ss-col-numish">الكمية</th>
+                    <th class="ss-col-money is-total">الإجمالي</th>
+                    <th class="ss-col-numish is-ret">مرتجع</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in sales_bundle.rows %}
+                    <tr class="{% if not row.has_sales %}is-empty{% endif %}">
+                      <td class="ss-col-num mono">{{ forloop.counter }}</td>
+                      <td class="ss-col-wh-code mono">{{ row.warehouse_code }}</td>
+                      <td class="ss-col-wh sticky-col">{{ row.warehouse_name }}</td>
+                      <td class="ss-col-numish mono">{{ row.invoice_count_display }}</td>
+                      <td class="ss-col-numish mono">{{ row.qty_display }}</td>
+                      <td class="ss-col-money mono is-total">{{ row.sales_total_display }}</td>
+                      <td class="ss-col-numish mono is-ret">{{ row.return_qty_display }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+          <p class="ss-note">الدوران = المباع ÷ (المباع + الرصيد الحالي) خلال الفترة. المصدر: نقاط البيع غير المعلّقة.</p>
+        </div>
+      {% endif %}
+
       {% if suppliers %}
         <div class="ss-suppliers">
           <div class="ss-sheet-bar">
             <strong>الموردون</strong>
             <span class="result-pill">{{ suppliers|length }}</span>
+            {% if vendor_q %}<span class="result-pill">{% if selected_vendor_name %}{{ selected_vendor_name }}{% else %}{{ vendor_q }}{% endif %}</span>{% endif %}
           </div>
           <div class="ss-sheet-wrap">
             <table class="ss-sheet" aria-label="موردو الصنف">
@@ -280,7 +405,7 @@
               </thead>
               <tbody>
                 {% for s in suppliers %}
-                  <tr>
+                  <tr{% if s.is_matched %} class="is-matched"{% endif %}>
                     <td class="ss-col-num mono">{{ forloop.counter }}</td>
                     <td class="ss-col-name">{{ s.name }}</td>
                     <td class="ss-col-code mono">{{ s.code|default:"—" }}</td>
@@ -317,7 +442,7 @@
               <tr>
                 <td class="ss-col-num mono">{{ forloop.counter }}</td>
                 <td class="ss-col-code mono">
-                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}">{{ item.code }}</a>
+                  <a href="{% url 'item_search' %}?q={{ item.code|urlencode }}&amp;scope={% if compare_mode %}compare{% else %}one{% endif %}&amp;warehouse={{ warehouse|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;vendor={{ vendor_q|urlencode }}">{{ item.code }}</a>
                 </td>
                 <td class="ss-col-name">{{ item.name }}{% if item.unit %} — {{ item.unit }}{% endif %}</td>
                 <td class="ss-col-code mono">{{ item.barcode|default:"—" }}</td>
@@ -350,8 +475,207 @@
   var field = document.getElementById("warehouse-field");
   var toggle = form.querySelector(".scope-toggle");
   var radios = form.querySelectorAll('input[name="scope"]');
+  var branch = document.getElementById("branch");
+  var warehouse = document.getElementById("warehouse");
+  var vendor = document.getElementById("vendor");
+  var vendorFilter = document.getElementById("vendor-filter");
+  var vendorSuggest = document.getElementById("vendor-suggestions");
+  var vendorCountEl = document.getElementById("vendor-item-count");
+  var vendorActive = -1;
+  var vendorCountReq = 0;
 
-  function sync() {
+  function setVendorItemCount(count, opts) {
+    opts = opts || {};
+    if (!vendorCountEl) return;
+    if (opts.loading) {
+      vendorCountEl.classList.remove("is-empty");
+      vendorCountEl.classList.add("is-loading");
+      vendorCountEl.textContent = "…";
+      return;
+    }
+    vendorCountEl.classList.remove("is-loading");
+    var n = Number(count);
+    if (!isFinite(n) || n < 0 || opts.clear) {
+      vendorCountEl.textContent = "";
+      vendorCountEl.classList.add("is-empty");
+      vendorCountEl.removeAttribute("data-vendor");
+      return;
+    }
+    vendorCountEl.classList.remove("is-empty");
+    vendorCountEl.textContent = Math.round(n).toLocaleString("en-US") + " صنف";
+  }
+
+  function loadVendorItemCount(code) {
+    if (!vendorCountEl) return;
+    var vendorCode = String(code || "").trim();
+    if (!vendorCode) {
+      setVendorItemCount(0, { clear: true });
+      return;
+    }
+    var url = vendorCountEl.getAttribute("data-count-url") || "";
+    if (!url) return;
+    var reqId = ++vendorCountReq;
+    setVendorItemCount(0, { loading: true });
+    vendorCountEl.setAttribute("data-vendor", vendorCode);
+    fetch(url + "?vendor=" + encodeURIComponent(vendorCode), {
+      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (payload) {
+        if (reqId !== vendorCountReq) return;
+        if (!payload.ok || !payload.data || !payload.data.ok) {
+          setVendorItemCount(0, { clear: true });
+          return;
+        }
+        setVendorItemCount(payload.data.count || 0);
+      })
+      .catch(function () {
+        if (reqId !== vendorCountReq) return;
+        setVendorItemCount(0, { clear: true });
+      });
+  }
+
+  function vendorItems() {
+    if (!vendor) return [];
+    var out = [];
+    for (var i = 0; i < vendor.options.length; i++) {
+      var opt = vendor.options[i];
+      if (!opt.value) continue;
+      out.push({
+        code: String(opt.value),
+        label: String(opt.textContent || "").trim(),
+      });
+    }
+    return out;
+  }
+
+  function closeVendorSuggest() {
+    if (!vendorSuggest || !vendorFilter) return;
+    vendorSuggest.hidden = true;
+    vendorSuggest.innerHTML = "";
+    vendorFilter.setAttribute("aria-expanded", "false");
+    vendorActive = -1;
+  }
+
+  function pickVendor(code, label) {
+    if (!vendor || !vendorFilter) return;
+    vendor.value = code || "";
+    vendorFilter.value = label || "";
+    closeVendorSuggest();
+    loadVendorItemCount(code);
+  }
+
+  function renderVendorSuggest(q) {
+    if (!vendorSuggest || !vendorFilter) return;
+    var query = String(q || "").trim().toLowerCase();
+    var items = vendorItems();
+    var matches = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var hay = (it.label + " " + it.code).toLowerCase();
+      if (!query || hay.indexOf(query) !== -1) matches.push(it);
+      if (matches.length >= 12) break;
+    }
+    vendorSuggest.innerHTML = "";
+    if (!query) {
+      closeVendorSuggest();
+      return;
+    }
+    if (!matches.length) {
+      var empty = document.createElement("li");
+      empty.className = "vendor-suggest-empty";
+      empty.textContent = "لا توجد نتائج";
+      vendorSuggest.appendChild(empty);
+    } else {
+      matches.forEach(function (it, idx) {
+        var li = document.createElement("li");
+        li.setAttribute("role", "option");
+        li.id = "vendor-opt-" + idx;
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "vendor-suggest-option";
+        btn.setAttribute("data-code", it.code);
+        btn.setAttribute("data-label", it.label);
+        var name = document.createElement("span");
+        name.className = "vendor-suggest-name";
+        name.textContent = it.label.split(" · ")[0] || it.label;
+        var code = document.createElement("span");
+        code.className = "vendor-suggest-code";
+        code.textContent = it.code;
+        btn.appendChild(name);
+        btn.appendChild(code);
+        btn.addEventListener("mousedown", function (e) {
+          e.preventDefault();
+          pickVendor(it.code, it.label);
+        });
+        li.appendChild(btn);
+        vendorSuggest.appendChild(li);
+      });
+    }
+    vendorSuggest.hidden = false;
+    vendorFilter.setAttribute("aria-expanded", "true");
+    vendorActive = -1;
+  }
+
+  function moveVendorActive(delta) {
+    if (!vendorSuggest || vendorSuggest.hidden) return;
+    var opts = vendorSuggest.querySelectorAll(".vendor-suggest-option");
+    if (!opts.length) return;
+    vendorActive = (vendorActive + delta + opts.length) % opts.length;
+    opts.forEach(function (el, i) {
+      if (i === vendorActive) el.classList.add("is-active");
+      else el.classList.remove("is-active");
+    });
+    opts[vendorActive].scrollIntoView({ block: "nearest" });
+  }
+
+  if (vendorFilter) {
+    vendorFilter.addEventListener("input", function () {
+      if (!String(vendorFilter.value || "").trim()) {
+        if (vendor) vendor.value = "";
+        closeVendorSuggest();
+        setVendorItemCount(0, { clear: true });
+        return;
+      }
+      renderVendorSuggest(vendorFilter.value);
+    });
+    vendorFilter.addEventListener("focus", function () {
+      if (String(vendorFilter.value || "").trim()) {
+        renderVendorSuggest(vendorFilter.value);
+      }
+    });
+    vendorFilter.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (vendorSuggest && vendorSuggest.hidden) renderVendorSuggest(vendorFilter.value);
+        moveVendorActive(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveVendorActive(-1);
+      } else if (e.key === "Enter") {
+        var opts = vendorSuggest
+          ? vendorSuggest.querySelectorAll(".vendor-suggest-option")
+          : [];
+        if (vendorSuggest && !vendorSuggest.hidden && vendorActive >= 0 && opts[vendorActive]) {
+          e.preventDefault();
+          var btn = opts[vendorActive];
+          pickVendor(btn.getAttribute("data-code"), btn.getAttribute("data-label"));
+        }
+      } else if (e.key === "Escape") {
+        closeVendorSuggest();
+      }
+    });
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest(".vendor-suggest")) closeVendorSuggest();
+    });
+  }
+
+  function syncScope() {
     var compare = false;
     radios.forEach(function (r) {
       var on = !!r.checked;
@@ -365,6 +689,46 @@
     if (field) field.hidden = compare;
   }
 
+  function normCode(value) {
+    var s = String(value || "").trim();
+    if (!s) return "";
+    if (/^\d+$/.test(s)) {
+      try {
+        return String(parseInt(s, 10));
+      } catch (err) {
+        return s;
+      }
+    }
+    return s;
+  }
+
+  function syncWarehouses() {
+    if (!warehouse) return;
+    var brn = branch ? String(branch.value || "").trim() : "";
+    var brnNorm = normCode(brn);
+    var options = warehouse.querySelectorAll("option");
+    var keep = warehouse.value;
+    var firstVisible = "";
+    var keepVisible = false;
+    options.forEach(function (opt) {
+      var optBrn = String(opt.getAttribute("data-branch") || "").trim();
+      var show = !brn || optBrn === brn || normCode(optBrn) === brnNorm;
+      opt.hidden = !show;
+      opt.disabled = !show;
+      if (show && !firstVisible) firstVisible = opt.value;
+      if (show && String(opt.value) === String(keep)) keepVisible = true;
+    });
+    if (keepVisible) {
+      warehouse.value = keep;
+    } else if (firstVisible) {
+      warehouse.value = firstVisible;
+    }
+    warehouse.dispatchEvent(new Event("change", { bubbles: true }));
+    if (typeof window.invSelectRefresh === "function") {
+      window.invSelectRefresh(warehouse);
+    }
+  }
+
   if (toggle) {
     toggle.addEventListener("click", function (e) {
       var label = e.target.closest(".scope-option");
@@ -372,13 +736,19 @@
       var radio = label.querySelector('input[name="scope"]');
       if (!radio) return;
       radio.checked = true;
-      sync();
+      syncScope();
     });
   }
   radios.forEach(function (r) {
-    r.addEventListener("change", sync);
+    r.addEventListener("change", syncScope);
   });
-  sync();
+  if (branch) {
+    branch.addEventListener("change", function () {
+      syncWarehouses();
+    });
+  }
+  syncScope();
+  syncWarehouses();
 })();
 </script>
 {% endblock %}

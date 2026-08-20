@@ -23,6 +23,7 @@ from .api_client import (
     lookup_by_group,
     lookup_by_item_code,
     lookup_by_name,
+    lookup_by_name_in_codes,
     search_item_details,
     sync_barcode_index,
 )
@@ -88,6 +89,8 @@ def _warehouses() -> list[dict]:
         {
             'code': str(w.get('code') or '').strip(),
             'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+            'branch_name': str(w.get('branch_name') or '').strip(),
         }
         for w in (settings.EXTERNAL_API.get('WAREHOUSES') or [])
         if str(w.get('code') or '').strip()
@@ -114,11 +117,85 @@ def _warehouses() -> list[dict]:
                 label = f'{raw_name} - {code}'
             else:
                 label = f'مخزن {code}'
-            out.append({'code': code, 'name': label})
+            out.append(
+                {
+                    'code': code,
+                    'name': label,
+                    'branch_code': str(w.get('branch_code') or '').strip(),
+                    'branch_name': str(w.get('branch_name') or '').strip(),
+                }
+            )
         return out or fallback
     except Exception as exc:  # noqa: BLE001
         logger.warning('Warehouse list from Oracle failed: %s', exc)
         return fallback
+
+
+def _branches_from_warehouses(warehouses: list[dict]) -> list[dict]:
+    """فروع فريدة من ربط المخازن (CONN_BRN_NO)."""
+    seen: dict[str, str] = {}
+    for row in warehouses or []:
+        code = str(row.get('branch_code') or '').strip()
+        if not code or code in seen:
+            continue
+        name = str(row.get('branch_name') or '').strip() or code
+        seen[code] = name
+    return [
+        {'code': code, 'name': name}
+        for code, name in sorted(seen.items(), key=lambda item: (item[1], item[0]))
+    ]
+
+
+def _warehouses_for_branch(warehouses: list[dict], branch_code: str) -> list[dict]:
+    brn = str(branch_code or '').strip()
+    if not brn:
+        return list(warehouses or [])
+    return [
+        row
+        for row in (warehouses or [])
+        if str(row.get('branch_code') or '').strip() == brn
+    ]
+
+
+def _parse_qty_loose(value) -> float | None:
+    text = str(value or '').strip().replace(',', '')
+    if not text or text in {'—', '-'}:
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _item_sales_turnover(sold_qty: float, stock_qty: float | None) -> dict:
+    """دوران المبيعات = المباع ÷ (المباع + الرصيد الحالي)."""
+    sold = max(0.0, float(sold_qty or 0))
+    stock = max(0.0, float(stock_qty or 0)) if stock_qty is not None else None
+    if stock is None:
+        return {
+            'sold_qty': round(sold, 2),
+            'sold_qty_display': f'{sold:,.2f}'.rstrip('0').rstrip('.') if sold else '0',
+            'stock_qty': None,
+            'stock_qty_display': '—',
+            'turnover_pct': None,
+            'turnover_display': '—',
+        }
+    base = sold + stock
+    pct = round((sold / base) * 100.0, 1) if base > 0 else 0.0
+
+    def _fmt(n: float) -> str:
+        if abs(n - round(n)) < 1e-9:
+            return f'{int(round(n)):,}'
+        return f'{n:,.2f}'
+
+    return {
+        'sold_qty': round(sold, 2),
+        'sold_qty_display': _fmt(sold),
+        'stock_qty': round(stock, 2),
+        'stock_qty_display': _fmt(stock),
+        'turnover_pct': pct,
+        'turnover_display': f'{pct:.1f}%',
+    }
 
 def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str) -> tuple[list[dict], dict | None]:
     """يربط باركود الوحدات من الفهرس ويختار الصف المطابق (باركود أو وحدة الرصيد/التكلفة)."""
@@ -218,6 +295,14 @@ def _items_from_prices(prices: list[dict], group_info: dict) -> list[dict]:
 
 @login_required
 def item_search(request):
+    from datetime import date as date_cls
+
+    from .oracle_stock import (
+        OracleStockError,
+        fetch_posted_item_sales_by_warehouses,
+        oracle_enabled,
+    )
+
     raw_query = request.GET.get('q')
     items = []
     prices = []
@@ -227,9 +312,45 @@ def item_search(request):
     group_info = {'g_code': '', 'g_name': ''}
     cache_count = ItemBarcode.objects.count()
     meta_incomplete = index_meta_incomplete()
-    warehouses = _warehouses()
+    all_warehouses = _warehouses()
+    branches = _branches_from_warehouses(all_warehouses)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    vendor_q = str(request.GET.get('vendor') or '').strip()[:120]
+    company_vendors: list[dict] = []
+    try:
+        from .oracle_stock import fetch_company_vendor_options, oracle_enabled as _oe
+
+        if _oe():
+            company_vendors = fetch_company_vendor_options()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Company vendor list skipped: %s', exc)
+        company_vendors = []
+    vendor_codes = {str(v.get('code') or '').strip() for v in company_vendors}
+    selected_vendor = vendor_q if vendor_q in vendor_codes else ''
+    # توافق: إن وصل اسم قديم بدل الكود نطابقه بالاسم
+    if vendor_q and not selected_vendor:
+        needle = vendor_q.casefold()
+        for row in company_vendors:
+            if needle == str(row.get('name') or '').casefold() or needle == str(row.get('code') or '').casefold():
+                selected_vendor = str(row.get('code') or '').strip()
+                break
+    vendor_q = selected_vendor
+    selected_vendor_name = next(
+        (str(v.get('name') or '') for v in company_vendors if v.get('code') == selected_vendor),
+        '',
+    )
+    vendor_item_count = 0
+    if selected_vendor:
+        try:
+            from .oracle_stock import fetch_vendor_item_count
+
+            vendor_item_count = fetch_vendor_item_count(selected_vendor)
+        except Exception:  # noqa: BLE001
+            vendor_item_count = 0
     default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
     warehouse_compare: list[dict] = []
+    sales_bundle: dict | None = None
+    sales_turnover: dict | None = None
     scope_raw = str(request.GET.get('scope') or 'one').strip().lower()
     raw_wh = str(request.GET.get('warehouse') or '').strip()
     # توافق مع الروابط القديمة warehouse=all
@@ -237,16 +358,39 @@ def item_search(request):
     if raw_wh == 'all':
         raw_wh = ''
 
+    branch_codes = {b['code'] for b in branches}
+    if selected_branch and selected_branch not in branch_codes:
+        selected_branch = ''
+
+    warehouses = (
+        _warehouses_for_branch(all_warehouses, selected_branch)
+        if selected_branch
+        else list(all_warehouses)
+    )
+    if not warehouses:
+        warehouses = list(all_warehouses)
+
+    today = date_cls.today()
+    month_start = today.replace(day=1)
     try:
         query = sanitize_search_query(raw_query)
         warehouse = resolve_warehouse(
             raw_wh or None,
             warehouses,
-            default_wh,
+            default_wh if any(w['code'] == default_wh for w in warehouses) else (
+                warehouses[0]['code'] if warehouses else default_wh
+            ),
+        )
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
         )
     except ValidationError as exc:
         query = (raw_query or '').strip()[:64]
-        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else '60'
+        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else (
+            warehouses[0]['code'] if warehouses else '60'
+        )
+        date_from, date_to = month_start, today
         searched = bool(query)
         error = str(exc)
         return render(
@@ -262,10 +406,21 @@ def item_search(request):
                 'cache_count': cache_count,
                 'meta_incomplete': False,
                 'warehouses': warehouses,
+                'all_warehouses': all_warehouses,
+                'branches': branches,
+                'selected_branch': selected_branch,
+                'vendor_q': vendor_q,
+                'company_vendors': company_vendors,
+                'selected_vendor_name': selected_vendor_name,
+                'vendor_item_count': vendor_item_count,
                 'warehouse': warehouse,
                 'detail_warehouse': warehouse,
                 'compare_mode': compare_mode,
                 'warehouse_compare': [],
+                'date_from': date_from.isoformat(),
+                'date_to': date_to.isoformat(),
+                'sales_bundle': None,
+                'sales_turnover': None,
                 'g_code': '',
                 'g_name': '',
                 'sync_secret_required': bool(settings.SYNC_SECRET) or not settings.DEBUG,
@@ -278,44 +433,82 @@ def item_search(request):
 
     if query:
         searched = True
+        vendor_item_codes: set[str] | None = None
+        if selected_vendor:
+            try:
+                from .oracle_stock import fetch_vendor_item_codes
+
+                vendor_item_codes = fetch_vendor_item_codes(selected_vendor)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning('Vendor item codes skipped: %s', exc)
+                vendor_item_codes = set()
+            if not vendor_item_codes:
+                error = 'لا أصناف مربوطة بهذا المورد في أونكس.'
+
         try:
-            barcode_hits = lookup_by_barcode(query)
-            code_hits = [] if barcode_hits else lookup_by_item_code(query)
-            name_hits = [] if barcode_hits or code_hits else lookup_by_name(query)
+            if error:
+                barcode_hits = []
+                code_hits = []
+                name_hits = []
+            else:
+                barcode_hits = lookup_by_barcode(query)
+                code_hits = [] if barcode_hits else lookup_by_item_code(query)
+                if barcode_hits or code_hits:
+                    name_hits = []
+                elif vendor_item_codes is not None:
+                    name_hits = lookup_by_name_in_codes(query, vendor_item_codes, limit=80)
+                else:
+                    name_hits = lookup_by_name(query)
+
+            def _allowed(code: str) -> bool:
+                if vendor_item_codes is None:
+                    return True
+                c = str(code or '').strip()
+                return bool(c) and c in vendor_item_codes
 
             if barcode_hits:
-                match_type = 'barcode'
-                item_code = barcode_hits[0]['code']
-                items = lookup_by_item_code(item_code) or barcode_hits
-                group_info = {
-                    'g_code': items[0].get('g_code', '') or barcode_hits[0].get('g_code', ''),
-                    'g_name': items[0].get('g_name', '') or barcode_hits[0].get('g_name', ''),
-                }
-                if not compare_mode:
-                    try:
-                        prices = search_item_details(item_code, warehouse=detail_wh)
-                    except ApiClientError:
-                        prices = []
-                    if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
-                        items = _items_from_prices(prices, group_info) or items
+                item_code = str(barcode_hits[0].get('code') or '').strip()
+                if not _allowed(item_code):
+                    error = 'هذا الصنف غير من أصناف المورد المختار.'
+                    items = []
+                    prices = []
+                    match_type = ''
+                else:
+                    match_type = 'barcode'
+                    items = lookup_by_item_code(item_code) or barcode_hits
+                    group_info = {
+                        'g_code': items[0].get('g_code', '') or barcode_hits[0].get('g_code', ''),
+                        'g_name': items[0].get('g_name', '') or barcode_hits[0].get('g_name', ''),
+                    }
+                    if not compare_mode:
+                        try:
+                            prices = search_item_details(item_code, warehouse=detail_wh)
+                        except ApiClientError:
+                            prices = []
+                        if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                            items = _items_from_prices(prices, group_info) or items
             elif code_hits:
-                # بحث مباشر برقم الصنف من الفهرس المحلي
-                match_type = 'code'
-                item_code = code_hits[0]['code']
-                items = code_hits
-                group_info = {
-                    'g_code': items[0].get('g_code', ''),
-                    'g_name': items[0].get('g_name', ''),
-                }
-                if not compare_mode:
-                    try:
-                        prices = search_item_details(item_code, warehouse=detail_wh)
-                    except ApiClientError:
-                        prices = []
-                    if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
-                        items = _items_from_prices(prices, group_info) or items
+                item_code = str(code_hits[0].get('code') or '').strip()
+                if not _allowed(item_code):
+                    error = 'هذا الصنف غير من أصناف المورد المختار.'
+                    items = []
+                    prices = []
+                    match_type = ''
+                else:
+                    match_type = 'code'
+                    items = code_hits
+                    group_info = {
+                        'g_code': items[0].get('g_code', ''),
+                        'g_name': items[0].get('g_name', ''),
+                    }
+                    if not compare_mode:
+                        try:
+                            prices = search_item_details(item_code, warehouse=detail_wh)
+                        except ApiClientError:
+                            prices = []
+                        if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
+                            items = _items_from_prices(prices, group_info) or items
             elif len(name_hits) == 1:
-                # اسم واحد مطابق → اعرض تفاصيله كصنف محدد
                 match_type = 'name'
                 item_code = name_hits[0]['code']
                 items = lookup_by_item_code(item_code) or name_hits
@@ -331,14 +524,11 @@ def item_search(request):
                     if not any(i.get('barcode') or i.get('unit') or i.get('pack_size') for i in items):
                         items = _items_from_prices(prices, group_info) or items
             elif len(name_hits) > 1:
-                # عدة أسماء → قائمة اختيار
                 match_type = 'name_list'
                 items = name_hits
                 prices = []
-            elif looks_like_item_code(query):
-                # احتياطي: إرسال النص للنظام كرقم صنف فقط
+            elif looks_like_item_code(query) and (vendor_item_codes is None or _allowed(query)):
                 if compare_mode:
-                    # في وضع المقارنة نكتفي برقم الاستعلام ونترك المقارنة تجلب التفاصيل
                     match_type = 'code'
                     item_code = query
                     group_info = get_item_group(item_code)
@@ -349,19 +539,29 @@ def item_search(request):
                     prices = search_item_details(query, warehouse=detail_wh)
                     if prices:
                         item_code = str(prices[0].get('code') or '').strip() or query
-                        match_type = 'barcode' if item_code != query else 'code'
-                        group_info = get_item_group(item_code)
-                        items = lookup_by_item_code(item_code)
-                        if not items:
-                            items = _items_from_prices(prices, group_info)
+                        if not _allowed(item_code):
+                            error = 'هذا الصنف غير من أصناف المورد المختار.'
+                            items = []
+                            prices = []
+                            match_type = ''
+                        else:
+                            match_type = 'barcode' if item_code != query else 'code'
+                            group_info = get_item_group(item_code)
+                            items = lookup_by_item_code(item_code)
+                            if not items:
+                                items = _items_from_prices(prices, group_info)
                     elif cache_count == 0:
                         error = (
                             'فهرس الباركود فارغ. اضغط «مزامنة» أو انتظر المزامنة التلقائية بعد النشر ثم أعد البحث.'
                         )
-            elif cache_count == 0:
+            elif looks_like_item_code(query) and vendor_item_codes is not None:
+                error = 'هذا الصنف غير من أصناف المورد المختار.'
+            elif not error and cache_count == 0:
                 error = (
                     'فهرس الباركود فارغ. اضغط «مزامنة» أولاً ثم ابحث بالاسم أو الباركود.'
                 )
+            elif not error and selected_vendor and not (barcode_hits or code_hits or name_hits):
+                error = 'لا صنف بهذا الاسم ضمن أصناف المورد المختار.'
         except ApiClientError as exc:
             error = str(exc)
 
@@ -379,10 +579,16 @@ def item_search(request):
         if not compare_code and query:
             compare_code = str(query).strip()
         if compare_code:
-            name_map = {str(w['code']): str(w['name']) for w in warehouses}
+            name_map = {str(w['code']): str(w['name']) for w in all_warehouses}
+            compare_list = (
+                [w['code'] for w in warehouses]
+                if selected_branch
+                else _compare_warehouse_codes(all_warehouses)
+            )
             try:
                 warehouse_compare = compare_item_across_warehouses(
                     compare_code,
+                    compare_list,
                     warehouse_names=name_map,
                 )
                 logger.info(
@@ -405,6 +611,64 @@ def item_search(request):
         if not supplier_code and warehouse_compare:
             supplier_code = str(warehouse_compare[0].get('code') or '').strip()
         suppliers = _fetch_suppliers_safe(supplier_code)
+        if selected_vendor:
+            for row in suppliers:
+                code = str(row.get('code') or '').strip()
+                row['is_matched'] = code == selected_vendor
+            suppliers.sort(key=lambda r: (0 if r.get('is_matched') else 1, str(r.get('name') or '')))
+
+    # دوران المبيعات للفترة ضمن المخزن/مخازن الفرع
+    if searched and not error and match_type != 'name_list':
+        sales_code = ''
+        if selected_price:
+            sales_code = str(selected_price.get('code') or '').strip()
+        if not sales_code and items:
+            sales_code = str(items[0].get('code') or '').strip()
+        if not sales_code and warehouse_compare:
+            sales_code = str(warehouse_compare[0].get('code') or '').strip()
+        if sales_code and oracle_enabled():
+            name_map = {str(w['code']): str(w['name']) for w in all_warehouses}
+            if compare_mode:
+                wh_codes = (
+                    [w['code'] for w in warehouses]
+                    if selected_branch
+                    else _compare_warehouse_codes(all_warehouses)
+                )
+            else:
+                wh_codes = [detail_wh]
+            try:
+                sales_bundle = fetch_posted_item_sales_by_warehouses(
+                    sales_code,
+                    wh_codes,
+                    date_from,
+                    date_to,
+                    warehouse_names=name_map,
+                    system='pos',
+                )
+                if not sales_bundle.get('item_name') and items:
+                    sales_bundle['item_name'] = str(items[0].get('name') or sales_code)
+                sold_qty = float((sales_bundle.get('totals') or {}).get('qty') or 0)
+                stock_qty = None
+                if compare_mode and warehouse_compare:
+                    stock_sum = 0.0
+                    any_stock = False
+                    for row in warehouse_compare:
+                        parsed = _parse_qty_loose(row.get('quantity'))
+                        if parsed is None:
+                            continue
+                        any_stock = True
+                        stock_sum += max(0.0, parsed)
+                    if any_stock:
+                        stock_qty = stock_sum
+                elif selected_price is not None:
+                    stock_qty = _parse_qty_loose(selected_price.get('quantity'))
+                    if stock_qty is not None:
+                        stock_qty = max(0.0, stock_qty)
+                sales_turnover = _item_sales_turnover(sold_qty, stock_qty)
+            except OracleStockError as exc:
+                logger.warning('Item sales turnover skipped: %s', exc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning('Item sales turnover failed: %s', exc)
 
     return render(
         request,
@@ -422,15 +686,52 @@ def item_search(request):
             'cache_count': cache_count,
             'meta_incomplete': meta_incomplete,
             'warehouses': warehouses,
+            'all_warehouses': all_warehouses,
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'vendor_q': vendor_q,
+            'company_vendors': company_vendors,
+            'selected_vendor_name': selected_vendor_name,
+            'vendor_item_count': vendor_item_count,
             'warehouse': warehouse,
             'detail_warehouse': detail_wh,
             'compare_mode': compare_mode,
             'warehouse_compare': warehouse_compare,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'sales_bundle': sales_bundle,
+            'sales_turnover': sales_turnover,
             'g_code': group_info.get('g_code', ''),
             'g_name': group_info.get('g_name', ''),
             'sync_secret_required': bool(settings.SYNC_SECRET) or not settings.DEBUG,
         },
     )
+
+
+@login_required
+@require_GET
+def item_vendor_item_count(request):
+    """عدد أصناف المورد المختار — لمقترح البحث الفوري."""
+    vendor = str(request.GET.get('vendor') or '').strip()[:40]
+    if not vendor:
+        return JsonResponse({'ok': True, 'vendor': '', 'count': 0})
+    try:
+        from .oracle_stock import (
+            fetch_company_vendor_options,
+            fetch_vendor_item_count,
+            oracle_enabled,
+        )
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'oracle_disabled', 'count': 0}, status=503)
+        allowed = {str(v.get('code') or '').strip() for v in fetch_company_vendor_options()}
+        if vendor not in allowed:
+            return JsonResponse({'ok': False, 'error': 'vendor_not_allowed', 'count': 0}, status=400)
+        count = fetch_vendor_item_count(vendor)
+        return JsonResponse({'ok': True, 'vendor': vendor, 'count': int(count)})
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse({'ok': False, 'error': str(exc), 'count': 0}, status=502)
+
 
 def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
     """قائمة مخازن المقارنة من الإعدادات مع الإبقاء على الموجود فعلياً."""
