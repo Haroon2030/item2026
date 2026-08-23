@@ -49,6 +49,14 @@ def _split_dr_cr(net: float) -> tuple[float, float]:
     return 0.0, -n
 
 
+def _book_branch(row: dict, names: dict[str, str]) -> tuple[str, str]:
+    """الفرع الدفتري BRN_NO — أساس الرصيد النهائي لكل حساب."""
+    brn = str(row.get("BRN_NO") or "").strip()
+    if brn:
+        return brn, names.get(brn) or f"فرع {brn}"
+    return "", "—"
+
+
 def _benef_branch(row: dict, names: dict[str, str]) -> tuple[str, str]:
     """الفرع المستفيد كأونكس = DOC_BRN_NO (قد يكون فارغاً)."""
     doc_brn = str(row.get("DOC_BRN") or "").strip()
@@ -83,7 +91,7 @@ def _cache_key(
     mode: str,
 ) -> str:
     return (
-        f"trialbal:v14:{mode}:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"trialbal:v16:{mode}:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{branch_code or '-'}:{int(posted_only)}:{int(hide_zero)}"
     )
 
@@ -283,31 +291,34 @@ def _fetch_tb_detail_rows(
 
 
 def _collapse_onix_groups(raw: list[dict], *, detail: bool) -> list[dict]:
-    """دمج دفاتر BRN_NO: أونكس يعرض حساب + مستفيد + عملة (+تحليلي) دون فصل الدفتر."""
+    """رصيد نهائي: دمج المستفيد داخل الفرع الدفتري (حساب + دفتر + عملة).
+
+    يمنع تضخيم المدين/الدائن من تحويلات المخزون (DOC_BRN فارغ مقابل فرع مستفيد).
+    """
     buckets: dict[tuple, dict] = {}
     for row in raw:
         code = str(row.get("A_CODE") or "").strip()
         if not code:
             continue
-        doc_brn = str(row.get("DOC_BRN") or "").strip()
+        book_brn = str(row.get("BRN_NO") or "").strip()
         cy = str(row.get("A_CY") or "SAR").strip() or "SAR"
         if detail:
             key: tuple = (
                 code,
                 str(row.get("AC_DTL_TYP") or "0").strip() or "0",
                 str(row.get("AC_CODE_DTL") or "").strip(),
-                doc_brn,
+                book_brn,
                 cy,
             )
         else:
-            key = (code, doc_brn, cy)
+            key = (code, book_brn, cy)
         acc = buckets.get(key)
         if acc is None:
             acc = dict(row)
             acc["A_CODE"] = code
-            acc["DOC_BRN"] = doc_brn
+            acc["BRN_NO"] = book_brn
+            acc["DOC_BRN"] = ""
             acc["A_CY"] = cy
-            acc["BRN_NO"] = ""
             acc["OPEN_NET"] = _f(row.get("OPEN_NET"))
             acc["MV_DR"] = _f(row.get("MV_DR"))
             acc["MV_CR"] = _f(row.get("MV_CR"))
@@ -446,7 +457,7 @@ def _build_summary(
     brn: str,
     posted_only: bool,
 ) -> dict[str, Any]:
-    """أرصدة نهائية حسب رقم الحساب + الفرع المستفيد + العملة كأونكس."""
+    """أرصدة نهائية: رقم الحساب + الفرع الدفتري + العملة (رصيد ختامي فقط)."""
     merged = _collapse_onix_groups(raw, detail=False)
     rows_out: list[dict] = []
     tot_dr = tot_cr = 0.0
@@ -455,7 +466,7 @@ def _build_summary(
         if not code:
             continue
         name = str(row.get("A_NAME") or "").strip() or code
-        branch_code_row, branch_name = _benef_branch(row, names)
+        branch_code_row, branch_name = _book_branch(row, names)
         cy = str(row.get("A_CY") or "SAR").strip() or "SAR"
         open_net = _f(row.get("OPEN_NET"))
         mv_dr = _f(row.get("MV_DR"))
@@ -470,7 +481,7 @@ def _build_summary(
                 "account_code": code,
                 "branch_code": branch_code_row,
                 "branch_name": branch_name,
-                "book_branch_code": "",
+                "book_branch_code": branch_code_row,
                 "account_name": name,
                 "display_name": display_name,
                 "dtl_typ": "",
@@ -499,7 +510,7 @@ def _build_summary(
         "mode": "summary",
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "report_title": "كشف حساب إجمالي — أرصدة نهائية",
-        "group_by_label": "رقم الحساب · الفرع المستفيد · العملة",
+        "group_by_label": "رقم الحساب · الفرع الدفتري · العملة",
         "currency": "SAR",
         "rows": rows_out,
         "totals": {
@@ -550,7 +561,7 @@ def _build_analytic(
         dtl_typ = str(row.get("AC_DTL_TYP") or "0").strip() or "0"
         dtl_code = str(row.get("AC_CODE_DTL") or "").strip()
         dtl_name = str(row.get("DTL_NAME") or "").strip() or dtl_code
-        branch_code_row, branch_name = _benef_branch(row, names)
+        branch_code_row, branch_name = _book_branch(row, names)
         cy = str(row.get("A_CY") or "SAR").strip() or "SAR"
         open_net = _f(row.get("OPEN_NET"))
         mv_dr = _f(row.get("MV_DR"))
@@ -568,7 +579,7 @@ def _build_analytic(
                 "dtl_name": dtl_name,
                 "branch_code": branch_code_row,
                 "branch_name": branch_name,
-                "book_branch_code": "",
+                "book_branch_code": branch_code_row,
                 "display_name": name,
                 "currency": cy,
                 "cheque_display": "",
@@ -596,7 +607,7 @@ def _build_analytic(
         "mode": "analytic",
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "report_title": "كشف حساب إجمالي — أرصدة نهائية تحليلية",
-        "group_by_label": "رقم الحساب · الحساب التحليلي · الفرع المستفيد · العملة",
+        "group_by_label": "رقم الحساب · الحساب التحليلي · الفرع الدفتري · العملة",
         "currency": "SAR",
         "rows": rows_out,
         "totals": {
@@ -647,7 +658,7 @@ def _build_detail(
         dtl_typ = str(row.get("AC_DTL_TYP") or "0").strip() or "0"
         dtl_code = str(row.get("AC_CODE_DTL") or "").strip()
         dtl_name = str(row.get("DTL_NAME") or "").strip() or dtl_code
-        branch_code_row, branch_name = _benef_branch(row, names)
+        branch_code_row, branch_name = _book_branch(row, names)
         cy = str(row.get("A_CY") or "SAR").strip() or "SAR"
         open_net = _f(row.get("OPEN_NET"))
         mv_dr = _f(row.get("MV_DR"))
@@ -666,7 +677,7 @@ def _build_detail(
                 "dtl_name": dtl_name,
                 "branch_code": branch_code_row,
                 "branch_name": branch_name,
-                "book_branch_code": "",
+                "book_branch_code": branch_code_row,
                 "currency": cy,
                 "open_dr": open_dr,
                 "open_cr": open_cr,
@@ -711,7 +722,7 @@ def _build_detail(
         "mode": "detail",
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "report_title": "كشف حساب إجمالي — تفصيلي تحليلي (أرصدة مع الحركة)",
-        "group_by_label": "رقم الحساب · الحساب التحليلي · الفرع المستفيد · العملة",
+        "group_by_label": "رقم الحساب · الحساب التحليلي · الفرع الدفتري · العملة",
         "currency": "SAR",
         "rows": rows_out,
         "totals": {
@@ -738,6 +749,83 @@ def _build_detail(
             "mode": "detail",
         },
     }
+
+
+def _inventory_sanity(raw: list[dict]) -> dict[str, Any]:
+    """سلامة مخزون البضاعة 11301001: صافي الدفتر مقابل عرض الفرع المستفيد.
+
+    التحويلات الداخلية تُظهر مدينًا كبيرًا (DOC_BRN فارغ) ودائنًا كبيرًا
+    (الفرع المستفيد) في عرض أونكس، بينما صافي الفرع الدفتري مدين فقط.
+    """
+    code = "11301001"
+    by_book: dict[str, float] = {}
+    by_benef: dict[str, float] = {}
+    name = "مخزون بضائع مشتراة بغرض البيع"
+    for row in raw or []:
+        if str(row.get("A_CODE") or "").strip() != code:
+            continue
+        if str(row.get("A_NAME") or "").strip():
+            name = str(row.get("A_NAME")).strip()
+        close = round(
+            _f(row.get("OPEN_NET")) + _f(row.get("MV_DR")) - _f(row.get("MV_CR")),
+            2,
+        )
+        book = str(row.get("BRN_NO") or "").strip() or "—"
+        benef = str(row.get("DOC_BRN") or "").strip()
+        by_book[book] = round(_f(by_book.get(book)) + close, 2)
+        by_benef[benef] = round(_f(by_benef.get(benef)) + close, 2)
+
+    if not by_book and not by_benef:
+        return {
+            "account_code": code,
+            "account_name": name,
+            "present": False,
+            "ok": True,
+            "net": 0.0,
+            "net_display": "0.00",
+            "net_side": "مدين",
+            "benef_debit": 0.0,
+            "benef_credit": 0.0,
+            "benef_debit_display": "0.00",
+            "benef_credit_display": "0.00",
+            "note": "لا قيود للمخزون ضمن الفترة/الفلتر.",
+        }
+
+    book_net = round(sum(by_book.values()), 2)
+    book_dr = round(sum(v for v in by_book.values() if v > 0), 2)
+    book_cr = round(sum(-v for v in by_book.values() if v < 0), 2)
+    benef_dr = round(sum(v for v in by_benef.values() if v > 0), 2)
+    benef_cr = round(sum(-v for v in by_benef.values() if v < 0), 2)
+    benef_net = round(benef_dr - benef_cr, 2)
+    ok = abs(benef_net - book_net) < 0.05 and book_cr < 0.05
+    return {
+        "account_code": code,
+        "account_name": name,
+        "present": True,
+        "ok": ok,
+        "net": book_net,
+        "net_display": _fmt_money(abs(book_net)),
+        "net_side": "مدين" if book_net >= 0 else "دائن",
+        "book_debit": book_dr,
+        "book_credit": book_cr,
+        "book_debit_display": _fmt_money(book_dr),
+        "book_credit_display": _fmt_money(book_cr),
+        "benef_debit": benef_dr,
+        "benef_credit": benef_cr,
+        "benef_debit_display": _fmt_money(benef_dr),
+        "benef_credit_display": _fmt_money(benef_cr),
+        "note": (
+            "الجدول يعرض الرصيد النهائي حسب الفرع الدفتري (مدين أو دائن). "
+            "أرقام المستفيد الكبيرة كانت تحويلات داخلية وصافيها هو الرصيد الظاهر."
+            if ok
+            else "تحذير: صافي عرض المستفيد لا يطابق صافي الدفتر — راجع القيود."
+        ),
+    }
+
+
+def _attach_inventory_sanity(result: dict[str, Any], raw: list[dict]) -> dict[str, Any]:
+    result["inventory_check"] = _inventory_sanity(raw)
+    return result
 
 
 def build_trial_balance(
@@ -806,49 +894,7 @@ def build_trial_balance(
                 posted_only=posted_only,
             )
     result["branch_gaps"] = _branch_gap_summary(_gap_rows_from_raw(raw), names)
-    # #region agent log
-    try:
-        import json as _json
-        import time as _time
-        from datetime import datetime as _dt
-        from pathlib import Path as _Path
-
-        result["fetched_at"] = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
-        _rows = result.get("rows") or []
-        _named = sum(1 for r in _rows if (r.get("dtl_name") or "") not in ("", r.get("dtl_code")))
-        _with_dtl = sum(1 for r in _rows if r.get("dtl_code"))
-        _Path("debug-e1de1c.log").open("a", encoding="utf-8").write(
-            _json.dumps(
-                {
-                    "sessionId": "e1de1c",
-                    "runId": "post-fix",
-                    "hypothesisId": "H-cache",
-                    "location": "oracle_trial_balance.build_trial_balance",
-                    "message": "built trial balance fresh",
-                    "data": {
-                        "mode": mode_n,
-                        "use_cache": use_cache,
-                        "raw_count": len(raw),
-                        "row_count": len(_rows),
-                        "with_dtl_code": _with_dtl,
-                        "named_dtl": _named,
-                        "debit": (result.get("totals") or {}).get("debit_display"),
-                        "credit": (result.get("totals") or {}).get("credit_display"),
-                        "balance": (result.get("totals") or {}).get("balance_display"),
-                        "fetched_at": result.get("fetched_at"),
-                        "onix_img": "3896013.65",
-                        "user_dom": "3895959.76",
-                        "gap_dom_onix": 53.89,
-                    },
-                    "timestamp": int(_time.time() * 1000),
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
-        )
-    except Exception:
-        pass
-    # #endregion
+    _attach_inventory_sanity(result, raw)
 
     try:
         cache.set(key, result, _CACHE_TTL)

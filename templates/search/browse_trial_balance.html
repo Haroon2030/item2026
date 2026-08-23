@@ -66,6 +66,34 @@
       </span>
     </article>
   </section>
+
+  {% if report.inventory_check and report.inventory_check.present %}
+    <section class="dash-panel dash-panel-glass tb-inv-check {% if report.inventory_check.ok %}is-ok{% else %}is-bad{% endif %}" aria-label="فحص سلامة المخزون">
+      <div class="dash-panel-head">
+        <div>
+          <h3>فحص المخزون · {{ report.inventory_check.account_code }}</h3>
+          <p class="sales-ov-sub">{{ report.inventory_check.account_name }}</p>
+        </div>
+        <span class="result-pill">{% if report.inventory_check.ok %}سليم{% else %}راجع{% endif %}</span>
+      </div>
+      <div class="tb-inv-grid">
+        <article class="tb-inv-card">
+          <span>صافي المخزون (دفتر)</span>
+          <strong class="mono">{{ report.inventory_check.net_display }}</strong>
+          <small>{{ report.inventory_check.net_side }}</small>
+        </article>
+        <article class="tb-inv-card">
+          <span>عرض المستفيد · مدين</span>
+          <strong class="mono">{{ report.inventory_check.benef_debit_display }}</strong>
+        </article>
+        <article class="tb-inv-card">
+          <span>عرض المستفيد · دائن</span>
+          <strong class="mono">{{ report.inventory_check.benef_credit_display }}</strong>
+        </article>
+      </div>
+      <p class="tb-inv-note">{{ report.inventory_check.note }}</p>
+    </section>
+  {% endif %}
 {% endif %}
 
 <form method="get" action="{% url 'browse_trial_balance' %}" class="income-filter-bar tb-filter-bar" role="search" aria-label="فلاتر ميزان المراجعة">
@@ -232,7 +260,7 @@
                 <tr>
                   <th>الرقم</th>
                   <th>الاسم</th>
-                  <th>الفرع المستفيد</th>
+                  <th>الفرع</th>
                   <th>العملة</th>
                   <th>مدين</th>
                   <th>دائن</th>

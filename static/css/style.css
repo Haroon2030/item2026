@@ -14137,6 +14137,66 @@ a.sidebar-brand-lockup {
   gap: 0.65rem 0.85rem;
 }
 
+.trial-balance-dash .tb-inv-check {
+  margin: 0.75rem 0 1rem;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.trial-balance-dash .tb-inv-check.is-ok {
+  border-color: rgba(35, 178, 104, 0.35);
+}
+
+.trial-balance-dash .tb-inv-check.is-bad {
+  border-color: rgba(220, 80, 80, 0.4);
+}
+
+.trial-balance-dash .tb-inv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.55rem;
+}
+
+.trial-balance-dash .tb-inv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(201, 220, 240, 0.8);
+}
+
+.trial-balance-dash .tb-inv-card span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #5d738c;
+}
+
+.trial-balance-dash .tb-inv-card strong {
+  font-size: 1.05rem;
+  color: #16324f;
+}
+
+.trial-balance-dash .tb-inv-card small {
+  font-size: 0.72rem;
+  color: #1b6b45;
+  font-weight: 700;
+}
+
+.trial-balance-dash .tb-inv-note {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+  color: #47617f;
+  line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+  .trial-balance-dash .tb-inv-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .trial-balance-dash .tb-filter-bar .income-filter-bar-main {
   display: grid;
   grid-template-columns:
