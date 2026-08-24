@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="أخطاء وحدات/أحجام الأصناف">
   <div class="dash-head-copy">
     <h2>أخطاء وحدات/أحجام الأصناف</h2>
-    <p>مقارنة P_SIZE بين المشتريات والتحويلات الواردة لنفس (الصنف + المخزن + اسم الوحدة).</p>
+    <p>مقارنة العبوة الكبيرة بين المشتريات والتحويلات الواردة لنفس الصنف والمخزن</p>
   </div>
 </section>
 
@@ -19,8 +19,8 @@
   </div>
 {% endif %}
 
-<form method="get" action="{% url 'browse_inventory_pack_errors' %}" class="income-filter-bar inv-pack-err-filter" role="search" aria-label="فلترة تقرير أخطاء وحدات الأصناف">
-  <div class="income-filter-bar-main">
+<form method="get" action="{% url 'browse_inventory_pack_errors' %}" class="income-filter-bar inv-pack-err-filter" role="search" aria-label="فلاتر أخطاء وحدات الأصناف">
+  <div class="income-filter-bar-main inv-pack-err-main">
     <div class="income-filter-period" role="group" aria-label="الفترة">
       <span class="income-filter-period-label">الفترة</span>
       <div class="income-filter-period-fields">
@@ -46,24 +46,19 @@
       </select>
     </div>
 
-    <div class="income-filter-field">
-      <label for="pack-err-wh">مخازن (بفواصل)</label>
-      <input id="pack-err-wh" type="text" name="warehouses" value="{{ warehouses_raw }}" placeholder="3,901,902,401">
+    <div class="income-filter-field inv-pack-err-wh">
+      <label for="pack-err-wh">المخازن</label>
+      <input id="pack-err-wh" type="text" name="warehouses" value="{{ warehouses_raw }}" placeholder="3,901,902,401" dir="ltr">
     </div>
 
     <div class="income-filter-field">
-      <label for="pack-err-minps">أقل P_SIZE للوحدة الكبيرة</label>
+      <label for="pack-err-minps">أقل عبوة</label>
       <input id="pack-err-minps" type="number" step="1" min="2" name="min_pack_size" value="{{ min_pack_size }}">
     </div>
 
     <div class="income-filter-field">
-      <label for="pack-err-tol">تسامح فرق P_SIZE (%)</label>
+      <label for="pack-err-tol">تسامح العبوة %</label>
       <input id="pack-err-tol" type="number" step="0.01" min="0" name="tolerance_pct" value="{{ tolerance_pct }}">
-    </div>
-
-    <div class="income-filter-field">
-      <label for="pack-err-qtytol">تسامح فرق الكمية Base Qty (%)</label>
-      <input id="pack-err-qtytol" type="number" step="0.01" min="0" name="qty_tolerance_pct" value="{{ qty_tolerance_pct }}">
     </div>
 
     <div class="income-filter-field">
@@ -71,49 +66,57 @@
       <input id="pack-err-limit" type="number" step="1" min="10" name="limit" value="{{ limit }}">
     </div>
   </div>
-  <button type="submit" class="btn-primary income-filter-submit">عرض الأخطاء</button>
+  <div class="inv-pack-err-actions">
+    <button type="submit" class="btn-primary income-filter-submit">عرض الأخطاء</button>
+  </div>
 </form>
 
 {% if report and report.rows %}
-  <section class="dash-panel dash-panel-glass perf-panel" aria-label="نتائج أخطاء وحدات/أحجام الأصناف">
+  <section class="dash-panel dash-panel-glass perf-panel inv-pack-err-panel" aria-label="نتائج أخطاء وحدات/أحجام الأصناف">
     <div class="dash-panel-head">
       <h3>الأصناف المخالفة</h3>
       <span class="result-pill">{{ report.kpis.mismatch_count }} خطأ</span>
     </div>
 
-    <div class="table-wrap income-analyst-scroll">
-      <table class="data-table sales-table income-analyst-table" aria-label="قائمة أخطاء وحدات الأصناف">
+    <div class="table-wrap inv-pack-err-scroll">
+      <table class="data-table inv-pack-err-table" aria-label="قائمة أخطاء وحدات الأصناف">
         <thead>
           <tr>
-            <th>الصنف</th>
-            <th>المخزن</th>
-            <th>الوحدة</th>
-            <th>مشتريات P_SIZE</th>
-            <th>وارد تحويل P_SIZE</th>
-            <th>النسبة</th>
-            <th>فرق (%)</th>
-            <th>نوع المخالفة</th>
-            <th>مشتريات كمية</th>
-            <th>وارد تحويل كمية</th>
-            <th>قاعدة (كمية × P_SIZE)</th>
+            <th class="pe-th-idx">#</th>
+            <th class="pe-th-item">الصنف</th>
+            <th class="pe-th-wh">المخزن</th>
+            <th class="pe-th-unit">الوحدة</th>
+            <th class="pe-th-buy">عبوة شراء</th>
+            <th class="pe-th-tr">عبوة تحويل</th>
+            <th class="pe-th-ratio">النسبة</th>
+            <th class="pe-th-diff">فرق العبوة %</th>
+            <th class="pe-th-buy">كمية شراء</th>
+            <th class="pe-th-tr">كمية تحويل</th>
+            <th class="pe-th-base">أساس شراء</th>
+            <th class="pe-th-base2">أساس تحويل</th>
           </tr>
         </thead>
         <tbody>
           {% for r in report.rows %}
-            <tr class="{% if r.diff_pct > 0 %}is-up{% else %}is-down{% endif %}">
-              <td class="mono">{{ r.item_code }}<br><span class="income-name-cell">{{ r.item_name }}</span></td>
-              <td class="mono">{{ r.wh_name }} #{{ r.wh_code }}</td>
-              <td>{{ r.unit }}</td>
-              <td class="mono">{{ r.purchase_p_size }}</td>
-              <td class="mono">{{ r.transfer_p_size }}</td>
-              <td class="mono">{{ r.ratio }}</td>
-              <td class="mono">{{ r.diff_pct }}%</td>
-              <td class="mono">{{ r.error_kind }}</td>
-              <td class="mono">{{ r.purchase_qty }}</td>
-              <td class="mono">{{ r.transfer_qty }}</td>
-              <td class="mono">
-                {{ r.purchase_base_qty }} / {{ r.transfer_base_qty }}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %} {% if r.diff_pct > 0 %}is-up{% else %}is-down{% endif %}">
+              <td class="mono pe-td-idx">{{ forloop.counter }}</td>
+              <td class="pe-td-item">
+                <strong class="mono">{{ r.item_code }}</strong>
+                <span class="pe-item-name" title="{{ r.item_name }}">{{ r.item_name }}</span>
               </td>
+              <td class="pe-td-wh" title="{{ r.wh_name }}">
+                <span>{{ r.wh_name }}</span>
+                <strong class="mono">{{ r.wh_code }}</strong>
+              </td>
+              <td class="pe-td-unit">{{ r.unit }}</td>
+              <td class="mono pe-td-buy">{{ r.purchase_p_size }}</td>
+              <td class="mono pe-td-tr">{{ r.transfer_p_size }}</td>
+              <td class="mono pe-td-ratio">{{ r.ratio }}</td>
+              <td class="mono pe-td-diff">{% if r.diff_pct > 0 %}+{% endif %}{{ r.diff_pct }}%</td>
+              <td class="mono pe-td-buy">{{ r.purchase_qty }}</td>
+              <td class="mono pe-td-tr">{{ r.transfer_qty }}</td>
+              <td class="mono pe-td-base">{{ r.purchase_base_qty }}</td>
+              <td class="mono pe-td-base2">{{ r.transfer_base_qty }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -124,4 +127,3 @@
   <p class="sales-empty">لا أخطاء ضمن الفترة/المخازن المحددة.</p>
 {% endif %}
 {% endblock %}
-

@@ -2055,7 +2055,6 @@ def browse_inventory_pack_errors(request):
     wh_codes_raw = str(request.GET.get('warehouses') or '3,901,902,401').strip()
     min_pack_size_raw = str(request.GET.get('min_pack_size') or '2').strip()
     tolerance_raw = str(request.GET.get('tolerance_pct') or '0.1').strip()
-    qty_tolerance_raw = str(request.GET.get('qty_tolerance_pct') or '20').strip()
     limit_raw = str(request.GET.get('limit') or '120').strip()
 
     date_from_raw = str(request.GET.get('date_from') or month_start.isoformat()).strip()
@@ -2064,13 +2063,11 @@ def browse_inventory_pack_errors(request):
     try:
         min_pack_size = float(min_pack_size_raw or 2)
         tolerance_pct = float(tolerance_raw or 0.1)
-        qty_tolerance_pct = float(qty_tolerance_raw or 20)
         limit = int(limit_raw or 120)
     except ValueError:
         error = 'قيمة min_pack_size / tolerance_pct / limit غير صحيحة.'
         min_pack_size = 2.0
         tolerance_pct = 0.1
-        qty_tolerance_pct = 20.0
         limit = 120
 
     try:
@@ -2139,7 +2136,6 @@ def browse_inventory_pack_errors(request):
                     warehouse_codes=wh_codes_raw,
                     min_pack_size=min_pack_size,
                     tolerance_pct=tolerance_pct,
-                    qty_tolerance_pct=qty_tolerance_pct,
                     limit=limit,
                 )
 
@@ -2175,7 +2171,6 @@ def browse_inventory_pack_errors(request):
             'warehouses_raw': wh_codes_raw,
             'min_pack_size': min_pack_size,
             'tolerance_pct': tolerance_pct,
-            'qty_tolerance_pct': qty_tolerance_pct,
             'limit': limit,
             'report': report,
             'error': error,

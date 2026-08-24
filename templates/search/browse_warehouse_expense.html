@@ -20,7 +20,7 @@
 {% endif %}
 
 <form method="get" action="{% url 'browse_warehouse_expense' %}" class="income-filter-bar wh-exp-filter" role="search" aria-label="فلاتر توزيع مصاريف المستودع">
-  <div class="income-filter-bar-main">
+  <div class="income-filter-bar-main wh-exp-main">
     <div class="income-filter-period" role="group" aria-label="الفترة">
       <span class="income-filter-period-label">الفترة</span>
       <div class="income-filter-period-fields">
@@ -35,15 +35,15 @@
         </div>
       </div>
     </div>
-    <div class="income-filter-field">
+    <div class="income-filter-field wh-exp-src">
       <label for="wh-exp-src">مخازن المصدر</label>
-      <input id="wh-exp-src" type="text" name="src_wh" value="{{ src_wh }}" placeholder="3,901,902,401">
+      <input id="wh-exp-src" type="text" name="src_wh" value="{{ src_wh }}" placeholder="3,901,902,401" dir="ltr">
     </div>
     <div class="income-filter-field">
-      <label for="wh-exp-expense">المصروف المراد توزيعه</label>
+      <label for="wh-exp-expense">المصروف</label>
       <input id="wh-exp-expense" type="number" step="0.01" min="0" name="expense" value="{{ expense }}">
     </div>
-    <div class="income-filter-field income-filter-posted">
+    <div class="income-filter-field">
       <label for="wh-exp-posted">الحالة</label>
       <select id="wh-exp-posted" name="posted">
         <option value="1" {% if posted_only %}selected{% endif %}>مرحّل فقط</option>
@@ -51,101 +51,110 @@
       </select>
     </div>
   </div>
-  <button type="submit" class="btn-primary income-filter-submit">توزيع</button>
+  <div class="wh-exp-actions">
+    <button type="submit" class="btn-primary income-filter-submit">توزيع</button>
+  </div>
 </form>
 
 {% if report %}
-  <section class="income-kpi-grid" aria-label="ملخص التوزيع">
-    <article class="dash-kpi-card dash-kpi-glass income-kpi">
-      <span class="dash-kpi-label">عدد التحويلات</span>
-      <strong class="dash-kpi-value mono">{{ report.kpis.transfer_count }}</strong>
-      <span class="dash-kpi-hint">{{ report.period_label }}</span>
+  <section class="wh-exp-kpi-grid" aria-label="ملخص التوزيع">
+    <article class="wh-exp-kpi is-count">
+      <span>عدد التحويلات</span>
+      <strong class="mono">{{ report.kpis.transfer_count }}</strong>
+      <small>{{ report.period_label }}</small>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass income-kpi">
-      <span class="dash-kpi-label">إجمالي مبلغ التحويل</span>
-      <strong class="dash-kpi-value mono">{{ report.kpis.amount_display }}</strong>
-      <span class="dash-kpi-hint">أساس النسبة: {{ report.kpis.ratio_basis_label }}</span>
+    <article class="wh-exp-kpi is-amt">
+      <span>إجمالي مبلغ التحويل</span>
+      <strong class="mono">{{ report.kpis.amount_display }}</strong>
+      <small>أساس النسبة: {{ report.kpis.ratio_basis_label }}</small>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass income-kpi">
-      <span class="dash-kpi-label">إجمالي الكمية المحولة</span>
-      <strong class="dash-kpi-value mono">{{ report.kpis.qty_display }}</strong>
-      <span class="dash-kpi-hint">{{ report.kpis.branch_count }} فرع</span>
+    <article class="wh-exp-kpi is-qty">
+      <span>إجمالي الكمية</span>
+      <strong class="mono">{{ report.kpis.qty_display }}</strong>
+      <small>{{ report.kpis.branch_count }} فرع</small>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass income-kpi">
-      <span class="dash-kpi-label">المصروف الموزع</span>
-      <strong class="dash-kpi-value mono">{{ report.kpis.allocated_total }}</strong>
-      <span class="dash-kpi-hint">الإدخال: {{ report.filters.expense_display }}</span>
+    <article class="wh-exp-kpi is-alloc">
+      <span>المصروف الموزع</span>
+      <strong class="mono">{{ report.kpis.allocated_total }}</strong>
+      <small>الإدخال: {{ report.filters.expense_display }}</small>
     </article>
   </section>
 
-  <section class="dash-panel dash-panel-glass perf-panel" aria-label="التوزيع على الفروع">
+  <section class="dash-panel dash-panel-glass perf-panel wh-exp-panel" aria-label="التوزيع على الفروع">
     <div class="dash-panel-head">
       <h3>تحميل المصروف حسب الفرع</h3>
       <span class="result-pill">{{ report.by_branch|length }} فرع</span>
     </div>
-    <div class="table-wrap income-analyst-scroll">
-      <table class="data-table sales-table income-analyst-table" aria-label="توزيع مصاريف المستودع على الفروع">
+    <div class="table-wrap wh-exp-scroll">
+      <table class="data-table wh-exp-table" aria-label="توزيع مصاريف المستودع على الفروع">
         <thead>
           <tr>
-            <th>الفرع</th>
-            <th>عدد التحويلات</th>
-            <th>إجمالي مبلغ التحويل</th>
-            <th>إجمالي الكمية</th>
-            <th>النسبة</th>
-            <th>المصروف المحمّل</th>
+            <th class="we-th-idx">#</th>
+            <th class="we-th-branch">الفرع</th>
+            <th class="we-th-count">عدد التحويلات</th>
+            <th class="we-th-amt">مبلغ التحويل</th>
+            <th class="we-th-qty">الكمية</th>
+            <th class="we-th-share">النسبة</th>
+            <th class="we-th-alloc">المصروف المحمّل</th>
           </tr>
         </thead>
         <tbody>
           {% for row in report.by_branch %}
-            <tr>
-              <td>{{ row.branch_name }}</td>
-              <td class="mono">{{ row.transfer_count }}</td>
-              <td class="mono">{{ row.amount_display }}</td>
-              <td class="mono">{{ row.qty_display }}</td>
-              <td class="mono">{{ row.share_display }}</td>
-              <td class="mono">{{ row.allocated_display }}</td>
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %}">
+              <td class="mono we-td-idx">{{ forloop.counter }}</td>
+              <td class="we-td-branch">
+                <strong>{{ row.branch_name }}</strong>
+                {% if row.branch_code %}<span class="mono">{{ row.branch_code }}</span>{% endif %}
+              </td>
+              <td class="mono we-td-count">{{ row.transfer_count }}</td>
+              <td class="mono we-td-amt">{{ row.amount_display }}</td>
+              <td class="mono we-td-qty">{{ row.qty_display }}</td>
+              <td class="mono we-td-share">{{ row.share_display }}</td>
+              <td class="mono we-td-alloc">{{ row.allocated_display }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="6">لا توجد تحويلات ضمن الفلتر.</td></tr>
+            <tr><td colspan="7">لا توجد تحويلات ضمن الفلتر.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </section>
 
-  <section class="dash-panel dash-panel-glass perf-panel" aria-label="تفصيل التحويلات">
+  <section class="dash-panel dash-panel-glass perf-panel wh-exp-panel" aria-label="تفصيل التحويلات">
     <div class="dash-panel-head">
-      <h3>تفصيل التحويلات (آخر 300)</h3>
+      <h3>تفصيل التحويلات</h3>
       <span class="result-pill">{{ report.transfers|length }}</span>
     </div>
-    <div class="table-wrap income-analyst-scroll">
-      <table class="data-table sales-table income-analyst-table" aria-label="تفاصيل التحويلات">
+    <div class="table-wrap wh-exp-scroll">
+      <table class="data-table wh-exp-table wh-exp-detail-table" aria-label="تفاصيل التحويلات">
         <thead>
           <tr>
-            <th>التاريخ</th>
-            <th>رقم التحويل</th>
-            <th>من مخزن</th>
-            <th>إلى مخزن</th>
-            <th>الفرع المستلم</th>
-            <th>الأصناف</th>
-            <th>الكمية</th>
-            <th>المبلغ</th>
+            <th class="we-th-idx">#</th>
+            <th class="we-th-date">التاريخ</th>
+            <th class="we-th-ser">رقم التحويل</th>
+            <th class="we-th-from">من مخزن</th>
+            <th class="we-th-to">إلى مخزن</th>
+            <th class="we-th-branch">الفرع المستلم</th>
+            <th class="we-th-count">الأصناف</th>
+            <th class="we-th-qty">الكمية</th>
+            <th class="we-th-amt">المبلغ</th>
           </tr>
         </thead>
         <tbody>
           {% for row in report.transfers %}
-            <tr>
-              <td class="mono">{{ row.tr_date }}</td>
-              <td class="mono">{{ row.tr_ser }}</td>
-              <td class="mono">{{ row.source_wh_code }}</td>
-              <td class="mono">{{ row.dest_wh_code }}</td>
-              <td>{{ row.dest_branch_name }}</td>
-              <td class="mono">{{ row.item_count }}</td>
-              <td class="mono">{{ row.qty_display }}</td>
-              <td class="mono">{{ row.amount_display }}</td>
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %}">
+              <td class="mono we-td-idx">{{ forloop.counter }}</td>
+              <td class="mono we-td-date">{{ row.tr_date }}</td>
+              <td class="mono we-td-ser">{{ row.tr_ser }}</td>
+              <td class="mono we-td-from">{{ row.source_wh_code }}</td>
+              <td class="mono we-td-to">{{ row.dest_wh_code }}</td>
+              <td class="we-td-branch">{{ row.dest_branch_name }}</td>
+              <td class="mono we-td-count">{{ row.item_count }}</td>
+              <td class="mono we-td-qty">{{ row.qty_display }}</td>
+              <td class="mono we-td-amt">{{ row.amount_display }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="8">لا بيانات.</td></tr>
+            <tr><td colspan="9">لا بيانات.</td></tr>
           {% endfor %}
         </tbody>
       </table>

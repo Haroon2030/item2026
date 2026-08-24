@@ -24,7 +24,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 900
-_CACHE_VER = "v1"
+_CACHE_VER = "v2"
 
 
 def _f(value: Any) -> float:
@@ -218,7 +218,6 @@ def build_unit_pack_mismatch_report(
     warehouse_codes: str,
     min_pack_size: float = 2,
     tolerance_pct: float = 0.1,
-    qty_tolerance_pct: float = 20.0,
     limit: int = 100,
 ) -> dict[str, Any]:
     """تقرير اختلاف P_SIZE للوحدة الكبيرة بين المشتريات والتحويلات الواردة."""
@@ -237,12 +236,11 @@ def build_unit_pack_mismatch_report(
     if min_ps < 2:
         min_ps = 2.0
     tol = float(tolerance_pct or 0.1)
-    qty_tol = float(qty_tolerance_pct or 20.0)
 
     date_to_excl = d_to + timedelta(days=1)
     cache_key = (
         f"packmismatch:{_CACHE_VER}:{d_from}:{d_to}:{','.join(wh_codes)}:"
-        f"minps={min_ps:.4f}:tol={tol:.4f}:qtytol={qty_tol:.4f}:lim={int(limit)}"
+        f"minps={min_ps:.4f}:tol={tol:.4f}:lim={int(limit)}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
@@ -316,6 +314,7 @@ def build_unit_pack_mismatch_report(
                     "transfer_base_qty": round(tr.base_qty, 4),
                     "transfer_unit": tr.unit,
                     "match_mode": "unit_name",
+                    "error_kind": "P_SIZE",
                 }
             )
 
@@ -373,66 +372,25 @@ def build_unit_pack_mismatch_report(
                     "transfer_base_qty": round(tr.base_qty, 4),
                     "transfer_unit": tr.unit,
                     "match_mode": "dominant_max_ps",
+                    "error_kind": "P_SIZE",
                 }
             )
             strict_seen.add(dedup_key)
 
-    # sort biggest transfer base first (أثر التحويل في التخزين)
+    # فرق % = فرق عبوة الشراء عن عبوة التحويل فقط (لا مقارنة كميات)
+    for r in mismatch_rows:
+        buy_ps = float(r.get("purchase_p_size") or 0)
+        tr_ps = float(r.get("transfer_p_size") or 0)
+        r["impact_base_diff"] = round(abs(tr_ps - buy_ps), 4)
+
     mismatch_rows.sort(
-        key=lambda r: (-abs(float(r.get("transfer_base_qty") or 0)), r["item_code"])
-    )
-    # فحص فرق الكمية (Base Qty) لنفس P_SIZE المتوقع — هذا يلتقط حالة 288 vs 960.
-    qty_mismatch_rows: list[dict[str, Any]] = []
-    for key, pur_list in pur_buckets.items():
-        tr_list = tr_buckets.get(key) or []
-        if not tr_list:
-            continue
-        expected = _pick_dominant(pur_list)
-        if not expected or expected.base_qty <= 0:
-            continue
-        expected_p = float(expected.p_size)
-        tr_same = [tr for tr in tr_list if abs(float(tr.p_size or 0) - expected_p) < 0.0001]
-        if not tr_same:
-            continue
-        tr_qty = sum(float(tr.qty or 0) for tr in tr_same)
-        tr_base_qty = round(tr_qty * expected_p, 4)
-        diff_pct_qty = (tr_base_qty - expected.base_qty) / expected.base_qty * 100.0
-        if abs(diff_pct_qty) < qty_tol:
-            continue
-        ratio = tr_base_qty / expected.base_qty if expected.base_qty else 0.0
-        qty_mismatch_rows.append(
-            {
-                "item_code": expected.item_code,
-                "item_name": expected.item_name,
-                "wh_code": expected.wh_code,
-                "unit": expected.unit,
-                "purchase_p_size": round(expected_p, 4),
-                "transfer_p_size": round(expected_p, 4),
-                "ratio": round(ratio, 4),
-                "diff_pct": round(diff_pct_qty, 3),
-                "purchase_qty": round(expected.qty, 4),
-                "transfer_qty": round(tr_qty, 4),
-                "purchase_base_qty": round(expected.base_qty, 4),
-                "transfer_base_qty": round(tr_base_qty, 4),
-                "error_kind": "QTY_BASE",
-                "impact_base_diff": round(abs(tr_base_qty - expected.base_qty), 4),
-            }
+        key=lambda r: (
+            -abs(float(r.get("diff_pct") or 0)),
+            -abs(float(r.get("impact_base_diff") or 0)),
+            r.get("item_code") or "",
         )
-
-    # Merge + sort
-    all_rows = qty_mismatch_rows + mismatch_rows
-    for r in all_rows:
-        if "error_kind" not in r:
-            r["error_kind"] = "P_SIZE"
-        r["impact_base_diff"] = round(
-            abs(float(r.get("transfer_base_qty") or 0) - float(r.get("purchase_base_qty") or 0)),
-            4,
-        )
-
-    all_rows.sort(
-        key=lambda r: (-abs(float(r.get("impact_base_diff") or 0)), r.get("item_code") or "")
     )
-    all_rows = all_rows[: max(1, int(limit or 100))]
+    all_rows = mismatch_rows[: max(1, int(limit or 100))]
 
     report = {
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
@@ -440,7 +398,6 @@ def build_unit_pack_mismatch_report(
             "warehouse_codes": warehouse_codes,
             "min_pack_size": min_ps,
             "tolerance_pct": tol,
-            "qty_tolerance_pct": qty_tol,
             "limit": int(limit or 100),
         },
         "kpis": {
