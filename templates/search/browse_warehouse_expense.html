@@ -40,8 +40,12 @@
       <input id="wh-exp-src" type="text" name="src_wh" value="{{ src_wh }}" placeholder="3,901,902,401" dir="ltr">
     </div>
     <div class="income-filter-field">
-      <label for="wh-exp-expense">المصروف</label>
-      <input id="wh-exp-expense" type="number" step="0.01" min="0" name="expense" value="{{ expense }}">
+      <label for="wh-exp-cc">مركز التكلفة</label>
+      <input id="wh-exp-cc" type="text" name="cc" value="{{ cc_code|default:'103' }}" placeholder="103" dir="ltr">
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-exp-expense">مصروف يدوي (اختياري)</label>
+      <input id="wh-exp-expense" type="number" step="0.01" min="0" name="expense" value="{{ expense }}" title="اتركه 0 لجلب المصروف من مركز التكلفة">
     </div>
     <div class="income-filter-field">
       <label for="wh-exp-posted">الحالة</label>
@@ -51,6 +55,7 @@
       </select>
     </div>
   </div>
+  {% if src_one %}<input type="hidden" name="src_one" value="{{ src_one }}">{% endif %}
   <div class="wh-exp-actions">
     <button type="submit" class="btn-primary income-filter-submit">توزيع</button>
   </div>
@@ -76,14 +81,40 @@
     <article class="wh-exp-kpi is-alloc">
       <span>المصروف الموزع</span>
       <strong class="mono">{{ report.kpis.allocated_total }}</strong>
-      <small>الإدخال: {{ report.filters.expense_display }}</small>
+      <small>
+        {% if report.filters.expense_source == 'cost_center' %}
+          مركز {{ report.filters.cc_code }} — {{ report.filters.cc_name }}
+        {% elif report.filters.source_wh_filter_name %}
+          مخزن: {{ report.filters.source_wh_filter_name }}
+        {% else %}
+          إدخال: {{ report.filters.expense_display }}
+        {% endif %}
+      </small>
     </article>
   </section>
 
   <section class="dash-panel dash-panel-glass perf-panel wh-exp-panel" aria-label="التوزيع على الفروع">
     <div class="dash-panel-head">
       <h3>تحميل المصروف حسب الفرع</h3>
-      <span class="result-pill">{{ report.by_branch|length }} فرع</span>
+      <div class="dash-panel-head-actions">
+        <form method="get" action="{% url 'browse_warehouse_expense' %}" class="wh-exp-src-filter" aria-label="فلتر مخزن المصدر للنسب">
+          <input type="hidden" name="date_from" value="{{ date_from }}">
+          <input type="hidden" name="date_to" value="{{ date_to }}">
+          <input type="hidden" name="src_wh" value="{{ src_wh }}">
+          <input type="hidden" name="cc" value="{{ cc_code|default:'103' }}">
+          <input type="hidden" name="expense" value="{{ expense }}">
+          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
+          <label class="sr-only" for="wh-exp-src-one-branch">مخزن المصدر</label>
+          <select id="wh-exp-src-one-branch" name="src_one" onchange="this.form.submit()">
+            <option value="">كل مخازن المصدر</option>
+            {% for w in report.source_options %}
+              <option value="{{ w.code }}" {% if src_one == w.code %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        <span class="result-pill">{{ report.by_branch|length }} فرع</span>
+        <button type="button" class="btn-ghost wh-exp-print-btn" onclick="window.print()" title="طباعة PDF">PDF</button>
+      </div>
     </div>
     <div class="table-wrap wh-exp-scroll">
       <table class="data-table wh-exp-table" aria-label="توزيع مصاريف المستودع على الفروع">
@@ -102,9 +133,8 @@
           {% for row in report.by_branch %}
             <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %}">
               <td class="mono we-td-idx">{{ forloop.counter }}</td>
-              <td class="we-td-branch">
-                <strong>{{ row.branch_name }}</strong>
-                {% if row.branch_code %}<span class="mono">{{ row.branch_code }}</span>{% endif %}
+              <td class="we-td-branch" {% if row.branch_code %}title="{{ row.branch_code }}"{% endif %}>
+                {{ row.branch_name }}
               </td>
               <td class="mono we-td-count">{{ row.transfer_count }}</td>
               <td class="mono we-td-amt">{{ row.amount_display }}</td>
@@ -114,47 +144,6 @@
             </tr>
           {% empty %}
             <tr><td colspan="7">لا توجد تحويلات ضمن الفلتر.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="dash-panel dash-panel-glass perf-panel wh-exp-panel" aria-label="تفصيل التحويلات">
-    <div class="dash-panel-head">
-      <h3>تفصيل التحويلات</h3>
-      <span class="result-pill">{{ report.transfers|length }}</span>
-    </div>
-    <div class="table-wrap wh-exp-scroll">
-      <table class="data-table wh-exp-table wh-exp-detail-table" aria-label="تفاصيل التحويلات">
-        <thead>
-          <tr>
-            <th class="we-th-idx">#</th>
-            <th class="we-th-date">التاريخ</th>
-            <th class="we-th-ser">رقم التحويل</th>
-            <th class="we-th-from">من مخزن</th>
-            <th class="we-th-to">إلى مخزن</th>
-            <th class="we-th-branch">الفرع المستلم</th>
-            <th class="we-th-count">الأصناف</th>
-            <th class="we-th-qty">الكمية</th>
-            <th class="we-th-amt">المبلغ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in report.transfers %}
-            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %}">
-              <td class="mono we-td-idx">{{ forloop.counter }}</td>
-              <td class="mono we-td-date">{{ row.tr_date }}</td>
-              <td class="mono we-td-ser">{{ row.tr_ser }}</td>
-              <td class="mono we-td-from">{{ row.source_wh_code }}</td>
-              <td class="mono we-td-to">{{ row.dest_wh_code }}</td>
-              <td class="we-td-branch">{{ row.dest_branch_name }}</td>
-              <td class="mono we-td-count">{{ row.item_count }}</td>
-              <td class="mono we-td-qty">{{ row.qty_display }}</td>
-              <td class="mono we-td-amt">{{ row.amount_display }}</td>
-            </tr>
-          {% empty %}
-            <tr><td colspan="9">لا بيانات.</td></tr>
           {% endfor %}
         </tbody>
       </table>

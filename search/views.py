@@ -3816,6 +3816,8 @@ def browse_warehouse_expense(request):
     date_from_raw = request.GET.get('date_from') or month_start.isoformat()
     date_to_raw = request.GET.get('date_to') or today.isoformat()
     src_wh_raw = str(request.GET.get('src_wh') or '3,901,902,401').strip()[:120]
+    src_filter_raw = str(request.GET.get('src_one') or '').strip()[:32]
+    cc_code_raw = str(request.GET.get('cc') or '103').strip()[:32] or '103'
     expense_raw = str(request.GET.get('expense') or '0').replace(',', '').strip()
     posted_raw = request.GET.get('posted')
     if posted_raw is None:
@@ -3842,6 +3844,8 @@ def browse_warehouse_expense(request):
                 'default_from': month_start.isoformat(),
                 'default_to': today.isoformat(),
                 'src_wh': src_wh_raw,
+                'src_one': src_filter_raw,
+                'cc_code': cc_code_raw,
                 'expense': expense_raw,
                 'posted_only': posted_only,
                 'report': None,
@@ -3863,6 +3867,8 @@ def browse_warehouse_expense(request):
                         source_warehouses=src_wh_raw,
                         expense_total=expense_value,
                         posted_only=posted_only,
+                        source_wh_filter=src_filter_raw,
+                        cc_code=cc_code_raw,
                     )
         except Exception as exc:  # noqa: BLE001
             logger.warning('browse_warehouse_expense failed: %s', exc)
@@ -3878,6 +3884,9 @@ def browse_warehouse_expense(request):
             'default_from': month_start.isoformat(),
             'default_to': today.isoformat(),
             'src_wh': src_wh_raw,
+            'src_one': (report or {}).get('filters', {}).get('source_wh_filter')
+            or src_filter_raw,
+            'cc_code': (report or {}).get('filters', {}).get('cc_code') or cc_code_raw,
             'expense': f'{expense_value:.2f}' if expense_raw else '0',
             'posted_only': posted_only,
             'report': report,

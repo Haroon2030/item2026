@@ -15175,6 +15175,113 @@ a.sidebar-brand-lockup {
   }
 }
 
+.inv-pack-err-dash .inv-pack-err-print-btn {
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body.sales-dash-body .sidebar,
+  body.sales-dash-body .topbar,
+  body.sales-dash-body .sidebar-toggle,
+  .inv-pack-err-dash .income-filter-bar,
+  .inv-pack-err-dash .alert,
+  .inv-pack-err-dash .inv-pack-err-print-btn {
+    display: none !important;
+  }
+
+  .page.has-sidebar {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .page.has-sidebar main,
+  .inv-pack-err-dash main {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .inv-pack-err-dash .dash-head {
+    margin-bottom: 0.6rem;
+    padding: 0;
+  }
+
+  .inv-pack-err-dash .dash-head h2 {
+    font-size: 1.15rem;
+    color: #111 !important;
+  }
+
+  .inv-pack-err-dash .dash-head p {
+    color: #333 !important;
+  }
+
+  .inv-pack-err-dash .inv-pack-err-panel {
+    break-inside: auto;
+    box-shadow: none !important;
+    border: 1px solid #c5d0de !important;
+    background: #fff !important;
+  }
+
+  .inv-pack-err-dash .dash-panel-head {
+    background: #eef3f9 !important;
+    border-bottom: 1px solid #c5d0de !important;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .inv-pack-err-dash .dash-panel-head h3 {
+    color: #111 !important;
+  }
+
+  .inv-pack-err-dash .inv-pack-err-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .inv-pack-err-dash .inv-pack-err-table {
+    font-size: 0.65rem;
+  }
+
+  .inv-pack-err-dash .inv-pack-err-table thead th {
+    position: static !important;
+    background: #dbe8f8 !important;
+    color: #12345f !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .inv-pack-err-dash .inv-pack-err-table th,
+  .inv-pack-err-dash .inv-pack-err-table td {
+    border: 1px solid #c5d0de !important;
+    padding: 0.25rem 0.3rem;
+  }
+
+  .inv-pack-err-dash .inv-pack-err-table .pe-td-buy,
+  .inv-pack-err-dash .inv-pack-err-table .pe-td-tr,
+  .inv-pack-err-dash .inv-pack-err-table .pe-td-diff,
+  .inv-pack-err-dash .inv-pack-err-table .pe-td-base,
+  .inv-pack-err-dash .inv-pack-err-table .pe-td-base2 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 /* توزيع مصاريف المستودع */
 .wh-exp-dash .wh-exp-filter {
   display: grid;
@@ -15186,10 +15293,11 @@ a.sidebar-brand-lockup {
 .wh-exp-dash .wh-exp-main {
   display: grid;
   grid-template-columns:
-    minmax(15rem, 1.35fr)
-    minmax(11rem, 1.15fr)
-    minmax(7rem, 0.85fr)
-    minmax(7rem, 0.8fr);
+    minmax(14rem, 1.2fr)
+    minmax(9rem, 0.9fr)
+    minmax(6.5rem, 0.7fr)
+    minmax(8rem, 0.85fr)
+    minmax(7rem, 0.75fr);
   align-items: end;
   gap: 0.55rem 0.7rem;
   flex: unset;
@@ -15297,10 +15405,13 @@ a.sidebar-brand-lockup {
 
 .page.sales-dash.wh-exp-dash .wh-exp-table,
 .wh-exp-dash .wh-exp-table {
-  width: 100%;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.8rem;
+  table-layout: auto;
 }
 
 .page.sales-dash.wh-exp-dash .wh-exp-table thead th,
@@ -15389,16 +15500,52 @@ a.sidebar-brand-lockup {
   width: 2.4rem;
 }
 
+.wh-exp-dash .wh-exp-table .we-td-branch,
+.wh-exp-dash .wh-exp-table .we-th-branch {
+  white-space: nowrap;
+  width: 1%;
+  max-width: 16rem;
+  color: #12345f;
+  font-weight: 800;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
 .wh-exp-dash .wh-exp-table .we-td-branch {
   white-space: normal;
-  min-width: 9rem;
+  overflow-wrap: anywhere;
 }
 
 .wh-exp-dash .wh-exp-table .we-td-branch span {
-  display: block;
-  margin-top: 0.1rem;
-  font-size: 0.72rem;
-  color: #64748b;
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.wh-exp-dash .wh-exp-table .we-th-idx,
+.wh-exp-dash .wh-exp-table .we-td-idx,
+.wh-exp-dash .wh-exp-table .we-th-count,
+.wh-exp-dash .wh-exp-table .we-td-count,
+.wh-exp-dash .wh-exp-table .we-th-amt,
+.wh-exp-dash .wh-exp-table .we-td-amt,
+.wh-exp-dash .wh-exp-table .we-th-qty,
+.wh-exp-dash .wh-exp-table .we-td-qty,
+.wh-exp-dash .wh-exp-table .we-th-share,
+.wh-exp-dash .wh-exp-table .we-td-share,
+.wh-exp-dash .wh-exp-table .we-th-alloc,
+.wh-exp-dash .wh-exp-table .we-td-alloc,
+.wh-exp-dash .wh-exp-table .we-th-date,
+.wh-exp-dash .wh-exp-table .we-td-date,
+.wh-exp-dash .wh-exp-table .we-th-ser,
+.wh-exp-dash .wh-exp-table .we-td-ser,
+.wh-exp-dash .wh-exp-table .we-th-from,
+.wh-exp-dash .wh-exp-table .we-td-from,
+.wh-exp-dash .wh-exp-table .we-th-to,
+.wh-exp-dash .wh-exp-table .we-td-to {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .wh-exp-dash .wh-exp-table .we-td-count {
@@ -15500,5 +15647,159 @@ a.sidebar-brand-lockup {
   }
 }
 
+.wh-exp-dash .wh-exp-print-btn {
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.wh-exp-dash .wh-exp-src-filter {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
+.wh-exp-dash .wh-exp-src-filter select {
+  min-width: 11rem;
+  max-width: 16rem;
+  height: 2rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid #c5d5e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #12345f;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body.sales-dash-body .sidebar,
+  body.sales-dash-body .topbar,
+  body.sales-dash-body .sidebar-toggle,
+  .wh-exp-dash .income-filter-bar,
+  .wh-exp-dash .alert,
+  .wh-exp-dash .wh-exp-print-btn,
+  .wh-exp-dash .wh-exp-src-filter {
+    display: none !important;
+  }
+
+  .page.has-sidebar {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .page.has-sidebar main,
+  .wh-exp-dash main {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .wh-exp-dash .dash-head {
+    margin-bottom: 0.6rem;
+    padding: 0;
+  }
+
+  .wh-exp-dash .dash-head h2 {
+    font-size: 1.15rem;
+    color: #111 !important;
+  }
+
+  .wh-exp-dash .dash-head p {
+    color: #333 !important;
+  }
+
+  .wh-exp-dash .wh-exp-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin-bottom: 0.7rem;
+    break-inside: avoid;
+  }
+
+  .wh-exp-dash .wh-exp-kpi {
+    border: 1px solid #c5d0de !important;
+    background: #fff !important;
+    border-radius: 6px;
+    padding: 0.45rem 0.55rem;
+    box-shadow: none !important;
+  }
+
+  .wh-exp-dash .wh-exp-kpi span,
+  .wh-exp-dash .wh-exp-kpi small {
+    color: #444 !important;
+  }
+
+  .wh-exp-dash .wh-exp-kpi strong {
+    color: #111 !important;
+    font-size: 0.95rem;
+  }
+
+  .wh-exp-dash .wh-exp-panel {
+    break-inside: auto;
+    box-shadow: none !important;
+    border: 1px solid #c5d0de !important;
+    background: #fff !important;
+    margin-bottom: 0.75rem;
+  }
+
+  .wh-exp-dash .dash-panel-head {
+    background: #eef3f9 !important;
+    border-bottom: 1px solid #c5d0de !important;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .wh-exp-dash .dash-panel-head h3 {
+    color: #111 !important;
+  }
+
+  .wh-exp-dash .wh-exp-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .wh-exp-dash .wh-exp-table {
+    font-size: 0.68rem;
+  }
+
+  .wh-exp-dash .wh-exp-table thead th {
+    position: static !important;
+    background: #dbe8f8 !important;
+    color: #12345f !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .wh-exp-dash .wh-exp-table th,
+  .wh-exp-dash .wh-exp-table td {
+    border: 1px solid #c5d0de !important;
+    padding: 0.28rem 0.35rem;
+  }
+
+  .wh-exp-dash .wh-exp-table .we-td-count,
+  .wh-exp-dash .wh-exp-table .we-td-amt,
+  .wh-exp-dash .wh-exp-table .we-td-qty,
+  .wh-exp-dash .wh-exp-table .we-td-share,
+  .wh-exp-dash .wh-exp-table .we-td-alloc,
+  .wh-exp-dash .wh-exp-table .we-td-from,
+  .wh-exp-dash .wh-exp-table .we-td-to {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
 
 

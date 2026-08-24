@@ -75,7 +75,10 @@
   <section class="dash-panel dash-panel-glass perf-panel inv-pack-err-panel" aria-label="نتائج أخطاء وحدات/أحجام الأصناف">
     <div class="dash-panel-head">
       <h3>الأصناف المخالفة</h3>
-      <span class="result-pill">{{ report.kpis.mismatch_count }} خطأ</span>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ report.kpis.mismatch_count }} خطأ</span>
+        <button type="button" class="btn-ghost inv-pack-err-print-btn" onclick="window.print()" title="طباعة PDF">PDF</button>
+      </div>
     </div>
 
     <div class="table-wrap inv-pack-err-scroll">
