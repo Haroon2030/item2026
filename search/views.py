@@ -2037,6 +2037,152 @@ def browse_inventory(request):
         },
     )
 
+
+@login_required
+@require_GET
+@never_cache
+def browse_inventory_pack_errors(request):
+    """كشف اختلاف P_SIZE للوحدة الكبيرة بين المشتريات والتحويلات الواردة."""
+    from datetime import date as date_cls
+
+    error = ''
+    report = None
+
+    today = date_cls.today()
+    month_start = today.replace(day=1)
+
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    wh_codes_raw = str(request.GET.get('warehouses') or '3,901,902,401').strip()
+    min_pack_size_raw = str(request.GET.get('min_pack_size') or '2').strip()
+    tolerance_raw = str(request.GET.get('tolerance_pct') or '0.1').strip()
+    qty_tolerance_raw = str(request.GET.get('qty_tolerance_pct') or '20').strip()
+    limit_raw = str(request.GET.get('limit') or '120').strip()
+
+    date_from_raw = str(request.GET.get('date_from') or month_start.isoformat()).strip()
+    date_to_raw = str(request.GET.get('date_to') or today.isoformat()).strip()
+
+    try:
+        min_pack_size = float(min_pack_size_raw or 2)
+        tolerance_pct = float(tolerance_raw or 0.1)
+        qty_tolerance_pct = float(qty_tolerance_raw or 20)
+        limit = int(limit_raw or 120)
+    except ValueError:
+        error = 'قيمة min_pack_size / tolerance_pct / limit غير صحيحة.'
+        min_pack_size = 2.0
+        tolerance_pct = 0.1
+        qty_tolerance_pct = 20.0
+        limit = 120
+
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+        if (date_to - date_from).days > 90:
+            raise ValidationError('الفترة القصوى لهذا التقرير 90 يوم.')
+    except ValidationError as exc:
+        error = str(exc)
+        date_from, date_to = month_start, today
+
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+
+    try:
+        from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض تقرير أخطاء الوحدات.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True)
+                branch_map: dict[str, str] = {}
+                for w in warehouses:
+                    brn = str(w.get('branch_code') or '').strip()
+                    if brn:
+                        branch_map[brn] = str(w.get('branch_name') or brn)
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(branch_map.items(), key=lambda x: (x[1], x[0]))
+                ]
+
+                wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+                if selected_branch and selected_branch not in {b['code'] for b in branches}:
+                    selected_branch = ''
+                if selected_branch:
+                    warehouses = [
+                        w
+                        for w in warehouses
+                        if str(w.get('branch_code') or '') == selected_branch
+                    ]
+                    wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+
+                if wh_codes_raw:
+                    parsed = (
+                        wh_codes_raw.replace('،', ',')
+                        .replace('-', ',')
+                        .split(',')
+                    )
+                    parsed = [p.strip() for p in parsed if p.strip()]
+                    parsed = [p for p in parsed if p in wh_allowed]
+                    wh_codes_raw = ','.join(parsed)
+                else:
+                    if not wh_codes_raw:
+                        if selected_branch:
+                            wh_codes_raw = ','.join(
+                                sorted({str(w['code']) for w in warehouses if w.get('code')})
+                            )
+                        else:
+                            raise ValidationError('حدد فرع أو مخازن (warehouses) لهذا التقرير.')
+
+                from .oracle_unit_pack_mismatch import build_unit_pack_mismatch_report
+
+                report = build_unit_pack_mismatch_report(
+                    date_from,
+                    date_to,
+                    warehouse_codes=wh_codes_raw,
+                    min_pack_size=min_pack_size,
+                    tolerance_pct=tolerance_pct,
+                    qty_tolerance_pct=qty_tolerance_pct,
+                    limit=limit,
+                )
+
+                wh_name_map = {
+                    str(w.get('code') or '').strip(): str(w.get('name') or '').strip()
+                    or str(w.get('code') or '').strip()
+                    for w in warehouses
+                }
+                for r in report.get('rows') or []:
+                    r['wh_name'] = (
+                        wh_name_map.get(str(r.get('wh_code') or '').strip())
+                        or '—'
+                    )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_inventory_pack_errors failed: %s', exc)
+        error = f'تعذّر تحميل تقرير أخطاء الوحدات: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_inventory_pack_errors.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'warehouses': warehouses,
+            'warehouses_raw': wh_codes_raw,
+            'min_pack_size': min_pack_size,
+            'tolerance_pct': tolerance_pct,
+            'qty_tolerance_pct': qty_tolerance_pct,
+            'limit': limit,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
 @login_required
 @require_GET
 @never_cache
@@ -3657,6 +3803,88 @@ def browse_assets(request):
             'q': q,
             'branches': branches,
             'groups': groups,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_warehouse_expense(request):
+    """توزيع مصاريف المستودع على الفروع حسب تحويلات المخازن المصدر."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    date_from_raw = request.GET.get('date_from') or month_start.isoformat()
+    date_to_raw = request.GET.get('date_to') or today.isoformat()
+    src_wh_raw = str(request.GET.get('src_wh') or '3,901,902,401').strip()[:120]
+    expense_raw = str(request.GET.get('expense') or '0').replace(',', '').strip()
+    posted_raw = request.GET.get('posted')
+    if posted_raw is None:
+        posted_only = True
+    else:
+        posted_only = str(posted_raw).strip() in ('1', 'true', 'yes', 'on')
+
+    report = None
+    error = ''
+    expense_value = 0.0
+    try:
+        expense_value = round(float(expense_raw or 0), 2)
+    except ValueError:
+        error = 'قيمة المصروف غير صحيحة.'
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_warehouse_expense.html',
+            {
+                'date_from': (date_from_raw or '')[:10],
+                'date_to': (date_to_raw or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'src_wh': src_wh_raw,
+                'expense': expense_raw,
+                'posted_only': posted_only,
+                'report': None,
+                'error': str(exc),
+            },
+        )
+    if not error:
+        try:
+            from .oracle_stock import oracle_enabled, oracle_session
+            from .oracle_warehouse_expense import build_warehouse_expense_distribution
+
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن عرض توزيع مصاريف المستودع.'
+            else:
+                with oracle_session():
+                    report = build_warehouse_expense_distribution(
+                        date_from,
+                        date_to,
+                        source_warehouses=src_wh_raw,
+                        expense_total=expense_value,
+                        posted_only=posted_only,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_warehouse_expense failed: %s', exc)
+            error = f'تعذّر تحميل توزيع مصاريف المستودع: {exc}'
+            report = None
+
+    return render(
+        request,
+        'search/browse_warehouse_expense.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'src_wh': src_wh_raw,
+            'expense': f'{expense_value:.2f}' if expense_raw else '0',
+            'posted_only': posted_only,
             'report': report,
             'error': error,
         },

@@ -20,6 +20,11 @@ urlpatterns = [
     ),
     path('inventory/transfers/', views.browse_tr_compare, name='browse_tr_compare'),
     path(
+        'inventory/pack-errors/',
+        views.browse_inventory_pack_errors,
+        name='browse_inventory_pack_errors',
+    ),
+    path(
         'inventory/transfers/request/',
         views.browse_tr_compare_detail,
         name='browse_tr_compare_detail',
@@ -92,6 +97,11 @@ urlpatterns = [
         name='browse_trial_balance',
     ),
     path('income/assets/', views.browse_assets, name='browse_assets'),
+    path(
+        'income/warehouse-expense/',
+        views.browse_warehouse_expense,
+        name='browse_warehouse_expense',
+    ),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
     path('users/', user_views.user_list, name='user_list'),
     path('users/activity/', user_views.user_activity, name='user_activity'),

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}توزيع مصاريف المستودع{% endblock %}
+{% block page_class %}sales-dash wh-exp-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="توزيع مصاريف المستودع">
+  <div class="dash-head-copy">
+    <h2>توزيع مصاريف المستودع</h2>
+    <p>تحميل المصروف على الفروع حسب نسبة التحويلات من مخازن المصدر</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_warehouse_expense' %}" class="income-filter-bar wh-exp-filter" role="search" aria-label="فلاتر توزيع مصاريف المستودع">
+  <div class="income-filter-bar-main">
+    <div class="income-filter-period" role="group" aria-label="الفترة">
+      <span class="income-filter-period-label">الفترة</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="wh-exp-from">من</label>
+          <input id="wh-exp-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">—</span>
+        <div class="income-filter-field">
+          <label for="wh-exp-to">إلى</label>
+          <input id="wh-exp-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+        </div>
+      </div>
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-exp-src">مخازن المصدر</label>
+      <input id="wh-exp-src" type="text" name="src_wh" value="{{ src_wh }}" placeholder="3,901,902,401">
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-exp-expense">المصروف المراد توزيعه</label>
+      <input id="wh-exp-expense" type="number" step="0.01" min="0" name="expense" value="{{ expense }}">
+    </div>
+    <div class="income-filter-field income-filter-posted">
+      <label for="wh-exp-posted">الحالة</label>
+      <select id="wh-exp-posted" name="posted">
+        <option value="1" {% if posted_only %}selected{% endif %}>مرحّل فقط</option>
+        <option value="0" {% if not posted_only %}selected{% endif %}>الكل</option>
+      </select>
+    </div>
+  </div>
+  <button type="submit" class="btn-primary income-filter-submit">توزيع</button>
+</form>
+
+{% if report %}
+  <section class="income-kpi-grid" aria-label="ملخص التوزيع">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi">
+      <span class="dash-kpi-label">عدد التحويلات</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.transfer_count }}</strong>
+      <span class="dash-kpi-hint">{{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi">
+      <span class="dash-kpi-label">إجمالي مبلغ التحويل</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.amount_display }}</strong>
+      <span class="dash-kpi-hint">أساس النسبة: {{ report.kpis.ratio_basis_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi">
+      <span class="dash-kpi-label">إجمالي الكمية المحولة</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.qty_display }}</strong>
+      <span class="dash-kpi-hint">{{ report.kpis.branch_count }} فرع</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi">
+      <span class="dash-kpi-label">المصروف الموزع</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.allocated_total }}</strong>
+      <span class="dash-kpi-hint">الإدخال: {{ report.filters.expense_display }}</span>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel" aria-label="التوزيع على الفروع">
+    <div class="dash-panel-head">
+      <h3>تحميل المصروف حسب الفرع</h3>
+      <span class="result-pill">{{ report.by_branch|length }} فرع</span>
+    </div>
+    <div class="table-wrap income-analyst-scroll">
+      <table class="data-table sales-table income-analyst-table" aria-label="توزيع مصاريف المستودع على الفروع">
+        <thead>
+          <tr>
+            <th>الفرع</th>
+            <th>عدد التحويلات</th>
+            <th>إجمالي مبلغ التحويل</th>
+            <th>إجمالي الكمية</th>
+            <th>النسبة</th>
+            <th>المصروف المحمّل</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.by_branch %}
+            <tr>
+              <td>{{ row.branch_name }}</td>
+              <td class="mono">{{ row.transfer_count }}</td>
+              <td class="mono">{{ row.amount_display }}</td>
+              <td class="mono">{{ row.qty_display }}</td>
+              <td class="mono">{{ row.share_display }}</td>
+              <td class="mono">{{ row.allocated_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">لا توجد تحويلات ضمن الفلتر.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel" aria-label="تفصيل التحويلات">
+    <div class="dash-panel-head">
+      <h3>تفصيل التحويلات (آخر 300)</h3>
+      <span class="result-pill">{{ report.transfers|length }}</span>
+    </div>
+    <div class="table-wrap income-analyst-scroll">
+      <table class="data-table sales-table income-analyst-table" aria-label="تفاصيل التحويلات">
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>رقم التحويل</th>
+            <th>من مخزن</th>
+            <th>إلى مخزن</th>
+            <th>الفرع المستلم</th>
+            <th>الأصناف</th>
+            <th>الكمية</th>
+            <th>المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.transfers %}
+            <tr>
+              <td class="mono">{{ row.tr_date }}</td>
+              <td class="mono">{{ row.tr_ser }}</td>
+              <td class="mono">{{ row.source_wh_code }}</td>
+              <td class="mono">{{ row.dest_wh_code }}</td>
+              <td>{{ row.dest_branch_name }}</td>
+              <td class="mono">{{ row.item_count }}</td>
+              <td class="mono">{{ row.qty_display }}</td>
+              <td class="mono">{{ row.amount_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">لا بيانات.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
