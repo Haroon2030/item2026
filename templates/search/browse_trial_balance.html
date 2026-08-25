@@ -178,8 +178,8 @@
             <table class="data-table sales-table income-account-table tb-income-table tb-detail-table" aria-label="ميزان مراجعة تفصيلي">
               <thead>
                 <tr>
-                  <th>الرقم</th>
-                  <th>الاسم</th>
+                  <th>رقم الحساب</th>
+                  <th>اسم الحساب</th>
                   <th>النوع</th>
                   <th>التحليلي</th>
                   <th>الفرع</th>
@@ -197,7 +197,7 @@
                   <tr>
                     <td class="mono">{{ row.account_code }}</td>
                     <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
-                    <td class="mono">{{ row.dtl_typ }}</td>
+                    <td class="income-name-cell">{% if row.dtl_typ_label %}{{ row.dtl_typ_label }}{% elif row.dtl_typ %}{{ row.dtl_typ }}{% endif %}</td>
                     <td class="income-name-cell" title="{{ row.dtl_name }}">{% if row.dtl_code %}<span class="mono">{{ row.dtl_code }}</span> {% endif %}{{ row.dtl_name }}</td>
                     <td class="income-name-cell">{{ row.branch_name }}</td>
                     <td class="mono">{{ row.currency }}</td>
@@ -217,8 +217,8 @@
             <table class="data-table sales-table income-account-table tb-income-table tb-analytic-table" aria-label="ميزان مراجعة تحليلي">
               <thead>
                 <tr>
-                  <th>الرقم</th>
-                  <th>الاسم</th>
+                  <th>رقم الحساب</th>
+                  <th>اسم الحساب</th>
                   <th>النوع</th>
                   <th>رقم التحليلي</th>
                   <th>اسم التحليلي</th>
@@ -233,7 +233,7 @@
                   <tr>
                     <td class="mono">{{ row.account_code }}</td>
                     <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
-                    <td class="mono">{{ row.dtl_typ }}</td>
+                    <td class="income-name-cell">{% if row.dtl_typ_label %}{{ row.dtl_typ_label }}{% elif row.dtl_typ %}{{ row.dtl_typ }}{% endif %}</td>
                     <td class="mono tb-dtl-code-cell">{% if row.dtl_code %}{{ row.dtl_code }}{% endif %}</td>
                     <td class="income-name-cell" title="{{ row.dtl_name }}">{% if row.dtl_name %}{{ row.dtl_name }}{% endif %}</td>
                     <td class="income-name-cell">{{ row.branch_name }}</td>

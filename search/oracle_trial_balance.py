@@ -26,6 +26,23 @@ _DETAIL_LIMIT = 8000
 # استبعاد مبالغ ≥ مليار (قيود شاذة تضخّم الإجمالي دون أثر على الرصيد)
 _SANE_AMT = "ABS(NVL(p.AMT, 0)) < 1000000000"
 
+# أنواع الحساب التحليلي في أونكس (ACCOUNT.AC_DTL_TYP / IAS_POST_DTL.AC_DTL_TYP)
+_DTL_TYP_LABELS = {
+    "0": "",
+    "1": "صندوق",
+    "2": "بنك",
+    "3": "عميل",
+    "4": "مورد",
+    "5": "مركز تكلفة",
+    "6": "أخرى",
+    "7": "موظف",
+}
+
+
+def _dtl_typ_label(dtl_typ: Any) -> str:
+    key = str(dtl_typ or "0").strip() or "0"
+    return _DTL_TYP_LABELS.get(key, key)
+
 
 def _f(value: Any) -> float:
     try:
@@ -91,7 +108,7 @@ def _cache_key(
     mode: str,
 ) -> str:
     return (
-        f"trialbal:v16:{mode}:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"trialbal:v18:{mode}:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{branch_code or '-'}:{int(posted_only)}:{int(hide_zero)}"
     )
 
@@ -208,7 +225,12 @@ def _fetch_tb_detail_rows(
     branch_code: str = "",
     posted_only: bool = False,
 ) -> list[dict]:
-    """تفصيلي: حساب + حساب تحليلي + نوع + فرع."""
+    """تفصيلي/تحليلي: حساب + رقم التحليلي + اسمه حسب نوع الحساب في أونكس.
+
+    نوع التحليلي من دليل الحسابات ACCOUNT.AC_DTL_TYP (مع احتياطي من القيد):
+      1 صندوق CASH_IN_HAND · 2 بنك CASH_AT_BANK · 3 عميل CUSTOMER
+      4 مورد V_DETAILS · 5 مركز تكلفة COST_CENTERS · 7 موظف S_EMP
+    """
     d_from = _as_date(date_from)
     d_to = _as_date(date_to)
     if d_from > d_to:
@@ -218,20 +240,30 @@ def _fetch_tb_detail_rows(
     extra, params = _filters(branch_code=branch_code, posted_only=posted_only)
     params.update({"dfrom": d_from, "dto": d_to})
     sane = _SANE_AMT
+    # نوع الدليل أولاً — نفس المنطق لكل الحسابات
+    dtl_typ_expr = "NVL(NULLIF(a.AC_DTL_TYP, 0), NVL(p.AC_DTL_TYP, 0))"
+    dtl_code_expr = f"""
+      CASE
+        WHEN {dtl_typ_expr} = 0 THEN ''
+        ELSE NVL(TO_CHAR(p.AC_CODE_DTL), '')
+      END
+    """
 
     return _fetch_all(
         f"""
         SELECT /*+ USE_HASH(p a) */
                TO_CHAR(a.A_CODE) AS A_CODE,
                MAX(a.A_NAME) AS A_NAME,
-               NVL(TO_CHAR(p.AC_DTL_TYP), '0') AS AC_DTL_TYP,
-               NVL(TO_CHAR(p.AC_CODE_DTL), '') AS AC_CODE_DTL,
+               TO_CHAR({dtl_typ_expr}) AS AC_DTL_TYP,
+               {dtl_code_expr} AS AC_CODE_DTL,
                MAX(
                  CASE
-                   WHEN NVL(p.AC_DTL_TYP, 0) = 4 THEN NVL(vd.V_A_NAME, TO_CHAR(p.AC_CODE_DTL))
-                   WHEN NVL(p.AC_DTL_TYP, 0) = 1 THEN NVL(cu.C_A_NAME, TO_CHAR(p.AC_CODE_DTL))
-                   WHEN NVL(p.AC_DTL_TYP, 0) = 2 THEN NVL(ch.CASH_NAME, TO_CHAR(p.AC_CODE_DTL))
-                   WHEN NVL(p.AC_DTL_TYP, 0) = 7 THEN
+                   WHEN {dtl_typ_expr} = 1 THEN NVL(ch.CASH_NAME, TO_CHAR(p.AC_CODE_DTL))
+                   WHEN {dtl_typ_expr} = 2 THEN NVL(bk.BANK_NAME, TO_CHAR(p.AC_CODE_DTL))
+                   WHEN {dtl_typ_expr} = 3 THEN NVL(cu.C_A_NAME, TO_CHAR(p.AC_CODE_DTL))
+                   WHEN {dtl_typ_expr} = 4 THEN NVL(vd.V_A_NAME, TO_CHAR(p.AC_CODE_DTL))
+                   WHEN {dtl_typ_expr} = 5 THEN NVL(cc.CC_A_NAME, TO_CHAR(p.AC_CODE_DTL))
+                   WHEN {dtl_typ_expr} = 7 THEN
                      TRIM(NVL(em.EMP_L_NM, '') || ' ' || NVL(em.EMP_F_NM, ''))
                    ELSE TO_CHAR(p.AC_CODE_DTL)
                  END
@@ -259,24 +291,30 @@ def _fetch_tb_detail_rows(
         FROM {sch}.IAS_POST_DTL p
         JOIN {sch}.ACCOUNT a
           ON a.A_CODE = p.A_CODE
-        LEFT JOIN {sch}.V_DETAILS vd
-          ON NVL(p.AC_DTL_TYP, 0) = 4
-         AND TO_CHAR(vd.V_CODE) = TO_CHAR(p.AC_CODE_DTL)
-        LEFT JOIN {sch}.CUSTOMER cu
-          ON NVL(p.AC_DTL_TYP, 0) = 1
-         AND TO_CHAR(cu.C_CODE) = TO_CHAR(p.AC_CODE_DTL)
         LEFT JOIN {sch}.CASH_IN_HAND ch
-          ON NVL(p.AC_DTL_TYP, 0) = 2
+          ON {dtl_typ_expr} = 1
          AND TO_CHAR(ch.CASH_NO) = TO_CHAR(p.AC_CODE_DTL)
+        LEFT JOIN {sch}.CASH_AT_BANK bk
+          ON {dtl_typ_expr} = 2
+         AND TO_CHAR(bk.BANK_NO) = TO_CHAR(p.AC_CODE_DTL)
+        LEFT JOIN {sch}.CUSTOMER cu
+          ON {dtl_typ_expr} = 3
+         AND TO_CHAR(cu.C_CODE) = TO_CHAR(p.AC_CODE_DTL)
+        LEFT JOIN {sch}.V_DETAILS vd
+          ON {dtl_typ_expr} = 4
+         AND TO_CHAR(vd.V_CODE) = TO_CHAR(p.AC_CODE_DTL)
+        LEFT JOIN {sch}.COST_CENTERS cc
+          ON {dtl_typ_expr} = 5
+         AND TO_CHAR(cc.CC_CODE) = TO_CHAR(p.AC_CODE_DTL)
         LEFT JOIN {sch}.S_EMP em
-          ON NVL(p.AC_DTL_TYP, 0) = 7
+          ON {dtl_typ_expr} = 7
          AND TO_CHAR(em.EMP_NO) = TO_CHAR(p.AC_CODE_DTL)
         WHERE {extra}
           AND p.DOC_DATE <= :dto
         GROUP BY
           a.A_CODE,
-          NVL(TO_CHAR(p.AC_DTL_TYP), '0'),
-          NVL(TO_CHAR(p.AC_CODE_DTL), ''),
+          {dtl_typ_expr},
+          {dtl_code_expr},
           p.BRN_NO,
           NVL(TO_CHAR(p.DOC_BRN_NO), ''),
           NVL(TO_CHAR(p.A_CY), 'SAR')
@@ -485,6 +523,7 @@ def _build_summary(
                 "account_name": name,
                 "display_name": display_name,
                 "dtl_typ": "",
+                "dtl_typ_label": "",
                 "dtl_code": "",
                 "dtl_name": "",
                 "currency": cy,
@@ -575,6 +614,7 @@ def _build_analytic(
                 "account_code": code,
                 "account_name": name,
                 "dtl_typ": dtl_typ,
+                "dtl_typ_label": _dtl_typ_label(dtl_typ),
                 "dtl_code": dtl_code,
                 "dtl_name": dtl_name,
                 "branch_code": branch_code_row,
@@ -673,6 +713,7 @@ def _build_detail(
                 "account_code": code,
                 "account_name": name,
                 "dtl_typ": dtl_typ,
+                "dtl_typ_label": _dtl_typ_label(dtl_typ),
                 "dtl_code": dtl_code,
                 "dtl_name": dtl_name,
                 "branch_code": branch_code_row,
@@ -951,7 +992,7 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
                 "<tr>"
                 f"<td>{escape(str(row.get('account_code') or ''))}</td>"
                 f"<td>{escape(str(row.get('account_name') or ''))}</td>"
-                f"<td>{escape(str(row.get('dtl_typ') or ''))}</td>"
+                f"<td>{escape(str(row.get('dtl_typ_label') or row.get('dtl_typ') or ''))}</td>"
                 f"<td class=\"link\">{escape(str(row.get('dtl_code') or ''))}</td>"
                 f"<td>{escape(str(row.get('dtl_name') or ''))}</td>"
                 f"<td>{escape(str(row.get('branch_name') or ''))}</td>"
@@ -994,7 +1035,7 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
                     "<tr>"
                     f"<td>{escape(str(row.get('account_code') or ''))}</td>"
                     f"<td>{escape(str(row.get('account_name') or ''))}</td>"
-                    f"<td>{escape(str(row.get('dtl_typ') or ''))}</td>"
+                    f"<td>{escape(str(row.get('dtl_typ_label') or row.get('dtl_typ') or ''))}</td>"
                     f"<td class=\"link\">{escape(str(row.get('dtl_code') or ''))}</td>"
                     f"<td>{escape(str(row.get('dtl_name') or ''))}</td>"
                     f"<td>{escape(str(row.get('branch_name') or ''))}</td>"
