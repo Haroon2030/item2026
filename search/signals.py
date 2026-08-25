@@ -47,6 +47,8 @@ def record_user_login(sender, request, user, **kwargs):
             if not session_key:
                 request.session.save()
                 session_key = request.session.session_key or ''
+            # تحديث إجباري مرة واحدة بعد الدخول (مثل Ctrl+Shift+R)
+            request.session['force_hard_refresh'] = '1'
         UserActivitySession.objects.create(
             user=user,
             user_name=_display_name(user)[:150],

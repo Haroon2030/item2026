@@ -51,6 +51,16 @@ urlpatterns = [
         views.browse_pr_compare_detail,
         name='browse_pr_compare_detail',
     ),
+    path(
+        'purchases/low-margin/',
+        views.browse_low_margin_prices,
+        name='browse_low_margin_prices',
+    ),
+    path(
+        'purchases/low-margin/api/rows/',
+        views.browse_low_margin_prices_api,
+        name='browse_low_margin_prices_api',
+    ),
     path('sales/', views.browse_sales, name='browse_sales'),
     path(
         'sales/api/groups/',

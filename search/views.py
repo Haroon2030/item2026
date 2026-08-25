@@ -2499,6 +2499,343 @@ def browse_vendor_turnover(request):
 @login_required
 @require_GET
 @never_cache
+def browse_low_margin_prices(request):
+    """أصناف مسعّرة بنسبة ربح أقل من حد معيّن (افتراضي 15%)."""
+    from django.core.cache import cache
+    from django.urls import reverse
+
+    error = ''
+    hint = ''
+    report = None
+
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()
+    max_prft_raw = str(request.GET.get('max_profit') or '15').strip()
+    lev_raw = str(request.GET.get('lev') or '1').strip()
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    include_negative = str(request.GET.get('include_neg') or '1').strip() not in (
+        '0',
+        'false',
+        'no',
+    )
+    submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
+
+    try:
+        max_profit = float(max_prft_raw or 15)
+        lev_no = int(lev_raw or 1)
+    except ValueError:
+        error = 'قيم الحد / المستوى غير صحيحة.'
+        max_profit = 15.0
+        lev_no = 1
+
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    wh_name_map: dict[str, str] = {}
+
+    def _branches_from_wh(wh_rows: list[dict]) -> list[dict]:
+        branch_map: dict[str, str] = {}
+        for w in wh_rows:
+            brn = str(w.get('branch_code') or '').strip()
+            if brn:
+                branch_map[brn] = str(w.get('branch_name') or brn)
+        return [
+            {'code': code, 'name': name}
+            for code, name in sorted(branch_map.items(), key=lambda x: (x[1], x[0]))
+        ]
+
+    def _apply_wh_rows(wh_rows: list[dict]) -> None:
+        nonlocal warehouses, branches, wh_name_map
+        warehouses = wh_rows
+        branches = _branches_from_wh(warehouses)
+        wh_name_map = {
+            str(w.get('code') or '').strip(): str(w.get('name') or '').strip()
+            or str(w.get('code') or '').strip()
+            for w in warehouses
+        }
+
+    # الكاش الفعلي تحت بادئة sales:lookup: (انظر _django_lookup_set)
+    cached_wh = cache.get('sales:lookup:inv:wh_options:v1:1')
+    if isinstance(cached_wh, list) and cached_wh:
+        _apply_wh_rows(cached_wh)
+    elif not branches:
+        # احتياطي: أسماء الفروع وحدها إن وُجدت
+        br_names = cache.get('sales:lookup:branch_names')
+        if isinstance(br_names, dict) and br_names:
+            branches = [
+                {'code': str(code), 'name': str(name or code)}
+                for code, name in sorted(
+                    br_names.items(), key=lambda x: (str(x[1] or ''), str(x[0]))
+                )
+                if str(code).strip()
+            ]
+
+    try:
+        from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض الأسعار منخفضة الربح.'
+        elif submitted:
+            with oracle_session():
+                if not warehouses:
+                    _apply_wh_rows(fetch_warehouse_options(active_only=True))
+
+                wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+                if selected_branch and selected_branch not in {
+                    b['code'] for b in branches
+                }:
+                    selected_branch = ''
+
+                if selected_branch:
+                    wh_allowed = {
+                        w.get('code')
+                        for w in warehouses
+                        if str(w.get('branch_code') or '') == selected_branch
+                        and w.get('code')
+                    }
+
+                if wh_codes_raw:
+                    parsed = [
+                        p.strip()
+                        for p in wh_codes_raw.replace('،', ',')
+                        .replace('-', ',')
+                        .split(',')
+                        if p.strip()
+                    ]
+                    if wh_allowed:
+                        keep = [p for p in parsed if p in wh_allowed]
+                        if not keep and not selected_branch:
+                            keep = parsed
+                        parsed = keep
+                    wh_codes_raw = ','.join(parsed)
+
+                if want_excel:
+                    from .oracle_low_margin_prices import build_low_margin_excel
+
+                    return build_low_margin_excel(
+                        max_profit_pct=max_profit,
+                        lev_no=lev_no,
+                        warehouse_codes=wh_codes_raw or None,
+                        item_q=item_q,
+                        include_negative=include_negative,
+                        wh_name_map=wh_name_map,
+                        branch_code=selected_branch if not wh_codes_raw else '',
+                    )
+                else:
+                    from .oracle_low_margin_prices import fetch_low_margin_priced_items
+
+                    report = fetch_low_margin_priced_items(
+                        max_profit_pct=max_profit,
+                        lev_no=lev_no,
+                        warehouse_codes=wh_codes_raw or None,
+                        item_q=item_q,
+                        limit=20,
+                        offset=0,
+                        include_negative=include_negative,
+                        with_total=False,
+                        branch_code=selected_branch if not wh_codes_raw else '',
+                    )
+                    for r in report.get('rows') or []:
+                        r['wh_name'] = (
+                            wh_name_map.get(str(r.get('wh_code') or '').strip())
+                            or '—'
+                        )
+        else:
+            hint = 'اختر «كل الفروع» أو فرعاً محدداً، ثم المخزن إن رغبت، واضغط عرض.'
+            if not branches:
+                hint = 'قائمة الفروع غير متاحة حالياً — أعد المحاولة بعد اتصال أوراكل.'
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_low_margin_prices failed: %s', exc)
+        msg = str(exc)
+        if '12170' in msg or '12541' in msg or 'timeout' in msg.lower() or 'Cannot connect' in msg:
+            error = 'تعذّر الاتصال بأوراكل حالياً (انقطاع الشبكة). أعد المحاولة بعد عودة الاتصال.'
+        else:
+            error = f'تعذّر تحميل الأصناف منخفضة الربح: {exc}'
+        report = None
+
+    api_url = reverse('browse_low_margin_prices_api')
+
+    selected_warehouse = ''
+    if wh_codes_raw and ',' not in wh_codes_raw:
+        selected_warehouse = wh_codes_raw.strip()
+    elif wh_codes_raw:
+        selected_warehouse = wh_codes_raw.split(',')[0].strip()
+
+    branch_warehouses: list[dict] = []
+    if selected_branch:
+        branch_warehouses = [
+            {
+                'code': str(w.get('code') or '').strip(),
+                'name': str(w.get('name') or w.get('code') or '').strip(),
+                'branch_code': str(w.get('branch_code') or '').strip(),
+            }
+            for w in warehouses
+            if str(w.get('branch_code') or '').strip() == selected_branch
+            and str(w.get('code') or '').strip()
+        ]
+    else:
+        # كل الفروع → كل المخازن في القائمة
+        branch_warehouses = [
+            {
+                'code': str(w.get('code') or '').strip(),
+                'name': str(w.get('name') or w.get('code') or '').strip(),
+                'branch_code': str(w.get('branch_code') or '').strip(),
+            }
+            for w in warehouses
+            if str(w.get('code') or '').strip()
+        ]
+    branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+
+    all_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+    ]
+
+    return render(
+        request,
+        'search/browse_low_margin_prices.html',
+        {
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'warehouses': warehouses,
+            'all_warehouses': all_warehouses,
+            'branch_warehouses': branch_warehouses,
+            'selected_warehouse': selected_warehouse,
+            'warehouses_raw': wh_codes_raw,
+            'item_q': item_q,
+            'max_profit': max_profit,
+            'lev_no': lev_no,
+            'limit': 20,
+            'include_negative': include_negative,
+            'report': report,
+            'error': error,
+            'hint': hint,
+            'api_url': api_url,
+            'page_size': 20,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_low_margin_prices_api(request):
+    """صفحة إضافية من الأصناف منخفضة الربح (تمرير لا نهائي)."""
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()
+    max_prft_raw = str(request.GET.get('max_profit') or '15').strip()
+    lev_raw = str(request.GET.get('lev') or '1').strip()
+    include_negative = str(request.GET.get('include_neg') or '1').strip() not in (
+        '0',
+        'false',
+        'no',
+    )
+
+    try:
+        max_profit = float(max_prft_raw or 15)
+        lev_no = int(lev_raw or 1)
+        offset = max(0, int(request.GET.get('offset') or 0))
+        limit = min(max(1, int(request.GET.get('limit') or 20)), 50)
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': 'معاملات غير صحيحة.'}, status=400)
+
+    if offset >= 2000:
+        return JsonResponse(
+            {
+                'ok': True,
+                'rows': [],
+                'offset': offset,
+                'limit': limit,
+                'has_more': False,
+                'done': True,
+            }
+        )
+
+    rows: list = []
+    has_more = False
+    try:
+        from .oracle_low_margin_prices import fetch_low_margin_priced_items
+        from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+
+        with oracle_session():
+            warehouses = fetch_warehouse_options(active_only=True)
+            wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+            if selected_branch:
+                warehouses = [
+                    w
+                    for w in warehouses
+                    if str(w.get('branch_code') or '') == selected_branch
+                ]
+                wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+            if wh_codes_raw:
+                parsed = [
+                    p.strip()
+                    for p in wh_codes_raw.replace('،', ',').replace('-', ',').split(',')
+                    if p.strip()
+                ]
+                if wh_allowed:
+                    keep = [p for p in parsed if p in wh_allowed]
+                    if not keep and not selected_branch:
+                        keep = parsed
+                    parsed = keep
+                wh_codes_raw = ','.join(parsed)
+
+            wh_name_map = {
+                str(w.get('code') or '').strip(): str(w.get('name') or '').strip()
+                or str(w.get('code') or '').strip()
+                for w in fetch_warehouse_options(active_only=True)
+            }
+
+            report = fetch_low_margin_priced_items(
+                max_profit_pct=max_profit,
+                lev_no=lev_no,
+                warehouse_codes=wh_codes_raw or None,
+                item_q=item_q,
+                limit=limit,
+                offset=offset,
+                include_negative=include_negative,
+                with_total=False,
+                branch_code=selected_branch if not wh_codes_raw else '',
+            )
+            rows = report.get('rows') or []
+            for r in rows:
+                r['wh_name'] = wh_name_map.get(str(r.get('wh_code') or '').strip()) or '—'
+            has_more = bool((report.get('kpis') or {}).get('has_more'))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_low_margin_prices_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+    return JsonResponse(
+        {
+            'ok': True,
+            'rows': rows,
+            'offset': offset,
+            'limit': limit,
+            'has_more': has_more,
+        }
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_purchases(request):
     """تحليل فواتير المشتريات حسب الفرع والمجموعة والمورد."""
     from datetime import date

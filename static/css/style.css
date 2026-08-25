@@ -15802,4 +15802,244 @@ a.sidebar-brand-lockup {
   }
 }
 
+/* أسعار بنسبة ربح منخفضة */
+.low-margin-dash .low-margin-filter {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.6fr) repeat(5, minmax(6.5rem, 1fr)) auto;
+  gap: 0.65rem 0.75rem;
+  align-items: end;
+  padding: 0.85rem 1rem;
+}
+
+.low-margin-dash .low-margin-filter .field {
+  min-width: 0;
+}
+
+.low-margin-dash .low-margin-filter .lm-opt {
+  font-weight: 400;
+  opacity: 0.65;
+  font-size: 0.85em;
+}
+
+.low-margin-dash .low-margin-filter .lm-actions-spacer {
+  visibility: hidden;
+  user-select: none;
+}
+
+.low-margin-dash .low-margin-filter .lm-field-actions .btn-primary {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.low-margin-dash .low-margin-filter #lm-branch {
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.low-margin-dash .low-margin-kpis {
+  margin-top: 0.85rem;
+}
+
+.low-margin-dash .low-margin-export-btns {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+.low-margin-dash .low-margin-kpi-export .dash-kpi-value {
+  display: none;
+}
+
+.low-margin-dash .low-margin-scroll {
+  /* أقل من 20 صف مرئي حتى يظهر شريط التمرير فوراً */
+  max-height: calc(2.2rem + (16 * 2.05rem) + 0.5rem);
+  overflow-y: auto;
+}
+
+.low-margin-dash .low-margin-scroll.table-wrap::after {
+  display: none;
+  content: none;
+}
+
+.low-margin-dash .low-margin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.low-margin-dash .low-margin-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.low-margin-dash .low-margin-table thead th.lm-th-cost {
+  background: #d8f3ec;
+  color: #0f5c4c;
+}
+
+.low-margin-dash .low-margin-table thead th.lm-th-price {
+  background: #dce8fb;
+  color: #1a4b8c;
+}
+
+.low-margin-dash .low-margin-table thead th.lm-th-prft {
+  background: #fde8d8;
+  color: #9a3412;
+}
+
+.low-margin-dash .low-margin-table .lm-td-item {
+  max-width: 14rem;
+  width: 14rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.low-margin-dash .low-margin-table .lm-td-code {
+  color: #5b4bb7;
+  font-weight: 600;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.low-margin-dash .low-margin-table .lm-item-name {
+  color: #4338ca;
+  font-weight: 600;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.low-margin-dash .low-margin-table .lm-td-levn {
+  color: #1d6fd8;
+}
+
+.low-margin-dash .low-margin-table .lm-td-cost,
+.low-margin-dash .low-margin-table .lm-td-price,
+.low-margin-dash .low-margin-table .lm-td-prft {
+  text-align: center;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.low-margin-dash .low-margin-table .lm-td-cost {
+  background: #e8faf5;
+  color: #0f766e;
+}
+
+.low-margin-dash .low-margin-table .lm-td-price {
+  background: #e8f0fe;
+  color: #1d4ed8;
+}
+
+.low-margin-dash .low-margin-table .lm-td-prft {
+  background: #fff4e8;
+  color: #c2410c;
+}
+
+.low-margin-dash .low-margin-table tr.is-ok .lm-td-prft {
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.low-margin-dash .low-margin-table tr.is-mid .lm-td-prft {
+  background: #fef9c3;
+  color: #a16207;
+}
+
+.low-margin-dash .low-margin-table tr.is-warn .lm-td-prft {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.low-margin-dash .low-margin-table tr.is-loss .lm-td-prft {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.low-margin-dash .low-margin-table tr.is-even td {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.low-margin-dash .low-margin-table tr.is-even .lm-td-cost {
+  background: #dff7f0;
+}
+
+.low-margin-dash .low-margin-table tr.is-even .lm-td-price {
+  background: #dce8fb;
+}
+
+.low-margin-dash .low-margin-table tr.is-even.is-ok .lm-td-prft {
+  background: #dcfce7;
+}
+
+.low-margin-dash .low-margin-table tr.is-even.is-mid .lm-td-prft {
+  background: #fef08a;
+}
+
+.low-margin-dash .low-margin-table tr.is-even.is-warn .lm-td-prft {
+  background: #fed7aa;
+}
+
+.low-margin-dash .low-margin-table tr.is-even.is-loss .lm-td-prft {
+  background: #fecaca;
+}
+
+.low-margin-dash .low-margin-print-btn {
+  margin-inline-start: 0.35rem;
+}
+
+.low-margin-dash .low-margin-loader {
+  padding: 0.75rem 1rem;
+  text-align: center;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1100px) {
+  .low-margin-dash .low-margin-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .low-margin-dash .low-margin-filter .lm-field-branch,
+  .low-margin-dash .low-margin-filter .lm-field-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .low-margin-dash .low-margin-filter {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .low-margin-dash .income-filter-bar,
+  .low-margin-dash .alert,
+  .low-margin-dash .low-margin-print-btn {
+    display: none !important;
+  }
+
+  .low-margin-dash .low-margin-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .low-margin-dash .low-margin-table thead th {
+    position: static !important;
+  }
+
+  .low-margin-dash .low-margin-table .lm-td-cost,
+  .low-margin-dash .low-margin-table .lm-td-price,
+  .low-margin-dash .low-margin-table .lm-td-prft,
+  .low-margin-dash .low-margin-table thead th.lm-th-cost,
+  .low-margin-dash .low-margin-table thead th.lm-th-price,
+  .low-margin-dash .low-margin-table thead th.lm-th-prft {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 

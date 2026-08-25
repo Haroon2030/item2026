@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}أسعار بنسبة ربح منخفضة{% endblock %}
+{% block page_class %}sales-dash purchase-dash low-margin-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="أسعار بنسبة ربح منخفضة">
+  <div class="dash-head-copy">
+    <h2>ربح أقل من الحد</h2>
+    <p>نسبة الربح كما أونكس — فرع أو كل الفروع، ومخزن اختياري · 20 صفاً أولاً والباقي بالتمرير</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_low_margin_prices' %}" class="purchase-filter dash-panel-glass low-margin-filter" role="search" aria-label="فلاتر الأسعار منخفضة الربح">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field lm-field-branch">
+    <label for="lm-branch">الفرع</label>
+    <select id="lm-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field lm-field-wh">
+    <label for="lm-wh">المخزن</label>
+    <select id="lm-wh" name="warehouses">
+      <option value="">{% if selected_branch %}كل مخازن الفرع{% else %}كل المخازن{% endif %}</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field lm-field-q">
+    <label for="lm-q">صنف</label>
+    <input id="lm-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
+  </div>
+
+  <div class="field lm-field-max">
+    <label for="lm-max">حد الربح %</label>
+    <input id="lm-max" type="number" step="0.01" min="0" name="max_profit" value="{{ max_profit }}">
+  </div>
+
+  <div class="field lm-field-lev">
+    <label for="lm-lev">المستوى</label>
+    <input id="lm-lev" type="number" step="1" min="1" name="lev" value="{{ lev_no }}">
+  </div>
+
+  <div class="field lm-field-neg">
+    <label for="lm-neg">الخسارة</label>
+    <select id="lm-neg" name="include_neg">
+      <option value="1" {% if include_negative %}selected{% endif %}>تشمل السالب</option>
+      <option value="0" {% if not include_negative %}selected{% endif %}>أكبر من 0 فقط</option>
+    </select>
+  </div>
+
+  <div class="field lm-field-actions">
+    <label class="lm-actions-spacer" aria-hidden="true">&nbsp;</label>
+    <button type="submit" class="btn-primary">عرض الأصناف</button>
+  </div>
+</form>
+
+{% if report and report.rows %}
+  <section class="purchase-kpis low-margin-kpis" aria-label="ملخص النتائج">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label">المعروض</span>
+      <strong class="dash-kpi-value mono" id="lm-loaded-count">{{ report.kpis.row_count }}</strong>
+      <span class="dash-kpi-hint">صف محمّل</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label">في الدفعة</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.total_matching }}</strong>
+      <span class="dash-kpi-hint">{% if report.kpis.truncated %}مقطوعة — صدّر Excel{% else %}مطابق للفلتر{% endif %}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label">حد الربح</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.max_profit_pct }}%</strong>
+      <span class="dash-kpi-hint">أقل من هذا الحد</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi low-margin-kpi-export">
+      <span class="dash-kpi-label">تصدير</span>
+      <div class="low-margin-export-btns">
+        <a class="btn-ghost" href="?{{ request.GET.urlencode }}{% if request.GET %}&{% endif %}export=excel">Excel</a>
+        <button type="button" class="btn-ghost" onclick="window.print()">PDF</button>
+      </div>
+      <span class="dash-kpi-hint">حتى 100 ألف صف</span>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel low-margin-panel" aria-label="نتائج الأسعار منخفضة الربح">
+    <div class="dash-panel-head">
+      <h3>الأصناف المسعّرة</h3>
+    </div>
+
+    <div class="table-wrap low-margin-scroll" id="lm-wrap">
+      <table
+        class="data-table low-margin-table"
+        id="lm-table"
+        aria-label="قائمة أسعار بنسبة ربح منخفضة"
+        data-api="{{ api_url }}"
+        data-page-size="{{ page_size|default:20 }}"
+        data-total="{{ report.kpis.total_matching|default:0 }}"
+        data-scroll-max="2000"
+        data-branch="{{ selected_branch }}"
+        data-warehouses="{{ warehouses_raw }}"
+        data-q="{{ item_q }}"
+        data-max-profit="{{ max_profit }}"
+        data-lev="{{ lev_no }}"
+        data-include-neg="{% if include_negative %}1{% else %}0{% endif %}"
+      >
+        <thead>
+          <tr>
+            <th class="lm-th-idx">#</th>
+            <th class="lm-th-code">الرقم</th>
+            <th class="lm-th-item">اسم الصنف</th>
+            <th class="lm-th-unit">الوحدة</th>
+            <th class="lm-th-wh">المخزن</th>
+            <th class="lm-th-cost">متوسط التكلفة</th>
+            <th class="lm-th-price">السعر</th>
+            <th class="lm-th-prft">نسبة الربح</th>
+            <th class="lm-th-cy">العملة</th>
+            <th class="lm-th-lev">المستوى</th>
+            <th class="lm-th-levn">اسم المستوى</th>
+          </tr>
+        </thead>
+        <tbody id="lm-body">
+          {% for r in report.rows %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %} {% if r.profit_pct < 0 %}is-loss{% elif r.profit_pct < 5 %}is-warn{% elif r.profit_pct < 10 %}is-mid{% else %}is-ok{% endif %}">
+              <td class="mono lm-td-idx">{{ forloop.counter }}</td>
+              <td class="mono lm-td-code">{{ r.item_code }}</td>
+              <td class="lm-td-item">
+                <span class="lm-item-name" title="{{ r.item_name }}">{{ r.item_name }}</span>
+              </td>
+              <td class="lm-td-unit">{{ r.unit }}</td>
+              <td class="lm-td-wh" title="{{ r.wh_name }}">
+                <strong class="mono">{{ r.wh_code }}</strong>
+              </td>
+              <td class="mono lm-td-cost">{{ r.avg_cost_display }}</td>
+              <td class="mono lm-td-price">{{ r.price_display }}</td>
+              <td class="mono lm-td-prft">{{ r.profit_pct_display }}%</td>
+              <td class="mono lm-td-cy">{{ r.currency }}</td>
+              <td class="mono lm-td-lev">{{ r.lev_no }}</td>
+              <td class="lm-td-levn">{{ r.lev_name }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div id="lm-loader" class="low-margin-loader" hidden>جاري تحميل المزيد…</div>
+    </div>
+  </section>
+{% elif report %}
+  <p class="sales-empty">لا أصناف مسعّرة تحت الحد المحدد.</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ all_warehouses|json_script:"lm-wh-data" }}
+<script src="/static/js/low-margin-filter.js?v={{ app_client_version }}"></script>
+<script src="/static/js/low-margin-loader.js?v={{ app_client_version }}"></script>
+{% endblock %}
