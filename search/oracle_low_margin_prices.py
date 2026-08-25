@@ -23,11 +23,12 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v11"
+_CACHE_VER = "v12"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 20
 _SCROLL_MAX = 2000
 _EXCEL_LIMIT = 100000
+_SINGLE_WH_LIMIT = 500000
 
 
 def _f(value: Any, nd: int = 2) -> float:
@@ -163,6 +164,56 @@ def _rows_from_oracle(rows: list[dict], lev: int) -> list[dict[str, Any]]:
     return out
 
 
+def _inner_select_sql(
+    schema: str,
+    *,
+    wh_sql: str,
+    item_sql: str,
+    avg_sql: str,
+    vat_sql: str,
+    net_price_sql: str,
+) -> str:
+    return f"""
+        SELECT /*+ LEADING(p) USE_NL(m d w lv) INDEX(p INV_PRC_LEV_NO_INDX) */
+          p.I_CODE,
+          m.I_NAME,
+          p.ITM_UNT,
+          p.LEV_NO,
+          lv.LEV_A_NAME,
+          p.W_CODE,
+          ROUND(
+            ({net_price_sql} - ({avg_sql}) * NVL(p.P_SIZE, 1))
+            / NULLIF(({avg_sql}) * NVL(p.P_SIZE, 1), 0) * 100
+          , 2) AS PRFT_PCT,
+          ROUND(p.I_PRICE, 4) AS I_PRICE,
+          ROUND({net_price_sql}, 4) AS NET_PRICE,
+          ROUND(({avg_sql}), 4) AS AVG_COST,
+          ROUND(({avg_sql}) * NVL(p.P_SIZE, 1), 4) AS UNIT_COST,
+          ROUND(NVL(p.P_SIZE, 1), 4) AS P_SIZE,
+          ROUND(({vat_sql}), 2) AS VAT_PCT,
+          CAST('SAR' AS VARCHAR2(10)) AS A_CY
+        FROM {schema}.IAS_ITEM_PRICE p
+        JOIN {schema}.IAS_ITM_MST m
+          ON m.I_CODE = p.I_CODE
+        JOIN {schema}.IAS_ITM_DTL d
+          ON d.I_CODE = p.I_CODE
+         AND NVL(d.MAIN_UNIT, 0) = 1
+        LEFT JOIN {schema}.IAS_ITM_WCODE w
+          ON w.I_CODE = p.I_CODE
+         AND w.W_CODE = p.W_CODE
+         AND w.ITM_UNT = d.ITM_UNT
+        LEFT JOIN {schema}.IAS_PRICING_LEVELS lv
+          ON lv.LEV_NO = p.LEV_NO
+        WHERE p.LEV_NO = :lev
+          AND p.I_PRICE > 0
+          AND NVL(p.P_SIZE, 1) > 0
+          AND NVL(({avg_sql}), 0) > 0
+          AND (m.INACTIVE IS NULL OR m.INACTIVE = 0)
+          {wh_sql}
+          {item_sql}
+    """
+
+
 def count_low_margin_priced_items(
     *,
     max_profit_pct: float = 15.0,
@@ -172,34 +223,20 @@ def count_low_margin_priced_items(
     include_negative: bool = True,
     branch_code: str = "",
 ) -> int:
-    """عدد تقريبي = حجم دفعة التمرير المخزّنة (حتى _SCROLL_MAX)."""
-    report = fetch_low_margin_priced_items(
-        max_profit_pct=max_profit_pct,
-        lev_no=lev_no,
-        warehouse_codes=warehouse_codes,
-        item_q=item_q,
-        limit=_SCROLL_MAX,
-        offset=0,
-        include_negative=include_negative,
-        with_total=False,
-        branch_code=branch_code,
-    )
-    return int((report.get("kpis") or {}).get("total_matching") or 0)
+    """عدد الصفوف المطابقة تحت حد نسبة الربح."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
 
-
-def _load_capped_rows(
-    *,
-    max_prft: float,
-    lev: int,
-    wh_list: list[str],
-    q: str,
-    include_negative: bool,
-    cap: int,
-    branch_code: str = "",
-) -> list[dict[str, Any]]:
-    """يجلب أعلى cap صفاً مرة واحدة (إيقاف ROWNUM) ثم يُكاش."""
+    max_prft = float(max_profit_pct)
+    lev = int(lev_no or 1)
+    if isinstance(warehouse_codes, str):
+        wh_list = _parse_wh_codes(warehouse_codes)
+    else:
+        wh_list = [str(w).strip() for w in (warehouse_codes or []) if str(w).strip()]
     brn = str(branch_code or "").strip()
-    bulk_key = (
+    q = str(item_q or "").strip()
+
+    ck = (
         _filter_key(
             max_prft=max_prft,
             lev=lev,
@@ -208,17 +245,16 @@ def _load_capped_rows(
             include_negative=include_negative,
             branch_code=brn,
         )
-        + f":bulk={cap}"
+        + ":count"
     )
-    cached = cache.get(bulk_key)
-    if isinstance(cached, list):
-        return cached
+    cached = cache.get(ck)
+    if cached is not None:
+        return int(cached)
 
     schema = _schema()
     params: dict[str, Any] = {
         "max_prft": max_prft,
         "lev": lev,
-        "cap": cap,
         "dflt_vat": _DEFAULT_VAT_PCT,
     }
     wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql = _build_sql_parts(
@@ -229,6 +265,83 @@ def _load_capped_rows(
         params=params,
         branch_code=brn,
     )
+    inner = _inner_select_sql(
+        schema,
+        wh_sql=wh_sql,
+        item_sql=item_sql,
+        avg_sql=avg_sql,
+        vat_sql=vat_sql,
+        net_price_sql=net_price_sql,
+    )
+    rows = _fetch_all(
+        f"""
+        SELECT COUNT(*) AS C
+        FROM (
+          {inner}
+        ) x
+        WHERE x.PRFT_PCT < :max_prft
+          {pos_only_sql}
+        """,
+        params,
+    )
+    total = int(rows[0].get("C") or 0) if rows else 0
+    cache.set(ck, total, _CACHE_TTL)
+    return total
+
+
+def _load_capped_rows(
+    *,
+    max_prft: float,
+    lev: int,
+    wh_list: list[str],
+    q: str,
+    include_negative: bool,
+    cap: int | None,
+    branch_code: str = "",
+) -> list[dict[str, Any]]:
+    """يجلب الصفوف المطابقة — بدون حد عند cap=None."""
+    brn = str(branch_code or "").strip()
+    cap_key = "all" if cap is None else str(cap)
+    bulk_key = (
+        _filter_key(
+            max_prft=max_prft,
+            lev=lev,
+            wh_list=wh_list,
+            q=q,
+            include_negative=include_negative,
+            branch_code=brn,
+        )
+        + f":bulk={cap_key}"
+    )
+    cached = cache.get(bulk_key)
+    if isinstance(cached, list):
+        return cached
+
+    schema = _schema()
+    params: dict[str, Any] = {
+        "max_prft": max_prft,
+        "lev": lev,
+        "dflt_vat": _DEFAULT_VAT_PCT,
+    }
+    if cap is not None:
+        params["cap"] = cap
+    wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql = _build_sql_parts(
+        schema,
+        wh_list=wh_list,
+        q=q,
+        include_negative=include_negative,
+        params=params,
+        branch_code=brn,
+    )
+    inner = _inner_select_sql(
+        schema,
+        wh_sql=wh_sql,
+        item_sql=item_sql,
+        avg_sql=avg_sql,
+        vat_sql=vat_sql,
+        net_price_sql=net_price_sql,
+    )
+    row_limit = f"WHERE ROWNUM <= :cap" if cap is not None else ""
 
     rows = _fetch_all(
         f"""
@@ -249,43 +362,7 @@ def _load_capped_rows(
             x.VAT_PCT,
             x.A_CY
           FROM (
-            SELECT /*+ LEADING(p) USE_NL(m d w lv) INDEX(p INV_PRC_LEV_NO_INDX) */
-              p.I_CODE,
-              m.I_NAME,
-              p.ITM_UNT,
-              p.LEV_NO,
-              lv.LEV_A_NAME,
-              p.W_CODE,
-              ROUND(
-                ({net_price_sql} - ({avg_sql}) * NVL(p.P_SIZE, 1))
-                / NULLIF(({avg_sql}) * NVL(p.P_SIZE, 1), 0) * 100
-              , 2) AS PRFT_PCT,
-              ROUND(p.I_PRICE, 4) AS I_PRICE,
-              ROUND({net_price_sql}, 4) AS NET_PRICE,
-              ROUND(({avg_sql}), 4) AS AVG_COST,
-              ROUND(({avg_sql}) * NVL(p.P_SIZE, 1), 4) AS UNIT_COST,
-              ROUND(NVL(p.P_SIZE, 1), 4) AS P_SIZE,
-              ROUND(({vat_sql}), 2) AS VAT_PCT,
-              CAST('SAR' AS VARCHAR2(10)) AS A_CY
-            FROM {schema}.IAS_ITEM_PRICE p
-            JOIN {schema}.IAS_ITM_MST m
-              ON m.I_CODE = p.I_CODE
-            JOIN {schema}.IAS_ITM_DTL d
-              ON d.I_CODE = p.I_CODE
-             AND NVL(d.MAIN_UNIT, 0) = 1
-            LEFT JOIN {schema}.IAS_ITM_WCODE w
-              ON w.I_CODE = p.I_CODE
-             AND w.W_CODE = p.W_CODE
-             AND w.ITM_UNT = d.ITM_UNT
-            LEFT JOIN {schema}.IAS_PRICING_LEVELS lv
-              ON lv.LEV_NO = p.LEV_NO
-            WHERE p.LEV_NO = :lev
-              AND p.I_PRICE > 0
-              AND NVL(p.P_SIZE, 1) > 0
-              AND NVL(({avg_sql}), 0) > 0
-              AND (m.INACTIVE IS NULL OR m.INACTIVE = 0)
-              {wh_sql}
-              {item_sql}
+            {inner}
           ) x
           WHERE x.PRFT_PCT < :max_prft
             {pos_only_sql}
@@ -295,7 +372,7 @@ def _load_capped_rows(
             x.I_CODE,
             x.W_CODE
         )
-        WHERE ROWNUM <= :cap
+        {row_limit}
         """,
         params,
     )
@@ -347,22 +424,33 @@ def fetch_low_margin_priced_items(
 
     brn = str(branch_code or "").strip()
     q = str(item_q or "").strip()
+    single_wh = len(wh_list) == 1
 
-    def _pack(all_rows: list[dict[str, Any]], cap_used: int) -> dict[str, Any]:
+    def _pack(
+        all_rows: list[dict[str, Any]],
+        *,
+        cap_used: int | None,
+        total_exact: int | None = None,
+    ) -> dict[str, Any]:
         page = all_rows[off : off + lim]
         loaded_total = len(all_rows)
-        truncated = loaded_total >= cap_used
+        total_matching = total_exact if total_exact is not None else loaded_total
+        truncated = bool(cap_used is not None and loaded_total >= cap_used)
+        if single_wh and total_exact is not None:
+            truncated = total_exact > loaded_total
+        scroll_max = total_matching if single_wh else min(total_matching, _SCROLL_MAX)
         return {
             "rows": page,
             "kpis": {
                 "row_count": len(page),
-                "total_matching": loaded_total,
+                "total_matching": total_matching,
                 "max_profit_pct": max_prft,
                 "lev_no": lev,
                 "limit": lim,
                 "offset": off,
                 "truncated": truncated,
-                "has_more": off + len(page) < min(loaded_total, _SCROLL_MAX),
+                "has_more": off + len(page) < loaded_total,
+                "single_warehouse": single_wh,
             },
             "meta": {
                 "warehouse_codes": wh_list,
@@ -372,11 +460,52 @@ def fetch_low_margin_priced_items(
                 "offset": off,
                 "include_negative": include_negative,
                 "page_size": _PAGE_SIZE,
-                "scroll_max": _SCROLL_MAX,
+                "scroll_max": scroll_max,
             },
         }
 
-    # أول الصفحات: حد صغير سريع. عند التمرير نوسّع الكاش حتى _SCROLL_MAX.
+    total_exact: int | None = None
+    if with_total:
+        try:
+            total_exact = count_low_margin_priced_items(
+                max_profit_pct=max_prft,
+                lev_no=lev,
+                warehouse_codes=wh_list,
+                item_q=q,
+                include_negative=include_negative,
+                branch_code=brn,
+            )
+        except Exception:  # noqa: BLE001
+            total_exact = None
+
+    # مخزن واحد → كل النتائج بلا قطع (حتى _SINGLE_WH_LIMIT)
+    if single_wh:
+        cap: int | None = _SINGLE_WH_LIMIT
+        bulk_key = (
+            _filter_key(
+                max_prft=max_prft,
+                lev=lev,
+                wh_list=wh_list,
+                q=q,
+                include_negative=include_negative,
+                branch_code=brn,
+            )
+            + f":bulk={cap}"
+        )
+        hit = cache.get(bulk_key)
+        if isinstance(hit, list):
+            return _pack(hit, cap_used=cap, total_exact=total_exact)
+        all_rows = _load_capped_rows(
+            max_prft=max_prft,
+            lev=lev,
+            wh_list=wh_list,
+            q=q,
+            include_negative=include_negative,
+            cap=cap,
+            branch_code=brn,
+        )
+        return _pack(all_rows, cap_used=cap, total_exact=total_exact)
+
     if lim > _SCROLL_MAX:
         cap = min(lim, _EXCEL_LIMIT)
     else:
@@ -397,7 +526,7 @@ def fetch_low_margin_priced_items(
                 + f":bulk={try_cap}"
             )
             if isinstance(hit, list):
-                return _pack(hit, try_cap)
+                return _pack(hit, cap_used=try_cap, total_exact=total_exact)
         if need_end > 100:
             cap = _SCROLL_MAX
 
@@ -410,7 +539,7 @@ def fetch_low_margin_priced_items(
         cap=cap,
         branch_code=brn,
     )
-    return _pack(all_rows, cap)
+    return _pack(all_rows, cap_used=cap, total_exact=total_exact)
 
 
 def build_low_margin_excel(

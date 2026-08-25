@@ -2637,7 +2637,7 @@ def browse_low_margin_prices(request):
                         limit=20,
                         offset=0,
                         include_negative=include_negative,
-                        with_total=False,
+                        with_total=bool(wh_codes_raw and ',' not in wh_codes_raw),
                         branch_code=selected_branch if not wh_codes_raw else '',
                     )
                     for r in report.get('rows') or []:
@@ -2725,6 +2725,7 @@ def browse_low_margin_prices(request):
             'hint': hint,
             'api_url': api_url,
             'page_size': 20,
+            'scroll_max': (report or {}).get('meta', {}).get('scroll_max', 2000) if report else 2000,
         },
     )
 
@@ -2753,7 +2754,7 @@ def browse_low_margin_prices_api(request):
     except (TypeError, ValueError):
         return JsonResponse({'ok': False, 'error': 'معاملات غير صحيحة.'}, status=400)
 
-    if offset >= 2000:
+    if offset >= 2000 and not (wh_codes_raw and ',' not in wh_codes_raw):
         return JsonResponse(
             {
                 'ok': True,
@@ -2811,7 +2812,7 @@ def browse_low_margin_prices_api(request):
                 limit=limit,
                 offset=offset,
                 include_negative=include_negative,
-                with_total=False,
+                with_total=bool(wh_codes_raw and ',' not in wh_codes_raw and offset == 0),
                 branch_code=selected_branch if not wh_codes_raw else '',
             )
             rows = report.get('rows') or []
