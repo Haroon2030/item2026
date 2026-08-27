@@ -3392,12 +3392,15 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:branches:v7:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v9:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not _skip_mst_returns(date_from, date_to))}"
     )
-    cached = _sales_cache_get(cache_key)
-    if cached is not None:
-        return cached
+    # فترة تنتهي اليوم: لا تُعرض أرقام كاش قديمة مكان الحيّ
+    ends_today = _as_date(date_to) >= date.today()
+    if not ends_today:
+        cached = _sales_cache_get(cache_key)
+        if cached is not None:
+            return cached
     conf = _system_conf(system)
     if conf.get("source") == "pos":
         rows = _fetch_pos_branch_totals(date_from, date_to)
@@ -3954,7 +3957,7 @@ def fetch_sales_mst_bundle(
 
     # مزامنة كاش الفروع المنفصل لواجهات أخرى
     br_cache = (
-        f"sales:branches:v7:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v9:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not skip_ret)}"
     )
     _sales_cache_set(br_cache, branches, date_from=date_from, date_to=date_to)

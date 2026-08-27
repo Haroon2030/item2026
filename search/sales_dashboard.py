@@ -596,13 +596,26 @@ def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
     )
 
     key = (
-        f"sales:branches:v8:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v9:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:"
         f"r{int(not _skip_mst_returns(date_from, date_to))}"
     )
     hit = _sales_cache_get(key)
     if hit is not None:
         return hit
+    # توافق مع مفاتيح أقدم كُتبت قبل توحيد رقم الفرع
+    for ver in ("v8", "v7"):
+        legacy = (
+            f"sales:branches:{ver}:{system}:{_as_date(date_from).isoformat()}:"
+            f"{_as_date(date_to).isoformat()}:"
+            f"r{int(not _skip_mst_returns(date_from, date_to))}"
+        )
+        hit = _sales_cache_get(legacy)
+        if hit is not None:
+            return hit
+        hit = _sales_cache_get_stale(legacy)
+        if hit is not None:
+            return hit
     return _sales_cache_get_stale(key)
 
 
@@ -801,6 +814,7 @@ def peek_sales_groups(
         _as_date,
         _merge_available_monthly_group_cache,
         _month_spans,
+        _norm_brn_code,
         _sales_cache_get,
         _sales_cache_get_stale,
         _skip_mst_returns,
@@ -844,18 +858,28 @@ def peek_sales_groups(
     raw_total = round(sum(float(r.get("sales_total") or 0) for r in raw), 2)
     if not by_branch and raw:
         br_key = (
-            f"sales:branches:v7:pos:{_as_date(date_from).isoformat()}:"
+            f"sales:branches:v9:pos:{_as_date(date_from).isoformat()}:"
             f"{_as_date(date_to).isoformat()}:"
             f"r{int(not _skip_mst_returns(date_from, date_to))}"
         )
         br_rows = _sales_cache_get(br_key)
+        if br_rows is None:
+            for ver in ("v8", "v7"):
+                legacy = (
+                    f"sales:branches:{ver}:pos:{_as_date(date_from).isoformat()}:"
+                    f"{_as_date(date_to).isoformat()}:"
+                    f"r{int(not _skip_mst_returns(date_from, date_to))}"
+                )
+                br_rows = _sales_cache_get(legacy) or _sales_cache_get_stale(legacy)
+                if br_rows is not None:
+                    break
         if br_rows is None:
             br_rows = _sales_cache_get_stale(br_key)
         if brn and br_rows is not None:
             br_rows = [
                 r
                 for r in br_rows
-                if str(r.get("branch_code") or "").strip() == brn
+                if _norm_brn_code(r.get("branch_code")) == _norm_brn_code(brn)
             ]
         if br_rows is not None:
             pos_total = round(
