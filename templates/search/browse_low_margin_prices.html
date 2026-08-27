@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="أسعار بنسبة ربح منخفضة">
   <div class="dash-head-copy">
     <h2>ربح أقل من الحد</h2>
-    <p>حدّد نسبة الربح — عند اختيار مخزن تُجلب كل النتائج المطابقة بلا قطع</p>
+    <p>نفس اتصال أوراكل لباقي الموقع — اختر مخزناً وحدّد نسبة الربح ثم عرض</p>
   </div>
 </section>
 
@@ -85,7 +85,7 @@
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
       <span class="dash-kpi-label">المعروض</span>
       <strong class="dash-kpi-value mono" id="lm-loaded-count">{{ report.kpis.row_count }}</strong>
-      <span class="dash-kpi-hint">صف محمّل — اسحب للمزيد</span>
+      <span class="dash-kpi-hint">صف محمّل — اسحب الجدول لباقي الأصناف</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
       <span class="dash-kpi-label">حد الربح</span>
@@ -113,10 +113,11 @@
         id="lm-table"
         aria-label="قائمة أسعار بنسبة ربح منخفضة"
         data-api="{{ api_url }}"
-        data-page-size="{{ page_size|default:20 }}"
+        data-page-size="{{ page_size|default:50 }}"
         data-total="{{ report.kpis.total_matching|default:0 }}"
         data-scroll-max="{{ scroll_max|default:2000 }}"
         data-full-wh="{% if report.kpis.single_warehouse %}1{% else %}0{% endif %}"
+        data-has-more="{% if report.kpis.has_more %}1{% else %}0{% endif %}"
         data-branch="{{ selected_branch }}"
         data-warehouses="{{ warehouses_raw }}"
         data-q="{{ item_q }}"

@@ -2614,7 +2614,12 @@ def browse_low_margin_prices(request):
                         parsed = keep
                     wh_codes_raw = ','.join(parsed)
 
-                if want_excel:
+                if not wh_codes_raw and not selected_branch:
+                    error = (
+                        'اختر مخزناً محدداً قبل العرض — '
+                        'نفس اتصال أوراكل المستخدم في باقي الموقع.'
+                    )
+                elif want_excel:
                     from .oracle_low_margin_prices import build_low_margin_excel
 
                     return build_low_margin_excel(
@@ -2634,7 +2639,7 @@ def browse_low_margin_prices(request):
                         lev_no=lev_no,
                         warehouse_codes=wh_codes_raw or None,
                         item_q=item_q,
-                        limit=20,
+                        limit=50,
                         offset=0,
                         include_negative=include_negative,
                         with_total=bool(wh_codes_raw and ',' not in wh_codes_raw),
@@ -2646,7 +2651,7 @@ def browse_low_margin_prices(request):
                             or '—'
                         )
         else:
-            hint = 'اختر «كل الفروع» أو فرعاً محدداً، ثم المخزن إن رغبت، واضغط عرض.'
+            hint = 'اختر فرعاً ثم مخزناً، حدّد نسبة الربح، ثم اضغط عرض.'
             if not branches:
                 hint = 'قائمة الفروع غير متاحة حالياً — أعد المحاولة بعد اتصال أوراكل.'
     except ValidationError as exc:
@@ -2655,8 +2660,16 @@ def browse_low_margin_prices(request):
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_low_margin_prices failed: %s', exc)
         msg = str(exc)
-        if '12170' in msg or '12541' in msg or 'timeout' in msg.lower() or 'Cannot connect' in msg:
-            error = 'تعذّر الاتصال بأوراكل حالياً (انقطاع الشبكة). أعد المحاولة بعد عودة الاتصال.'
+        low = msg.lower()
+        if any(t in msg for t in ('12170', '12541', 'Cannot connect', 'مهلة الشبكة')):
+            error = (
+                'تعذّر الاتصال بأوراكل حالياً (انقطاع الشبكة). '
+                'أعد المحاولة بعد عودة الاتصال.'
+            )
+        elif 'مهلة جلب' in msg or 'call timeout' in low or 'dpy-4011' in low:
+            error = (
+                'الاستعلام طال على أوراكل — اختر مخزناً واحداً أو صنفاً وحاول مجدداً.'
+            )
         else:
             error = f'تعذّر تحميل الأصناف منخفضة الربح: {exc}'
         report = None
@@ -2724,7 +2737,7 @@ def browse_low_margin_prices(request):
             'error': error,
             'hint': hint,
             'api_url': api_url,
-            'page_size': 20,
+            'page_size': 50,
             'scroll_max': (report or {}).get('meta', {}).get('scroll_max', 2000) if report else 2000,
         },
     )
@@ -2750,7 +2763,7 @@ def browse_low_margin_prices_api(request):
         max_profit = float(max_prft_raw or 15)
         lev_no = int(lev_raw or 1)
         offset = max(0, int(request.GET.get('offset') or 0))
-        limit = min(max(1, int(request.GET.get('limit') or 20)), 50)
+        limit = min(max(1, int(request.GET.get('limit') or 50)), 100)
     except (TypeError, ValueError):
         return JsonResponse({'ok': False, 'error': 'معاملات غير صحيحة.'}, status=400)
 
@@ -2768,6 +2781,7 @@ def browse_low_margin_prices_api(request):
 
     rows: list = []
     has_more = False
+    total_matching = 0
     try:
         from .oracle_low_margin_prices import fetch_low_margin_priced_items
         from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
@@ -2819,6 +2833,10 @@ def browse_low_margin_prices_api(request):
             for r in rows:
                 r['wh_name'] = wh_name_map.get(str(r.get('wh_code') or '').strip()) or '—'
             has_more = bool((report.get('kpis') or {}).get('has_more'))
+            try:
+                total_matching = int((report.get('kpis') or {}).get('total_matching') or 0)
+            except (TypeError, ValueError):
+                total_matching = 0
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_low_margin_prices_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
@@ -2830,6 +2848,7 @@ def browse_low_margin_prices_api(request):
             'offset': offset,
             'limit': limit,
             'has_more': has_more,
+            'total': total_matching,
         }
     )
 

@@ -245,7 +245,27 @@ def _merge_group_total_parts(parts: list, *, by_branch: bool) -> list[dict]:
     return out
 
 
+def _is_call_timeout(exc: BaseException) -> bool:
+    """مهلة تنفيذ الاستعلام (أوراكل متصل لكن الاستعلام طال)."""
+    text = str(exc or "")
+    upper = text.upper()
+    if any(
+        token in upper
+        for token in (
+            "DPY-4011",
+            "CALL TIMEOUT",
+            "CALL TIMED OUT",
+            "DPI-1067",
+        )
+    ):
+        return True
+    return "انتهت مهلة جلب البيانات من أوراكل" in text
+
+
 def _is_connect_timeout(exc: BaseException) -> bool:
+    """فشل إنشاء الاتصال / الشبكة — ليس مهلة استعلام."""
+    if _is_call_timeout(exc):
+        return False
     text = str(exc or "")
     upper = text.upper()
     if any(
@@ -257,12 +277,10 @@ def _is_connect_timeout(exc: BaseException) -> bool:
             "ORA-12535",
             "ORA-12547",
             "DPY-6005",
-            "DPY-4011",
-            "TIMEOUT",
-            "TIMED OUT",
             "CANNOT CONNECT",
             "CONNECTION REFUSED",
-            "NETWORK",
+            "NO LISTENER",
+            "OUTBOUND CONNECT TIMEOUT",
         )
     ):
         return True
@@ -271,7 +289,6 @@ def _is_connect_timeout(exc: BaseException) -> bool:
         token in text
         for token in (
             "مهلة الشبكة",
-            "انتهت مهلة",
             "تعذّر الاتصال بأوراكل",
             "تعذر الاتصال بأوراكل",
         )
@@ -304,6 +321,11 @@ def _is_disconnect_error(exc: BaseException) -> bool:
 def _friendly_connect_error(exc: BaseException) -> str:
     if _is_disconnect_error(exc):
         return "انقطع الاتصال بأوراكل مؤقتاً. أعد المحاولة بعد لحظات."
+    if _is_call_timeout(exc):
+        return (
+            "انتهت مهلة جلب البيانات من أوراكل. "
+            "ضيّق الفلتر (مخزن/صنف) أو أعد المحاولة بعد لحظات."
+        )
     if _is_connect_timeout(exc):
         return (
             "تعذّر الاتصال بأوراكل (انتهت مهلة الشبكة). "
@@ -741,12 +763,58 @@ def _date_params(date_from, date_to) -> dict[str, date]:
     return {"d_from": d_from, "d_to_excl": d_to_excl}
 
 
+def _norm_brn_code(value: Any) -> str:
+    """توحيد رقم الفرع: 7 و 7.0 و'٧' → '7' حتى تطابق POS مع S_BRN."""
+    if value is None or value == "":
+        return ""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value != value:  # NaN
+            return ""
+        try:
+            if value == int(value):
+                return str(int(value))
+        except (OverflowError, ValueError):
+            pass
+        return str(value).strip()
+    try:
+        from decimal import Decimal
+
+        if isinstance(value, Decimal):
+            if value == value.to_integral_value():
+                return str(int(value))
+            return format(value, "f").rstrip("0").rstrip(".") or "0"
+    except Exception:
+        pass
+    text = str(value).strip()
+    if not text:
+        return ""
+    text = text.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+    if text.endswith(".0") and text[:-2].lstrip("-").isdigit():
+        text = text[:-2]
+    if text.lstrip("-").isdigit():
+        try:
+            return str(int(text))
+        except ValueError:
+            return text
+    try:
+        num = float(text)
+        if num == int(num):
+            return str(int(num))
+    except (TypeError, ValueError):
+        pass
+    return text
+
+
 def _bind_brn(branch_code: str):
     """يربط رقم الفرع كرقم إن أمكن — أفضل لاستخدام فهرس BRN_NO."""
-    s = str(branch_code or "").strip()
+    s = _norm_brn_code(branch_code)
     if not s:
         return s
-    if s.isdigit():
+    if s.lstrip("-").isdigit():
         try:
             return int(s)
         except ValueError:
@@ -898,7 +966,7 @@ def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
             dead = getattr(_tls, "conn", None)
             _tls.conn = None
             _drop_conn(dead)
-        if _is_connect_timeout(exc):
+        if _is_connect_timeout(exc) or _is_call_timeout(exc):
             raise OracleStockError(_friendly_connect_error(exc)) from exc
         raise
     finally:
@@ -1180,7 +1248,7 @@ def fetch_warehouse_options(*, active_only: bool = True) -> list[dict]:
     """قائمة المخازن من WAREHOUSE_DETAILS مع فرع الربط."""
     if not oracle_enabled():
         return []
-    cache_key = f"inv:wh_options:v1:{int(active_only)}"
+    cache_key = f"inv:wh_options:v2:{int(active_only)}"
     hit, cached = _django_lookup_get(cache_key)
     if hit:
         return cached
@@ -1210,7 +1278,7 @@ def fetch_warehouse_options(*, active_only: bool = True) -> list[dict]:
         code = str(row.get("W_CODE") or "").strip()
         if not code:
             continue
-        brn = str(row.get("BRANCH_CODE") or "").strip()
+        brn = _norm_brn_code(row.get("BRANCH_CODE"))
         name = str(row.get("W_NAME") or row.get("W_E_NAME") or "").strip() or code
         out.append(
             {
@@ -3060,7 +3128,7 @@ def fetch_item_compare_from_oracle(
 
 def _branch_names() -> dict[str, str]:
     """أسماء الفروع من S_BRN مفهرسة برقم الفرع."""
-    hit, cached = _django_lookup_get("branch_names")
+    hit, cached = _django_lookup_get("branch_names:v2")
     if hit:
         return cached
     try:
@@ -3069,16 +3137,19 @@ def _branch_names() -> dict[str, str]:
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Branch names unavailable: %s", exc)
-        return _django_lookup_set("branch_names", {})
+        return _django_lookup_set("branch_names:v2", {})
     names: dict[str, str] = {}
     for row in rows:
-        code = str(row.get("BRN_NO") or "").strip()
+        code = _norm_brn_code(row.get("BRN_NO"))
         if not code:
             continue
         label = str(row.get("BRN_LNAME") or row.get("BRN_FNAME") or "").strip()
         label = label.lstrip("-").strip() or code
+        # اضغط المسافات المكررة: «فرع  الدمام» → «فرع الدمام»
+        while "  " in label:
+            label = label.replace("  ", " ")
         names[code] = label
-    return _django_lookup_set("branch_names", names)
+    return _django_lookup_set("branch_names:v2", names)
 
 
 # نقاط البيع من جدول POS الحقيقي؛ الآجل من فواتير المبيعات العامة.
@@ -3156,8 +3227,16 @@ def _assemble_branch_rows(sales_rows, returns_by_brn) -> list[dict]:
     names = _branch_names()
     out: list[dict] = []
     for row in sales_rows:
-        code = str(row.get("BRANCH_CODE") or "").strip()
+        code = _norm_brn_code(row.get("BRANCH_CODE"))
+        if not code:
+            continue
         ret_count, ret_net, ret_vat = returns_by_brn.get(code, (0, 0.0, 0.0))
+        if code not in returns_by_brn:
+            # توافق مفاتيح قديمة غير موحّدة (7.0 / مسافات)
+            for rk, rv in returns_by_brn.items():
+                if _norm_brn_code(rk) == code:
+                    ret_count, ret_net, ret_vat = rv
+                    break
         sales_count = int(row.get("INVOICE_COUNT") or 0)
         gross_net = float(row.get("NET_TOTAL") or 0)
         gross_vat = float(row.get("VAT_TOTAL") or 0)
@@ -3197,7 +3276,7 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
     sales_rows = _fetch_all(
         f"""
         SELECT
-            TO_CHAR(p.BRN_NO) AS BRANCH_CODE,
+            p.BRN_NO AS BRANCH_CODE,
             COUNT(DISTINCT p.BILL_NO) AS INVOICE_COUNT,
             ROUND(SUM(NVL(p.BILL_AMT, 0)), 2) AS NET_TOTAL,
             ROUND(SUM(NVL(p.VAT_AMT, 0)), 2) AS VAT_TOTAL,
@@ -3206,7 +3285,7 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
         WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
           AND {hung}
           AND {amt_ok}
-        GROUP BY TO_CHAR(p.BRN_NO)
+        GROUP BY p.BRN_NO
         """,
         params,
     )
@@ -3219,7 +3298,7 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
         for row in _fetch_all(
             f"""
             SELECT
-                TO_CHAR(r.BRN_NO) AS BRANCH_CODE,
+                r.BRN_NO AS BRANCH_CODE,
                 COUNT(DISTINCT r.RT_BILL_NO) AS RET_COUNT,
                 ROUND(SUM(NVL(r.RT_BILL_AMT, 0)), 2) AS RET_NET,
                 ROUND(SUM(NVL(r.VAT_AMT, 0)), 2) AS RET_VAT
@@ -3227,11 +3306,13 @@ def _fetch_pos_branch_totals(date_from, date_to) -> list[dict]:
             WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
               AND {ret_hung}
               AND {ret_amt}
-            GROUP BY TO_CHAR(r.BRN_NO)
+            GROUP BY r.BRN_NO
             """,
             params,
         ):
-            code = str(row.get("BRANCH_CODE") or "").strip()
+            code = _norm_brn_code(row.get("BRANCH_CODE"))
+            if not code:
+                continue
             returns_by_brn[code] = (
                 int(row.get("RET_COUNT") or 0),
                 float(row.get("RET_NET") or 0),
@@ -3339,7 +3420,7 @@ def fetch_branch_sales_activity(
         raise OracleStockError("أوراكل غير مفعّل.")
     brn = str(branch_code or "").strip()
     cache_key = (
-        f"sales:branch_activity:v1:{_as_date(date_from).isoformat()}:"
+        f"sales:branch_activity:v2:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3356,7 +3437,7 @@ def fetch_branch_sales_activity(
     raw = _fetch_all(
         f"""
         SELECT
-            TO_CHAR(p.BRN_NO) AS BRANCH_CODE,
+            p.BRN_NO AS BRANCH_CODE,
             COUNT(DISTINCT p.BILL_NO) AS INVOICE_COUNT,
             ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS SALES_TOTAL,
             COUNT(DISTINCT TRUNC(p.BILL_DATE)) AS ACTIVE_DAYS,
@@ -3365,16 +3446,16 @@ def fetch_branch_sales_activity(
             MAX(TO_NUMBER(TO_CHAR(p.BILL_DATE, 'HH24'))) AS LAST_HOUR
         FROM {pos}.IAS_POS_BILL_MST p
         WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
-          AND NVL(p.HUNG, 0) = 0
+          AND {_hung_ok("p")}
           AND p.BRN_NO IS NOT NULL
           {branch_filter}
-        GROUP BY TO_CHAR(p.BRN_NO)
+        GROUP BY p.BRN_NO
         """,
         params,
     )
     out: list[dict] = []
     for row in raw:
-        code = str(row.get("BRANCH_CODE") or "").strip()
+        code = _norm_brn_code(row.get("BRANCH_CODE"))
         if not code:
             continue
         invoices = int(row.get("INVOICE_COUNT") or 0)

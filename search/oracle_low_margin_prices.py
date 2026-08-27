@@ -23,12 +23,13 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v12"
+_CACHE_VER = "v13"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 20
 _SCROLL_MAX = 2000
 _EXCEL_LIMIT = 100000
 _SINGLE_WH_LIMIT = 500000
+_SINGLE_WH_CAPS = (20, 40, 100, 200, 500, 2000, 5000, 10000, 50000, 100000, 500000)
 
 
 def _f(value: Any, nd: int = 2) -> float:
@@ -425,6 +426,10 @@ def fetch_low_margin_priced_items(
     brn = str(branch_code or "").strip()
     q = str(item_q or "").strip()
     single_wh = len(wh_list) == 1
+    if not wh_list and not brn:
+        raise OracleStockError(
+            "اختر مخزناً (أو فرعاً) قبل العرض — مسح كل الشركة يستهلك أوراكل."
+        )
 
     def _pack(
         all_rows: list[dict[str, Any]],
@@ -438,7 +443,19 @@ def fetch_low_margin_priced_items(
         truncated = bool(cap_used is not None and loaded_total >= cap_used)
         if single_wh and total_exact is not None:
             truncated = total_exact > loaded_total
-        scroll_max = total_matching if single_wh else min(total_matching, _SCROLL_MAX)
+        if single_wh:
+            scroll_max = (
+                total_matching
+                if total_exact is not None
+                else min(max(loaded_total, off + lim + _PAGE_SIZE), _SINGLE_WH_LIMIT)
+            )
+            if total_exact is not None:
+                has_more = off + len(page) < total_exact
+            else:
+                has_more = off + len(page) < loaded_total or truncated
+        else:
+            scroll_max = min(total_matching, _SCROLL_MAX)
+            has_more = off + len(page) < min(loaded_total, _SCROLL_MAX)
         return {
             "rows": page,
             "kpis": {
@@ -449,7 +466,7 @@ def fetch_low_margin_priced_items(
                 "limit": lim,
                 "offset": off,
                 "truncated": truncated,
-                "has_more": off + len(page) < loaded_total,
+                "has_more": has_more,
                 "single_warehouse": single_wh,
             },
             "meta": {
@@ -464,10 +481,11 @@ def fetch_low_margin_priced_items(
             },
         }
 
-    total_exact: int | None = None
-    if with_total:
+    def _maybe_count() -> int | None:
+        if not with_total or not (single_wh or brn):
+            return None
         try:
-            total_exact = count_low_margin_priced_items(
+            return count_low_margin_priced_items(
                 max_profit_pct=max_prft,
                 lev_no=lev,
                 warehouse_codes=wh_list,
@@ -476,25 +494,30 @@ def fetch_low_margin_priced_items(
                 branch_code=brn,
             )
         except Exception:  # noqa: BLE001
-            total_exact = None
+            return None
 
-    # مخزن واحد → كل النتائج بلا قطع (حتى _SINGLE_WH_LIMIT)
+    # مخزن واحد: توسعة تدريجية للكاش (لا 500 ألف دفعة أولى)
     if single_wh:
-        cap: int | None = _SINGLE_WH_LIMIT
-        bulk_key = (
-            _filter_key(
-                max_prft=max_prft,
-                lev=lev,
-                wh_list=wh_list,
-                q=q,
-                include_negative=include_negative,
-                branch_code=brn,
+        need_end = min(max(off + lim, _PAGE_SIZE), _SINGLE_WH_LIMIT)
+        if lim > _SCROLL_MAX:
+            need_end = min(max(lim, off + lim), _SINGLE_WH_LIMIT)
+        for try_cap in reversed(_SINGLE_WH_CAPS):
+            if try_cap < need_end:
+                continue
+            hit = cache.get(
+                _filter_key(
+                    max_prft=max_prft,
+                    lev=lev,
+                    wh_list=wh_list,
+                    q=q,
+                    include_negative=include_negative,
+                    branch_code=brn,
+                )
+                + f":bulk={try_cap}"
             )
-            + f":bulk={cap}"
-        )
-        hit = cache.get(bulk_key)
-        if isinstance(hit, list):
-            return _pack(hit, cap_used=cap, total_exact=total_exact)
+            if isinstance(hit, list):
+                return _pack(hit, cap_used=try_cap, total_exact=_maybe_count())
+        cap = next((c for c in _SINGLE_WH_CAPS if c >= need_end), _SINGLE_WH_LIMIT)
         all_rows = _load_capped_rows(
             max_prft=max_prft,
             lev=lev,
@@ -504,7 +527,7 @@ def fetch_low_margin_priced_items(
             cap=cap,
             branch_code=brn,
         )
-        return _pack(all_rows, cap_used=cap, total_exact=total_exact)
+        return _pack(all_rows, cap_used=cap, total_exact=_maybe_count())
 
     if lim > _SCROLL_MAX:
         cap = min(lim, _EXCEL_LIMIT)
@@ -526,7 +549,7 @@ def fetch_low_margin_priced_items(
                 + f":bulk={try_cap}"
             )
             if isinstance(hit, list):
-                return _pack(hit, cap_used=try_cap, total_exact=total_exact)
+                return _pack(hit, cap_used=try_cap, total_exact=_maybe_count())
         if need_end > 100:
             cap = _SCROLL_MAX
 
@@ -539,7 +562,7 @@ def fetch_low_margin_priced_items(
         cap=cap,
         branch_code=brn,
     )
-    return _pack(all_rows, cap_used=cap, total_exact=total_exact)
+    return _pack(all_rows, cap_used=cap, total_exact=_maybe_count())
 
 
 def build_low_margin_excel(

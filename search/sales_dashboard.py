@@ -76,6 +76,8 @@ def _is_pos_store_name(name: str) -> bool:
 
 def _pos_store_branches() -> dict[str, str]:
     """الدمام، حائل، سكاي، الربوة، الخميس، بريدة، المنصورة، الواحة."""
+    from .oracle_stock import _norm_brn_code
+
     names: dict[str, str] = {}
     try:
         from .oracle_stock import _branch_names
@@ -85,12 +87,13 @@ def _pos_store_branches() -> dict[str, str]:
         names = {}
     out: dict[str, str] = {}
     for code, name in names.items():
-        key = str(code or "").strip()
+        key = _norm_brn_code(code)
         if key and _is_pos_store_name(str(name or "")):
             out[key] = str(name).strip() or key
     for code in _POS_STORE_FALLBACK_CODES:
-        if code not in out:
-            out[code] = names.get(code) or code
+        key = _norm_brn_code(code)
+        if key and key not in out:
+            out[key] = names.get(key) or key
     return out
 
 
@@ -100,11 +103,23 @@ def _pad_pos_store_branches(
     selected: str = "",
 ) -> list[dict]:
     """أضف فروع نقاط البيع بلا حركة كصفوف صفرية — دون مخازن/إدارة."""
+    from .oracle_stock import _norm_brn_code
+
+    names = {
+        _norm_brn_code(code): str(name or code).strip() or _norm_brn_code(code)
+        for code, name in (stores or {}).items()
+        if _norm_brn_code(code)
+    }
     rows = list(pos_raw or [])
-    have = {str(r.get("branch_code") or "").strip() for r in rows}
+    # وحّد أكواد الصفوف القادمة من أوراكل واربط الاسم المعتمد
+    for row in rows:
+        code = _norm_brn_code(row.get("branch_code"))
+        row["branch_code"] = code
+        if code and code in names:
+            row["branch_name"] = names[code]
+    have = {_norm_brn_code(r.get("branch_code")) for r in rows}
     have.discard("")
-    names = dict(stores or {})
-    brn = str(selected or "").strip()
+    brn = _norm_brn_code(selected)
     if brn:
         if brn in names and brn not in have:
             rows.append(_empty_pos_branch_row(brn, names.get(brn) or brn))
@@ -116,12 +131,15 @@ def _pad_pos_store_branches(
 
 
 def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
+    from .oracle_stock import _norm_brn_code
+
     total_sales = round(sum(float(r.get("sales_total") or 0) for r in rows), 2)
     total_invoices = sum(int(r.get("invoice_count") or 0) for r in rows)
     total_returns = round(sum(float(r.get("return_total") or 0) for r in rows), 2)
     total_return_bills = sum(int(r.get("return_count") or 0) for r in rows)
     out: list[dict] = []
     for row in rows:
+        code = _norm_brn_code(row.get("branch_code"))
         sales = round(float(row.get("sales_total") or 0), 2)
         invoices = int(row.get("invoice_count") or 0)
         returns = round(float(row.get("return_total") or 0), 2)
@@ -136,12 +154,11 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
             and abs(sales) < 0.005
             and abs(returns) < 0.005
         )
+        label = str(row.get("branch_name") or code or "—").strip() or code or "—"
         out.append(
             {
-                "branch_code": str(row.get("branch_code") or "").strip(),
-                "branch_name": str(
-                    row.get("branch_name") or row.get("branch_code") or "—"
-                ).strip(),
+                "branch_code": code,
+                "branch_name": label,
                 "invoice_count": invoices,
                 "invoice_count_display": f"{invoices:,}",
                 "return_count": return_count,
@@ -313,13 +330,15 @@ def _empty_groups() -> dict[str, Any]:
 
 
 def _filter_branch_rows(rows: list[dict], branch_code: str) -> list[dict]:
-    brn = str(branch_code or "").strip()
+    from .oracle_stock import _norm_brn_code
+
+    brn = _norm_brn_code(branch_code)
     if not brn:
         return list(rows or [])
     return [
         r
         for r in (rows or [])
-        if str(r.get("branch_code") or "").strip() == brn
+        if _norm_brn_code(r.get("branch_code")) == brn
     ]
 
 
@@ -577,7 +596,7 @@ def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
     )
 
     key = (
-        f"sales:branches:v7:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:v8:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:"
         f"r{int(not _skip_mst_returns(date_from, date_to))}"
     )

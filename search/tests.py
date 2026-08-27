@@ -550,6 +550,40 @@ class PosSalesTableTests(TestCase):
         self.assertFalse(_is_pos_store_name('الإدارة العامة'))
         self.assertFalse(_is_pos_store_name('فرع الثلاجة'))
 
+    @patch(
+        'search.sales_dashboard._pos_store_branches',
+        return_value={'7': 'فرع الدمام', '6': 'سكاي مول'},
+    )
+    def test_dammam_sales_merge_float_branch_code(self, _stores):
+        """مبيعات الدمام لا تُفصل عن صف الأصفار عند BRN=7.0 من أوراكل."""
+        from datetime import date
+
+        from search.sales_dashboard import _assemble_sales_branches_dashboard
+
+        payload = _assemble_sales_branches_dashboard(
+            [
+                {
+                    'branch_code': '7.0',
+                    'branch_name': '7.0',
+                    'invoice_count': 40,
+                    'return_count': 1,
+                    'return_total': 50,
+                    'sales_total': 9000,
+                    'avg_basket': 225,
+                }
+            ],
+            [],
+            [],
+            date(2026, 8, 1),
+            date(2026, 8, 16),
+        )
+        by_code = {row['branch_code']: row for row in payload['pos']['branches']}
+        self.assertIn('7', by_code)
+        self.assertNotIn('7.0', by_code)
+        self.assertEqual(by_code['7']['branch_name'], 'فرع الدمام')
+        self.assertFalse(by_code['7']['no_sales'])
+        self.assertEqual(by_code['7']['sales_total'], 9000.0)
+
 
 class VendorQueryFilterTests(TestCase):
     def test_matches_name_and_code(self):

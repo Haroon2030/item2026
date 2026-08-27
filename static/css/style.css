@@ -15852,9 +15852,13 @@ a.sidebar-brand-lockup {
 }
 
 .low-margin-dash .low-margin-scroll {
-  /* أقل من 20 صف مرئي حتى يظهر شريط التمرير فوراً */
-  max-height: calc(2.2rem + (16 * 2.05rem) + 0.5rem);
-  overflow-y: auto;
+  max-height: min(70vh, 38rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #d5e0ee;
+  border-radius: 8px;
+  background: #fff;
+  scrollbar-gutter: stable;
 }
 
 .low-margin-dash .low-margin-scroll.table-wrap::after {
@@ -15865,7 +15869,7 @@ a.sidebar-brand-lockup {
 .low-margin-dash .low-margin-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 .low-margin-dash .low-margin-table {
