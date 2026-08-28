@@ -140,13 +140,13 @@
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M8 16V9M12 16V7M16 16v-5M20 16V8"/><path d="M3 19h18"/></svg>
               <span>تحليل المشتريات</span>
             </a>
-            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_low_margin_prices' %}is-active{% endif %}" href="{% url 'browse_low_margin_prices' %}" title="تحليل هامش الربح الإجمالي">
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_low_margin_prices' %}is-active{% endif %}" href="{% url 'browse_low_margin_prices' %}" title="حد الربح من تسعير الصنف">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V9M12 16V5M17 16v-3"/><path d="M4 5h16"/></svg>
-              <span>هامش الربح الإجمالي</span>
+              <span>حد ربح التسعير</span>
             </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_returns' %}is-active{% endif %}" href="{% url 'browse_purchase_returns' %}" title="مردود المشتريات الشهري">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h13"/><path d="M12 7l5 5-5 5"/><path d="M21 5v14"/></svg>
-              <span>مردود المشتريات الشهري</span>
+              <span>مردود المشتريات</span>
             </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_vendor_turnover' %}is-active{% endif %}" href="{% url 'browse_vendor_turnover' %}" title="دوران مخزون الموردين">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
