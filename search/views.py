@@ -4255,6 +4255,120 @@ def browse_warehouse_expense(request):
 @login_required
 @require_GET
 @never_cache
+def browse_wh_outgoing(request):
+    """تحويلات صادرة من مستودعات 401/3/90/902 مع حالة الاستلام."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    default_from = today - timedelta(days=30)
+    date_from_raw = request.GET.get('date_from') or default_from.isoformat()
+    date_to_raw = request.GET.get('date_to') or today.isoformat()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    status_raw = str(request.GET.get('status') or 'all').strip().lower()
+    if status_raw not in ('all', 'received', 'pending', 'late'):
+        status_raw = 'all'
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        'xls',
+        'excel',
+        'xlsx',
+    }
+
+    report = None
+    error = ''
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_wh_outgoing.html',
+            {
+                'date_from': (date_from_raw or '')[:10],
+                'date_to': (date_to_raw or '')[:10],
+                'default_from': default_from.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_warehouse': selected_warehouse,
+                'selected_group': selected_group,
+                'status': status_raw,
+                'branches': [],
+                'warehouses': [],
+                'groups': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_wh_outgoing import (
+            build_outgoing_transfers_excel,
+            build_outgoing_transfers_report,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض تحويلات المستودعات.'
+        else:
+            with oracle_session():
+                (
+                    selected_branch,
+                    selected_warehouse,
+                    _wh_name,
+                    branches,
+                    warehouses,
+                ) = _load_branch_warehouses(selected_branch, selected_warehouse)
+                groups = fetch_sales_group_options()
+                group_codes = {str(g.get('code') or '').strip() for g in groups}
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+                report = build_outgoing_transfers_report(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    warehouse_code=selected_warehouse,
+                    group_code=selected_group,
+                    status=status_raw,
+                )
+                if want_excel and report is not None:
+                    return build_outgoing_transfers_excel(report)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_wh_outgoing failed: %s', exc)
+        error = f'تعذّر تحميل تحويلات المستودعات: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_wh_outgoing.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': default_from.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'status': status_raw,
+            'branches': branches,
+            'warehouses': warehouses,
+            'groups': groups,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_sold_no_supply(request):
     """أصناف تُباع بلا مشتريات على الفرع ولا تحويل وارد إليه."""
     from datetime import date

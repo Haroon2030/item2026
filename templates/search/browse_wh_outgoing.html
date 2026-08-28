@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}حركة التحويلات — إدارة المستودعات{% endblock %}
+{% block page_class %}sales-dash wh-out-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="حركة التحويلات">
+  <div class="dash-head-copy">
+    <h2>حركة التحويلات</h2>
+    <p>التحويلات الصادرة من المستودعات 401 · 3 · 90 · 902 مع متابعة الاستلام</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="wh-out-kpi-grid" aria-label="ملخص التحويلات">
+    <article class="wh-out-kpi is-total">
+      <span class="wh-out-kpi-label">
+        <span class="wh-out-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/><path d="M17 11h4l-3 3 3 3h-4"/><path d="M7 13H3l3-3-3-3h4"/></svg>
+        </span>
+        إجمالي التحويلات
+      </span>
+      <strong class="wh-out-kpi-value mono">{{ report.kpis.total }}</strong>
+      <small class="wh-out-kpi-hint">{{ report.period_label }}</small>
+    </article>
+    <article class="wh-out-kpi is-ok">
+      <span class="wh-out-kpi-label">
+        <span class="wh-out-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5"/></svg>
+        </span>
+        مكتمل الاستلام
+      </span>
+      <strong class="wh-out-kpi-value mono">{{ report.kpis.received }}</strong>
+      <small class="wh-out-kpi-hint">تم إغلاق التحويل</small>
+    </article>
+    <article class="wh-out-kpi is-pending">
+      <span class="wh-out-kpi-label">
+        <span class="wh-out-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2.5"/></svg>
+        </span>
+        معلّق
+      </span>
+      <strong class="wh-out-kpi-value mono">{{ report.kpis.pending }}</strong>
+      <small class="wh-out-kpi-hint">ضمن مهلة 48 س</small>
+    </article>
+    <article class="wh-out-kpi is-late">
+      <span class="wh-out-kpi-label">
+        <span class="wh-out-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.1L2.2 18.1a2 2 0 001.7 3h16.2a2 2 0 001.7-3L13.7 4.1a2 2 0 00-3.4 0z"/></svg>
+        </span>
+        متأخر
+      </span>
+      <strong class="wh-out-kpi-value mono">{{ report.kpis.late }}</strong>
+      <small class="wh-out-kpi-hint">تجاوز مهلة الاستلام</small>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_wh_outgoing' %}" class="income-filter-bar wh-out-filter" role="search" aria-label="فلاتر التحويلات">
+  <div class="income-filter-bar-main wh-out-filter-main">
+    <div class="income-filter-period" role="group" aria-label="الفترة">
+      <span class="income-filter-period-label">الفترة</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="wh-out-from">من</label>
+          <input id="wh-out-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">—</span>
+        <div class="income-filter-field">
+          <label for="wh-out-to">إلى</label>
+          <input id="wh-out-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+        </div>
+      </div>
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-out-branch">الفرع</label>
+      <select
+        id="wh-out-branch"
+        name="branch"
+        onchange="this.form.warehouse && (this.form.warehouse.value=''); this.form.submit()"
+      >
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-out-warehouse">المخزن</label>
+      <select
+        id="wh-out-warehouse"
+        name="warehouse"
+        {% if not selected_branch %}disabled{% endif %}
+        onchange="this.form.submit()"
+      >
+        {% if not selected_branch %}
+          <option value="">اختر الفرع أولاً</option>
+        {% else %}
+          <option value="">كل مخازن الفرع</option>
+          {% for w in warehouses %}
+            <option value="{{ w.code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+          {% empty %}
+            <option value="">لا توجد مخازن لهذا الفرع</option>
+          {% endfor %}
+        {% endif %}
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-out-group">المجموعة</label>
+      <select id="wh-out-group" name="group">
+        <option value="">كل المجموعات</option>
+        {% for g in groups %}
+          <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="wh-out-status">حالة الاستلام</label>
+      <select id="wh-out-status" name="status">
+        <option value="all" {% if status == 'all' %}selected{% endif %}>جميع الحالات</option>
+        <option value="received" {% if status == 'received' %}selected{% endif %}>مكتمل الاستلام</option>
+        <option value="pending" {% if status == 'pending' %}selected{% endif %}>معلق — بانتظار الاستلام</option>
+        <option value="late" {% if status == 'late' %}selected{% endif %}>متأخر — تجاوز 48 س</option>
+      </select>
+    </div>
+  </div>
+  <div class="wh-out-actions">
+    <button type="submit" class="btn-primary income-filter-submit">عرض</button>
+  </div>
+</form>
+
+{% if report %}
+  <section class="wh-out-sheet" aria-label="جدول التحويلات">
+    <div class="wh-out-sheet-head">
+      <div class="wh-out-sheet-title">
+        <h3>سجل التحويلات الصادرة</h3>
+        <span class="wh-out-sheet-count">{{ report.kpis.shown }} تحويل</span>
+      </div>
+      <div class="wh-out-sheet-actions">
+        <a class="btn-ghost wh-out-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير إلى Excel">Excel</a>
+        <button type="button" class="btn-ghost wh-out-pdf-btn" onclick="window.print()" title="طباعة PDF">PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap wh-out-scroll" tabindex="0" aria-label="جدول التحويلات — اسحب أفقياً وعمودياً">
+      <table class="wh-out-table" aria-label="تحويلات المستودعات الصادرة">
+        <colgroup>
+          <col class="col-status">
+          <col class="col-no">
+          <col class="col-name">
+          <col class="col-branch">
+          <col class="col-delay">
+          <col class="col-src-wh">
+          <col class="col-dst-wh">
+          <col class="col-created">
+          <col class="col-qty">
+          <col class="col-items">
+          <col class="col-group">
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">هل تم الاستلام</th>
+            <th scope="col">رقم التحويل</th>
+            <th scope="col">بيان التحويل</th>
+            <th scope="col">فرع المحول له</th>
+            <th scope="col">تأخير استلام</th>
+            <th scope="col">المخزن المحول منه</th>
+            <th scope="col">المخزن المحول له</th>
+            <th scope="col">تاريخ الإنشاء</th>
+            <th scope="col">الكمية</th>
+            <th scope="col">عدد الأصناف</th>
+            <th scope="col">المجموعة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr class="wh-out-row is-{{ row.status_kind }}">
+              <td class="wh-out-td-status is-{{ row.status_kind }}">{{ row.status_label }}</td>
+              <td class="mono wh-out-td-no">{{ row.tr_no }}</td>
+              <td class="wh-out-td-name">{{ row.tr_name }}</td>
+              <td class="wh-out-td-branch">{{ row.branch_label }}</td>
+              <td class="mono wh-out-td-delay {% if row.days > 2 %}is-late{% elif row.received %}is-ok{% endif %}">{{ row.days }}</td>
+              <td class="wh-out-td-src-wh">{{ row.src_wh_label }}</td>
+              <td class="wh-out-td-dst-wh">{{ row.dst_wh_label }}</td>
+              <td class="mono wh-out-td-created">{{ row.create_label }}</td>
+              <td class="mono wh-out-td-qty">{{ row.qty_display }}</td>
+              <td class="mono wh-out-td-items">{{ row.item_count }}</td>
+              <td class="wh-out-td-group">{{ row.group_label }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="11" class="wh-out-empty">لا توجد تحويلات ضمن الفلاتر المحددة.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if report %}
+<script src="/static/js/wh-out-scroll.js?v={{ app_client_version }}" defer></script>
+{% endif %}
+{% endblock %}

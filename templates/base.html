@@ -228,6 +228,27 @@
             </a>
           </div>
         </div>
+        <div
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_wh_outgoing' %} is-open is-current{% endif %}"
+          data-sidebar-group
+        >
+          <button
+            type="button"
+            class="sidebar-link sidebar-group-toggle"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_wh_outgoing' %}true{% else %}false{% endif %}"
+            title="إدارة المستودعات"
+          >
+            <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-5 9 5v10H3z"/><path d="M9 22V12h6v10"/></svg>
+            <span>إدارة المستودعات</span>
+            <svg class="sidebar-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="sidebar-group-items" role="group" aria-label="إدارة المستودعات">
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_wh_outgoing' %}is-active{% endif %}" href="{% url 'browse_wh_outgoing' %}" title="حركة التحويلات">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z"/><path d="M17 11h4l-3 3 3 3h-4"/><path d="M7 13H3l3-3-3-3h4"/></svg>
+              <span>حركة التحويلات</span>
+            </a>
+          </div>
+        </div>
         {% if request.user.is_staff %}
           <div
             class="sidebar-group{% if request.resolver_match.url_name == 'user_list' or request.resolver_match.url_name == 'user_create' or request.resolver_match.url_name == 'user_edit' or request.resolver_match.url_name == 'user_delete' or request.resolver_match.url_name == 'user_activity' %} is-open is-current{% endif %}"

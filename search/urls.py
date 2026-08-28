@@ -112,6 +112,11 @@ urlpatterns = [
         views.browse_warehouse_expense,
         name='browse_warehouse_expense',
     ),
+    path(
+        'warehouses/transfers/',
+        views.browse_wh_outgoing,
+        name='browse_wh_outgoing',
+    ),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
     path('users/', user_views.user_list, name='user_list'),
     path('users/activity/', user_views.user_activity, name='user_activity'),
