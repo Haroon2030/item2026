@@ -15803,34 +15803,54 @@ a.sidebar-brand-lockup {
 }
 
 /* أسعار بنسبة ربح منخفضة */
+.low-margin-dash > main {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 .low-margin-dash .low-margin-filter {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  padding: 0.85rem 1rem;
-}
-
-.low-margin-dash .lm-filter-row {
   display: grid;
-  gap: 0.65rem 0.75rem;
-  align-items: end;
-}
-
-.low-margin-dash .lm-filter-row-main {
   grid-template-columns:
-    minmax(10rem, 1.35fr)
-    minmax(10rem, 1.35fr)
-    minmax(5.5rem, 0.65fr)
-    minmax(4.5rem, 0.55fr)
-    minmax(7rem, 0.85fr);
-}
-
-.low-margin-dash .lm-filter-row-actions {
-  grid-template-columns: minmax(12rem, 1fr) auto;
+    minmax(0, 1.35fr)
+    minmax(0, 1.35fr)
+    minmax(0, 5.5rem)
+    minmax(0, 4.5rem)
+    minmax(0, 7.5rem)
+    minmax(0, 1fr)
+    auto;
+  gap: 0.6rem 0.7rem;
+  align-items: end;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
 }
 
 .low-margin-dash .low-margin-filter .field {
+  display: grid;
+  gap: 0.18rem;
   min-width: 0;
+}
+
+.low-margin-dash .low-margin-filter label {
+  color: #294f78;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.low-margin-dash .low-margin-filter input,
+.low-margin-dash .low-margin-filter select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.2rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #c9d9eb;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #183d66;
+  font-size: 0.76rem;
 }
 
 .low-margin-dash .low-margin-filter .lm-req {
@@ -15844,25 +15864,25 @@ a.sidebar-brand-lockup {
   font-size: 0.85em;
 }
 
-.low-margin-dash .low-margin-filter .lm-actions-spacer {
-  visibility: hidden;
-  user-select: none;
+.low-margin-dash .low-margin-filter .lm-field-actions {
+  align-self: end;
 }
 
 .low-margin-dash .low-margin-filter .lm-field-actions .btn-primary {
   width: 100%;
+  min-width: 7.5rem;
+  min-height: 2.2rem;
   white-space: nowrap;
-  min-width: 8.5rem;
 }
 
 .low-margin-dash .low-margin-filter #lm-branch,
 .low-margin-dash .low-margin-filter #lm-wh {
-  max-width: 100%;
   text-overflow: ellipsis;
 }
 
-.low-margin-dash .low-margin-filter #lm-max {
-  max-width: 7rem;
+.low-margin-dash .low-margin-filter #lm-max,
+.low-margin-dash .low-margin-filter #lm-lev {
+  text-align: center;
 }
 
 .low-margin-dash .lm-kpi-grid {
@@ -16265,35 +16285,52 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   background: #f8fafc;
 }
 
-@media (max-width: 900px) {
-  .low-margin-dash .lm-kpi-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 1100px) {
-  .low-margin-dash .lm-filter-row-main {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .low-margin-dash .lm-filter-row-actions {
-    grid-template-columns: 1fr auto;
+@media (max-width: 1200px) {
+  .low-margin-dash .low-margin-filter {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .low-margin-dash .low-margin-filter .lm-field-branch,
   .low-margin-dash .low-margin-filter .lm-field-wh {
     grid-column: 1 / -1;
   }
+
+  .low-margin-dash .low-margin-filter .lm-field-q {
+    grid-column: 1 / span 2;
+  }
+
+  .low-margin-dash .low-margin-filter .lm-field-actions {
+    grid-column: 3;
+  }
 }
 
-@media (max-width: 640px) {
-  .low-margin-dash .lm-filter-row-main,
-  .low-margin-dash .lm-filter-row-actions {
+@media (max-width: 900px) {
+  .low-margin-dash .lm-kpi-grid {
     grid-template-columns: 1fr;
   }
 
-  .low-margin-dash .low-margin-filter #lm-max {
-    max-width: none;
+  .low-margin-dash .low-margin-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .low-margin-dash .low-margin-filter .lm-field-branch,
+  .low-margin-dash .low-margin-filter .lm-field-wh,
+  .low-margin-dash .low-margin-filter .lm-field-q,
+  .low-margin-dash .low-margin-filter .lm-field-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .low-margin-dash .low-margin-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .low-margin-dash .low-margin-filter .lm-field-branch,
+  .low-margin-dash .low-margin-filter .lm-field-wh,
+  .low-margin-dash .low-margin-filter .lm-field-q,
+  .low-margin-dash .low-margin-filter .lm-field-actions {
+    grid-column: auto;
   }
 }
 

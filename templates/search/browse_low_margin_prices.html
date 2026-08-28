@@ -74,59 +74,54 @@
   </section>
 {% endif %}
 
-<form method="get" action="{% url 'browse_low_margin_prices' %}" class="purchase-filter dash-panel-glass low-margin-filter" role="search" aria-label="فلاتر الأسعار منخفضة الربح" id="lm-filter-form">
+<form method="get" action="{% url 'browse_low_margin_prices' %}" class="dash-panel-glass low-margin-filter" role="search" aria-label="فلاتر الأسعار منخفضة الربح" id="lm-filter-form">
   <input type="hidden" name="run" value="1">
 
-  <div class="lm-filter-row lm-filter-row-main">
-    <div class="field lm-field-branch">
-      <label for="lm-branch">الفرع</label>
-      <select id="lm-branch" name="branch">
-        <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
-        {% for b in branches %}
-          <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="field lm-field-wh">
-      <label for="lm-wh">المخزن</label>
-      <select id="lm-wh" name="warehouses">
-        <option value="">{% if selected_branch %}كل مخازن الفرع{% else %}كل المخازن{% endif %}</option>
-        {% for w in branch_warehouses %}
-          <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="field lm-field-max">
-      <label for="lm-max">حد الربح % <span class="lm-req" aria-hidden="true">*</span></label>
-      <input id="lm-max" type="number" step="0.01" min="0" name="max_profit" value="{{ max_profit_input }}" placeholder="15" required inputmode="decimal" aria-required="true">
-    </div>
-
-    <div class="field lm-field-lev">
-      <label for="lm-lev">المستوى</label>
-      <input id="lm-lev" type="number" step="1" min="1" name="lev" value="{{ lev_no }}">
-    </div>
-
-    <div class="field lm-field-neg">
-      <label for="lm-neg">الخسارة</label>
-      <select id="lm-neg" name="include_neg">
-        <option value="1" {% if include_negative %}selected{% endif %}>تشمل السالب</option>
-        <option value="0" {% if not include_negative %}selected{% endif %}>أكبر من 0 فقط</option>
-      </select>
-    </div>
+  <div class="field lm-field-branch">
+    <label for="lm-branch">الفرع</label>
+    <select id="lm-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
   </div>
 
-  <div class="lm-filter-row lm-filter-row-actions">
-    <div class="field lm-field-q">
-      <label for="lm-q">صنف <span class="lm-opt">(اختياري)</span></label>
-      <input id="lm-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
-    </div>
+  <div class="field lm-field-wh">
+    <label for="lm-wh">المخزن</label>
+    <select id="lm-wh" name="warehouses">
+      <option value="">{% if selected_branch %}كل مخازن الفرع{% else %}كل المخازن{% endif %}</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
 
-    <div class="field lm-field-actions">
-      <label class="lm-actions-spacer" aria-hidden="true">&nbsp;</label>
-      <button type="submit" class="btn-primary">عرض الأصناف</button>
-    </div>
+  <div class="field lm-field-max">
+    <label for="lm-max">حد الربح % <span class="lm-req" aria-hidden="true">*</span></label>
+    <input id="lm-max" type="number" step="0.01" min="0" name="max_profit" value="{{ max_profit_input }}" placeholder="15" required inputmode="decimal" aria-required="true">
+  </div>
+
+  <div class="field lm-field-lev">
+    <label for="lm-lev">المستوى</label>
+    <input id="lm-lev" type="number" step="1" min="1" name="lev" value="{{ lev_no }}">
+  </div>
+
+  <div class="field lm-field-neg">
+    <label for="lm-neg">الخسارة</label>
+    <select id="lm-neg" name="include_neg">
+      <option value="1" {% if include_negative %}selected{% endif %}>تشمل السالب</option>
+      <option value="0" {% if not include_negative %}selected{% endif %}>أكبر من 0 فقط</option>
+    </select>
+  </div>
+
+  <div class="field lm-field-q">
+    <label for="lm-q">صنف <span class="lm-opt">(اختياري)</span></label>
+    <input id="lm-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
+  </div>
+
+  <div class="field lm-field-actions">
+    <button type="submit" class="btn-primary">عرض الأصناف</button>
   </div>
 </form>
 
