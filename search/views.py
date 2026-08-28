@@ -157,6 +157,35 @@ def _warehouses_for_branch(warehouses: list[dict], branch_code: str) -> list[dic
     ]
 
 
+def _low_margin_branches(warehouses: list[dict]) -> list[dict]:
+    """فروع S_BRN التي لها مخازن نشطة — أسماء رسمية بدون تكرار."""
+    from .oracle_income import fetch_income_branches
+
+    wh_brn = {
+        str(w.get('branch_code') or '').strip()
+        for w in (warehouses or [])
+        if str(w.get('branch_code') or '').strip()
+    }
+    if not wh_brn:
+        return []
+    official = {b['code']: b['name'] for b in fetch_income_branches()}
+    out = [
+        {'code': code, 'name': official.get(code) or code}
+        for code in wh_brn
+    ]
+    out.sort(key=lambda row: (row['name'], row['code']))
+    return out
+
+
+def _low_margin_wh_name_map(warehouses: list[dict]) -> dict[str, str]:
+    return {
+        str(w.get('code') or '').strip(): str(w.get('name') or '').strip()
+        or str(w.get('code') or '').strip()
+        for w in (warehouses or [])
+        if str(w.get('code') or '').strip()
+    }
+
+
 def _parse_qty_loose(value) -> float | None:
     text = str(value or '').strip().replace(',', '')
     if not text or text in {'—', '-'}:
@@ -2519,7 +2548,6 @@ def browse_vendor_turnover(request):
 @never_cache
 def browse_low_margin_prices(request):
     """أصناف مسعّرة بنسبة ربح أقل من حد معيّن (افتراضي 15%)."""
-    from django.core.cache import cache
     from django.urls import reverse
 
     error = ''
@@ -2569,54 +2597,21 @@ def browse_low_margin_prices(request):
     warehouses: list[dict] = []
     wh_name_map: dict[str, str] = {}
 
-    def _branches_from_wh(wh_rows: list[dict]) -> list[dict]:
-        branch_map: dict[str, str] = {}
-        for w in wh_rows:
-            brn = str(w.get('branch_code') or '').strip()
-            if brn:
-                branch_map[brn] = str(w.get('branch_name') or brn)
-        return [
-            {'code': code, 'name': name}
-            for code, name in sorted(branch_map.items(), key=lambda x: (x[1], x[0]))
-        ]
-
-    def _apply_wh_rows(wh_rows: list[dict]) -> None:
-        nonlocal warehouses, branches, wh_name_map
-        warehouses = wh_rows
-        branches = _branches_from_wh(warehouses)
-        wh_name_map = {
-            str(w.get('code') or '').strip(): str(w.get('name') or '').strip()
-            or str(w.get('code') or '').strip()
-            for w in warehouses
-        }
-
-    # الكاش الفعلي تحت بادئة sales:lookup: (انظر _django_lookup_set)
-    cached_wh = cache.get('sales:lookup:inv:wh_options:v1:1')
-    if isinstance(cached_wh, list) and cached_wh:
-        _apply_wh_rows(cached_wh)
-    elif not branches:
-        # احتياطي: أسماء الفروع وحدها إن وُجدت
-        br_names = cache.get('sales:lookup:branch_names')
-        if isinstance(br_names, dict) and br_names:
-            branches = [
-                {'code': str(code), 'name': str(name or code)}
-                for code, name in sorted(
-                    br_names.items(), key=lambda x: (str(x[1] or ''), str(x[0]))
-                )
-                if str(code).strip()
-            ]
-
     try:
         from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن عرض الأسعار منخفضة الربح.'
-        elif submitted and not error:
+        else:
             with oracle_session():
-                if not warehouses:
-                    _apply_wh_rows(fetch_warehouse_options(active_only=True))
+                wh_rows = fetch_warehouse_options(active_only=True) or []
+            warehouses = wh_rows
+            wh_name_map = _low_margin_wh_name_map(warehouses)
+            branches = _low_margin_branches(warehouses)
 
-                wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+            if submitted and not error:
+                with oracle_session():
+                    wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
                 if selected_branch and selected_branch not in {
                     b['code'] for b in branches
                 }:
@@ -2686,10 +2681,10 @@ def browse_low_margin_prices(request):
                             wh_name_map.get(str(r.get('wh_code') or '').strip())
                             or '—'
                         )
-        else:
-            hint = 'اختر فرعاً ومخزناً، حدّد حد الربح % (افتراضي 15)، ثم اضغط عرض.'
-            if not branches:
+            elif not branches:
                 hint = 'قائمة الفروع غير متاحة حالياً — أعد المحاولة بعد اتصال أوراكل.'
+            else:
+                hint = 'اختر فرعاً ومخزناً، حدّد حد الربح % (افتراضي 15)، ثم اضغط عرض.'
     except ValidationError as exc:
         error = str(exc)
         report = None

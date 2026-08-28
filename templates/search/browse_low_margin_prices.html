@@ -82,7 +82,7 @@
     <select id="lm-branch" name="branch">
       <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
       {% for b in branches %}
-        <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        <option value="{{ b.code }}" title="{{ b.code }} — {{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
       {% endfor %}
     </select>
   </div>
