@@ -4,6 +4,8 @@
   var branchEl = document.getElementById('lm-branch');
   var whEl = document.getElementById('lm-wh');
   var dataEl = document.getElementById('lm-wh-data');
+  var formEl = document.getElementById('lm-filter-form');
+  var maxEl = document.getElementById('lm-max');
   if (!branchEl || !whEl || !dataEl) return;
 
   var allWh = [];
@@ -11,6 +13,30 @@
     allWh = JSON.parse(dataEl.textContent || '[]');
   } catch (e) {
     allWh = [];
+  }
+
+  function normalizeDecimalInput(el) {
+    if (!el) return;
+    var raw = String(el.value || '').trim().replace(/\u066C/g, ',').replace(/,/g, '.');
+    if (!raw) return;
+    var n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    if (Math.abs(n - Math.round(n)) < 1e-9) {
+      el.value = String(Math.round(n));
+    } else {
+      el.value = String(n);
+    }
+  }
+
+  if (formEl) {
+    formEl.addEventListener('submit', function () {
+      normalizeDecimalInput(maxEl);
+    });
+  }
+  if (maxEl) {
+    maxEl.addEventListener('blur', function () {
+      normalizeDecimalInput(maxEl);
+    });
   }
 
   function fillWarehouses(branchCode, selectedCode) {

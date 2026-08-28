@@ -10,19 +10,10 @@
 
   var api = table.getAttribute('data-api') || '';
   var total = parseInt(table.getAttribute('data-total') || '0', 10);
-  var pageSize = parseInt(table.getAttribute('data-page-size') || '50', 10);
-  var fullWh = table.getAttribute('data-full-wh') === '1';
-  var scrollMax = parseInt(table.getAttribute('data-scroll-max') || '0', 10);
-  if (fullWh) {
-    scrollMax = total > 0 ? total : 500000;
-  } else if (!scrollMax) {
-    scrollMax = 2000;
-  }
-
+  var pageSize = parseInt(table.getAttribute('data-page-size') || '200', 10);
   var loaded = tbody.querySelectorAll('tr').length;
   var loading = false;
-  /* لا تعتمد على total وحده — قد يساوي حجم الدفعة الأولى دون العد الحقيقي */
-  var finished = table.getAttribute('data-has-more') === '0';
+  var finished = table.getAttribute('data-has-more') !== '1';
 
   function esc(text) {
     var div = document.createElement('div');
@@ -40,16 +31,13 @@
 
   function buildRow(row, index) {
     var tr = document.createElement('tr');
-    var even = index % 2 === 0 ? ' is-even' : '';
-    tr.className = rowClass(row.profit_pct) + even;
+    tr.className = rowClass(row.profit_pct);
     tr.innerHTML =
       '<td class="mono lm-td-idx">' + index + '</td>' +
       '<td class="mono lm-td-code">' + esc(row.item_code) + '</td>' +
-      '<td class="lm-td-item"><span class="lm-item-name" title="' + esc(row.item_name) + '">' +
-        esc(row.item_name) + '</span></td>' +
+      '<td class="lm-td-item" title="' + esc(row.item_name) + '">' + esc(row.item_name) + '</td>' +
       '<td class="lm-td-unit">' + esc(row.unit) + '</td>' +
-      '<td class="lm-td-wh" title="' + esc(row.wh_name) + '"><strong class="mono">' +
-        esc(row.wh_code) + '</strong></td>' +
+      '<td class="mono lm-td-wh" title="' + esc(row.wh_name) + '">' + esc(row.wh_code) + '</td>' +
       '<td class="mono lm-td-cost">' + esc(row.avg_cost_display) + '</td>' +
       '<td class="mono lm-td-price">' + esc(row.price_display) + '</td>' +
       '<td class="mono lm-td-prft">' + esc(row.profit_pct_display) + '%</td>' +
@@ -59,9 +47,12 @@
     return tr;
   }
 
-  function setLoading(on) {
+  function setLoading(on, msg) {
     loading = on;
-    if (loader) loader.hidden = !on;
+    if (!loader) return;
+    loader.hidden = !on;
+    if (msg) loader.textContent = msg;
+    else if (on) loader.textContent = 'جاري تحميل المزيد…';
   }
 
   function finish() {
@@ -70,22 +61,22 @@
   }
 
   function nearBottom() {
-    return wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 140;
+    return wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 160;
   }
 
   function needsFill() {
-    /* املأ الإطار حتى يظهر شريط السحب أو تنتهي النتائج */
-    return wrap.scrollHeight <= wrap.clientHeight + 8;
+    return wrap.scrollHeight <= wrap.clientHeight + 12;
+  }
+
+  function canLoadMore() {
+    if (loading || finished || !api) return false;
+    if (total > 0 && loaded >= total) return false;
+    return true;
   }
 
   function loadMore() {
-    if (loading || finished || !api) return;
-    if (total > 0 && loaded >= total) {
-      finish();
-      return;
-    }
-    if (!fullWh && loaded >= scrollMax) {
-      finish();
+    if (!canLoadMore()) {
+      if (total > 0 && loaded >= total) finish();
       return;
     }
     setLoading(true);
@@ -99,10 +90,17 @@
       offset: String(loaded),
       limit: String(pageSize),
     });
-    fetch(api + '?' + params.toString(), { headers: { 'X-Requested-With': 'fetch' } })
-      .then(function (resp) { return resp.json(); })
+    fetch(api + '?' + params.toString(), {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'fetch', Accept: 'application/json' },
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
       .then(function (data) {
-        if (!data.ok || !data.rows || !data.rows.length) {
+        if (!data.ok) throw new Error(data.error || 'fetch failed');
+        if (!data.rows || !data.rows.length) {
           finish();
           return;
         }
@@ -111,41 +109,45 @@
           tbody.appendChild(buildRow(row, loaded));
         });
         if (countEl) countEl.textContent = String(loaded);
-        if (typeof data.total === 'number' && data.total > total) {
+        document.dispatchEvent(new Event('lm-rows-added'));
+        if (typeof data.total === 'number' && data.total > 0) {
           total = data.total;
           table.setAttribute('data-total', String(total));
         }
-        var more = data.has_more === true;
         if (total > 0 && loaded >= total) {
           finish();
           return;
         }
-        if (!more && data.rows.length < pageSize) {
+        if (data.has_more !== true && data.rows.length < pageSize) {
           finish();
           return;
         }
-        if (!more && !(fullWh && total > loaded)) {
-          finish();
-          return;
-        }
-        /* تابع التحميل إن الإطار لم يمتلئ بعد أو المستخدم قرب الأسفل */
-        if (needsFill() || nearBottom()) {
-          window.setTimeout(loadMore, 30);
+        if (needsFill()) {
+          window.setTimeout(loadMore, 20);
         }
       })
-      .catch(function () { finish(); })
-      .finally(function () { setLoading(false); });
+      .catch(function (err) {
+        setLoading(true, 'تعذّر التحميل — اسحب للأسفل للمحاولة');
+        finished = false;
+        console.warn('low-margin load failed', err);
+      })
+      .finally(function () {
+        if (!loader || loader.textContent.indexOf('تعذّر') !== 0) {
+          setLoading(false);
+        }
+      });
   }
 
   function onScroll() {
-    if (finished || loading) return;
+    if (!canLoadMore()) return;
     if (nearBottom()) loadMore();
   }
 
   wrap.addEventListener('scroll', onScroll, { passive: true });
 
-  /* ابدأ بملء الجدول حتى يظهر شريط السحب */
-  if (!finished && (needsFill() || loaded < pageSize)) {
-    loadMore();
+  if (!finished) {
+    if (needsFill() || loaded < pageSize) {
+      loadMore();
+    }
   }
 })();

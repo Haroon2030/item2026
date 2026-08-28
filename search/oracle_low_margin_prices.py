@@ -5,8 +5,10 @@
                   (وحدة الحد الأدنى) — حتى لو الكمية = 0
                   وإن عُدم يُستخدم متوسط بطاقة الصنف.
   صافي السعر = I_PRICE / (1 + VAT/100)
-    VAT من الصنف؛ إن VAT_TYPE خاضع و VAT_PER=0 يُفترض 15%.
   نسبة الربح = (صافي السعر − المتوسط × P_SIZE) / (المتوسط × P_SIZE) × 100
+
+وحدة العرض: صف واحد لكل صنف/مخزن/مستوى — الوحدة الرئيسية (MAIN_UNIT)
+  أو وحدة البيع (SALE_UNIT) أو وحدة المخزون، ثم أصغر P_SIZE.
 """
 
 from __future__ import annotations
@@ -23,13 +25,12 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v13"
+_CACHE_VER = "v18"
 _DEFAULT_VAT_PCT = 15.0
-_PAGE_SIZE = 20
-_SCROLL_MAX = 2000
+_PAGE_SIZE = 200
 _EXCEL_LIMIT = 100000
 _SINGLE_WH_LIMIT = 500000
-_SINGLE_WH_CAPS = (20, 40, 100, 200, 500, 2000, 5000, 10000, 50000, 100000, 500000)
+_SINGLE_WH_CAPS = (200, 500, 2000, 5000, 10000, 50000, 100000, 500000)
 
 
 def _f(value: Any, nd: int = 2) -> float:
@@ -174,8 +175,9 @@ def _inner_select_sql(
     vat_sql: str,
     net_price_sql: str,
 ) -> str:
+    """سعر الوحدة الرئيسية/البيع فقط — صف واحد لكل صنف."""
     return f"""
-        SELECT /*+ LEADING(p) USE_NL(m d w lv) INDEX(p INV_PRC_LEV_NO_INDX) */
+        SELECT /*+ LEADING(p) USE_NL(m d pu w lv) INDEX(p INV_PRC_LEV_NO_INDX) */
           p.I_CODE,
           m.I_NAME,
           p.ITM_UNT,
@@ -199,6 +201,31 @@ def _inner_select_sql(
         JOIN {schema}.IAS_ITM_DTL d
           ON d.I_CODE = p.I_CODE
          AND NVL(d.MAIN_UNIT, 0) = 1
+        JOIN (
+          SELECT I_CODE, ITM_UNT
+          FROM (
+            SELECT
+              ud.I_CODE,
+              ud.ITM_UNT,
+              ROW_NUMBER() OVER (
+                PARTITION BY ud.I_CODE
+                ORDER BY
+                  CASE
+                    WHEN NVL(ud.MAIN_UNIT, 0) = 1 THEN 0
+                    WHEN NVL(ud.SALE_UNIT, 0) = 1 THEN 1
+                    WHEN NVL(ud.STOCK_UNIT, 0) = 1 THEN 2
+                    ELSE 3
+                  END,
+                  NVL(ud.P_SIZE, 1) ASC,
+                  ud.ITM_UNT
+              ) AS RN
+            FROM {schema}.IAS_ITM_DTL ud
+            WHERE NVL(ud.P_SIZE, 0) > 0
+          )
+          WHERE RN = 1
+        ) pu
+          ON pu.I_CODE = p.I_CODE
+         AND pu.ITM_UNT = p.ITM_UNT
         LEFT JOIN {schema}.IAS_ITM_WCODE w
           ON w.I_CODE = p.I_CODE
          AND w.W_CODE = p.W_CODE
@@ -441,21 +468,13 @@ def fetch_low_margin_priced_items(
         loaded_total = len(all_rows)
         total_matching = total_exact if total_exact is not None else loaded_total
         truncated = bool(cap_used is not None and loaded_total >= cap_used)
-        if single_wh and total_exact is not None:
+        if total_exact is not None:
             truncated = total_exact > loaded_total
-        if single_wh:
-            scroll_max = (
-                total_matching
-                if total_exact is not None
-                else min(max(loaded_total, off + lim + _PAGE_SIZE), _SINGLE_WH_LIMIT)
-            )
-            if total_exact is not None:
-                has_more = off + len(page) < total_exact
-            else:
-                has_more = off + len(page) < loaded_total or truncated
+            has_more = off + len(page) < total_exact
+            scroll_max = total_exact
         else:
-            scroll_max = min(total_matching, _SCROLL_MAX)
-            has_more = off + len(page) < min(loaded_total, _SCROLL_MAX)
+            has_more = off + len(page) < loaded_total or truncated
+            scroll_max = min(max(loaded_total, off + lim + _PAGE_SIZE), _SINGLE_WH_LIMIT)
         return {
             "rows": page,
             "kpis": {
@@ -468,6 +487,7 @@ def fetch_low_margin_priced_items(
                 "truncated": truncated,
                 "has_more": has_more,
                 "single_warehouse": single_wh,
+                "full_scroll": True,
             },
             "meta": {
                 "warehouse_codes": wh_list,
@@ -482,7 +502,7 @@ def fetch_low_margin_priced_items(
         }
 
     def _maybe_count() -> int | None:
-        if not with_total or not (single_wh or brn):
+        if not with_total:
             return None
         try:
             return count_low_margin_priced_items(
@@ -496,62 +516,40 @@ def fetch_low_margin_priced_items(
         except Exception:  # noqa: BLE001
             return None
 
-    # مخزن واحد: توسعة تدريجية للكاش (لا 500 ألف دفعة أولى)
-    if single_wh:
-        need_end = min(max(off + lim, _PAGE_SIZE), _SINGLE_WH_LIMIT)
-        if lim > _SCROLL_MAX:
-            need_end = min(max(lim, off + lim), _SINGLE_WH_LIMIT)
-        for try_cap in reversed(_SINGLE_WH_CAPS):
-            if try_cap < need_end:
-                continue
-            hit = cache.get(
-                _filter_key(
-                    max_prft=max_prft,
-                    lev=lev,
-                    wh_list=wh_list,
-                    q=q,
-                    include_negative=include_negative,
-                    branch_code=brn,
-                )
-                + f":bulk={try_cap}"
-            )
-            if isinstance(hit, list):
-                return _pack(hit, cap_used=try_cap, total_exact=_maybe_count())
-        cap = next((c for c in _SINGLE_WH_CAPS if c >= need_end), _SINGLE_WH_LIMIT)
-        all_rows = _load_capped_rows(
+    total_exact = _maybe_count()
+    need_end = min(max(off + lim, _PAGE_SIZE), _SINGLE_WH_LIMIT)
+    if total_exact is not None:
+        need_end = min(max(need_end, off + lim), total_exact, _SINGLE_WH_LIMIT)
+    if lim >= _EXCEL_LIMIT:
+        need_end = min(_EXCEL_LIMIT, total_exact or _EXCEL_LIMIT)
+
+    bulk_prefix = (
+        _filter_key(
             max_prft=max_prft,
             lev=lev,
             wh_list=wh_list,
             q=q,
             include_negative=include_negative,
-            cap=cap,
             branch_code=brn,
         )
-        return _pack(all_rows, cap_used=cap, total_exact=_maybe_count())
+        + ":bulk="
+    )
 
-    if lim > _SCROLL_MAX:
-        cap = min(lim, _EXCEL_LIMIT)
+    for try_cap in reversed(_SINGLE_WH_CAPS):
+        if try_cap < need_end:
+            continue
+        hit = cache.get(bulk_prefix + str(try_cap))
+        if isinstance(hit, list) and len(hit) >= need_end:
+            return _pack(hit, cap_used=try_cap, total_exact=total_exact)
+
+    hit = cache.get(bulk_prefix + "all")
+    if isinstance(hit, list) and len(hit) >= need_end:
+        return _pack(hit, cap_used=None, total_exact=total_exact)
+
+    if total_exact is not None and total_exact <= need_end:
+        cap: int | None = None
     else:
-        need_end = min(max(off + lim, _PAGE_SIZE), _SCROLL_MAX)
-        cap = _SCROLL_MAX if need_end > 100 else max(need_end, _PAGE_SIZE)
-        for try_cap in (_SCROLL_MAX, 500, 200, 100, 40, 20):
-            if try_cap < need_end:
-                continue
-            hit = cache.get(
-                _filter_key(
-                    max_prft=max_prft,
-                    lev=lev,
-                    wh_list=wh_list,
-                    q=q,
-                    include_negative=include_negative,
-                    branch_code=brn,
-                )
-                + f":bulk={try_cap}"
-            )
-            if isinstance(hit, list):
-                return _pack(hit, cap_used=try_cap, total_exact=_maybe_count())
-        if need_end > 100:
-            cap = _SCROLL_MAX
+        cap = next((c for c in _SINGLE_WH_CAPS if c >= need_end), _SINGLE_WH_LIMIT)
 
     all_rows = _load_capped_rows(
         max_prft=max_prft,
@@ -562,7 +560,23 @@ def fetch_low_margin_priced_items(
         cap=cap,
         branch_code=brn,
     )
-    return _pack(all_rows, cap_used=cap, total_exact=_maybe_count())
+    return _pack(all_rows, cap_used=cap, total_exact=total_exact)
+
+
+def _xls_num(value: Any, *, css: str = "num", digits: int = 4) -> str:
+    """خلية Excel رقمية خام — بدون رموز أو فواصل."""
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return f'<td class="{css}"></td>'
+    return f'<td class="{css}">{n:.{digits}f}</td>'
+
+
+def _xls_text(value: Any, *, css: str = "txt") -> str:
+    """خلية Excel كنص — يحافظ على الأصفار البادئة في أكواد الأصناف."""
+    from django.utils.html import escape
+
+    return f'<td class="{css}">{escape(str(value or ""))}</td>'
 
 
 def build_low_margin_excel(
@@ -579,7 +593,6 @@ def build_low_margin_excel(
     import io
 
     from django.http import HttpResponse
-    from django.utils.html import escape
 
     report = fetch_low_margin_priced_items(
         max_profit_pct=max_profit_pct,
@@ -589,42 +602,65 @@ def build_low_margin_excel(
         limit=_EXCEL_LIMIT,
         offset=0,
         include_negative=include_negative,
-        with_total=False,
+        with_total=True,
         branch_code=branch_code,
     )
     names = wh_name_map or {}
+    kpis = report.get("kpis") or {}
     buf = io.StringIO()
     buf.write("\ufeff")
     buf.write(
         "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
         "xmlns:x=\"urn:schemas-microsoft-com:office:excel\" "
         "xmlns=\"http://www.w3.org/TR/REC-html40\">"
-        "<head><meta charset=\"utf-8\"></head><body>"
-        "<table border=\"1\">"
-        "<tr>"
+        "<head><meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>أسعار منخفضة</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>"
+        "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;vertical-align:middle;}"
+        "th{background:#d9e2f3;color:#1e293b;font-weight:700;}"
+        "td.txt{mso-number-format:'\\@';}"
+        "td.num{mso-number-format:'0\\.0000';text-align:left;}"
+        "td.pct{mso-number-format:'0\\.00';text-align:left;}"
+        "td.int{mso-number-format:'0';text-align:center;}"
+        "tr.even td{background:#f8fafc;}"
+        "caption{font-family:Tahoma,Arial;font-size:13px;font-weight:700;margin:8px 0;text-align:right;}"
+        ".sub{font-size:10px;color:#475569;font-weight:400;}"
+        "</style></head><body dir=\"rtl\">"
+    )
+    buf.write(
+        f"<table><caption>أسعار بنسبة ربح أقل من {max_profit_pct:g}%"
+        f"<br><span class=\"sub\">"
+        f"المستوى {int(lev_no or 1)} · "
+        f"{int(kpis.get('total_matching') or len(report.get('rows') or []))} صنف"
+        f"</span></caption>"
+        "<thead><tr>"
         "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
-        "<th>المخزن</th><th>متوسط التكلفة</th><th>السعر</th>"
+        "<th>المخزن</th><th>اسم المخزن</th><th>متوسط التكلفة</th><th>السعر</th>"
         "<th>نسبة الربح</th><th>العملة</th><th>المستوى</th><th>اسم المستوى</th>"
-        "</tr>"
+        "</tr></thead><tbody>"
     )
     for i, r in enumerate(report.get("rows") or [], start=1):
         wh = str(r.get("wh_code") or "")
-        buf.write(
-            "<tr>"
-            f"<td>{i}</td>"
-            f"<td>{escape(str(r.get('item_code') or ''))}</td>"
-            f"<td>{escape(str(r.get('item_name') or ''))}</td>"
-            f"<td>{escape(str(r.get('unit') or ''))}</td>"
-            f"<td>{escape(wh)} {escape(names.get(wh) or '')}</td>"
-            f"<td>{escape(str(r.get('avg_cost_display') or ''))}</td>"
-            f"<td>{escape(str(r.get('price_display') or ''))}</td>"
-            f"<td>{escape(str(r.get('profit_pct_display') or ''))}</td>"
-            f"<td>{escape(str(r.get('currency') or ''))}</td>"
-            f"<td>{escape(str(r.get('lev_no') or ''))}</td>"
-            f"<td>{escape(str(r.get('lev_name') or ''))}</td>"
-            "</tr>"
-        )
-    buf.write("</table></body></html>")
+        even = ' class="even"' if i % 2 == 0 else ""
+        buf.write(f"<tr{even}>")
+        buf.write(f'<td class="int">{i}</td>')
+        buf.write(_xls_text(r.get("item_code"), css="txt"))
+        buf.write(_xls_text(r.get("item_name"), css="txt"))
+        buf.write(_xls_text(r.get("unit"), css="txt"))
+        buf.write(_xls_text(wh, css="txt"))
+        buf.write(_xls_text(names.get(wh) or "", css="txt"))
+        buf.write(_xls_num(r.get("avg_cost"), css="num", digits=4))
+        buf.write(_xls_num(r.get("price"), css="num", digits=4))
+        buf.write(_xls_num(r.get("profit_pct"), css="pct", digits=2))
+        buf.write(_xls_text(r.get("currency"), css="txt"))
+        buf.write(f'<td class="int">{int(r.get("lev_no") or lev_no or 1)}</td>')
+        buf.write(_xls_text(r.get("lev_name"), css="txt"))
+        buf.write("</tr>")
+    buf.write("</tbody></table></body></html>")
     resp = HttpResponse(buf.getvalue(), content_type="application/vnd.ms-excel; charset=utf-8")
     resp["Content-Disposition"] = 'attachment; filename="low-margin-prices.xls"'
     return resp

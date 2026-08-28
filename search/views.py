@@ -167,6 +167,24 @@ def _parse_qty_loose(value) -> float | None:
         return None
 
 
+def _parse_decimal_param(raw: str, *, default: float | None = None) -> float:
+    """تحويل نص رقمي — يقبل الفاصلة العربية/الإنجليزية كنقطة عشرية."""
+    text = str(raw or '').strip().replace('،', ',').replace(',', '.')
+    if not text:
+        if default is None:
+            raise ValueError('empty')
+        return float(default)
+    return float(text)
+
+
+def _decimal_input_str(value: float) -> str:
+    """قيمة حقل إدخال — نقطة عشرية دائماً (متوافقة مع type=number)."""
+    n = float(value)
+    if abs(n - round(n)) < 1e-9:
+        return str(int(round(n)))
+    return f'{n:.4f}'.rstrip('0').rstrip('.')
+
+
 def _item_sales_turnover(
     sold_qty: float,
     stock_qty: float | None,
@@ -2511,7 +2529,7 @@ def browse_low_margin_prices(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()
-    max_prft_raw = str(request.GET.get('max_profit') or '15').strip()
+    max_prft_raw = str(request.GET.get('max_profit') or '').strip()
     lev_raw = str(request.GET.get('lev') or '1').strip()
     want_excel = str(request.GET.get('export') or '').strip().lower() in {
         '1',
@@ -2526,13 +2544,26 @@ def browse_low_margin_prices(request):
     )
     submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
 
-    try:
-        max_profit = float(max_prft_raw or 15)
-        lev_no = int(lev_raw or 1)
-    except ValueError:
-        error = 'قيم الحد / المستوى غير صحيحة.'
-        max_profit = 15.0
-        lev_no = 1
+    max_profit = 15.0
+    max_profit_input = _decimal_input_str(15.0)
+    lev_no = 1
+    if submitted and not max_prft_raw:
+        error = 'حد الربح % مطلوب — اكتب النسبة (الافتراضي 15).'
+    else:
+        try:
+            if max_prft_raw:
+                max_profit = _parse_decimal_param(max_prft_raw)
+                max_profit_input = _decimal_input_str(max_profit)
+            elif not submitted:
+                max_profit_input = _decimal_input_str(15.0)
+            lev_no = int(lev_raw or 1)
+            if max_profit < 0:
+                error = 'حد الربح يجب أن يكون صفراً أو أكثر.'
+        except ValueError:
+            error = 'قيم الحد / المستوى غير صحيحة — استخدم نقطة للكسور (مثل 15 أو 12.5).'
+            max_profit = 15.0
+            max_profit_input = _decimal_input_str(15.0)
+            lev_no = 1
 
     branches: list[dict] = []
     warehouses: list[dict] = []
@@ -2580,7 +2611,7 @@ def browse_low_margin_prices(request):
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن عرض الأسعار منخفضة الربح.'
-        elif submitted:
+        elif submitted and not error:
             with oracle_session():
                 if not warehouses:
                     _apply_wh_rows(fetch_warehouse_options(active_only=True))
@@ -2634,15 +2665,20 @@ def browse_low_margin_prices(request):
                 else:
                     from .oracle_low_margin_prices import fetch_low_margin_priced_items
 
+                    # مخزن واحد: جلب كل الأصناف دفعة واحدة (حتى 100 ألف)
+                    is_single_wh = bool(
+                        wh_codes_raw and ',' not in wh_codes_raw
+                    )
+                    fetch_limit = 100_000 if is_single_wh else 200
                     report = fetch_low_margin_priced_items(
                         max_profit_pct=max_profit,
                         lev_no=lev_no,
                         warehouse_codes=wh_codes_raw or None,
                         item_q=item_q,
-                        limit=50,
+                        limit=fetch_limit,
                         offset=0,
                         include_negative=include_negative,
-                        with_total=bool(wh_codes_raw and ',' not in wh_codes_raw),
+                        with_total=True,
                         branch_code=selected_branch if not wh_codes_raw else '',
                     )
                     for r in report.get('rows') or []:
@@ -2651,7 +2687,7 @@ def browse_low_margin_prices(request):
                             or '—'
                         )
         else:
-            hint = 'اختر فرعاً ثم مخزناً، حدّد نسبة الربح، ثم اضغط عرض.'
+            hint = 'اختر فرعاً ومخزناً، حدّد حد الربح % (افتراضي 15)، ثم اضغط عرض.'
             if not branches:
                 hint = 'قائمة الفروع غير متاحة حالياً — أعد المحاولة بعد اتصال أوراكل.'
     except ValidationError as exc:
@@ -2730,6 +2766,7 @@ def browse_low_margin_prices(request):
             'warehouses_raw': wh_codes_raw,
             'item_q': item_q,
             'max_profit': max_profit,
+            'max_profit_input': max_profit_input,
             'lev_no': lev_no,
             'limit': 20,
             'include_negative': include_negative,
@@ -2737,8 +2774,8 @@ def browse_low_margin_prices(request):
             'error': error,
             'hint': hint,
             'api_url': api_url,
-            'page_size': 50,
-            'scroll_max': (report or {}).get('meta', {}).get('scroll_max', 2000) if report else 2000,
+            'page_size': 200,
+            'scroll_max': (report or {}).get('meta', {}).get('scroll_max', 500000) if report else 500000,
         },
     )
 
@@ -2751,7 +2788,7 @@ def browse_low_margin_prices_api(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()
-    max_prft_raw = str(request.GET.get('max_profit') or '15').strip()
+    max_prft_raw = str(request.GET.get('max_profit') or '').strip()
     lev_raw = str(request.GET.get('lev') or '1').strip()
     include_negative = str(request.GET.get('include_neg') or '1').strip() not in (
         '0',
@@ -2759,25 +2796,16 @@ def browse_low_margin_prices_api(request):
         'no',
     )
 
+    if not max_prft_raw:
+        return JsonResponse({'ok': False, 'error': 'حد الربح % مطلوب.'}, status=400)
+
     try:
-        max_profit = float(max_prft_raw or 15)
+        max_profit = _parse_decimal_param(max_prft_raw)
         lev_no = int(lev_raw or 1)
         offset = max(0, int(request.GET.get('offset') or 0))
-        limit = min(max(1, int(request.GET.get('limit') or 50)), 100)
+        limit = min(max(1, int(request.GET.get('limit') or 200)), 500)
     except (TypeError, ValueError):
         return JsonResponse({'ok': False, 'error': 'معاملات غير صحيحة.'}, status=400)
-
-    if offset >= 2000 and not (wh_codes_raw and ',' not in wh_codes_raw):
-        return JsonResponse(
-            {
-                'ok': True,
-                'rows': [],
-                'offset': offset,
-                'limit': limit,
-                'has_more': False,
-                'done': True,
-            }
-        )
 
     rows: list = []
     has_more = False
@@ -2826,7 +2854,7 @@ def browse_low_margin_prices_api(request):
                 limit=limit,
                 offset=offset,
                 include_negative=include_negative,
-                with_total=bool(wh_codes_raw and ',' not in wh_codes_raw and offset == 0),
+                with_total=True,
                 branch_code=selected_branch if not wh_codes_raw else '',
             )
             rows = report.get('rows') or []

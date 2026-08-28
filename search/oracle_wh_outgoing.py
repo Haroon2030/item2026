@@ -24,7 +24,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 300
-_CACHE_VER = "v7"
+_CACHE_VER = "v8"
 _DEFAULT_SRC = ("401", "3", "90", "902")
 _LATE_DAYS = 2
 
@@ -121,20 +121,20 @@ def _status(received: bool, days: int) -> dict:
     if received:
         return {
             "received": True,
-            "label": "مكتمل الاستلام",
+            "label": "مكتمل",
             "kind": "ok",
             "delay_days": delay,
         }
     if days > _LATE_DAYS:
         return {
             "received": False,
-            "label": "متأخر — تجاوز 48 س",
+            "label": "متأخر",
             "kind": "late",
             "delay_days": delay,
         }
     return {
         "received": False,
-        "label": "معلق — بانتظار الاستلام",
+        "label": "معلق",
         "kind": "pending",
         "delay_days": 0,
     }
