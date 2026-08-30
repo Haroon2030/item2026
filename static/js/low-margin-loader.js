@@ -38,6 +38,7 @@
       '<td class="lm-td-item" title="' + esc(row.item_name) + '">' + esc(row.item_name) + '</td>' +
       '<td class="lm-td-unit">' + esc(row.unit) + '</td>' +
       '<td class="mono lm-td-wh" title="' + esc(row.wh_name) + '">' + esc(row.wh_code) + '</td>' +
+      '<td class="lm-td-group" title="' + esc(row.g_code) + '">' + esc(row.g_name) + '</td>' +
       '<td class="mono lm-td-cost">' + esc(row.avg_cost_display) + '</td>' +
       '<td class="mono lm-td-price">' + esc(row.price_display) + '</td>' +
       '<td class="mono lm-td-prft">' + esc(row.profit_pct_display) + '%</td>' +

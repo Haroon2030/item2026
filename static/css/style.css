@@ -16191,6 +16191,7 @@ a.sidebar-brand-lockup {
 .low-margin-dash .lm-table col.col-item { width: 14rem; }
 .low-margin-dash .lm-table col.col-unit { width: 3.5rem; }
 .low-margin-dash .lm-table col.col-wh { width: 3.5rem; }
+.low-margin-dash .lm-table col.col-group { width: 8rem; }
 .low-margin-dash .lm-table col.col-cost { width: 6rem; }
 .low-margin-dash .lm-table col.col-price { width: 5rem; }
 .low-margin-dash .lm-table col.col-prft { width: 5.5rem; }
@@ -16291,6 +16292,14 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   max-width: 14rem;
   color: #1e293b;
   font-weight: 600;
+}
+
+.low-margin-dash .lm-table .lm-td-group {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #334155;
 }
 
 .low-margin-dash .lm-table .lm-td-levn {

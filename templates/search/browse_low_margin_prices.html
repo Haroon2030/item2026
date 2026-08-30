@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="حد الربح من تسعير الصنف">
   <div class="dash-head-copy">
     <h2>حد الربح من تسعير الصنف</h2>
-    <p>أصناف برصيد كمية ومسعّرة بوحدة رئيسية أو وحدة بيع — اعرض ما ربح تسعيره أقل من الحد الذي تحدده (مثال: 15%)</p>
+    <p>أصناف برصيد كمية وحركة مخزون (شراء/تحويل/تسوية) ومسعّرة بوحدة رئيسية أو بيع — ما ربح تسعيره أقل من الحد (مثال: 15%). يُستثنى الافتتاحي فقط.</p>
   </div>
 </section>
 
@@ -37,7 +37,7 @@
         {% if report.kpis.truncated %}
           تجاوز حد العرض — صدّر Excel
         {% else %}
-          كمية &gt; 0 · تحت {{ max_profit_input }}%
+          كمية وحركة · تحت {{ max_profit_input }}%
         {% endif %}
       </small>
     </article>
@@ -173,6 +173,7 @@
           <col class="col-item">
           <col class="col-unit">
           <col class="col-wh">
+          <col class="col-group">
           <col class="col-cost">
           <col class="col-price">
           <col class="col-prft">
@@ -187,6 +188,7 @@
             <th class="lm-th-item">اسم الصنف</th>
             <th class="lm-th-unit">الوحدة</th>
             <th class="lm-th-wh">المخزن</th>
+            <th class="lm-th-group">المجموعة</th>
             <th class="lm-th-cost">متوسط التكلفة</th>
             <th class="lm-th-price">السعر</th>
             <th class="lm-th-prft">نسبة الربح</th>
@@ -203,6 +205,7 @@
               <td class="lm-td-item" title="{{ r.item_name }}">{{ r.item_name }}</td>
               <td class="lm-td-unit">{{ r.unit }}</td>
               <td class="mono lm-td-wh" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
+              <td class="lm-td-group" title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono lm-td-cost">{{ r.avg_cost_display }}</td>
               <td class="mono lm-td-price">{{ r.price_display }}</td>
               <td class="mono lm-td-prft">{{ r.profit_pct_display }}%</td>

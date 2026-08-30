@@ -9,7 +9,9 @@
 
 وحدة العرض: صف واحد لكل صنف/مخزن/مستوى — الوحدة الرئيسية (MAIN_UNIT)
   أو وحدة البيع (SALE_UNIT) أو وحدة المخزون، ثم أصغر P_SIZE.
-يُشترط رصيد كمية > 0 على الوحدة الرئيسية في نفس المخزن.
+يُشترط رصيد كمية > 0 على الوحدة الرئيسية في نفس المخزن،
+وحركة مخزون حقيقية (شراء / تحويل / تسوية كمية).
+يُستثنى الصنف الذي رصيده من افتتاحي فقط بلا تلك الحركات.
 """
 
 from __future__ import annotations
@@ -27,12 +29,56 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v20"
+_MOVED_CODES_TTL = 7200
+_CACHE_VER = "v22"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 200
 _EXCEL_LIMIT = 100000
 _SINGLE_WH_LIMIT = 500000
 _SINGLE_WH_CAPS = (200, 500, 2000, 5000, 10000, 50000, 100000, 500000)
+
+
+def _item_codes_with_stock_movement() -> frozenset[str]:
+    """أكواد أصناف لها حركة مخزون: شراء أو تحويل أو تسوية كمية.
+
+    لا يشمل افتتاح المخزون ولا مبيعات POS — لاستثناء «افتتاحي فقط».
+    """
+    ck = f"purch:stock_moved_codes:{_CACHE_VER}"
+    hit = cache.get(ck)
+    if hit is not None:
+        return frozenset(hit)
+
+    schema = _schema()
+    rows = _fetch_all(
+        f"""
+        SELECT I_CODE FROM (
+          SELECT DISTINCT I_CODE FROM {schema}.IAS_PI_BILL_DTL
+          UNION
+          SELECT DISTINCT I_CODE FROM {schema}.IAS_WHTRNS_DTL
+          UNION
+          SELECT DISTINCT d.I_CODE
+            FROM {schema}.STK_ADJUSTMENT_DET d
+            JOIN {schema}.STK_ADJUSTMENT m ON m.DOC_SER = d.DOC_SER
+           WHERE m.ADJUST_TYPE = 1
+        )
+        """,
+        {},
+    )
+    codes = [
+        str(r.get("I_CODE") or "").strip()
+        for r in rows
+        if str(r.get("I_CODE") or "").strip()
+    ]
+    cache.set(ck, codes, _MOVED_CODES_TTL)
+    return frozenset(codes)
+
+
+def _keep_moved_stock_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """يستبعد أصناف بلا حركة مخزون (افتتاحي فقط ونحوها)."""
+    if not rows:
+        return rows
+    moved = _item_codes_with_stock_movement()
+    return [r for r in rows if str(r.get("item_code") or "").strip() in moved]
 
 
 def _f(value: Any, nd: int = 2) -> float:
@@ -156,6 +202,8 @@ def _rows_from_oracle(rows: list[dict], lev: int) -> list[dict[str, Any]]:
                 "lev_no": int(r.get("LEV_NO") or lev),
                 "lev_name": str(r.get("LEV_A_NAME") or "").strip() or "—",
                 "wh_code": str(r.get("W_CODE") or "").strip(),
+                "g_code": str(r.get("G_CODE") or "").strip(),
+                "g_name": str(r.get("G_NAME") or "").strip() or "—",
                 "profit_pct": prft,
                 "profit_pct_display": f"{prft:g}",
                 "currency": str(r.get("A_CY") or "SAR").strip() or "SAR",
@@ -185,13 +233,15 @@ def _inner_select_sql(
 ) -> str:
     """سعر الوحدة الرئيسية/البيع فقط — صف واحد لكل صنف."""
     return f"""
-        SELECT /*+ LEADING(p) USE_NL(m d pu w lv) INDEX(p INV_PRC_LEV_NO_INDX) */
+        SELECT /*+ LEADING(p) USE_NL(m d pu w lv g) INDEX(p INV_PRC_LEV_NO_INDX) */
           p.I_CODE,
           m.I_NAME,
           p.ITM_UNT,
           p.LEV_NO,
           lv.LEV_A_NAME,
           p.W_CODE,
+          m.G_CODE,
+          NVL(NULLIF(TRIM(g.G_A_NAME), ''), NVL(TO_CHAR(m.G_CODE), '—')) AS G_NAME,
           ROUND(
             ({net_price_sql} - ({avg_sql}) * NVL(p.P_SIZE, 1))
             / NULLIF(({avg_sql}) * NVL(p.P_SIZE, 1), 0) * 100
@@ -241,6 +291,8 @@ def _inner_select_sql(
          AND w.AVL_QTY > 0
         LEFT JOIN {schema}.IAS_PRICING_LEVELS lv
           ON lv.LEV_NO = p.LEV_NO
+        LEFT JOIN {schema}.GROUP_DETAILS g
+          ON g.G_CODE = m.G_CODE
         WHERE p.LEV_NO = :lev
           AND p.I_PRICE > 0
           AND NVL(p.P_SIZE, 1) > 0
@@ -291,41 +343,19 @@ def count_low_margin_priced_items(
     if cached is not None:
         return int(cached)
 
-    schema = _schema()
-    params: dict[str, Any] = {
-        "max_prft": max_prft,
-        "lev": lev,
-        "dflt_vat": _DEFAULT_VAT_PCT,
-    }
-    wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql = _build_sql_parts(
-        schema,
-        wh_list=wh_list,
-        q=q,
-        include_negative=include_negative,
-        params=params,
-        branch_code=brn,
-        group_code=gcode,
+    # العدد بعد استثناء الافتتاحي فقط — نفس مسار الجلب المصفّى
+    total = len(
+        _load_capped_rows(
+            max_prft=max_prft,
+            lev=lev,
+            wh_list=wh_list,
+            q=q,
+            include_negative=include_negative,
+            cap=None,
+            branch_code=brn,
+            group_code=gcode,
+        )
     )
-    inner = _inner_select_sql(
-        schema,
-        wh_sql=wh_sql,
-        item_sql=item_sql,
-        avg_sql=avg_sql,
-        vat_sql=vat_sql,
-        net_price_sql=net_price_sql,
-    )
-    rows = _fetch_all(
-        f"""
-        SELECT COUNT(*) AS C
-        FROM (
-          {inner}
-        ) x
-        WHERE x.PRFT_PCT < :max_prft
-          {pos_only_sql}
-        """,
-        params,
-    )
-    total = int(rows[0].get("C") or 0) if rows else 0
     cache.set(ck, total, _CACHE_TTL)
     return total
 
@@ -341,25 +371,22 @@ def _load_capped_rows(
     branch_code: str = "",
     group_code: str = "",
 ) -> list[dict[str, Any]]:
-    """يجلب الصفوف المطابقة — بدون حد عند cap=None."""
+    """يجلب الصفوف المطابقة بعد استثناء الافتتاحي فقط — بدون حد عند cap=None."""
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
-    cap_key = "all" if cap is None else str(cap)
-    bulk_key = (
-        _filter_key(
-            max_prft=max_prft,
-            lev=lev,
-            wh_list=wh_list,
-            q=q,
-            include_negative=include_negative,
-            branch_code=brn,
-            group_code=gcode,
-        )
-        + f":bulk={cap_key}"
+    base_key = _filter_key(
+        max_prft=max_prft,
+        lev=lev,
+        wh_list=wh_list,
+        q=q,
+        include_negative=include_negative,
+        branch_code=brn,
+        group_code=gcode,
     )
-    cached = cache.get(bulk_key)
-    if isinstance(cached, list):
-        return cached
+    all_key = base_key + ":bulk=all"
+    hit_all = cache.get(all_key)
+    if isinstance(hit_all, list):
+        return hit_all if cap is None else hit_all[:cap]
 
     schema = _schema()
     params: dict[str, Any] = {
@@ -367,8 +394,6 @@ def _load_capped_rows(
         "lev": lev,
         "dflt_vat": _DEFAULT_VAT_PCT,
     }
-    if cap is not None:
-        params["cap"] = cap
     wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql = _build_sql_parts(
         schema,
         wh_list=wh_list,
@@ -386,43 +411,46 @@ def _load_capped_rows(
         vat_sql=vat_sql,
         net_price_sql=net_price_sql,
     )
-    row_limit = f"WHERE ROWNUM <= :cap" if cap is not None else ""
 
+    # جلب كامل ثم تصفية الحركة في بايثون — ثم تطبيق cap (لا ROWNUM قبل التصفية)
     rows = _fetch_all(
         f"""
-        SELECT * FROM (
-          SELECT
-            x.I_CODE,
-            x.I_NAME,
-            x.ITM_UNT,
-            x.LEV_NO,
-            x.LEV_A_NAME,
-            x.W_CODE,
-            x.PRFT_PCT,
-            x.I_PRICE,
-            x.NET_PRICE,
-            x.AVG_COST,
-            x.UNIT_COST,
-            x.P_SIZE,
-            x.VAT_PCT,
-            x.A_CY
-          FROM (
-            {inner}
-          ) x
-          WHERE x.PRFT_PCT < :max_prft
-            {pos_only_sql}
-          ORDER BY
-            CASE WHEN x.PRFT_PCT < 0 THEN 1 ELSE 0 END,
-            x.PRFT_PCT DESC,
-            x.I_CODE,
-            x.W_CODE
-        )
-        {row_limit}
+        SELECT
+          x.I_CODE,
+          x.I_NAME,
+          x.ITM_UNT,
+          x.LEV_NO,
+          x.LEV_A_NAME,
+          x.W_CODE,
+          x.G_CODE,
+          x.G_NAME,
+          x.PRFT_PCT,
+          x.I_PRICE,
+          x.NET_PRICE,
+          x.AVG_COST,
+          x.UNIT_COST,
+          x.P_SIZE,
+          x.VAT_PCT,
+          x.A_CY
+        FROM (
+          {inner}
+        ) x
+        WHERE x.PRFT_PCT < :max_prft
+          {pos_only_sql}
+        ORDER BY
+          CASE WHEN x.PRFT_PCT < 0 THEN 1 ELSE 0 END,
+          x.PRFT_PCT DESC,
+          x.I_CODE,
+          x.W_CODE
         """,
         params,
     )
-    out = _rows_from_oracle(rows, lev)
-    cache.set(bulk_key, out, _CACHE_TTL)
+    out = _keep_moved_stock_rows(_rows_from_oracle(rows, lev))
+    cache.set(all_key, out, _CACHE_TTL)
+    if cap is not None:
+        capped = out[:cap]
+        cache.set(base_key + f":bulk={cap}", capped, _CACHE_TTL)
+        return capped
     return out
 
 
@@ -664,7 +692,8 @@ def build_low_margin_excel(
         f"</span></caption>"
         "<thead><tr>"
         "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
-        "<th>المخزن</th><th>اسم المخزن</th><th>متوسط التكلفة</th><th>السعر</th>"
+        "<th>المخزن</th><th>اسم المخزن</th><th>المجموعة</th><th>كود المجموعة</th>"
+        "<th>متوسط التكلفة</th><th>السعر</th>"
         "<th>نسبة الربح</th><th>العملة</th><th>المستوى</th><th>اسم المستوى</th>"
         "</tr></thead><tbody>"
     )
@@ -678,6 +707,8 @@ def build_low_margin_excel(
         buf.write(_xls_text(r.get("unit"), css="txt"))
         buf.write(_xls_text(wh, css="txt"))
         buf.write(_xls_text(names.get(wh) or "", css="txt"))
+        buf.write(_xls_text(r.get("g_name"), css="txt"))
+        buf.write(_xls_text(r.get("g_code"), css="txt"))
         buf.write(_xls_num(r.get("avg_cost"), css="num", digits=4))
         buf.write(_xls_num(r.get("price"), css="num", digits=4))
         buf.write(_xls_num(r.get("profit_pct"), css="pct", digits=2))
