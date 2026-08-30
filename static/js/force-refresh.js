@@ -134,4 +134,24 @@
       }
     } catch (e) {}
   });
+
+  /** تحديث إجباري يدوي (مثل Ctrl+Shift+R) من زر الواجهة. */
+  window.appHardRefresh = function () {
+    try {
+      localStorage.removeItem(KEY);
+      sessionStorage.removeItem(HARD_DONE);
+      if (htmlVer) sessionStorage.removeItem(flagKey(htmlVer));
+    } catch (e) {}
+    reloadBusted("_hr", String(Date.now()));
+  };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var btn = document.getElementById("app-hard-refresh");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      btn.classList.add("is-spinning");
+      btn.disabled = true;
+      window.appHardRefresh();
+    });
+  });
 })();
