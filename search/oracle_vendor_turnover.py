@@ -110,10 +110,6 @@ def _money(value: Any) -> str:
     return f"{float(value or 0):,.2f}"
 
 
-def format_qty(value: Any) -> str:
-    return _qty(value)
-
-
 def _item_max_pack_map() -> dict[str, float]:
     """أكبر عبوة لكل صنف (الوحدة الكبيرة / الكرتون) من IAS_ITM_DTL."""
     cache_key = "vendor:turnover:maxpack:v2"

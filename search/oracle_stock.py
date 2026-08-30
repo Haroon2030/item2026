@@ -389,34 +389,8 @@ def oracle_enabled() -> bool:
 
 
 def _agent_dbg(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> dict:
-    """Debug-mode NDJSON (local file + returned for API→browser ingest)."""
-    import json
-    import time
-    from pathlib import Path
-
-    payload = {
-        "sessionId": "e1de1c",
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(time.time() * 1000),
-    }
-    # #region agent log
-    for p in (
-        Path(r"d:\مشاريعي 2026\item\debug-e1de1c.log"),
-        Path("/app/debug-e1de1c.log"),
-        Path("debug-e1de1c.log"),
-        Path("/tmp/debug-e1de1c.log"),
-    ):
-        try:
-            with p.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            break
-        except Exception:
-            continue
-    # #endregion
-    return payload
+    """توافق قديم — لا يكتب سجلات."""
+    return {}
 
 
 def _groups_sql_mode() -> str:
@@ -738,11 +712,6 @@ _LONG_RANGE_MIN_DAYS = 14
 
 def _use_fast_sales(date_from, date_to) -> bool:
     """سابقاً: تخطّي مرتجعات. أُلغي — المالك يحتاج أرقاماً صافية دائماً."""
-    return False
-
-
-def sales_fast_mode(date_from, date_to) -> bool:
-    """لا يتخطى المرتجعات؛ للتوافق فقط (دائماً False)."""
     return False
 
 
@@ -3408,97 +3377,6 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
         rows = _fetch_bill_branch_totals(date_from, date_to, conf)
     _sales_cache_set(cache_key, rows, date_from=date_from, date_to=date_to)
     return rows
-
-
-def fetch_branch_sales_activity(
-    date_from,
-    date_to,
-    branch_code: str = "",
-) -> list[dict]:
-    """نشاط الفروع من رأس فاتورة POS: ساعات البيع وأيام العمل.
-
-    يقيس الاستمرارية عبر متوسط الساعات النشطة يومياً (فترات HH24 فيها فواتير).
-    """
-    if not oracle_enabled():
-        raise OracleStockError("أوراكل غير مفعّل.")
-    brn = str(branch_code or "").strip()
-    cache_key = (
-        f"sales:branch_activity:v2:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}"
-    )
-    cached = _sales_cache_get(cache_key)
-    if cached is not None:
-        return cached
-
-    pos = _pos_owner()
-    params = _date_params(date_from, date_to)
-    branch_filter = ""
-    if brn:
-        params["brn"] = _bind_brn(brn)
-        branch_filter = "AND p.BRN_NO = :brn"
-    names = _branch_names()
-    raw = _fetch_all(
-        f"""
-        SELECT
-            p.BRN_NO AS BRANCH_CODE,
-            COUNT(DISTINCT p.BILL_NO) AS INVOICE_COUNT,
-            ROUND(SUM(NVL(p.BILL_AMT, 0) + NVL(p.VAT_AMT, 0)), 2) AS SALES_TOTAL,
-            COUNT(DISTINCT TRUNC(p.BILL_DATE)) AS ACTIVE_DAYS,
-            COUNT(DISTINCT TO_CHAR(p.BILL_DATE, 'YYYYMMDDHH24')) AS ACTIVE_SLOTS,
-            MIN(TO_NUMBER(TO_CHAR(p.BILL_DATE, 'HH24'))) AS FIRST_HOUR,
-            MAX(TO_NUMBER(TO_CHAR(p.BILL_DATE, 'HH24'))) AS LAST_HOUR
-        FROM {pos}.IAS_POS_BILL_MST p
-        WHERE p.BILL_DATE >= :d_from AND p.BILL_DATE < :d_to_excl
-          AND {_hung_ok("p")}
-          AND p.BRN_NO IS NOT NULL
-          {branch_filter}
-        GROUP BY p.BRN_NO
-        """,
-        params,
-    )
-    out: list[dict] = []
-    for row in raw:
-        code = _norm_brn_code(row.get("BRANCH_CODE"))
-        if not code:
-            continue
-        invoices = int(row.get("INVOICE_COUNT") or 0)
-        sales = round(float(row.get("SALES_TOTAL") or 0), 2)
-        days = max(1, int(row.get("ACTIVE_DAYS") or 0))
-        slots = int(row.get("ACTIVE_SLOTS") or 0)
-        first_h = int(row.get("FIRST_HOUR") or 0)
-        last_h = int(row.get("LAST_HOUR") or 0)
-        avg_hours = round(slots / days, 1) if days else 0.0
-        span_hours = max(0, last_h - first_h + 1)
-        # كثافة: فواتير لكل ساعة نشطة
-        density = round(invoices / slots, 1) if slots else 0.0
-        # درجة استمرارية نسبة ليوم عمل ~14 ساعة
-        continuity = round(min(100.0, avg_hours / 14.0 * 100.0), 1)
-        out.append(
-            {
-                "branch_code": code,
-                "branch_name": names.get(code) or code,
-                "invoice_count": invoices,
-                "sales_total": sales,
-                "active_days": days,
-                "active_slots": slots,
-                "avg_hours_per_day": avg_hours,
-                "span_hours": span_hours,
-                "first_hour": first_h,
-                "last_hour": last_h,
-                "invoices_per_hour": density,
-                "continuity_pct": continuity,
-            }
-        )
-    out.sort(
-        key=lambda r: (
-            -float(r.get("avg_hours_per_day") or 0),
-            -float(r.get("continuity_pct") or 0),
-            -int(r.get("invoice_count") or 0),
-            str(r.get("branch_name") or ""),
-        )
-    )
-    _sales_cache_set(cache_key, out, date_from=date_from, date_to=date_to)
-    return out
 
 
 def fetch_branch_return_totals(

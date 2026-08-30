@@ -66,6 +66,11 @@ urlpatterns = [
         views.browse_unpriced_items,
         name='browse_unpriced_items',
     ),
+    path(
+        'purchases/below-cost/',
+        views.browse_below_cost_prices,
+        name='browse_below_cost_prices',
+    ),
     path('sales/', views.browse_sales, name='browse_sales'),
     path(
         'sales/api/groups/',
@@ -81,11 +86,6 @@ urlpatterns = [
         'sales/api/top-items/',
         views.browse_sales_top_items_api,
         name='browse_sales_top_items_api',
-    ),
-    path(
-        'sales/api/branch-activity/',
-        views.browse_sales_branch_activity_api,
-        name='browse_sales_branch_activity_api',
     ),
     path(
         'sales/api/top-users/',

@@ -15893,11 +15893,12 @@ a.sidebar-brand-lockup {
 .low-margin-dash .low-margin-filter {
   display: grid;
   grid-template-columns:
-    minmax(0, 1.35fr)
-    minmax(0, 1.35fr)
-    minmax(0, 5.5rem)
-    minmax(0, 4.5rem)
-    minmax(0, 7.5rem)
+    minmax(0, 1.2fr)
+    minmax(0, 1.25fr)
+    minmax(0, 1.2fr)
+    minmax(0, 5.2rem)
+    minmax(0, 4.2rem)
+    minmax(0, 7rem)
     minmax(0, 1fr)
     auto;
   gap: 0.6rem 0.7rem;
@@ -16373,7 +16374,8 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   }
 
   .low-margin-dash .low-margin-filter .lm-field-branch,
-  .low-margin-dash .low-margin-filter .lm-field-wh {
+  .low-margin-dash .low-margin-filter .lm-field-wh,
+  .low-margin-dash .low-margin-filter .lm-field-group {
     grid-column: 1 / -1;
   }
 
@@ -16397,6 +16399,7 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 
   .low-margin-dash .low-margin-filter .lm-field-branch,
   .low-margin-dash .low-margin-filter .lm-field-wh,
+  .low-margin-dash .low-margin-filter .lm-field-group,
   .low-margin-dash .low-margin-filter .lm-field-q,
   .low-margin-dash .low-margin-filter .lm-field-actions {
     grid-column: 1 / -1;
@@ -16410,6 +16413,7 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 
   .low-margin-dash .low-margin-filter .lm-field-branch,
   .low-margin-dash .low-margin-filter .lm-field-wh,
+  .low-margin-dash .low-margin-filter .lm-field-group,
   .low-margin-dash .low-margin-filter .lm-field-q,
   .low-margin-dash .low-margin-filter .lm-field-actions {
     grid-column: auto;
@@ -16956,6 +16960,33 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   font-weight: 600;
 }
 
+.unpriced-dash .up-kpi-label:has(.up-kpi-ico) {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.unpriced-dash .up-kpi-ico {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.unpriced-dash .up-kpi-ico svg {
+  width: 0.92rem;
+  height: 0.92rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .unpriced-dash .up-kpi-value {
   font-size: 1.25rem;
   font-weight: 700;
@@ -17016,6 +17047,21 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   color: #64748b;
 }
 
+.unpriced-dash .up-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.unpriced-dash .up-excel-btn,
+.unpriced-dash .up-pdf-btn {
+  min-width: 4.2rem;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
 .unpriced-dash .up-scroll {
   max-height: min(70vh, 42rem);
   overflow: auto;
@@ -17047,6 +17093,11 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   background: #f8fafc;
 }
 
+.unpriced-dash .up-table td.up-unpriced-mark {
+  color: #b45309;
+  font-weight: 700;
+}
+
 @media (max-width: 1100px) {
   .unpriced-dash .unpriced-filter {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -17071,3 +17122,63 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
     grid-template-columns: 1fr;
   }
 }
+
+@media print {
+  .unpriced-dash .unpriced-filter,
+  .unpriced-dash .up-kpi-grid,
+  .unpriced-dash .alert,
+  .unpriced-dash .dash-head,
+  .unpriced-dash .up-sheet-actions,
+  .sidebar,
+  .sidebar-backdrop,
+  .sidebar-open,
+  .app-hard-refresh,
+  .topbar {
+    display: none !important;
+  }
+
+  .page.unpriced-dash > main {
+    padding: 0;
+  }
+
+  .unpriced-dash .up-sheet {
+    border: none;
+  }
+
+  .unpriced-dash .up-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .unpriced-dash .up-table thead th {
+    position: static !important;
+  }
+}
+
+/* تسعير أقل من التكلفة — تمييز الفرق */
+.below-cost-dash .up-table td.bc-unit-avg {
+  color: #9a3412;
+  font-weight: 700;
+  background: #fff7ed;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+
+.below-cost-dash .up-table td.bc-price {
+  color: #15803d;
+  font-weight: 700;
+  background: #f0fdf4;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+
+.below-cost-dash .up-table td.bc-gap {
+  color: #b91c1c;
+  font-weight: 700;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+

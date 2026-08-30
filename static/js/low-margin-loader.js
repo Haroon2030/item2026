@@ -83,6 +83,7 @@
     var params = new URLSearchParams({
       branch: table.getAttribute('data-branch') || '',
       warehouses: table.getAttribute('data-warehouses') || '',
+      group: table.getAttribute('data-group') || '',
       q: table.getAttribute('data-q') || '',
       max_profit: table.getAttribute('data-max-profit') || '15',
       lev: table.getAttribute('data-lev') || '1',

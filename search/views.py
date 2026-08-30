@@ -1845,14 +1845,6 @@ def browse_sales_top_items_api(request):
 @login_required
 @require_GET
 @never_cache
-def browse_sales_branch_activity_api(request):
-    """توافق: حوّل لأكثر المستخدمين مبيعاً."""
-    return browse_sales_top_users_api(request)
-
-
-@login_required
-@require_GET
-@never_cache
 def browse_sales_top_users_api(request):
     """تحميل لاحق لأكثر المستخدمين مبيعاً."""
     try:
@@ -2555,6 +2547,7 @@ def browse_low_margin_prices(request):
     report = None
 
     selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
     wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()
     max_prft_raw = str(request.GET.get('max_profit') or '').strip()
@@ -2595,19 +2588,31 @@ def browse_low_margin_prices(request):
 
     branches: list[dict] = []
     warehouses: list[dict] = []
+    groups: list[dict] = []
     wh_name_map: dict[str, str] = {}
 
     try:
-        from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن عرض الأسعار منخفضة الربح.'
         else:
             with oracle_session():
                 wh_rows = fetch_warehouse_options(active_only=True) or []
+                groups = fetch_sales_group_options() or []
             warehouses = wh_rows
             wh_name_map = _low_margin_wh_name_map(warehouses)
             branches = _low_margin_branches(warehouses)
+
+            if selected_group and selected_group not in {
+                str(g.get('code') or '') for g in groups
+            }:
+                selected_group = ''
 
             if submitted and not error:
                 with oracle_session():
@@ -2656,6 +2661,7 @@ def browse_low_margin_prices(request):
                         include_negative=include_negative,
                         wh_name_map=wh_name_map,
                         branch_code=selected_branch if not wh_codes_raw else '',
+                        group_code=selected_group,
                     )
                 else:
                     from .oracle_low_margin_prices import fetch_low_margin_priced_items
@@ -2675,6 +2681,7 @@ def browse_low_margin_prices(request):
                         include_negative=include_negative,
                         with_total=True,
                         branch_code=selected_branch if not wh_codes_raw else '',
+                        group_code=selected_group,
                     )
                     for r in report.get('rows') or []:
                         r['wh_name'] = (
@@ -2684,7 +2691,10 @@ def browse_low_margin_prices(request):
             elif not branches:
                 hint = 'قائمة الفروع غير متاحة حالياً — أعد المحاولة بعد اتصال أوراكل.'
             else:
-                hint = 'اختر فرعاً ومخزناً، حدّد حد الربح % (افتراضي 15)، ثم اضغط عرض.'
+                hint = (
+                    'اختر فرعاً ومخزناً والمجموعة اختيارياً، '
+                    'حدّد حد الربح % (افتراضي 15)، ثم اضغط عرض.'
+                )
     except ValidationError as exc:
         error = str(exc)
         report = None
@@ -2754,6 +2764,8 @@ def browse_low_margin_prices(request):
         {
             'branches': branches,
             'selected_branch': selected_branch,
+            'groups': groups,
+            'selected_group': selected_group,
             'warehouses': warehouses,
             'all_warehouses': all_warehouses,
             'branch_warehouses': branch_warehouses,
@@ -2781,6 +2793,7 @@ def browse_low_margin_prices(request):
 def browse_low_margin_prices_api(request):
     """صفحة إضافية من الأصناف منخفضة الربح (تمرير لا نهائي)."""
     selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
     wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()
     max_prft_raw = str(request.GET.get('max_profit') or '').strip()
@@ -2851,6 +2864,7 @@ def browse_low_margin_prices_api(request):
                 include_negative=include_negative,
                 with_total=True,
                 branch_code=selected_branch if not wh_codes_raw else '',
+                group_code=selected_group,
             )
             rows = report.get('rows') or []
             for r in rows:
@@ -2880,7 +2894,7 @@ def browse_low_margin_prices_api(request):
 @require_GET
 @never_cache
 def browse_unpriced_items(request):
-    """أصناف بلا سعر بيع على الوحدة الرئيسية — فلتر فرع/مخزن/مجموعة."""
+    """أصناف بلا سعر بيع على وحدة البيع — فلتر فرع/مخزن/مجموعة."""
     error = ''
     hint = ''
     report = None
@@ -2981,7 +2995,7 @@ def browse_unpriced_items(request):
             elif not error:
                 hint = (
                     'اختر فرعاً ومخزناً (والمجموعة اختيارياً)، ثم اعرض الأصناف '
-                    'بلا سعر على الوحدة الرئيسية.'
+                    'ذات الكمية بلا تسعير على وحدة البيع.'
                 )
     except ValidationError as exc:
         error = str(exc)
@@ -3039,6 +3053,172 @@ def browse_unpriced_items(request):
             'selected_group': selected_group,
             'item_q': item_q,
             'lev_no': lev_no,
+            'report': report,
+            'error': error,
+            'hint': hint,
+            'wh_name': wh_name_map.get(selected_warehouse) or '',
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_below_cost_prices(request):
+    """أصناف مسعّرة بأقل من متوسط التكلفة — مستوى 1 سعر بيع · كل الوحدات."""
+    error = ''
+    hint = ''
+    report = None
+
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
+
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    wh_name_map: dict[str, str] = {}
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض التسعير الأقل من التكلفة.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True) or []
+                groups = fetch_sales_group_options() or []
+                branches = _low_margin_branches(warehouses) or fetch_income_branches()
+            wh_name_map = _low_margin_wh_name_map(warehouses)
+
+            if selected_branch and selected_branch not in {b['code'] for b in branches}:
+                selected_branch = ''
+            if selected_group and selected_group not in {
+                str(g.get('code') or '') for g in groups
+            }:
+                selected_group = ''
+
+            branch_wh_codes = {
+                str(w.get('code') or '').strip()
+                for w in warehouses
+                if (
+                    not selected_branch
+                    or str(w.get('branch_code') or '').strip() == selected_branch
+                )
+                and str(w.get('code') or '').strip()
+            }
+            if selected_warehouse and selected_warehouse not in branch_wh_codes:
+                if not selected_branch:
+                    if selected_warehouse not in {
+                        str(w.get('code') or '').strip() for w in warehouses
+                    }:
+                        selected_warehouse = ''
+                else:
+                    selected_warehouse = ''
+
+            if submitted and not error:
+                if not selected_warehouse:
+                    error = 'اختر مخزناً محدداً قبل العرض.'
+                elif want_excel:
+                    from .oracle_below_cost_prices import build_below_cost_excel
+
+                    with oracle_session():
+                        return build_below_cost_excel(
+                            warehouse_code=selected_warehouse,
+                            group_code=selected_group,
+                            item_q=item_q,
+                            wh_name=wh_name_map.get(selected_warehouse) or '',
+                        )
+                else:
+                    from .oracle_below_cost_prices import fetch_below_cost_items
+
+                    with oracle_session():
+                        report = fetch_below_cost_items(
+                            warehouse_code=selected_warehouse,
+                            group_code=selected_group,
+                            item_q=item_q,
+                            limit=50_000,
+                            offset=0,
+                            with_total=True,
+                        )
+                    for r in report.get('rows') or []:
+                        r['wh_name'] = (
+                            wh_name_map.get(str(r.get('wh_code') or '').strip()) or '—'
+                        )
+            elif not error:
+                hint = (
+                    'اختر فرعاً ومخزناً، ثم اعرض الأصناف المسعّرة '
+                    'بأقل من متوسط تكلفتها لنفس الوحدة (كأونكس: سعر 0.24 ومتوسط 0.18).'
+                )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_below_cost_prices failed: %s', exc)
+        msg = str(exc)
+        low = msg.lower()
+        if any(t in msg for t in ('12170', '12541', 'Cannot connect', 'مهلة الشبكة')):
+            error = (
+                'تعذّر الاتصال بأوراكل حالياً (انقطاع الشبكة). '
+                'أعد المحاولة بعد عودة الاتصال.'
+            )
+        elif 'مهلة جلب' in msg or 'call timeout' in low or 'dpy-4011' in low:
+            error = 'الاستعلام طال على أوراكل — ضيّق المجموعة أو ابحث بصنف وحاول مجدداً.'
+        else:
+            error = f'تعذّر تحميل التسعير الأقل من التكلفة: {exc}'
+        report = None
+
+    branch_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+        and (
+            not selected_branch
+            or str(w.get('branch_code') or '').strip() == selected_branch
+        )
+    ]
+    branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+
+    all_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+    ]
+
+    return render(
+        request,
+        'search/browse_below_cost_prices.html',
+        {
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'branch_warehouses': branch_warehouses,
+            'all_warehouses': all_warehouses,
+            'selected_warehouse': selected_warehouse,
+            'groups': groups,
+            'selected_group': selected_group,
+            'item_q': item_q,
             'report': report,
             'error': error,
             'hint': hint,

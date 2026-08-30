@@ -19,13 +19,14 @@ from django.core.cache import cache
 
 from .oracle_stock import (
     OracleStockError,
+    _bind_gcode,
     _fetch_all,
     _schema,
     oracle_enabled,
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v18"
+_CACHE_VER = "v19"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 200
 _EXCEL_LIMIT = 100000
@@ -60,10 +61,11 @@ def _filter_key(
     q: str,
     include_negative: bool,
     branch_code: str = "",
+    group_code: str = "",
 ) -> str:
     return (
         f"purch:low_margin:{_CACHE_VER}:{max_prft}:{lev}:{branch_code}:"
-        f"{','.join(wh_list)}:{q}:{int(include_negative)}"
+        f"{group_code}:{','.join(wh_list)}:{q}:{int(include_negative)}"
     )
 
 
@@ -75,6 +77,7 @@ def _build_sql_parts(
     include_negative: bool,
     params: dict[str, Any],
     branch_code: str = "",
+    group_code: str = "",
 ) -> tuple[str, str, str, str, str, str]:
     wh_sql = ""
     if wh_list:
@@ -103,10 +106,14 @@ def _build_sql_parts(
         """
 
     item_sql = ""
+    gcode = str(group_code or "").strip()
+    if gcode:
+        params["gcode"] = _bind_gcode(gcode)
+        item_sql += "AND m.G_CODE = :gcode\n"
     if q:
         params["iq"] = f"%{q}%"
         params["iq_exact"] = q
-        item_sql = """
+        item_sql += """
             AND (
               p.I_CODE = :iq_exact
               OR UPPER(m.I_NAME) LIKE UPPER(:iq)
@@ -250,6 +257,7 @@ def count_low_margin_priced_items(
     item_q: str = "",
     include_negative: bool = True,
     branch_code: str = "",
+    group_code: str = "",
 ) -> int:
     """عدد الصفوف المطابقة تحت حد نسبة الربح."""
     if not oracle_enabled():
@@ -262,6 +270,7 @@ def count_low_margin_priced_items(
     else:
         wh_list = [str(w).strip() for w in (warehouse_codes or []) if str(w).strip()]
     brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
     q = str(item_q or "").strip()
 
     ck = (
@@ -272,6 +281,7 @@ def count_low_margin_priced_items(
             q=q,
             include_negative=include_negative,
             branch_code=brn,
+            group_code=gcode,
         )
         + ":count"
     )
@@ -292,6 +302,7 @@ def count_low_margin_priced_items(
         include_negative=include_negative,
         params=params,
         branch_code=brn,
+        group_code=gcode,
     )
     inner = _inner_select_sql(
         schema,
@@ -326,9 +337,11 @@ def _load_capped_rows(
     include_negative: bool,
     cap: int | None,
     branch_code: str = "",
+    group_code: str = "",
 ) -> list[dict[str, Any]]:
     """يجلب الصفوف المطابقة — بدون حد عند cap=None."""
     brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
     cap_key = "all" if cap is None else str(cap)
     bulk_key = (
         _filter_key(
@@ -338,6 +351,7 @@ def _load_capped_rows(
             q=q,
             include_negative=include_negative,
             branch_code=brn,
+            group_code=gcode,
         )
         + f":bulk={cap_key}"
     )
@@ -360,6 +374,7 @@ def _load_capped_rows(
         include_negative=include_negative,
         params=params,
         branch_code=brn,
+        group_code=gcode,
     )
     inner = _inner_select_sql(
         schema,
@@ -420,6 +435,7 @@ def fetch_low_margin_priced_items(
     include_negative: bool = True,
     with_total: bool = True,
     branch_code: str = "",
+    group_code: str = "",
 ) -> dict[str, Any]:
     """يرجع صفحة من الأسعار ذات نسبة ربح أقل من max_profit_pct."""
     if not oracle_enabled():
@@ -451,6 +467,7 @@ def fetch_low_margin_priced_items(
         wh_list = [str(w).strip() for w in (warehouse_codes or []) if str(w).strip()]
 
     brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
     q = str(item_q or "").strip()
     single_wh = len(wh_list) == 1
     if not wh_list and not brn:
@@ -492,6 +509,7 @@ def fetch_low_margin_priced_items(
             "meta": {
                 "warehouse_codes": wh_list,
                 "branch_code": brn,
+                "group_code": gcode,
                 "item_q": q,
                 "limit": lim,
                 "offset": off,
@@ -512,6 +530,7 @@ def fetch_low_margin_priced_items(
                 item_q=q,
                 include_negative=include_negative,
                 branch_code=brn,
+                group_code=gcode,
             )
         except Exception:  # noqa: BLE001
             return None
@@ -531,6 +550,7 @@ def fetch_low_margin_priced_items(
             q=q,
             include_negative=include_negative,
             branch_code=brn,
+            group_code=gcode,
         )
         + ":bulk="
     )
@@ -559,6 +579,7 @@ def fetch_low_margin_priced_items(
         include_negative=include_negative,
         cap=cap,
         branch_code=brn,
+        group_code=gcode,
     )
     return _pack(all_rows, cap_used=cap, total_exact=total_exact)
 
@@ -588,6 +609,7 @@ def build_low_margin_excel(
     include_negative: bool = True,
     wh_name_map: dict[str, str] | None = None,
     branch_code: str = "",
+    group_code: str = "",
 ):
     """تصدير الصفوف تحت الحد إلى Excel (حتى _EXCEL_LIMIT)."""
     import io
@@ -604,6 +626,7 @@ def build_low_margin_excel(
         include_negative=include_negative,
         with_total=True,
         branch_code=branch_code,
+        group_code=group_code,
     )
     names = wh_name_map or {}
     kpis = report.get("kpis") or {}

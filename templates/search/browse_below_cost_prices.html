@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}أصناف غير مسعّرة{% endblock %}
-{% block page_class %}sales-dash purchase-dash unpriced-dash{% endblock %}
+{% block title %}أقل من التكلفة{% endblock %}
+{% block page_class %}sales-dash purchase-dash unpriced-dash below-cost-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="أصناف غير مسعّرة">
+<section class="dash-head" aria-label="تسعير أقل من التكلفة">
   <div class="dash-head-copy">
-    <h2>أصناف غير مسعّرة</h2>
-    <p>أصناف برصيد كمية في المخزن بلا سعر في جدول التسعير — وحدة البيع · مستوى 1</p>
+    <h2>تسعير أقل من التكلفة</h2>
+    <p>أصناف برصيد كمية وسعرها أقل من متوسط تكلفتها لنفس الوحدة — كأونكس · مستوى 1 سعر بيع</p>
   </div>
 </section>
 
@@ -26,26 +26,41 @@
 {% if report %}
   <section class="up-kpi-grid" aria-label="ملخص النتائج">
     <article class="up-kpi is-match">
-      <span class="up-kpi-label">غير مسعّر</span>
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 9l4 4 3-3 5 5"/><path d="M14 15h4v-4"/></svg>
+        </span>
+        أقل من التكلفة
+      </span>
       <strong class="up-kpi-value mono">{{ report.kpis.total_matching|default:0 }}</strong>
-      <small class="up-kpi-hint">كمية &gt; 0 · بلا تسعير وحدة البيع · مستوى 1</small>
+      <small class="up-kpi-hint">كمية &gt; 0 · سعر &lt; متوسط الوحدة · مستوى 1</small>
     </article>
     <article class="up-kpi is-shown">
-      <span class="up-kpi-label">المعروض</span>
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 13h3"/><path d="M8 16h5"/></svg>
+        </span>
+        المعروض
+      </span>
       <strong class="up-kpi-value mono">{{ report.rows|length }}</strong>
       <small class="up-kpi-hint">
         {% if report.kpis.has_more %}جزء من النتائج — صدّر Excel للباقي{% else %}كل النتائج محمّلة{% endif %}
       </small>
     </article>
     <article class="up-kpi is-wh">
-      <span class="up-kpi-label">المخزن</span>
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 20V12h6v8"/></svg>
+        </span>
+        المخزن
+      </span>
       <strong class="up-kpi-value mono">{{ selected_warehouse }}</strong>
       <small class="up-kpi-hint">{{ wh_name|default:"—" }}</small>
     </article>
   </section>
 {% endif %}
 
-<form method="get" action="{% url 'browse_unpriced_items' %}" class="dash-panel-glass unpriced-filter" role="search" aria-label="فلاتر الأصناف غير المسعّرة" id="up-filter-form">
+<form method="get" action="{% url 'browse_below_cost_prices' %}" class="dash-panel-glass unpriced-filter" role="search" aria-label="فلاتر التسعير الأقل من التكلفة" id="up-filter-form">
   <input type="hidden" name="run" value="1">
 
   <div class="field up-field-branch">
@@ -80,7 +95,7 @@
 
   <div class="field up-field-q">
     <label for="up-q">صنف <span class="up-opt">(اختياري)</span></label>
-    <input id="up-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
+    <input id="up-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو باركود أو اسم" autocomplete="off">
   </div>
 
   <div class="field up-field-actions">
@@ -89,10 +104,10 @@
 </form>
 
 {% if report and report.rows %}
-  <section class="up-sheet" aria-label="نتائج الأصناف غير المسعّرة">
+  <section class="up-sheet" aria-label="نتائج التسعير الأقل من التكلفة">
     <div class="up-sheet-head">
       <div class="up-sheet-title">
-        <h3>رصيد بلا تسعير — وحدة البيع</h3>
+        <h3>سعر أقل من متوسط التكلفة — مستوى سعر البيع</h3>
         <span class="up-sheet-count">{{ report.rows|length }} / {{ report.kpis.total_matching }} صنف</span>
       </div>
       <div class="up-sheet-actions">
@@ -101,8 +116,8 @@
       </div>
     </div>
 
-    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول الأصناف غير المسعّرة">
-      <table class="up-table" aria-label="قائمة أصناف غير مسعّرة">
+    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول التسعير الأقل من التكلفة">
+      <table class="up-table" aria-label="أصناف مسعّرة بأقل من التكلفة">
         <thead>
           <tr>
             <th>#</th>
@@ -111,9 +126,11 @@
             <th>الوحدة</th>
             <th>المجموعة</th>
             <th>المخزن</th>
+            <th>متوسط الوحدة</th>
+            <th>سعر الوحدة</th>
+            <th>الفرق</th>
+            <th>نسبة الخسارة %</th>
             <th>الكمية</th>
-            <th>غير مسعر</th>
-            <th>متوسط التكلفة</th>
           </tr>
         </thead>
         <tbody>
@@ -125,9 +142,11 @@
               <td>{{ r.unit }}</td>
               <td title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
-              <td class="mono">{{ r.qty_display }}</td>
-              <td class="up-unpriced-mark">غير مسعر</td>
-              <td class="mono">{{ r.avg_cost_display }}</td>
+              <td class="mono bc-unit-avg" title="متوسط تكلفة وحدة البيع" dir="ltr">{{ r.unit_cost_display }}</td>
+              <td class="mono bc-price" title="سعر وحدة البيع" dir="ltr">{{ r.price_display }}</td>
+              <td class="mono bc-gap" dir="ltr">{{ r.gap_display }}</td>
+              <td class="mono bc-gap" dir="ltr">{{ r.gap_pct_display }}%</td>
+              <td class="mono" dir="ltr">{{ r.qty_display }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -135,7 +154,7 @@
     </div>
   </section>
 {% elif report %}
-  <p class="sales-empty">لا أصناف برصيد بلا تسعير ضمن الفلاتر المحددة.</p>
+  <p class="sales-empty">لا أصناف مسعّرة بأقل من تكلفتها ضمن الفلاتر المحددة.</p>
 {% endif %}
 {% endblock %}
 

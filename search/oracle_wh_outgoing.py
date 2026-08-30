@@ -64,10 +64,6 @@ def _wh_name_sql(alias: str) -> str:
     return f"NVL(NULLIF(TRIM({alias}.W_NAME), ''), TO_CHAR({alias}.W_CODE))"
 
 
-def default_source_warehouses() -> list[str]:
-    return list(_DEFAULT_SRC)
-
-
 def _parse_wh_codes(raw: str | None) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []

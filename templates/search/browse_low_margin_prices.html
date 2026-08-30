@@ -97,6 +97,16 @@
     </select>
   </div>
 
+  <div class="field lm-field-group">
+    <label for="lm-group">المجموعة</label>
+    <select id="lm-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
   <div class="field lm-field-max">
     <label for="lm-max">حد الربح % <span class="lm-req" aria-hidden="true">*</span></label>
     <input id="lm-max" type="number" step="0.01" min="0" name="max_profit" value="{{ max_profit_input }}" placeholder="15" required inputmode="decimal" aria-required="true">
@@ -151,6 +161,7 @@
         data-has-more="{% if report.kpis.has_more %}1{% else %}0{% endif %}"
         data-branch="{{ selected_branch }}"
         data-warehouses="{{ warehouses_raw }}"
+        data-group="{{ selected_group }}"
         data-q="{{ item_q }}"
         data-max-profit="{{ max_profit_input }}"
         data-lev="{{ lev_no }}"

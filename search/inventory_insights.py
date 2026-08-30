@@ -141,44 +141,6 @@ def _rank_group_sales(
     }
 
 
-def _build_group_sales_activity(
-    by_group: list[dict],
-    *,
-    warehouse: str = "",
-    group_code: str = "",
-    branch_code: str = "",
-) -> tuple[list[dict], str, dict[str, float]]:
-    """ترتيب المجموعات من الأكبر مبيعات (مبلغ ثم كمية) مع دوران ومبلغ المخزون."""
-    from datetime import date, timedelta
-
-    from .oracle_stock import fetch_group_sales_totals
-
-    date_to = date.today()
-    date_from = date_to - timedelta(days=6)
-    period_label = f"{date_from.isoformat()} → {date_to.isoformat()}"
-
-    brn = str(branch_code or "").strip()
-    wh = str(warehouse or "").strip()
-    gcode = str(group_code or "").strip()
-    if wh and not brn:
-        from .oracle_stock import fetch_warehouse_options
-
-        for w in fetch_warehouse_options(active_only=True):
-            if str(w.get("code") or "") == wh:
-                brn = str(w.get("branch_code") or "").strip()
-                break
-
-    sales_rows = fetch_group_sales_totals(
-        date_from,
-        date_to,
-        system="pos",
-        branch_code=brn,
-        group_code=gcode,
-        by_branch=False,
-    )
-    return _rank_group_sales(by_group, sales_rows, period_label=period_label)
-
-
 def _build_stagnant_items(
     rows: list[dict],
     *,
