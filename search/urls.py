@@ -61,6 +61,11 @@ urlpatterns = [
         views.browse_low_margin_prices_api,
         name='browse_low_margin_prices_api',
     ),
+    path(
+        'purchases/unpriced/',
+        views.browse_unpriced_items,
+        name='browse_unpriced_items',
+    ),
     path('sales/', views.browse_sales, name='browse_sales'),
     path(
         'sales/api/groups/',

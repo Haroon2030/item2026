@@ -2879,6 +2879,177 @@ def browse_low_margin_prices_api(request):
 @login_required
 @require_GET
 @never_cache
+def browse_unpriced_items(request):
+    """أصناف بلا سعر بيع على الوحدة الرئيسية — فلتر فرع/مخزن/مجموعة."""
+    error = ''
+    hint = ''
+    report = None
+
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()
+    lev_no = 1
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
+
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    wh_name_map: dict[str, str] = {}
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض الأصناف غير المسعّرة.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True) or []
+                groups = fetch_sales_group_options() or []
+                branches = _low_margin_branches(warehouses) or fetch_income_branches()
+            wh_name_map = _low_margin_wh_name_map(warehouses)
+
+            if selected_branch and selected_branch not in {b['code'] for b in branches}:
+                selected_branch = ''
+            if selected_group and selected_group not in {
+                str(g.get('code') or '') for g in groups
+            }:
+                selected_group = ''
+
+            branch_wh_codes = {
+                str(w.get('code') or '').strip()
+                for w in warehouses
+                if (
+                    not selected_branch
+                    or str(w.get('branch_code') or '').strip() == selected_branch
+                )
+                and str(w.get('code') or '').strip()
+            }
+            if selected_warehouse and selected_warehouse not in branch_wh_codes:
+                if not selected_branch:
+                    # ابقِ المخزن إن وُجد في القائمة الكاملة
+                    if selected_warehouse not in {
+                        str(w.get('code') or '').strip() for w in warehouses
+                    }:
+                        selected_warehouse = ''
+                else:
+                    selected_warehouse = ''
+
+            if submitted and not error:
+                if not selected_warehouse:
+                    error = 'اختر مخزناً محدداً قبل العرض.'
+                elif want_excel:
+                    from .oracle_unpriced_items import build_unpriced_excel
+
+                    with oracle_session():
+                        return build_unpriced_excel(
+                            warehouse_code=selected_warehouse,
+                            lev_no=lev_no,
+                            group_code=selected_group,
+                            item_q=item_q,
+                            wh_name=wh_name_map.get(selected_warehouse) or '',
+                        )
+                else:
+                    from .oracle_unpriced_items import fetch_unpriced_items
+
+                    with oracle_session():
+                        report = fetch_unpriced_items(
+                            warehouse_code=selected_warehouse,
+                            lev_no=lev_no,
+                            group_code=selected_group,
+                            item_q=item_q,
+                            limit=50_000,
+                            offset=0,
+                            with_total=True,
+                        )
+                    for r in report.get('rows') or []:
+                        r['wh_name'] = (
+                            wh_name_map.get(str(r.get('wh_code') or '').strip()) or '—'
+                        )
+            elif not error:
+                hint = (
+                    'اختر فرعاً ومخزناً (والمجموعة اختيارياً)، ثم اعرض الأصناف '
+                    'بلا سعر على الوحدة الرئيسية.'
+                )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_unpriced_items failed: %s', exc)
+        msg = str(exc)
+        low = msg.lower()
+        if any(t in msg for t in ('12170', '12541', 'Cannot connect', 'مهلة الشبكة')):
+            error = (
+                'تعذّر الاتصال بأوراكل حالياً (انقطاع الشبكة). '
+                'أعد المحاولة بعد عودة الاتصال.'
+            )
+        elif 'مهلة جلب' in msg or 'call timeout' in low or 'dpy-4011' in low:
+            error = 'الاستعلام طال على أوراكل — ضيّق المجموعة أو ابحث بصنف وحاول مجدداً.'
+        else:
+            error = f'تعذّر تحميل الأصناف غير المسعّرة: {exc}'
+        report = None
+
+    branch_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+        and (
+            not selected_branch
+            or str(w.get('branch_code') or '').strip() == selected_branch
+        )
+    ]
+    branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+
+    all_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+    ]
+
+    return render(
+        request,
+        'search/browse_unpriced_items.html',
+        {
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'branch_warehouses': branch_warehouses,
+            'all_warehouses': all_warehouses,
+            'selected_warehouse': selected_warehouse,
+            'groups': groups,
+            'selected_group': selected_group,
+            'item_q': item_q,
+            'lev_no': lev_no,
+            'report': report,
+            'error': error,
+            'hint': hint,
+            'wh_name': wh_name_map.get(selected_warehouse) or '',
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_purchases(request):
     """تحليل فواتير المشتريات حسب الفرع والمجموعة والمورد."""
     from datetime import date

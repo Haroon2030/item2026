@@ -160,11 +160,18 @@ body {
 }
 
 .sidebar-brand .sidebar-collapse,
-.sidebar-brand .sidebar-close {
+.sidebar-brand .sidebar-close,
+.sidebar-brand .app-hard-refresh--brand {
   border-radius: 9px;
   border: 1px solid var(--line);
   color: var(--muted);
   background: #fff;
+}
+
+.sidebar-brand .app-hard-refresh--brand {
+  border-color: rgba(34, 158, 94, 0.45);
+  background: linear-gradient(135deg, #148f52 0%, #23b268 100%);
+  color: #fff;
 }
 
 .sidebar-brand .sidebar-collapse:hover,
@@ -172,6 +179,11 @@ body {
   color: var(--brand-dark);
   background: var(--bg-soft);
   border-color: var(--line-strong);
+}
+
+.sidebar-brand .app-hard-refresh--brand:hover {
+  filter: brightness(1.06);
+  color: #fff;
 }
 
 .sidebar-nav {

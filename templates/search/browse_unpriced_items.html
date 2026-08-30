@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}أصناف غير مسعّرة{% endblock %}
+{% block page_class %}sales-dash purchase-dash unpriced-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="أصناف غير مسعّرة">
+  <div class="dash-head-copy">
+    <h2>أصناف غير مسعّرة</h2>
+    <p>أصناف بلا سعر بيع على الوحدة الرئيسية — مستوى السعر 1</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="up-kpi-grid" aria-label="ملخص النتائج">
+    <article class="up-kpi is-match">
+      <span class="up-kpi-label">غير مسعّر</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.total_matching|default:0 }}</strong>
+      <small class="up-kpi-hint">وحدة رئيسية · مستوى السعر 1</small>
+    </article>
+    <article class="up-kpi is-shown">
+      <span class="up-kpi-label">المعروض</span>
+      <strong class="up-kpi-value mono">{{ report.rows|length }}</strong>
+      <small class="up-kpi-hint">
+        {% if report.kpis.has_more %}جزء من النتائج — صدّر Excel للباقي{% else %}كل النتائج محمّلة{% endif %}
+      </small>
+    </article>
+    <article class="up-kpi is-wh">
+      <span class="up-kpi-label">المخزن</span>
+      <strong class="up-kpi-value mono">{{ selected_warehouse }}</strong>
+      <small class="up-kpi-hint">{{ wh_name|default:"—" }}</small>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_unpriced_items' %}" class="dash-panel-glass unpriced-filter" role="search" aria-label="فلاتر الأصناف غير المسعّرة" id="up-filter-form">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field up-field-branch">
+    <label for="up-branch">الفرع</label>
+    <select id="up-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" title="{{ b.code }} — {{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-wh">
+    <label for="up-wh">المخزن <span class="up-req" aria-hidden="true">*</span></label>
+    <select id="up-wh" name="warehouse" required aria-required="true">
+      <option value="">اختر مخزناً</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-group">
+    <label for="up-group">المجموعة</label>
+    <select id="up-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-q">
+    <label for="up-q">صنف <span class="up-opt">(اختياري)</span></label>
+    <input id="up-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
+  </div>
+
+  <div class="field up-field-actions">
+    <button type="submit" class="btn-primary">عرض الأصناف</button>
+  </div>
+</form>
+
+{% if report and report.rows %}
+  <section class="up-sheet" aria-label="نتائج الأصناف غير المسعّرة">
+    <div class="up-sheet-head">
+      <div class="up-sheet-title">
+        <h3>بلا سعر — وحدة رئيسية</h3>
+        <span class="up-sheet-count">{{ report.rows|length }} / {{ report.kpis.total_matching }} صنف</span>
+      </div>
+      <div class="up-sheet-actions">
+        <a class="btn-ghost up-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير إلى Excel">Excel</a>
+      </div>
+    </div>
+
+    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول الأصناف غير المسعّرة">
+      <table class="up-table" aria-label="قائمة أصناف غير مسعّرة">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الرقم</th>
+            <th>اسم الصنف</th>
+            <th>الوحدة</th>
+            <th>المجموعة</th>
+            <th>المخزن</th>
+            <th>الكمية</th>
+            <th>متوسط التكلفة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="mono">{{ r.item_code }}</td>
+              <td title="{{ r.item_name }}">{{ r.item_name }}</td>
+              <td>{{ r.unit }}</td>
+              <td title="{{ r.g_code }}">{{ r.g_name }}</td>
+              <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
+              <td class="mono">{{ r.qty_display }}</td>
+              <td class="mono">{{ r.avg_cost_display }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% elif report %}
+  <p class="sales-empty">لا أصناف غير مسعّرة ضمن الفلاتر المحددة.</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ all_warehouses|json_script:"up-wh-data" }}
+<script src="/static/js/unpriced-filter.js?v={{ app_client_version }}"></script>
+{% endblock %}

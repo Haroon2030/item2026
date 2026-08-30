@@ -146,12 +146,16 @@
   };
 
   document.addEventListener("DOMContentLoaded", function () {
-    var btn = document.getElementById("app-hard-refresh");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-      btn.classList.add("is-spinning");
-      btn.disabled = true;
-      window.appHardRefresh();
+    var buttons = document.querySelectorAll(".app-hard-refresh");
+    if (!buttons.length) return;
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        buttons.forEach(function (b) {
+          b.classList.add("is-spinning");
+          b.disabled = true;
+        });
+        window.appHardRefresh();
+      });
     });
   });
 })();
