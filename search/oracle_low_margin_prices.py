@@ -9,6 +9,7 @@
 
 وحدة العرض: صف واحد لكل صنف/مخزن/مستوى — الوحدة الرئيسية (MAIN_UNIT)
   أو وحدة البيع (SALE_UNIT) أو وحدة المخزون، ثم أصغر P_SIZE.
+يُشترط رصيد كمية > 0 على الوحدة الرئيسية في نفس المخزن.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v19"
+_CACHE_VER = "v20"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 200
 _EXCEL_LIMIT = 100000
@@ -233,10 +234,11 @@ def _inner_select_sql(
         ) pu
           ON pu.I_CODE = p.I_CODE
          AND pu.ITM_UNT = p.ITM_UNT
-        LEFT JOIN {schema}.IAS_ITM_WCODE w
+        JOIN {schema}.IAS_ITM_WCODE w
           ON w.I_CODE = p.I_CODE
          AND w.W_CODE = p.W_CODE
          AND w.ITM_UNT = d.ITM_UNT
+         AND w.AVL_QTY > 0
         LEFT JOIN {schema}.IAS_PRICING_LEVELS lv
           ON lv.LEV_NO = p.LEV_NO
         WHERE p.LEV_NO = :lev
