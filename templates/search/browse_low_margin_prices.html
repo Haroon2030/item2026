@@ -177,6 +177,7 @@
           <col class="col-idx">
           <col class="col-code">
           <col class="col-item">
+          <col class="col-barcode">
           <col class="col-unit">
           <col class="col-wh">
           <col class="col-group">
@@ -195,6 +196,7 @@
             <th class="lm-th-idx">#</th>
             <th class="lm-th-code">الرقم</th>
             <th class="lm-th-item">اسم الصنف</th>
+            <th class="lm-th-barcode">الباركود</th>
             <th class="lm-th-unit">الوحدة</th>
             <th class="lm-th-wh">المخزن</th>
             <th class="lm-th-group">المجموعة</th>
@@ -215,6 +217,7 @@
               <td class="mono lm-td-idx">{{ forloop.counter }}</td>
               <td class="mono lm-td-code">{{ r.item_code }}</td>
               <td class="lm-td-item" title="{{ r.item_name }}">{{ r.item_name }}</td>
+              <td class="mono lm-td-barcode" dir="ltr">{% if r.barcode %}{{ r.barcode }}{% endif %}</td>
               <td class="lm-td-unit">{{ r.unit }}</td>
               <td class="mono lm-td-wh" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
               <td class="lm-td-group" title="{{ r.g_code }}">{{ r.g_name }}</td>

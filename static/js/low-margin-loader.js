@@ -36,6 +36,7 @@
       '<td class="mono lm-td-idx">' + index + '</td>' +
       '<td class="mono lm-td-code">' + esc(row.item_code) + '</td>' +
       '<td class="lm-td-item" title="' + esc(row.item_name) + '">' + esc(row.item_name) + '</td>' +
+      '<td class="mono lm-td-barcode" dir="ltr">' + esc(row.barcode || '') + '</td>' +
       '<td class="lm-td-unit">' + esc(row.unit) + '</td>' +
       '<td class="mono lm-td-wh" title="' + esc(row.wh_name) + '">' + esc(row.wh_code) + '</td>' +
       '<td class="lm-td-group" title="' + esc(row.g_code) + '">' + esc(row.g_name) + '</td>' +

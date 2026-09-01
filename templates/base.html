@@ -167,13 +167,13 @@
           </div>
         </div>
         <div
-          class="sidebar-group{% if request.resolver_match.url_name == 'browse_low_margin_prices' or request.resolver_match.url_name == 'browse_unpriced_items' or request.resolver_match.url_name == 'browse_below_cost_prices' %} is-open is-current{% endif %}"
+          class="sidebar-group{% if request.resolver_match.url_name == 'browse_low_margin_prices' or request.resolver_match.url_name == 'browse_unpriced_items' or request.resolver_match.url_name == 'browse_below_cost_prices' or request.resolver_match.url_name == 'browse_name_barcode_conflicts' %} is-open is-current{% endif %}"
           data-sidebar-group
         >
           <button
             type="button"
             class="sidebar-link sidebar-group-toggle"
-            aria-expanded="{% if request.resolver_match.url_name == 'browse_low_margin_prices' or request.resolver_match.url_name == 'browse_unpriced_items' or request.resolver_match.url_name == 'browse_below_cost_prices' %}true{% else %}false{% endif %}"
+            aria-expanded="{% if request.resolver_match.url_name == 'browse_low_margin_prices' or request.resolver_match.url_name == 'browse_unpriced_items' or request.resolver_match.url_name == 'browse_below_cost_prices' or request.resolver_match.url_name == 'browse_name_barcode_conflicts' %}true{% else %}false{% endif %}"
             title="إدارة التسعيرة"
           >
             <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5"/></svg>
@@ -184,6 +184,10 @@
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_low_margin_prices' %}is-active{% endif %}" href="{% url 'browse_low_margin_prices' %}" title="حد الربح من تسعير الصنف">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V9M12 16V5M17 16v-3"/><path d="M4 5h16"/></svg>
               <span>حد ربح التسعير</span>
+            </a>
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_name_barcode_conflicts' %}is-active{% endif %}" href="{% url 'browse_name_barcode_conflicts' %}" title="أسماء متشابهة وباركود مختلف">
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7l2 2h7v10H4z"/><path d="M9 12h6M12 9v6"/></svg>
+              <span>اسم مشابه · باركود مختلف</span>
             </a>
             <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_unpriced_items' %}is-active{% endif %}" href="{% url 'browse_unpriced_items' %}" title="أصناف غير مسعّرة">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>

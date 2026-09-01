@@ -205,6 +205,40 @@ def _build_sql_parts(
     return wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql
 
 
+def _attach_barcodes(rows: list[dict[str, Any]]) -> None:
+    """يربط الباركود من فهرس ItemBarcode — وحدة الصف أولاً ثم أي باركود للصنف."""
+    from search.models import ItemBarcode
+
+    codes = {str(r.get("item_code") or "").strip() for r in rows}
+    codes.discard("")
+    if not codes:
+        for r in rows:
+            r.setdefault("barcode", "")
+        return
+
+    by_code_unit: dict[tuple[str, str], str] = {}
+    by_code_any: dict[str, str] = {}
+    for row in (
+        ItemBarcode.objects.filter(item_code__in=codes)
+        .exclude(barcode="")
+        .only("item_code", "unit", "barcode")
+        .iterator(chunk_size=2_000)
+    ):
+        ic = str(row.item_code or "").strip()
+        bc = str(row.barcode or "").strip()
+        if not ic or not bc:
+            continue
+        unit = str(row.unit or "").strip()
+        by_code_unit.setdefault((ic, unit), bc)
+        by_code_any.setdefault(ic, bc)
+
+    for r in rows:
+        ic = str(r.get("item_code") or "").strip()
+        unit = str(r.get("unit") or "").strip()
+        bc = by_code_unit.get((ic, unit)) or by_code_any.get(ic, "")
+        r["barcode"] = bc
+
+
 def _rows_from_oracle(rows: list[dict], lev: int, *, limit_pct: float) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     lim_pct = _f(limit_pct, 2)
@@ -616,6 +650,7 @@ def fetch_low_margin_priced_items(
         total_exact: int | None = None,
     ) -> dict[str, Any]:
         page = all_rows[off : off + lim]
+        _attach_barcodes(page)
         loaded_total = len(all_rows)
         total_matching = total_exact if total_exact is not None else loaded_total
         truncated = bool(cap_used is not None and loaded_total >= cap_used)
@@ -807,7 +842,7 @@ def build_low_margin_excel(
         f"{int(kpis.get('total_matching') or len(report.get('rows') or []))} صنف"
         f"</span></caption>"
         "<thead><tr>"
-        "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
+        "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الباركود</th><th>الوحدة</th>"
         "<th>المخزن</th><th>اسم المخزن</th><th>المجموعة</th><th>كود المجموعة</th>"
         "<th>متوسط التكلفة</th><th>السعر شامل الضريبة</th>"
         "<th>نسبة الربح</th><th>ربح أونكس</th><th>حد الربح %</th><th>حد السعر</th>"
@@ -821,6 +856,7 @@ def build_low_margin_excel(
         buf.write(f'<td class="int">{i}</td>')
         buf.write(_xls_text(r.get("item_code"), css="txt"))
         buf.write(_xls_text(r.get("item_name"), css="txt"))
+        buf.write(_xls_text(r.get("barcode"), css="txt"))
         buf.write(_xls_text(r.get("unit"), css="txt"))
         buf.write(_xls_text(wh, css="txt"))
         buf.write(_xls_text(names.get(wh) or "", css="txt"))

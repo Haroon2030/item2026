@@ -3254,6 +3254,98 @@ def browse_below_cost_prices(request):
 @login_required
 @require_GET
 @never_cache
+def browse_name_barcode_conflicts(request):
+    """أصناف متشابهة بالاسم ومختلفة بالباركود — فهرس باركود محلي."""
+    error = ''
+    hint = ''
+    report = None
+
+    selected_group = str(request.GET.get('group') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()
+    mode = str(request.GET.get('mode') or 'all').strip().lower()
+    min_ratio_raw = str(request.GET.get('min_ratio') or '88').strip()
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
+
+    if mode not in ('all', 'exact', 'similar'):
+        mode = 'all'
+
+    try:
+        min_ratio = max(0.5, min(1.0, float(min_ratio_raw or 88) / 100.0))
+    except ValueError:
+        error = 'نسبة التشابه غير صحيحة (0–100).'
+        min_ratio = 0.88
+
+    groups: list[dict] = []
+    try:
+        from search.models import ItemBarcode
+
+        from .name_barcode_conflicts import (
+            build_name_barcode_excel,
+            fetch_name_barcode_conflicts,
+            group_options,
+        )
+
+        groups = group_options()
+        index_count = ItemBarcode.objects.exclude(item_code='').count()
+
+        if selected_group and selected_group not in {g['code'] for g in groups}:
+            selected_group = ''
+
+        if index_count == 0:
+            error = (
+                'فهرس الباركود فارغ — نفّذ مزامنة الأصناف من الإعدادات '
+                'أو من شاشة البحث قبل استخدام هذا التقرير.'
+            )
+        elif submitted and not error:
+            if want_excel:
+                return build_name_barcode_excel(
+                    group_code=selected_group,
+                    item_q=item_q,
+                    mode=mode,
+                    min_ratio=min_ratio,
+                )
+            report = fetch_name_barcode_conflicts(
+                group_code=selected_group,
+                item_q=item_q,
+                mode=mode,
+                min_ratio=min_ratio,
+            )
+        elif not error:
+            hint = (
+                'يعرض أصنافاً مختلفة الأرقام تشترك في اسم متطابق أو مشابه '
+                'ولكن بباركود مختلف — من فهرس GetAllItems المحلي. '
+                'اختر مجموعة أو ابحث بصنف لتضييق النتائج.'
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_name_barcode_conflicts failed: %s', exc)
+        error = f'تعذّر تحميل تقرير الاسم والباركود: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_name_barcode_conflicts.html',
+        {
+            'groups': groups,
+            'selected_group': selected_group,
+            'item_q': item_q,
+            'mode': mode,
+            'min_ratio_input': min_ratio_raw or '88',
+            'report': report,
+            'error': error,
+            'hint': hint,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_purchases(request):
     """تحليل فواتير المشتريات حسب الفرع والمجموعة والمورد."""
     from datetime import date

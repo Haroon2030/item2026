@@ -71,6 +71,11 @@ urlpatterns = [
         views.browse_below_cost_prices,
         name='browse_below_cost_prices',
     ),
+    path(
+        'purchases/name-barcode/',
+        views.browse_name_barcode_conflicts,
+        name='browse_name_barcode_conflicts',
+    ),
     path('sales/', views.browse_sales, name='browse_sales'),
     path(
         'sales/api/groups/',

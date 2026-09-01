@@ -16191,6 +16191,7 @@ a.sidebar-brand-lockup {
 .low-margin-dash .lm-table col.col-idx { width: 2.4rem; }
 .low-margin-dash .lm-table col.col-code { width: 5rem; }
 .low-margin-dash .lm-table col.col-item { width: 14rem; }
+.low-margin-dash .lm-table col.col-barcode { width: 9rem; }
 .low-margin-dash .lm-table col.col-unit { width: 3.5rem; }
 .low-margin-dash .lm-table col.col-wh { width: 3.5rem; }
 .low-margin-dash .lm-table col.col-group { width: 8rem; }
@@ -16237,6 +16238,11 @@ a.sidebar-brand-lockup {
 .low-margin-dash .lm-table thead th.lm-th-price {
   background: #dce8fb;
   color: #1a4b8c;
+}
+
+.low-margin-dash .lm-table thead th.lm-th-barcode {
+  background: #ede9fe;
+  color: #5b21b6;
 }
 
 .low-margin-dash .lm-table thead th.lm-th-prft {
@@ -16304,6 +16310,20 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   max-width: 14rem;
   color: #1e293b;
   font-weight: 600;
+}
+
+.low-margin-dash .lm-table .lm-td-barcode {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: #f3e8ff;
+  color: #7c3aed;
 }
 
 .low-margin-dash .lm-table .lm-td-group {
@@ -16384,6 +16404,10 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 
 .low-margin-dash .lm-table tbody tr:nth-child(even) .lm-td-price {
   background: #dce8fb;
+}
+
+.low-margin-dash .lm-table tbody tr:nth-child(even) .lm-td-barcode {
+  background: #e9d5ff;
 }
 
 .low-margin-dash .lm-table tbody tr:nth-child(even).is-ok .lm-td-prft {
@@ -16494,9 +16518,11 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 
   .low-margin-dash .lm-table .lm-td-cost,
   .low-margin-dash .lm-table .lm-td-price,
+  .low-margin-dash .lm-table .lm-td-barcode,
   .low-margin-dash .lm-table .lm-td-prft,
   .low-margin-dash .lm-table thead th.lm-th-cost,
   .low-margin-dash .lm-table thead th.lm-th-price,
+  .low-margin-dash .lm-table thead th.lm-th-barcode,
   .low-margin-dash .lm-table thead th.lm-th-prft,
   .low-margin-dash .lm-table tr.is-ok .lm-td-prft,
   .low-margin-dash .lm-table tr.is-mid .lm-td-prft,
@@ -17223,5 +17249,169 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   direction: ltr;
   unicode-bidi: isolate;
   text-align: left;
+}
+
+/* —— اسم مشابه · باركود مختلف —— */
+.name-barcode-dash .up-table.nbc-table {
+  width: max-content;
+  max-width: 100%;
+  table-layout: auto;
+}
+
+.name-barcode-dash .nbc-table col.col-idx { width: 0; }
+.name-barcode-dash .nbc-table col.col-code { width: 0; }
+.name-barcode-dash .nbc-table col.col-item { width: 0; }
+.name-barcode-dash .nbc-table col.col-barcode { width: 0; }
+.name-barcode-dash .nbc-table col.col-grp { width: 0; }
+.name-barcode-dash .nbc-table col.col-type { width: 0; }
+.name-barcode-dash .nbc-table col.col-unit { width: 0; }
+.name-barcode-dash .nbc-table col.col-gname { width: auto; }
+
+.name-barcode-dash .nbc-table .nbc-th-idx,
+.name-barcode-dash .nbc-table .nbc-idx,
+.name-barcode-dash .nbc-table .nbc-th-code,
+.name-barcode-dash .nbc-table .nbc-code,
+.name-barcode-dash .nbc-table .nbc-th-item,
+.name-barcode-dash .nbc-table .nbc-name,
+.name-barcode-dash .nbc-table .nbc-th-barcode,
+.name-barcode-dash .nbc-table .nbc-barcode,
+.name-barcode-dash .nbc-table .nbc-th-grp,
+.name-barcode-dash .nbc-table .nbc-group-id,
+.name-barcode-dash .nbc-table .nbc-th-type,
+.name-barcode-dash .nbc-table .nbc-match-exact,
+.name-barcode-dash .nbc-table .nbc-match-similar,
+.name-barcode-dash .nbc-table .nbc-th-unit,
+.name-barcode-dash .nbc-table .nbc-unit {
+  width: 0;
+  max-width: max-content;
+  white-space: nowrap;
+}
+
+.name-barcode-dash .nbc-table .nbc-th-unit,
+.name-barcode-dash .nbc-table .nbc-unit {
+  text-align: center;
+}
+
+.name-barcode-dash .nbc-table .nbc-th-gname,
+.name-barcode-dash .nbc-table .nbc-gname {
+  width: auto;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-barcode-dash .nbc-table thead th.nbc-th-barcode {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.name-barcode-dash .nbc-table thead th.nbc-th-item {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.name-barcode-dash .nbc-filter {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.2fr) minmax(10rem, 1.4fr) minmax(9rem, 1fr) minmax(5rem, 0.55fr) auto;
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.name-barcode-dash .nbc-table td.nbc-group-id {
+  text-align: center;
+  font-weight: 700;
+  background: #f5f3ff;
+  color: #5b21b6;
+}
+
+.name-barcode-dash .nbc-table td.nbc-match-exact {
+  text-align: center;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  font-weight: 700;
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.name-barcode-dash .nbc-table td.nbc-match-similar {
+  text-align: center;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  font-weight: 700;
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.name-barcode-dash .nbc-table td.nbc-code {
+  text-align: center;
+  font-weight: 700;
+  color: #4338ca;
+}
+
+.name-barcode-dash .nbc-table td.nbc-name {
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+}
+
+.name-barcode-dash .nbc-table td.nbc-barcode {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #f3e8ff;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.name-barcode-dash .nbc-table tr.nbc-stripe-b td:not(.nbc-barcode):not(.nbc-group-id):not(.nbc-match-exact):not(.nbc-match-similar) {
+  background: #f8fafc;
+}
+
+.name-barcode-dash .nbc-table tr.nbc-stripe-b td.nbc-barcode {
+  background: #e9d5ff;
+}
+
+.name-barcode-dash .nbc-table tbody tr:hover td {
+  background: #fff6d5;
+}
+
+.name-barcode-dash .nbc-table tbody tr:hover td.nbc-barcode {
+  background: #ddd6fe;
+}
+
+.name-barcode-dash .nbc-table tbody tr:hover td.nbc-group-id {
+  background: #ede9fe;
+}
+
+.name-barcode-dash .nbc-table tbody tr:hover td.nbc-match-exact {
+  background: #bbf7d0;
+}
+
+.name-barcode-dash .nbc-table tbody tr:hover td.nbc-match-similar {
+  background: #fed7aa;
+}
+
+@media (max-width: 960px) {
+  .name-barcode-dash .nbc-filter {
+    grid-template-columns: 1fr 1fr;
+  }
+  .name-barcode-dash .nbc-filter .up-field-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media print {
+  .name-barcode-dash .nbc-filter,
+  .name-barcode-dash .up-kpi-grid,
+  .name-barcode-dash .alert,
+  .name-barcode-dash .dash-head,
+  .name-barcode-dash .up-sheet-actions,
+  #app-sidebar,
+  .app-topbar {
+    display: none !important;
+  }
 }
 

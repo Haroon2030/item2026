@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}اسم مشابه · باركود مختلف{% endblock %}
+{% block page_class %}sales-dash purchase-dash unpriced-dash name-barcode-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="أصناف متشابهة بالاسم">
+  <div class="dash-head-copy">
+    <h2>اسم مشابه · باركود مختلف</h2>
+    <p>أصناف مختلفة الأرقام تشترك في اسم متطابق أو قريب ولكن بباركود مختلف — من فهرس GetAllItems المحلي</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="up-kpi-grid" aria-label="ملخص النتائج">
+    <article class="up-kpi is-match">
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h14"/><circle cx="18" cy="17" r="3"/></svg>
+        </span>
+        مجموعات متعارضة
+      </span>
+      <strong class="up-kpi-value mono">{{ report.kpis.total_groups|default:0 }}</strong>
+      <small class="up-kpi-hint">اسم متطابق أو مشابه · باركود مختلف</small>
+    </article>
+    <article class="up-kpi is-shown">
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 13h3"/><path d="M8 16h5"/></svg>
+        </span>
+        المعروض
+      </span>
+      <strong class="up-kpi-value mono">{{ report.rows|length }}</strong>
+      <small class="up-kpi-hint">
+        {% if report.kpis.has_more %}جزء من النتائج — صدّر Excel للباقي{% else %}{{ report.kpis.total_items|default:0 }} صنف في {{ report.kpis.total_groups|default:0 }} مجموعة{% endif %}
+      </small>
+    </article>
+    <article class="up-kpi is-wh">
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 7h7l2 2h7v10H4z"/><path d="M8 12h8"/></svg>
+        </span>
+        الفهرس
+      </span>
+      <strong class="up-kpi-value mono">{{ report.kpis.index_count|default:0 }}</strong>
+      <small class="up-kpi-hint">صف باركود محلي</small>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_name_barcode_conflicts' %}" class="dash-panel-glass unpriced-filter nbc-filter" role="search" aria-label="فلاتر الاسم والباركود" id="nbc-filter-form">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field up-field-group">
+    <label for="nbc-group">المجموعة</label>
+    <select id="nbc-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-q">
+    <label for="nbc-q">صنف <span class="up-opt">(اختياري)</span></label>
+    <input id="nbc-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو باركود أو اسم" autocomplete="off">
+  </div>
+
+  <div class="field nbc-field-mode">
+    <label for="nbc-mode">نوع التطابق</label>
+    <select id="nbc-mode" name="mode">
+      <option value="all" {% if mode == 'all' %}selected{% endif %}>الكل (تام + مشابه)</option>
+      <option value="exact" {% if mode == 'exact' %}selected{% endif %}>اسم متطابق فقط</option>
+      <option value="similar" {% if mode == 'similar' %}selected{% endif %}>اسم مشابه فقط</option>
+    </select>
+  </div>
+
+  <div class="field nbc-field-ratio">
+    <label for="nbc-ratio">تشابه الاسم %</label>
+    <input id="nbc-ratio" type="number" name="min_ratio" value="{{ min_ratio_input }}" min="50" max="100" step="1" title="للأسماء المشابهة — الافتراضي 88%">
+  </div>
+
+  <div class="field up-field-actions">
+    <button type="submit" class="btn-primary">جلب الأصناف</button>
+  </div>
+</form>
+
+{% if report and report.rows %}
+  <section class="up-sheet" aria-label="نتائج الاسم والباركود">
+    <div class="up-sheet-head">
+      <div class="up-sheet-title">
+        <h3>أصناف متشابهة بالاسم · باركود مختلف</h3>
+        <span class="up-sheet-count">{{ report.rows|length }} صف · {{ report.kpis.total_groups }} مجموعة</span>
+      </div>
+      <div class="up-sheet-actions">
+        <a class="btn-ghost up-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير إلى Excel">Excel</a>
+        <button type="button" class="btn-ghost up-pdf-btn" onclick="window.print()" title="طباعة PDF">PDF</button>
+      </div>
+    </div>
+
+    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول الاسم والباركود">
+      <table class="up-table nbc-table" aria-label="أصناف متشابهة بالاسم">
+        <colgroup>
+          <col class="col-idx">
+          <col class="col-code">
+          <col class="col-item">
+          <col class="col-barcode">
+          <col class="col-grp">
+          <col class="col-type">
+          <col class="col-unit">
+          <col class="col-gname">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="nbc-th-idx">#</th>
+            <th class="nbc-th-code">الرقم</th>
+            <th class="nbc-th-item">اسم الصنف</th>
+            <th class="nbc-th-barcode">الباركود</th>
+            <th class="nbc-th-grp">مج.</th>
+            <th class="nbc-th-type">نوع</th>
+            <th class="nbc-th-unit">الوحدة</th>
+            <th class="nbc-th-gname">المجموعة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+            <tr class="nbc-row nbc-g-{{ r.group_id }}{% if r.group_id|divisibleby:2 %} nbc-stripe-b{% else %} nbc-stripe-a{% endif %}">
+              <td class="mono nbc-idx">{{ forloop.counter }}</td>
+              <td class="mono nbc-code">{{ r.item_code }}</td>
+              <td class="nbc-name" title="{{ r.item_name }}">{{ r.item_name }}</td>
+              <td class="mono nbc-barcode" dir="ltr" title="{% if r.barcode_count > 1 %}{{ r.barcodes_display }}{% endif %}">{% if r.primary_barcode %}{{ r.primary_barcode }}{% endif %}</td>
+              <td class="mono nbc-group-id" title="{{ r.group_label }}">{{ r.group_id }}</td>
+              <td class="nbc-match nbc-match-{{ r.match_type }}">{{ r.match_type_label }}</td>
+              <td class="nbc-unit">{% if r.unit != '—' %}{{ r.unit }}{% endif %}</td>
+              <td class="nbc-gname" title="{{ r.g_code }}">{% if r.g_name != '—' %}{{ r.g_name }}{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% elif report and not report.rows %}
+  <div class="alert alert-info" role="status">
+    <span>لا توجد مجموعات مطابقة — جرّب توسيع نسبة التشابه أو إزالة فلتر المجموعة.</span>
+  </div>
+{% endif %}
+{% endblock %}
