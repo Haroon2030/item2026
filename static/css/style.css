@@ -15896,7 +15896,8 @@ a.sidebar-brand-lockup {
     minmax(0, 1.2fr)
     minmax(0, 1.25fr)
     minmax(0, 1.2fr)
-    minmax(0, 5.2rem)
+    minmax(0, 4.2rem)
+    minmax(0, 4.2rem)
     minmax(0, 4.2rem)
     minmax(0, 7rem)
     minmax(0, 1fr)
@@ -15963,6 +15964,7 @@ a.sidebar-brand-lockup {
   text-overflow: ellipsis;
 }
 
+.low-margin-dash .low-margin-filter #lm-min,
 .low-margin-dash .low-margin-filter #lm-max,
 .low-margin-dash .low-margin-filter #lm-lev {
   text-align: center;
@@ -16195,6 +16197,9 @@ a.sidebar-brand-lockup {
 .low-margin-dash .lm-table col.col-cost { width: 6rem; }
 .low-margin-dash .lm-table col.col-price { width: 5rem; }
 .low-margin-dash .lm-table col.col-prft { width: 5.5rem; }
+.low-margin-dash .lm-table col.col-onixprft { width: 5.5rem; }
+.low-margin-dash .lm-table col.col-limprft { width: 5rem; }
+.low-margin-dash .lm-table col.col-limprc { width: 5.5rem; }
 .low-margin-dash .lm-table col.col-cy { width: 3rem; }
 .low-margin-dash .lm-table col.col-lev { width: 3rem; }
 .low-margin-dash .lm-table col.col-levn { width: 8rem; }
@@ -16270,14 +16275,21 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   background: #fff6d5;
 }
 
+.low-margin-dash .lm-table .lm-td-prft,
+.low-margin-dash .lm-table .lm-td-onixprft,
+.low-margin-dash .lm-table .lm-td-limprft,
+.low-margin-dash .lm-table .lm-td-limprc,
+.low-margin-dash .lm-table .lm-td-cy,
+.low-margin-dash .lm-table .lm-td-lev {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .low-margin-dash .lm-table .lm-td-idx,
 .low-margin-dash .lm-table .lm-td-code,
 .low-margin-dash .lm-table .lm-td-wh,
 .low-margin-dash .lm-table .lm-td-cost,
-.low-margin-dash .lm-table .lm-td-price,
-.low-margin-dash .lm-table .lm-td-prft,
-.low-margin-dash .lm-table .lm-td-cy,
-.low-margin-dash .lm-table .lm-td-lev {
+.low-margin-dash .lm-table .lm-td-price {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -16316,6 +16328,28 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   background: #e8f0fe;
   color: #1d4ed8;
   font-weight: 700;
+}
+
+.low-margin-dash .lm-table .lm-td-prft,
+.low-margin-dash .lm-table .lm-td-onixprft,
+.low-margin-dash .lm-table .lm-td-limprft,
+.low-margin-dash .lm-table .lm-td-limprc {
+  text-align: center;
+  font-weight: 700;
+}
+
+.low-margin-dash .lm-table .lm-td-onixprft {
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
+.low-margin-dash .lm-table .lm-td-limprft {
+  color: #1d4ed8;
+}
+
+.low-margin-dash .lm-table .lm-td-limprc {
+  color: #0f766e;
+  font-weight: 600;
 }
 
 .low-margin-dash .lm-table .lm-td-prft {

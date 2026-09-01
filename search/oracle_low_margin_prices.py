@@ -6,6 +6,7 @@
                   وإن عُدم يُستخدم متوسط بطاقة الصنف.
   صافي السعر = I_PRICE / (1 + VAT/100)
   نسبة الربح = (صافي السعر − المتوسط × P_SIZE) / (المتوسط × P_SIZE) × 100
+  ربح أونكس = نفس الصيغة على PRIMARY_COST × P_SIZE (شاشة التسعير)
 
 وحدة العرض: صف واحد لكل صنف/مخزن/مستوى — الوحدة الرئيسية (MAIN_UNIT)
   أو وحدة البيع (SALE_UNIT) أو وحدة المخزون، ثم أصغر P_SIZE.
@@ -30,7 +31,7 @@ from .oracle_stock import (
 
 _CACHE_TTL = 600
 _MOVED_CODES_TTL = 7200
-_CACHE_VER = "v22"
+_CACHE_VER = "v25"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 200
 _EXCEL_LIMIT = 100000
@@ -100,8 +101,26 @@ def _parse_wh_codes(raw: str) -> list[str]:
     return out
 
 
+def _resolved_profit_bounds(
+    min_profit_pct: float | None,
+    max_profit_pct: float,
+    *,
+    include_negative: bool,
+) -> tuple[float, float]:
+    """يحوّل «من/إلى» إلى حدود SQL — من شامل، إلى غير شامل (<)."""
+    max_p = float(max_profit_pct)
+    if min_profit_pct is not None:
+        min_p = float(min_profit_pct)
+    elif include_negative:
+        min_p = -999999.0
+    else:
+        min_p = -999999.0
+    return min_p, max_p
+
+
 def _filter_key(
     *,
+    min_prft: float,
     max_prft: float,
     lev: int,
     wh_list: list[str],
@@ -111,7 +130,7 @@ def _filter_key(
     group_code: str = "",
 ) -> str:
     return (
-        f"purch:low_margin:{_CACHE_VER}:{max_prft}:{lev}:{branch_code}:"
+        f"purch:low_margin:{_CACHE_VER}:{min_prft}:{max_prft}:{lev}:{branch_code}:"
         f"{group_code}:{','.join(wh_list)}:{q}:{int(include_negative)}"
     )
 
@@ -186,14 +205,29 @@ def _build_sql_parts(
     return wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql
 
 
-def _rows_from_oracle(rows: list[dict], lev: int) -> list[dict[str, Any]]:
+def _rows_from_oracle(rows: list[dict], lev: int, *, limit_pct: float) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
+    lim_pct = _f(limit_pct, 2)
     for r in rows:
         prft = _f(r.get("PRFT_PCT"), 2)
         price = _f(r.get("I_PRICE"), 4)
         net_price = _f(r.get("NET_PRICE"), 4)
         avg_cost = _f(r.get("AVG_COST"), 4)
         unit_cost = _f(r.get("UNIT_COST"), 4)
+        min_price = _f(r.get("MIN_ITM_PRICE"), 4)
+        min_lim_prft = r.get("MIN_LIMIT_PRFT_PCT")
+        calc_lim_price = _f(r.get("LIMIT_PRICE"), 4)
+        if min_price > 0 and min_lim_prft is not None:
+            limit_price = min_price
+            limit_profit_pct = _f(min_lim_prft, 2)
+            limit_source = "min"
+        else:
+            limit_price = calc_lim_price
+            limit_profit_pct = lim_pct
+            limit_source = "calc"
+        onix_prft = _f(r.get("ONIX_PRFT_PCT"), 2)
+        primary_unit = _f(r.get("PRIMARY_UNIT_COST"), 4)
+        primary_avg = _f(r.get("PRIMARY_COST"), 4)
         out.append(
             {
                 "item_code": str(r.get("I_CODE") or "").strip(),
@@ -206,6 +240,17 @@ def _rows_from_oracle(rows: list[dict], lev: int) -> list[dict[str, Any]]:
                 "g_name": str(r.get("G_NAME") or "").strip() or "—",
                 "profit_pct": prft,
                 "profit_pct_display": f"{prft:g}",
+                "onyx_profit_pct": onix_prft,
+                "onyx_profit_pct_display": f"{onix_prft:g}",
+                "primary_cost": primary_avg,
+                "primary_cost_display": f"{primary_avg:g}" if primary_avg > 0 else "—",
+                "primary_unit_cost": primary_unit,
+                "primary_unit_cost_display": f"{primary_unit:g}" if primary_unit > 0 else "—",
+                "limit_profit_pct": limit_profit_pct,
+                "limit_profit_pct_display": f"{limit_profit_pct:g}",
+                "limit_price": limit_price,
+                "limit_price_display": f"{limit_price:g}" if limit_price > 0 else "—",
+                "limit_source": limit_source,
                 "currency": str(r.get("A_CY") or "SAR").strip() or "SAR",
                 "price": price,
                 "price_display": f"{price:g}",
@@ -246,13 +291,48 @@ def _inner_select_sql(
             ({net_price_sql} - ({avg_sql}) * NVL(p.P_SIZE, 1))
             / NULLIF(({avg_sql}) * NVL(p.P_SIZE, 1), 0) * 100
           , 2) AS PRFT_PCT,
+          ROUND(
+            ({net_price_sql} - (
+              CASE
+                WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
+                ELSE ({avg_sql})
+              END
+            ) * NVL(p.P_SIZE, 1))
+            / NULLIF((
+              CASE
+                WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
+                ELSE ({avg_sql})
+              END
+            ) * NVL(p.P_SIZE, 1), 0) * 100
+          , 2) AS ONIX_PRFT_PCT,
           ROUND(p.I_PRICE, 4) AS I_PRICE,
           ROUND({net_price_sql}, 4) AS NET_PRICE,
           ROUND(({avg_sql}), 4) AS AVG_COST,
           ROUND(({avg_sql}) * NVL(p.P_SIZE, 1), 4) AS UNIT_COST,
+          ROUND(
+            CASE
+              WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
+              ELSE ({avg_sql})
+            END
+          , 4) AS PRIMARY_COST,
+          ROUND(
+            CASE
+              WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
+              ELSE ({avg_sql})
+            END * NVL(p.P_SIZE, 1)
+          , 4) AS PRIMARY_UNIT_COST,
           ROUND(NVL(p.P_SIZE, 1), 4) AS P_SIZE,
           ROUND(({vat_sql}), 2) AS VAT_PCT,
-          CAST('SAR' AS VARCHAR2(10)) AS A_CY
+          CAST('SAR' AS VARCHAR2(10)) AS A_CY,
+          p.MIN_ITM_PRICE,
+          CASE
+            WHEN NVL(p.MIN_ITM_PRICE, 0) > 0
+             AND NVL(({avg_sql}) * NVL(p.P_SIZE, 1), 0) > 0
+            THEN ROUND(
+              (p.MIN_ITM_PRICE / (1 + ({vat_sql}) / 100) - ({avg_sql}) * NVL(p.P_SIZE, 1))
+              / NULLIF(({avg_sql}) * NVL(p.P_SIZE, 1), 0) * 100
+            , 2)
+          END AS MIN_LIMIT_PRFT_PCT
         FROM {schema}.IAS_ITEM_PRICE p
         JOIN {schema}.IAS_ITM_MST m
           ON m.I_CODE = p.I_CODE
@@ -305,6 +385,7 @@ def _inner_select_sql(
 
 def count_low_margin_priced_items(
     *,
+    min_profit_pct: float | None = None,
     max_profit_pct: float = 15.0,
     lev_no: int = 1,
     warehouse_codes: str | list[str] | None = None,
@@ -313,11 +394,13 @@ def count_low_margin_priced_items(
     branch_code: str = "",
     group_code: str = "",
 ) -> int:
-    """عدد الصفوف المطابقة تحت حد نسبة الربح."""
+    """عدد الصفوف المطابقة ضمن نطاق نسبة الربح."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
 
-    max_prft = float(max_profit_pct)
+    min_prft, max_prft = _resolved_profit_bounds(
+        min_profit_pct, max_profit_pct, include_negative=include_negative
+    )
     lev = int(lev_no or 1)
     if isinstance(warehouse_codes, str):
         wh_list = _parse_wh_codes(warehouse_codes)
@@ -329,6 +412,7 @@ def count_low_margin_priced_items(
 
     ck = (
         _filter_key(
+            min_prft=min_prft,
             max_prft=max_prft,
             lev=lev,
             wh_list=wh_list,
@@ -346,6 +430,7 @@ def count_low_margin_priced_items(
     # العدد بعد استثناء الافتتاحي فقط — نفس مسار الجلب المصفّى
     total = len(
         _load_capped_rows(
+            min_prft=min_prft,
             max_prft=max_prft,
             lev=lev,
             wh_list=wh_list,
@@ -362,6 +447,7 @@ def count_low_margin_priced_items(
 
 def _load_capped_rows(
     *,
+    min_prft: float,
     max_prft: float,
     lev: int,
     wh_list: list[str],
@@ -375,6 +461,7 @@ def _load_capped_rows(
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     base_key = _filter_key(
+        min_prft=min_prft,
         max_prft=max_prft,
         lev=lev,
         wh_list=wh_list,
@@ -390,6 +477,7 @@ def _load_capped_rows(
 
     schema = _schema()
     params: dict[str, Any] = {
+        "min_prft": min_prft,
         "max_prft": max_prft,
         "lev": lev,
         "dflt_vat": _DEFAULT_VAT_PCT,
@@ -425,17 +513,26 @@ def _load_capped_rows(
           x.G_CODE,
           x.G_NAME,
           x.PRFT_PCT,
+          x.ONIX_PRFT_PCT,
           x.I_PRICE,
           x.NET_PRICE,
           x.AVG_COST,
           x.UNIT_COST,
+          x.PRIMARY_COST,
+          x.PRIMARY_UNIT_COST,
           x.P_SIZE,
           x.VAT_PCT,
-          x.A_CY
+          x.A_CY,
+          x.MIN_ITM_PRICE,
+          x.MIN_LIMIT_PRFT_PCT,
+          ROUND(
+            x.UNIT_COST * (1 + :max_prft / 100) * (1 + x.VAT_PCT / 100)
+          , 4) AS LIMIT_PRICE
         FROM (
           {inner}
         ) x
-        WHERE x.PRFT_PCT < :max_prft
+        WHERE x.PRFT_PCT >= :min_prft
+          AND x.PRFT_PCT < :max_prft
           {pos_only_sql}
         ORDER BY
           CASE WHEN x.PRFT_PCT < 0 THEN 1 ELSE 0 END,
@@ -445,7 +542,7 @@ def _load_capped_rows(
         """,
         params,
     )
-    out = _keep_moved_stock_rows(_rows_from_oracle(rows, lev))
+    out = _keep_moved_stock_rows(_rows_from_oracle(rows, lev, limit_pct=max_prft))
     cache.set(all_key, out, _CACHE_TTL)
     if cap is not None:
         capped = out[:cap]
@@ -456,6 +553,7 @@ def _load_capped_rows(
 
 def fetch_low_margin_priced_items(
     *,
+    min_profit_pct: float | None = None,
     max_profit_pct: float = 15.0,
     lev_no: int = 1,
     warehouse_codes: str | list[str] | None = None,
@@ -467,14 +565,20 @@ def fetch_low_margin_priced_items(
     branch_code: str = "",
     group_code: str = "",
 ) -> dict[str, Any]:
-    """يرجع صفحة من الأسعار ذات نسبة ربح أقل من max_profit_pct."""
+    """يرجع صفحة من الأسعار ضمن نطاق نسبة الربح (من ≤ ربح < إلى)."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
 
     try:
         max_prft = float(max_profit_pct)
     except (TypeError, ValueError) as exc:
-        raise OracleStockError("حد نسبة الربح غير صالح.") from exc
+        raise OracleStockError("حد نسبة الربح «إلى» غير صالح.") from exc
+
+    min_prft, max_prft = _resolved_profit_bounds(
+        min_profit_pct, max_prft, include_negative=include_negative
+    )
+    if min_prft >= max_prft:
+        raise OracleStockError("«من» يجب أن يكون أقل من «إلى».")
 
     try:
         lev = int(lev_no or 1)
@@ -527,6 +631,7 @@ def fetch_low_margin_priced_items(
             "kpis": {
                 "row_count": len(page),
                 "total_matching": total_matching,
+                "min_profit_pct": min_profit_pct,
                 "max_profit_pct": max_prft,
                 "lev_no": lev,
                 "limit": lim,
@@ -554,6 +659,7 @@ def fetch_low_margin_priced_items(
             return None
         try:
             return count_low_margin_priced_items(
+                min_profit_pct=min_profit_pct,
                 max_profit_pct=max_prft,
                 lev_no=lev,
                 warehouse_codes=wh_list,
@@ -574,6 +680,7 @@ def fetch_low_margin_priced_items(
 
     bulk_prefix = (
         _filter_key(
+            min_prft=min_prft,
             max_prft=max_prft,
             lev=lev,
             wh_list=wh_list,
@@ -602,6 +709,7 @@ def fetch_low_margin_priced_items(
         cap = next((c for c in _SINGLE_WH_CAPS if c >= need_end), _SINGLE_WH_LIMIT)
 
     all_rows = _load_capped_rows(
+        min_prft=min_prft,
         max_prft=max_prft,
         lev=lev,
         wh_list=wh_list,
@@ -632,6 +740,7 @@ def _xls_text(value: Any, *, css: str = "txt") -> str:
 
 def build_low_margin_excel(
     *,
+    min_profit_pct: float | None = None,
     max_profit_pct: float = 15.0,
     lev_no: int = 1,
     warehouse_codes: str | list[str] | None = None,
@@ -641,12 +750,13 @@ def build_low_margin_excel(
     branch_code: str = "",
     group_code: str = "",
 ):
-    """تصدير الصفوف تحت الحد إلى Excel (حتى _EXCEL_LIMIT)."""
+    """تصدير الصفوف ضمن نطاق الربح إلى Excel (حتى _EXCEL_LIMIT)."""
     import io
 
     from django.http import HttpResponse
 
     report = fetch_low_margin_priced_items(
+        min_profit_pct=min_profit_pct,
         max_profit_pct=max_profit_pct,
         lev_no=lev_no,
         warehouse_codes=warehouse_codes,
@@ -660,6 +770,12 @@ def build_low_margin_excel(
     )
     names = wh_name_map or {}
     kpis = report.get("kpis") or {}
+    min_p = kpis.get("min_profit_pct")
+    range_label = (
+        f"من {float(min_p):g}% إلى {max_profit_pct:g}%"
+        if min_p is not None
+        else f"أقل من {max_profit_pct:g}%"
+    )
     buf = io.StringIO()
     buf.write("\ufeff")
     buf.write(
@@ -685,7 +801,7 @@ def build_low_margin_excel(
         "</style></head><body dir=\"rtl\">"
     )
     buf.write(
-        f"<table><caption>أسعار بنسبة ربح أقل من {max_profit_pct:g}%"
+        f"<table><caption>أسعار بنسبة ربح {range_label}"
         f"<br><span class=\"sub\">"
         f"المستوى {int(lev_no or 1)} · "
         f"{int(kpis.get('total_matching') or len(report.get('rows') or []))} صنف"
@@ -693,8 +809,9 @@ def build_low_margin_excel(
         "<thead><tr>"
         "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
         "<th>المخزن</th><th>اسم المخزن</th><th>المجموعة</th><th>كود المجموعة</th>"
-        "<th>متوسط التكلفة</th><th>السعر</th>"
-        "<th>نسبة الربح</th><th>العملة</th><th>المستوى</th><th>اسم المستوى</th>"
+        "<th>متوسط التكلفة</th><th>السعر شامل الضريبة</th>"
+        "<th>نسبة الربح</th><th>ربح أونكس</th><th>حد الربح %</th><th>حد السعر</th>"
+        "<th>العملة</th><th>المستوى</th><th>اسم المستوى</th>"
         "</tr></thead><tbody>"
     )
     for i, r in enumerate(report.get("rows") or [], start=1):
@@ -712,6 +829,9 @@ def build_low_margin_excel(
         buf.write(_xls_num(r.get("avg_cost"), css="num", digits=4))
         buf.write(_xls_num(r.get("price"), css="num", digits=4))
         buf.write(_xls_num(r.get("profit_pct"), css="pct", digits=2))
+        buf.write(_xls_num(r.get("onyx_profit_pct"), css="pct", digits=2))
+        buf.write(_xls_num(r.get("limit_profit_pct"), css="pct", digits=2))
+        buf.write(_xls_num(r.get("limit_price"), css="num", digits=4))
         buf.write(_xls_text(r.get("currency"), css="txt"))
         buf.write(f'<td class="int">{int(r.get("lev_no") or lev_no or 1)}</td>')
         buf.write(_xls_text(r.get("lev_name"), css="txt"))

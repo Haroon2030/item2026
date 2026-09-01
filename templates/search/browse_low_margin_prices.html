@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="حد الربح من تسعير الصنف">
   <div class="dash-head-copy">
     <h2>حد الربح من تسعير الصنف</h2>
-    <p>أصناف برصيد كمية وحركة مخزون (شراء/تحويل/تسوية) ومسعّرة بوحدة رئيسية أو بيع — ما ربح تسعيره أقل من الحد (مثال: 15%). يُستثنى الافتتاحي فقط.</p>
+    <p>أصناف برصيد كمية وحركة مخزون (شراء/تحويل/تسوية) ومسعّرة — اعرض ما نسبة ربحه ضمن النطاق الذي تحدده (مثال: من 0% إلى 15%). يُستثنى الافتتاحي فقط.</p>
   </div>
 </section>
 
@@ -37,7 +37,7 @@
         {% if report.kpis.truncated %}
           تجاوز حد العرض — صدّر Excel
         {% else %}
-          كمية وحركة · تحت {{ max_profit_input }}%
+          كمية وحركة · {% if min_profit_input %}{{ min_profit_input }}–{% endif %}{{ max_profit_input }}%
         {% endif %}
       </small>
     </article>
@@ -68,8 +68,8 @@
         </span>
         حد الربح
       </span>
-      <strong class="lm-kpi-value mono">{{ max_profit_input }}%</strong>
-      <small class="lm-kpi-hint">أقل من هذه النسبة</small>
+      <strong class="lm-kpi-value mono">{% if min_profit_input %}{{ min_profit_input }}–{% endif %}{{ max_profit_input }}%</strong>
+      <small class="lm-kpi-hint">من → إلى</small>
     </article>
   </section>
 {% endif %}
@@ -107,8 +107,13 @@
     </select>
   </div>
 
+  <div class="field lm-field-min">
+    <label for="lm-min">من % <span class="lm-opt">(اختياري)</span></label>
+    <input id="lm-min" type="number" step="0.01" name="min_profit" value="{{ min_profit_input }}" placeholder="—" inputmode="decimal">
+  </div>
+
   <div class="field lm-field-max">
-    <label for="lm-max">حد الربح % <span class="lm-req" aria-hidden="true">*</span></label>
+    <label for="lm-max">إلى % <span class="lm-req" aria-hidden="true">*</span></label>
     <input id="lm-max" type="number" step="0.01" min="0" name="max_profit" value="{{ max_profit_input }}" placeholder="15" required inputmode="decimal" aria-required="true">
   </div>
 
@@ -163,6 +168,7 @@
         data-warehouses="{{ warehouses_raw }}"
         data-group="{{ selected_group }}"
         data-q="{{ item_q }}"
+        data-min-profit="{{ min_profit_input }}"
         data-max-profit="{{ max_profit_input }}"
         data-lev="{{ lev_no }}"
         data-include-neg="{% if include_negative %}1{% else %}0{% endif %}"
@@ -177,6 +183,9 @@
           <col class="col-cost">
           <col class="col-price">
           <col class="col-prft">
+          <col class="col-onixprft">
+          <col class="col-limprft">
+          <col class="col-limprc">
           <col class="col-cy">
           <col class="col-lev">
           <col class="col-levn">
@@ -190,8 +199,11 @@
             <th class="lm-th-wh">المخزن</th>
             <th class="lm-th-group">المجموعة</th>
             <th class="lm-th-cost">متوسط التكلفة</th>
-            <th class="lm-th-price">السعر</th>
-            <th class="lm-th-prft">نسبة الربح</th>
+            <th class="lm-th-price">السعر شامل الضريبة</th>
+            <th class="lm-th-prft" title="صافي ÷ I_CWTAVG">نسبة الربح</th>
+            <th class="lm-th-onixprft" title="صافي ÷ PRIMARY_COST">ربح أونكس</th>
+            <th class="lm-th-limprft">حد الربح</th>
+            <th class="lm-th-limprc">حد السعر</th>
             <th class="lm-th-cy">العملة</th>
             <th class="lm-th-lev">المستوى</th>
             <th class="lm-th-levn">اسم المستوى</th>
@@ -208,7 +220,10 @@
               <td class="lm-td-group" title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono lm-td-cost">{{ r.avg_cost_display }}</td>
               <td class="mono lm-td-price">{{ r.price_display }}</td>
-              <td class="mono lm-td-prft">{{ r.profit_pct_display }}%</td>
+              <td class="mono lm-td-prft" title="I_CWTAVG {{ r.unit_cost_display }}">{{ r.profit_pct_display }}%</td>
+              <td class="mono lm-td-onixprft" title="PRIMARY {{ r.primary_cost_display }}">{{ r.onyx_profit_pct_display }}%</td>
+              <td class="mono lm-td-limprft" title="{% if r.limit_source == 'min' %}من أقل سعر مسموح{% else %}عند حد «إلى» {{ max_profit_input }}%{% endif %}">{{ r.limit_profit_pct_display }}%</td>
+              <td class="mono lm-td-limprc" title="{% if r.limit_source == 'min' %}أقل سعر مسموح{% else %}سعر عند حد «إلى»{% endif %}">{{ r.limit_price_display }}</td>
               <td class="mono lm-td-cy">{{ r.currency }}</td>
               <td class="mono lm-td-lev">{{ r.lev_no }}</td>
               <td class="lm-td-levn">{{ r.lev_name }}</td>

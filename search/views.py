@@ -2550,6 +2550,7 @@ def browse_low_margin_prices(request):
     selected_group = str(request.GET.get('group') or '').strip()
     wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()
+    min_prft_raw = str(request.GET.get('min_profit') or '').strip()
     max_prft_raw = str(request.GET.get('max_profit') or '').strip()
     lev_raw = str(request.GET.get('lev') or '1').strip()
     want_excel = str(request.GET.get('export') or '').strip().lower() in {
@@ -2565,11 +2566,13 @@ def browse_low_margin_prices(request):
     )
     submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
 
+    min_profit: float | None = None
+    min_profit_input = ''
     max_profit = 15.0
     max_profit_input = _decimal_input_str(15.0)
     lev_no = 1
     if submitted and not max_prft_raw:
-        error = 'حد الربح % مطلوب — اكتب النسبة (الافتراضي 15).'
+        error = 'حد الربح «إلى» مطلوب — اكتب النسبة العليا (الافتراضي 15).'
     else:
         try:
             if max_prft_raw:
@@ -2577,11 +2580,18 @@ def browse_low_margin_prices(request):
                 max_profit_input = _decimal_input_str(max_profit)
             elif not submitted:
                 max_profit_input = _decimal_input_str(15.0)
+            if min_prft_raw:
+                min_profit = _parse_decimal_param(min_prft_raw)
+                min_profit_input = _decimal_input_str(min_profit)
             lev_no = int(lev_raw or 1)
             if max_profit < 0:
-                error = 'حد الربح يجب أن يكون صفراً أو أكثر.'
+                error = 'حد الربح «إلى» يجب أن يكون صفراً أو أكثر.'
+            if min_profit is not None and min_profit >= max_profit:
+                error = '«من» يجب أن يكون أقل من «إلى».'
         except ValueError:
-            error = 'قيم الحد / المستوى غير صحيحة — استخدم نقطة للكسور (مثل 15 أو 12.5).'
+            error = 'قيم نطاق الربح / المستوى غير صحيحة — استخدم نقطة للكسور (مثل 5 أو 15).'
+            min_profit = None
+            min_profit_input = ''
             max_profit = 15.0
             max_profit_input = _decimal_input_str(15.0)
             lev_no = 1
@@ -2654,6 +2664,7 @@ def browse_low_margin_prices(request):
                     from .oracle_low_margin_prices import build_low_margin_excel
 
                     return build_low_margin_excel(
+                        min_profit_pct=min_profit,
                         max_profit_pct=max_profit,
                         lev_no=lev_no,
                         warehouse_codes=wh_codes_raw or None,
@@ -2672,6 +2683,7 @@ def browse_low_margin_prices(request):
                     )
                     fetch_limit = 100_000 if is_single_wh else 200
                     report = fetch_low_margin_priced_items(
+                        min_profit_pct=min_profit,
                         max_profit_pct=max_profit,
                         lev_no=lev_no,
                         warehouse_codes=wh_codes_raw or None,
@@ -2693,7 +2705,7 @@ def browse_low_margin_prices(request):
             else:
                 hint = (
                     'اختر فرعاً ومخزناً والمجموعة اختيارياً، '
-                    'حدّد حد الربح % (افتراضي 15)، ثم اضغط عرض.'
+                    'حدّد نطاق الربح % (من → إلى، افتراضي إلى 15)، ثم اضغط عرض.'
                 )
     except ValidationError as exc:
         error = str(exc)
@@ -2772,6 +2784,8 @@ def browse_low_margin_prices(request):
             'selected_warehouse': selected_warehouse,
             'warehouses_raw': wh_codes_raw,
             'item_q': item_q,
+            'min_profit': min_profit,
+            'min_profit_input': min_profit_input,
             'max_profit': max_profit,
             'max_profit_input': max_profit_input,
             'lev_no': lev_no,
@@ -2796,6 +2810,7 @@ def browse_low_margin_prices_api(request):
     selected_group = str(request.GET.get('group') or '').strip()
     wh_codes_raw = str(request.GET.get('warehouses') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()
+    min_prft_raw = str(request.GET.get('min_profit') or '').strip()
     max_prft_raw = str(request.GET.get('max_profit') or '').strip()
     lev_raw = str(request.GET.get('lev') or '1').strip()
     include_negative = str(request.GET.get('include_neg') or '1').strip() not in (
@@ -2805,10 +2820,18 @@ def browse_low_margin_prices_api(request):
     )
 
     if not max_prft_raw:
-        return JsonResponse({'ok': False, 'error': 'حد الربح % مطلوب.'}, status=400)
+        return JsonResponse({'ok': False, 'error': 'حد الربح «إلى» مطلوب.'}, status=400)
 
     try:
         max_profit = _parse_decimal_param(max_prft_raw)
+        min_profit = (
+            _parse_decimal_param(min_prft_raw) if min_prft_raw else None
+        )
+        if min_profit is not None and min_profit >= max_profit:
+            return JsonResponse(
+                {'ok': False, 'error': '«من» يجب أن يكون أقل من «إلى».'},
+                status=400,
+            )
         lev_no = int(lev_raw or 1)
         offset = max(0, int(request.GET.get('offset') or 0))
         limit = min(max(1, int(request.GET.get('limit') or 200)), 500)
@@ -2855,6 +2878,7 @@ def browse_low_margin_prices_api(request):
             }
 
             report = fetch_low_margin_priced_items(
+                min_profit_pct=min_profit,
                 max_profit_pct=max_profit,
                 lev_no=lev_no,
                 warehouse_codes=wh_codes_raw or None,

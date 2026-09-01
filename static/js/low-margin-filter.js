@@ -5,6 +5,7 @@
   var whEl = document.getElementById('lm-wh');
   var dataEl = document.getElementById('lm-wh-data');
   var formEl = document.getElementById('lm-filter-form');
+  var minEl = document.getElementById('lm-min');
   var maxEl = document.getElementById('lm-max');
   if (!branchEl || !whEl || !dataEl) return;
 
@@ -30,7 +31,13 @@
 
   if (formEl) {
     formEl.addEventListener('submit', function () {
+      normalizeDecimalInput(minEl);
       normalizeDecimalInput(maxEl);
+    });
+  }
+  if (minEl) {
+    minEl.addEventListener('blur', function () {
+      normalizeDecimalInput(minEl);
     });
   }
   if (maxEl) {

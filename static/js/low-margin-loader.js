@@ -41,7 +41,10 @@
       '<td class="lm-td-group" title="' + esc(row.g_code) + '">' + esc(row.g_name) + '</td>' +
       '<td class="mono lm-td-cost">' + esc(row.avg_cost_display) + '</td>' +
       '<td class="mono lm-td-price">' + esc(row.price_display) + '</td>' +
-      '<td class="mono lm-td-prft">' + esc(row.profit_pct_display) + '%</td>' +
+      '<td class="mono lm-td-prft" title="I_CWTAVG ' + esc(row.unit_cost_display) + '">' + esc(row.profit_pct_display) + '%</td>' +
+      '<td class="mono lm-td-onixprft" title="PRIMARY ' + esc(row.primary_cost_display) + '">' + esc(row.onyx_profit_pct_display) + '%</td>' +
+      '<td class="mono lm-td-limprft" title="' + esc(row.limit_source === 'min' ? 'من أقل سعر مسموح' : 'عند حد «إلى»') + '">' + esc(row.limit_profit_pct_display) + '%</td>' +
+      '<td class="mono lm-td-limprc" title="' + esc(row.limit_source === 'min' ? 'أقل سعر مسموح' : 'سعر عند حد «إلى»') + '">' + esc(row.limit_price_display) + '</td>' +
       '<td class="mono lm-td-cy">' + esc(row.currency) + '</td>' +
       '<td class="mono lm-td-lev">' + esc(row.lev_no) + '</td>' +
       '<td class="lm-td-levn">' + esc(row.lev_name) + '</td>';
@@ -86,6 +89,7 @@
       warehouses: table.getAttribute('data-warehouses') || '',
       group: table.getAttribute('data-group') || '',
       q: table.getAttribute('data-q') || '',
+      min_profit: table.getAttribute('data-min-profit') || '',
       max_profit: table.getAttribute('data-max-profit') || '15',
       lev: table.getAttribute('data-lev') || '1',
       include_neg: table.getAttribute('data-include-neg') || '1',
