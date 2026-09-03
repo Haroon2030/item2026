@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from .oracle_pr_compare import (
@@ -21,6 +21,10 @@ from .oracle_stock import (
     _schema,
     oracle_enabled,
 )
+
+# نافذة مطابقة الأصناف غير المتوفرة مع طلبات الشراء
+_SHORT_PR_LOOKBACK_DAYS = 7
+_ICODE_IN_CHUNK = 400
 
 
 def _bind_num(value: Any):
@@ -218,6 +222,10 @@ def fetch_today_transfer_requests(
                 "user_name": str(row.get("USER_NAME") or "").strip(),
                 "item_count": int(row.get("ITEM_COUNT") or 0),
                 "source_short_count": 0,
+                "short_pr_item_count": 0,
+                "short_pr_nos": [],
+                "short_pr_display": "",
+                "short_pr_title": "",
                 "qty_total": float(row.get("QTY_TOTAL") or 0),
                 "qty_display": _qty(row.get("QTY_TOTAL") or 0),
                 "processed": processed,
@@ -226,7 +234,7 @@ def fetch_today_transfer_requests(
                 "status_kind": status_kind,
             }
         )
-    _attach_source_short_counts(out)
+    _attach_source_short_counts(out, day=day)
     return out
 
 
@@ -369,15 +377,16 @@ def _enrich_packs_from_stock(packs: dict[str, float], stock_rows: list[dict]) ->
             packs[unit] = float(psz)
 
 
-def _count_source_short(
+def _short_item_codes(
     items: list[dict],
     *,
     from_wh: str,
     stock_map: dict[str, list[dict]],
     packs_map: dict[str, dict[str, float]],
-) -> int:
-    """عدد أصناف الطلب التي لا يغطيها رصيد المخزن المطلوب منه (بعد المعلّق)."""
-    short = 0
+) -> list[str]:
+    """أكواد الأصناف التي لا يغطيها رصيد المخزن المطلوب منه (بعد المعلّق)."""
+    short: list[str] = []
+    seen: set[str] = set()
     for item in items:
         packs = dict(packs_map.get(item["code"]) or {})
         stock_rows = stock_map.get(item["code"]) or []
@@ -391,12 +400,155 @@ def _count_source_short(
         req_qty = float(item.get("req_qty") or 0)
         source_expected = float(source.get("expected_qty") or 0)
         if source_expected + 1e-9 < req_qty:
-            short += 1
+            code = str(item.get("code") or "").strip()
+            if code and code not in seen:
+                seen.add(code)
+                short.append(code)
     return short
 
 
-def _attach_source_short_counts(requests: list[dict]) -> None:
-    """يحسب لكل طلب عدد الأصناف غير المتوفرة في المخزن المطلوب منه."""
+def _recent_pr_bounds(day: date | None = None) -> tuple[date, date]:
+    end = day or date.today()
+    return end - timedelta(days=_SHORT_PR_LOOKBACK_DAYS - 1), end + timedelta(days=1)
+
+
+def _bind_icode(code: str):
+    """I_CODE غالباً VARCHAR — الربط كنص يمنع ORA-01722 عند وجود أكواد غير رقمية."""
+    return str(code or "").strip()
+
+
+def fetch_recent_pr_by_items(
+    item_codes: list[str],
+    *,
+    day: date | None = None,
+) -> dict[str, list[dict]]:
+    """
+    طلبات شراء خلال آخر 7 أيام تحتوي الأصناف المعطاة.
+    مجموعة الأصناف صغيرة أولاً ثم مسح P_REQUEST بالتاريخ.
+    المفتاح: كود الصنف → قائمة {pr_no, pr_type, pr_ser, date_label}.
+    """
+    codes = [str(c).strip() for c in item_codes if str(c).strip()]
+    if not codes or not oracle_enabled():
+        return {}
+    schema = _schema()
+    d_from, d_to_excl = _recent_pr_bounds(day)
+    by_item: dict[str, list[dict]] = {code: [] for code in codes}
+    seen_pair: dict[str, set[str]] = {code: set() for code in codes}
+
+    for start in range(0, len(codes), _ICODE_IN_CHUNK):
+        chunk = codes[start : start + _ICODE_IN_CHUNK]
+        params: dict[str, Any] = {"d_from": d_from, "d_to_excl": d_to_excl}
+        keys: list[str] = []
+        for i, code in enumerate(chunk):
+            key = f"c{i}"
+            keys.append(f":{key}")
+            params[key] = _bind_icode(code)
+        try:
+            rows = _fetch_all(
+                f"""
+                SELECT /*+ LEADING(p d) USE_NL(d) */
+                       d.I_CODE AS ITEM_CODE,
+                       p.PR_TYPE AS PR_TYPE,
+                       p.PR_NO AS PR_NO,
+                       p.PR_SER AS PR_SER,
+                       NVL(p.AD_DATE, p.PR_DATE) AS PR_WHEN,
+                       TO_CHAR(NVL(p.AD_DATE, p.PR_DATE), 'YYYY-MM-DD') AS PR_DAY
+                FROM {schema}.P_REQUEST p
+                JOIN {schema}.P_REQUEST_DETAIL d
+                  ON d.PR_TYPE = p.PR_TYPE
+                 AND d.PR_NO = p.PR_NO
+                 AND d.PR_SER = p.PR_SER
+                WHERE p.PR_DATE >= :d_from
+                  AND p.PR_DATE < :d_to_excl
+                  AND (p.INACTIVE IS NULL OR p.INACTIVE = 0)
+                  AND TO_CHAR(d.I_CODE) IN ({", ".join(keys)})
+                ORDER BY NVL(p.AD_DATE, p.PR_DATE) DESC, p.PR_NO DESC
+                """,
+                params,
+            )
+        except Exception:
+            rows = []
+        for row in rows:
+            code = _norm_code(row.get("ITEM_CODE")) or str(row.get("ITEM_CODE") or "").strip()
+            pr_no = _norm_code(row.get("PR_NO")) or str(row.get("PR_NO") or "").strip()
+            if not code or not pr_no:
+                continue
+            # طابق المفتاح حتى لو اختلف تنسيق الأصفار البادئة
+            target = code if code in by_item else next(
+                (c for c in chunk if _norm_code(c) == code or c == code),
+                "",
+            )
+            if not target:
+                continue
+            pair_key = (
+                f"{_norm_code(row.get('PR_TYPE'))}|{pr_no}|"
+                f"{_norm_code(row.get('PR_SER'))}"
+            )
+            if pair_key in seen_pair.setdefault(target, set()):
+                continue
+            seen_pair[target].add(pair_key)
+            by_item.setdefault(target, []).append(
+                {
+                    "pr_type": _norm_code(row.get("PR_TYPE"))
+                    or str(row.get("PR_TYPE") or "").strip(),
+                    "pr_no": pr_no,
+                    "pr_ser": _norm_code(row.get("PR_SER"))
+                    or str(row.get("PR_SER") or "").strip(),
+                    "date_label": str(row.get("PR_DAY") or "").strip()
+                    or _dt_label(row.get("PR_WHEN")),
+                }
+            )
+    return {k: v for k, v in by_item.items() if v}
+
+
+def _pr_summary_for_codes(
+    codes: list[str],
+    pr_by_item: dict[str, list[dict]],
+) -> dict[str, Any]:
+    """ملخص طلبات الشراء للأصناف غير المتوفرة."""
+    matched = 0
+    pr_nos: list[str] = []
+    seen_nos: set[str] = set()
+    detail_bits: list[str] = []
+    for code in codes:
+        hits = pr_by_item.get(code) or []
+        if not hits:
+            # جرّب تطابق بالرمز المطبّع
+            norm = _norm_code(code)
+            if norm and norm != code:
+                hits = pr_by_item.get(norm) or []
+        if not hits:
+            continue
+        matched += 1
+        nos = []
+        for hit in hits:
+            no = str(hit.get("pr_no") or "").strip()
+            if not no:
+                continue
+            nos.append(no)
+            if no not in seen_nos:
+                seen_nos.add(no)
+                pr_nos.append(no)
+        if nos:
+            detail_bits.append(f"{code} ← طلب {('، '.join(nos[:4]))}")
+    display = "، ".join(pr_nos[:6])
+    if len(pr_nos) > 6:
+        display = f"{display} +"
+    title = " · ".join(detail_bits[:8]) if detail_bits else ""
+    return {
+        "short_pr_item_count": matched,
+        "short_pr_nos": pr_nos,
+        "short_pr_display": display,
+        "short_pr_title": title,
+    }
+
+
+def _attach_source_short_counts(
+    requests: list[dict],
+    *,
+    day: date | None = None,
+) -> None:
+    """يحسب لكل طلب عدد الأصناف غير المتوفرة ومطابقتها مع طلبات شراء آخر 7 أيام."""
     if not requests:
         return
     sers = [str(row.get("tr_ser") or "").strip() for row in requests]
@@ -417,14 +569,35 @@ def _attach_source_short_counts(requests: list[dict]) -> None:
                 item_codes.append(code)
     stock_map = _fetch_stock_for_items(item_codes, warehouse_codes=wh_codes or None)
     packs_map = _fetch_unit_packs_map(item_codes)
+    short_by_ser: dict[str, list[str]] = {}
+    all_short: list[str] = []
+    seen_short: set[str] = set()
     for req in requests:
         ser = str(req.get("tr_ser") or "").strip()
-        req["source_short_count"] = _count_source_short(
+        short_codes = _short_item_codes(
             items_by_ser.get(ser) or [],
             from_wh=str(req.get("from_wh_code") or "").strip(),
             stock_map=stock_map,
             packs_map=packs_map,
         )
+        short_by_ser[ser] = short_codes
+        req["source_short_count"] = len(short_codes)
+        for code in short_codes:
+            if code not in seen_short:
+                seen_short.add(code)
+                all_short.append(code)
+
+    pr_by_item: dict[str, list[dict]] = {}
+    if all_short:
+        try:
+            pr_by_item = fetch_recent_pr_by_items(all_short, day=day)
+        except Exception:
+            # لا تُسقط قائمة طلبات التحويل إن فشل مطابقة طلب الشراء
+            pr_by_item = {}
+    for req in requests:
+        ser = str(req.get("tr_ser") or "").strip()
+        summary = _pr_summary_for_codes(short_by_ser.get(ser) or [], pr_by_item)
+        req.update(summary)
 
 
 def _cell_or_empty(cell: dict | None) -> dict:
@@ -484,6 +657,7 @@ def build_transfer_request_compare(
     compare_items: list[dict] = []
     source_ok = 0
     source_short = 0
+    short_codes: list[str] = []
     for item in items:
         packs = dict(packs_map.get(item["code"]) or {})
         stock_rows = stock_map.get(item["code"]) or []
@@ -502,6 +676,7 @@ def build_transfer_request_compare(
             source_ok += 1
         else:
             source_short += 1
+            short_codes.append(item["code"])
         compare_items.append(
             {
                 **item,
@@ -510,8 +685,45 @@ def build_transfer_request_compare(
                 "can_cover": can_cover,
                 "gap_qty": round(req_qty - source_expected, 4),
                 "gap_display": _qty(max(req_qty - source_expected, 0)),
+                "recent_pr_nos": [],
+                "recent_pr_display": "",
+                "recent_prs": [],
             }
         )
+
+    pr_day = date.today()
+    pr_by_item: dict[str, list[dict]] = {}
+    if short_codes:
+        try:
+            pr_by_item = fetch_recent_pr_by_items(short_codes, day=pr_day)
+        except Exception:
+            pr_by_item = {}
+    for row in compare_items:
+        if row.get("can_cover"):
+            continue
+        hits = pr_by_item.get(row["code"]) or []
+        if not hits:
+            norm = _norm_code(row["code"])
+            if norm and norm != row["code"]:
+                hits = pr_by_item.get(norm) or []
+        # إزالة تكرار الطلب مع الحفاظ على الترتيب
+        uniq_prs: list[dict] = []
+        seen_keys: set[str] = set()
+        for hit in hits:
+            no = str(hit.get("pr_no") or "").strip()
+            if not no:
+                continue
+            key = (
+                f"{hit.get('pr_type') or ''}|{no}|{hit.get('pr_ser') or ''}"
+            )
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            uniq_prs.append(hit)
+        nos = [str(h.get("pr_no") or "").strip() for h in uniq_prs]
+        row["recent_prs"] = uniq_prs
+        row["recent_pr_nos"] = nos
+        row["recent_pr_display"] = "، ".join(nos[:6]) + (" +" if len(nos) > 6 else "")
 
     return {
         "header": header,
@@ -519,4 +731,5 @@ def build_transfer_request_compare(
         "item_count": len(compare_items),
         "source_ok_count": source_ok,
         "source_short_count": source_short,
+        "short_pr_lookback_days": _SHORT_PR_LOOKBACK_DAYS,
     }

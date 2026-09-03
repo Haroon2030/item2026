@@ -4162,6 +4162,12 @@ def browse_tr_compare_detail(request):
         'yes',
         'on',
     )
+    pr_match = str(request.GET.get('pr_match') or '').strip() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
     compare = None
     error = ''
 
@@ -4183,15 +4189,23 @@ def browse_tr_compare_detail(request):
                     )
                 if compare is None:
                     error = 'طلب التحويل غير موجود أو غير نشط.'
-                elif short_only and compare:
+                elif (short_only or pr_match) and compare:
                     all_items = list(compare.get('items') or [])
                     short_items = [row for row in all_items if not row.get('can_cover')]
+                    # pr_match: كل غير المتوفر مع قائمة طلبات الشراء (أو «لا يوجد»)
                     compare = {
                         **compare,
                         'items': short_items,
                         'shown_item_count': len(short_items),
                         'short_only': True,
+                        'pr_match': bool(pr_match),
                         'all_item_count': len(all_items),
+                        'short_item_count': len(short_items),
+                        'short_pr_hit_count': sum(
+                            1
+                            for row in short_items
+                            if row.get('recent_prs') or row.get('recent_pr_nos')
+                        ),
                     }
         except Exception as exc:  # noqa: BLE001
             logger.warning('browse_tr_compare_detail failed: %s', exc)
@@ -4208,7 +4222,8 @@ def browse_tr_compare_detail(request):
             'selected_branch': selected_branch,
             'selected_warehouse': selected_warehouse,
             'selected_date': selected_date,
-            'short_only': short_only,
+            'short_only': short_only or pr_match,
+            'pr_match': pr_match,
             'compare': compare,
             'error': error,
         },

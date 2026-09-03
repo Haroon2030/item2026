@@ -67,16 +67,29 @@
 
   <section class="dash-panel dash-panel-glass pr-compare-sheet-panel" aria-label="جدول مقارنة الأصناف">
     <div class="dash-panel-head">
-      <h3>{% if short_only %}الأصناف غير المتوفرة{% else %}ورقة المقارنة{% endif %}</h3>
+      <h3>
+        {% if pr_match %}الأصناف غير المتوفرة وطلبات الشراء
+        {% elif short_only %}الأصناف غير المتوفرة
+        {% else %}ورقة المقارنة{% endif %}
+      </h3>
       <span class="result-pill">
-        {% if short_only %}
+        {% if pr_match %}
+          {{ compare.shown_item_count }} صنف · {{ compare.short_pr_hit_count }} في طلب شراء
+        {% elif short_only %}
           {{ compare.shown_item_count }} غير متوفر من {{ compare.all_item_count }}
         {% else %}
           {{ compare.item_count }} صنف · ناقص {{ compare.source_short_count }}
         {% endif %}
       </span>
     </div>
-    {% if short_only %}
+    {% if pr_match %}
+      <p class="pr-compare-sheet-note pr-compare-short-only-note">
+        لكل صنف غير متوفر: قائمة أرقام طلبات الشراء خلال آخر 7 أيام، أو «لا يوجد طلبات لشراء».
+        <a
+          href="{% url 'browse_tr_compare_detail' %}?tr_type={{ tr_type|urlencode }}&amp;tr_no={{ tr_no|urlencode }}&amp;tr_ser={{ tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+        >عرض كل الأصناف</a>
+      </p>
+    {% elif short_only %}
       <p class="pr-compare-sheet-note pr-compare-short-only-note">
         عرض الأصناف التي لا يغطيها المخزن المطلوب فقط.
         <a
@@ -86,6 +99,52 @@
     {% endif %}
 
     {% if compare.items %}
+      {% if pr_match %}
+      <div class="table-wrap pr-compare-sheet-wrap">
+        <table class="pr-compare-sheet pr-match-sheet">
+          <thead>
+            <tr>
+              <th class="pr-compare-sheet-num">#</th>
+              <th class="pr-compare-sheet-name">الصنف</th>
+              <th class="pr-compare-sheet-code">الكود</th>
+              <th class="pr-compare-sheet-unit">الوحدة</th>
+              <th class="pr-compare-sheet-req">مطلوب</th>
+              <th class="pr-compare-sheet-pr-list" title="طلبات شراء خلال آخر 7 أيام">أرقام طلبات الشراء</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in compare.items %}
+              <tr class="{% if item.recent_prs %}is-pr-hit{% else %}is-pr-miss{% endif %}">
+                <td class="pr-compare-sheet-num mono">{{ forloop.counter }}</td>
+                <td class="pr-compare-sheet-name" title="{{ item.name }}"><strong>{{ item.name }}</strong></td>
+                <td class="pr-compare-sheet-code mono">{{ item.code }}</td>
+                <td class="pr-compare-sheet-unit">{{ item.unit }}</td>
+                <td class="pr-compare-sheet-req mono">{{ item.req_display }}</td>
+                <td class="pr-compare-sheet-pr-list{% if item.recent_prs %} is-hit{% else %} is-miss{% endif %}">
+                  {% if item.recent_prs %}
+                    <ul class="pr-match-pr-list">
+                      {% for pr in item.recent_prs %}
+                        <li>
+                          <a
+                            class="pr-compare-pr-doc-link"
+                            href="{% url 'browse_pr_compare_detail' %}?pr_type={{ pr.pr_type|urlencode }}&amp;pr_no={{ pr.pr_no|urlencode }}&amp;pr_ser={{ pr.pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}"
+                            title="فتح طلب الشراء {{ pr.pr_no }}{% if pr.date_label %} — {{ pr.date_label }}{% endif %}"
+                          >{{ pr.pr_no }}</a>
+                          {% if pr.date_label %}<span class="pr-match-pr-day mono">{{ pr.date_label }}</span>{% endif %}
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <span class="pr-match-none">لا يوجد طلبات لشراء</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="pr-compare-sheet-note">اضغط رقم الطلب لفتح تفاصيل طلب الشراء.</p>
+      {% else %}
       <div class="table-wrap pr-compare-sheet-wrap">
         <table class="pr-compare-sheet">
           <thead>
@@ -104,6 +163,7 @@
                 <span class="pr-compare-sheet-wh-branch">المخزن الرئيسي بعد الترحيل</span>
               </th>
               <th class="pr-compare-sheet-count">النقص</th>
+              <th class="pr-compare-sheet-pr" title="طلبات شراء خلال آخر 7 أيام تحتوي هذا الصنف">طلب شراء (7 أيام)</th>
             </tr>
           </thead>
           <tbody>
@@ -131,12 +191,28 @@
                   <td class="pr-compare-sheet-qty is-blank">—</td>
                 {% endif %}
                 <td class="pr-compare-sheet-count mono">{% if item.can_cover %}—{% else %}{{ item.gap_display }}{% endif %}</td>
+                <td class="pr-compare-sheet-pr mono{% if item.recent_prs %} is-hit{% endif %}">
+                  {% if item.can_cover %}
+                    —
+                  {% elif item.recent_prs %}
+                    {% for pr in item.recent_prs %}
+                      <a
+                        class="pr-compare-pr-doc-link"
+                        href="{% url 'browse_pr_compare_detail' %}?pr_type={{ pr.pr_type|urlencode }}&amp;pr_no={{ pr.pr_no|urlencode }}&amp;pr_ser={{ pr.pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}"
+                        title="فتح طلب الشراء {{ pr.pr_no }}{% if pr.date_label %} — {{ pr.date_label }}{% endif %}"
+                      >{{ pr.pr_no }}</a>{% if not forloop.last %}، {% endif %}
+                    {% endfor %}
+                  {% else %}
+                    <span class="pr-match-none">لا يوجد طلبات لشراء</span>
+                  {% endif %}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
       <p class="pr-compare-sheet-note">الأرقام بنفس وحدة الطلب. الأحمر = المخزن المطلوب لا يغطي الكمية. مرّر على الخلية لرؤية الرصيد الحالي وغير المرحّل.</p>
+      {% endif %}
     {% else %}
       <p class="sales-empty">لا توجد أصناف في هذا الطلب.</p>
     {% endif %}

@@ -9624,6 +9624,133 @@ html.users-modal-open {
   font-weight: 800;
 }
 
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-list-col-pr {
+  min-width: 8.5rem;
+  max-width: 14rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+  line-height: 1.25;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-list-col-pr.is-hit {
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-hit {
+  display: block;
+  font-weight: 800;
+  color: #0f766e;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-nos {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78em;
+  font-weight: 700;
+  color: #115e59;
+  word-break: break-word;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.15rem;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-link:hover,
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-link:focus-visible {
+  background: #ccfbf1;
+  outline: none;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-link:hover .pr-compare-pr-nos,
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-link:focus-visible .pr-compare-pr-nos {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.pr-compare-dash .pr-compare-list-sheet .pr-compare-pr-miss {
+  color: #94a3b8;
+}
+
+.pr-compare-dash .pr-compare-sheet .pr-compare-sheet-pr {
+  min-width: 7rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+
+.pr-compare-dash .pr-compare-sheet .pr-compare-sheet-pr.is-hit {
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.pr-compare-dash .pr-compare-sheet .pr-compare-pr-doc-link {
+  color: #0f766e;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  white-space: nowrap;
+}
+
+.pr-compare-dash .pr-compare-sheet .pr-compare-pr-doc-link:hover,
+.pr-compare-dash .pr-compare-sheet .pr-compare-pr-doc-link:focus-visible {
+  color: #115e59;
+}
+
+.pr-compare-dash .pr-match-sheet .pr-compare-sheet-pr-list {
+  min-width: 12rem;
+  text-align: start;
+}
+
+.pr-compare-dash .pr-match-sheet .pr-compare-sheet-pr-list.is-hit {
+  color: #0f766e;
+}
+
+.pr-compare-dash .pr-match-sheet .pr-compare-sheet-pr-list.is-miss {
+  color: #b45309;
+}
+
+.pr-compare-dash .pr-match-pr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
+.pr-compare-dash .pr-match-pr-list li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.pr-compare-dash .pr-match-pr-day {
+  font-size: 0.78em;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.pr-compare-dash .pr-match-none {
+  color: #b45309;
+  font-weight: 700;
+  font-size: 0.92em;
+}
+
+.pr-compare-dash .pr-match-sheet tr.is-pr-miss {
+  background: #fffbeb;
+}
+
+.pr-compare-dash .pr-match-sheet tr.is-pr-hit {
+  background: #f0fdfa;
+}
+
 .pr-compare-dash .pr-compare-list-sheet .pr-compare-short-link {
   color: inherit;
   font-weight: inherit;

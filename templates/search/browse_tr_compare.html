@@ -99,6 +99,7 @@
             <th class="pr-compare-list-col-items">الأصناف</th>
             <th>الحالة</th>
             <th class="pr-compare-list-col-short" title="أصناف لا يغطيها رصيد المخزن المطلوب منه">غير متوفر</th>
+            <th class="pr-compare-list-col-pr" title="الأصناف غير المتوفرة الموجودة في طلبات شراء خلال آخر 7 أيام">في طلب شراء</th>
             <th class="pr-compare-list-col-action">إجراء</th>
           </tr>
         </thead>
@@ -124,6 +125,24 @@
                   >{{ row.source_short_count }}</a>
                 {% else %}
                   <span title="كل الأصناف متوفرة في {{ row.from_wh_label }}">0</span>
+                {% endif %}
+              </td>
+              <td class="pr-compare-list-col-pr mono{% if row.short_pr_item_count %} is-hit{% endif %}">
+                {% if row.source_short_count %}
+                  <a
+                    class="pr-compare-pr-link"
+                    href="{% url 'browse_tr_compare_detail' %}?tr_type={{ row.tr_type|urlencode }}&amp;tr_no={{ row.tr_no|urlencode }}&amp;tr_ser={{ row.tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date={{ selected_date|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}&amp;pr_match=1"
+                    title="{% if row.short_pr_title %}{{ row.short_pr_title }} — {% endif %}عرض الأصناف وقائمة طلبات الشراء"
+                  >
+                    {% if row.short_pr_item_count %}
+                      <span class="pr-compare-pr-hit">{{ row.short_pr_item_count }}/{{ row.source_short_count }}</span>
+                      <span class="pr-compare-pr-nos">{{ row.short_pr_display }}</span>
+                    {% else %}
+                      <span class="pr-compare-pr-miss">لا يوجد طلبات لشراء</span>
+                    {% endif %}
+                  </a>
+                {% else %}
+                  <span>—</span>
                 {% endif %}
               </td>
               <td class="pr-compare-list-col-action">

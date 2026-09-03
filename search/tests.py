@@ -446,6 +446,63 @@ class TransferRequestCompareTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'معرّف طلب التحويل غير مكتمل')
 
+    def test_pr_summary_for_short_codes(self):
+        from search.oracle_tr_compare import _pr_summary_for_codes
+
+        summary = _pr_summary_for_codes(
+            ['A1', 'B2', 'C3'],
+            {
+                'A1': [{'pr_no': '100', 'pr_type': '1', 'pr_ser': '9'}],
+                'C3': [
+                    {'pr_no': '100', 'pr_type': '1', 'pr_ser': '9'},
+                    {'pr_no': '200', 'pr_type': '1', 'pr_ser': '10'},
+                ],
+            },
+        )
+        self.assertEqual(summary['short_pr_item_count'], 2)
+        self.assertEqual(summary['short_pr_nos'], ['100', '200'])
+        self.assertIn('100', summary['short_pr_display'])
+        self.assertIn('A1', summary['short_pr_title'])
+
+    @patch('search.oracle_tr_compare.oracle_enabled', return_value=True)
+    @patch('search.oracle_tr_compare._fetch_all')
+    def test_fetch_recent_pr_by_items(self, fetch_all, _enabled):
+        from datetime import date
+
+        from search.oracle_tr_compare import fetch_recent_pr_by_items
+
+        fetch_all.return_value = [
+            {
+                'ITEM_CODE': '111',
+                'PR_TYPE': 1,
+                'PR_NO': 4501,
+                'PR_SER': 88,
+                'PR_WHEN': date(2026, 9, 1),
+                'PR_DAY': '2026-09-01',
+            },
+            {
+                'ITEM_CODE': '111',
+                'PR_TYPE': 1,
+                'PR_NO': 4501,
+                'PR_SER': 88,
+                'PR_WHEN': date(2026, 9, 1),
+                'PR_DAY': '2026-09-01',
+            },
+            {
+                'ITEM_CODE': '222',
+                'PR_TYPE': 1,
+                'PR_NO': 4502,
+                'PR_SER': 89,
+                'PR_WHEN': date(2026, 9, 2),
+                'PR_DAY': '2026-09-02',
+            },
+        ]
+        by_item = fetch_recent_pr_by_items(['111', '222', '333'], day=date(2026, 9, 3))
+        self.assertEqual(len(by_item['111']), 1)
+        self.assertEqual(by_item['111'][0]['pr_no'], '4501')
+        self.assertEqual(by_item['222'][0]['pr_no'], '4502')
+        self.assertNotIn('333', by_item)
+
 
 class MainWarehouseForBranchTests(TestCase):
     @patch('search.oracle_tr_compare.oracle_enabled', return_value=True)
