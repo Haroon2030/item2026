@@ -6,7 +6,10 @@
                   وإن عُدم يُستخدم متوسط بطاقة الصنف.
   صافي السعر = I_PRICE / (1 + VAT/100)
   نسبة الربح = (صافي السعر − المتوسط × P_SIZE) / (المتوسط × P_SIZE) × 100
-  ربح أونكس = نفس الصيغة على PRIMARY_COST × P_SIZE (شاشة التسعير)
+  ربح أونكس = (صافي − آخر سعر توريد للوحدة × P_SIZE) / (آخر توريد × P_SIZE) × 100
+              آخر توريد = I_PRICE/P_SIZE من آخر فاتورة شراء للصنف (أي مخزن)
+              مثال 1001522817: صافي 1.6957 ← توريد 1.25 → 35.65%
+              إن لم يوجد شراء: يُرجع لتكلفة Get_Grand_Wtavg (متوسط ثم أولية)
 
 وحدة العرض: صف واحد لكل صنف/مخزن/مستوى — الوحدة الرئيسية (MAIN_UNIT)
   أو وحدة البيع (SALE_UNIT) أو وحدة المخزون، ثم أصغر P_SIZE.
@@ -17,6 +20,7 @@
 
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from django.core.cache import cache
@@ -31,7 +35,7 @@ from .oracle_stock import (
 
 _CACHE_TTL = 600
 _MOVED_CODES_TTL = 7200
-_CACHE_VER = "v25"
+_CACHE_VER = "v29"
 _DEFAULT_VAT_PCT = 15.0
 _PAGE_SIZE = 200
 _EXCEL_LIMIT = 100000
@@ -83,10 +87,61 @@ def _keep_moved_stock_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _f(value: Any, nd: int = 2) -> float:
+    """تقريب كأوراكل ROUND — نصف لأعلى (لا banker's rounding في بايثون)."""
     try:
-        return round(float(value or 0), nd)
-    except (TypeError, ValueError):
+        return float(
+            Decimal(str(value if value is not None else 0)).quantize(
+                Decimal(1).scaleb(-nd),
+                rounding=ROUND_HALF_UP,
+            )
+        )
+    except (TypeError, ValueError, ArithmeticError):
         return 0.0
+
+
+def _fmt_pct(value: Any) -> str:
+    """نسبة بمنزلتين دائماً — مثل أونكس 35.65."""
+    return f"{_f(value, 2):.2f}"
+
+
+def _fmt_money(value: Any, nd: int = 4) -> str:
+    """رقم تكلفة/سعر بلا أصفار زائدة بعد التقريب."""
+    n = _f(value, nd)
+    text = f"{n:.{nd}f}".rstrip("0").rstrip(".")
+    return text if text else "0"
+
+
+def _onyx_profit_from_parts(
+    *,
+    price: float,
+    vat_pct: float,
+    unit_cost: float,
+    p_size: float = 1.0,
+    cost_decimals: int = 2,
+) -> float:
+    """ربح أونكس بنفس تقريب الشاشة.
+
+    أونكس يعرض التكلفة بمنزلتين (مثل 10.06) ثم يحسب النسبة عليها:
+    15÷1.15 و 10.06 → 29.66  (لا 10.0583 → 29.68)
+    """
+    if unit_cost <= 0 or p_size <= 0:
+        return 0.0
+    price_d = Decimal(str(price or 0))
+    vat_d = Decimal(str(vat_pct or 0))
+    # تقريب تكلفة الوحدة كعرض أونكس قبل الضرب في العبوة
+    unit_d = Decimal(str(unit_cost)).quantize(
+        Decimal(1).scaleb(-max(0, int(cost_decimals))),
+        rounding=ROUND_HALF_UP,
+    )
+    cost_d = unit_d * Decimal(str(p_size))
+    if cost_d <= 0:
+        return 0.0
+    if vat_d > -100:
+        net = price_d / (Decimal(1) + vat_d / Decimal(100))
+    else:
+        net = price_d
+    pct = (net - cost_d) / cost_d * Decimal(100)
+    return float(pct.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def _parse_wh_codes(raw: str) -> list[str]:
@@ -194,6 +249,15 @@ def _build_sql_parts(
           ELSE m.I_CWTAVG
         END
     """
+    # محرك تكلفة أونكس: Get_Grand_Wtavg / Get_Pri_Cost مع WTAVG_TYPE=2
+    onix_cost_sql = """
+        CASE
+          WHEN NVL(w.I_CWTAVG, 0) > 0 THEN w.I_CWTAVG
+          WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
+          WHEN NVL(m.PRIMARY_COST, 0) > 0 THEN m.PRIMARY_COST
+          ELSE m.I_CWTAVG
+        END
+    """
     vat_sql = """
         CASE
           WHEN NVL(m.VAT_PER, 0) > 0 THEN m.VAT_PER
@@ -202,7 +266,7 @@ def _build_sql_parts(
         END
     """
     net_price_sql = f"(p.I_PRICE / (1 + ({vat_sql}) / 100))"
-    return wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql
+    return wh_sql, item_sql, pos_only_sql, avg_sql, onix_cost_sql, vat_sql, net_price_sql
 
 
 def _attach_barcodes(rows: list[dict[str, Any]]) -> None:
@@ -239,15 +303,124 @@ def _attach_barcodes(rows: list[dict[str, Any]]) -> None:
         r["barcode"] = bc
 
 
+def _fetch_last_buy_unit_costs(codes: list[str]) -> dict[str, float]:
+    """آخر سعر توريد للوحدة الأساسية لكل صنف (I_PRICE/P_SIZE من آخر شراء)."""
+    out: dict[str, float] = {}
+    clean = [str(c).strip() for c in codes if str(c).strip()]
+    if not clean or not oracle_enabled():
+        return out
+
+    schema = _schema()
+    batch_size = 400
+    for i in range(0, len(clean), batch_size):
+        chunk = clean[i : i + batch_size]
+        params: dict[str, Any] = {}
+        keys: list[str] = []
+        for j, code in enumerate(chunk):
+            key = f"c{j}"
+            keys.append(f":{key}")
+            params[key] = code
+        sql = f"""
+            SELECT I_CODE, UNIT_COST
+            FROM (
+              SELECT
+                d.I_CODE,
+                CASE
+                  WHEN NVL(d.P_SIZE, 0) > 0 THEN ROUND(d.I_PRICE / d.P_SIZE, 6)
+                  ELSE ROUND(d.I_PRICE, 6)
+                END AS UNIT_COST,
+                ROW_NUMBER() OVER (
+                  PARTITION BY d.I_CODE
+                  ORDER BY m.BILL_DATE DESC NULLS LAST, m.BILL_NO DESC NULLS LAST
+                ) AS RN
+              FROM {schema}.IAS_PI_BILL_DTL d
+              JOIN {schema}.IAS_PI_BILL_MST m
+                ON m.BILL_NO = d.BILL_NO
+               AND m.BILL_SER = d.BILL_SER
+               AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+              WHERE d.I_CODE IN ({", ".join(keys)})
+                AND (m.HUNG IS NULL OR m.HUNG = 0)
+                AND NVL(d.I_PRICE, 0) > 0
+            )
+            WHERE RN = 1
+        """
+        try:
+            for row in _fetch_all(sql, params):
+                ic = str(row.get("I_CODE") or "").strip()
+                cost = _f(row.get("UNIT_COST"), 6)
+                if ic and cost > 0:
+                    out[ic] = cost
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def _attach_onyx_last_buy(rows: list[dict[str, Any]]) -> None:
+    """يعيد حساب ربح أونكس من آخر سعر توريد — مطابقة شاشة أسعار أونكس."""
+    if not rows:
+        return
+    codes = sorted({str(r.get("item_code") or "").strip() for r in rows if r.get("item_code")})
+    buys = _fetch_last_buy_unit_costs(codes)
+    for r in rows:
+        ic = str(r.get("item_code") or "").strip()
+        buy = buys.get(ic)
+        if not buy or buy <= 0:
+            continue
+        p_size = float(r.get("p_size") or 1) or 1.0
+        price = float(r.get("price") or 0)
+        vat = float(r.get("vat_pct") or 0)
+        onix = _onyx_profit_from_parts(
+            price=price,
+            vat_pct=vat,
+            unit_cost=buy,
+            p_size=p_size,
+            cost_decimals=2,
+        )
+        # اعرض تكلفة التوريد كما أونكس (منزلتان) مع الإبقاء على القيمة الخام للحساب السابق
+        buy_disp = _f(buy, 2)
+        unit_buy = _f(buy_disp * p_size, 4)
+        r["primary_cost"] = buy_disp
+        r["primary_cost_display"] = _fmt_money(buy_disp, 2)
+        r["primary_unit_cost"] = unit_buy
+        r["primary_unit_cost_display"] = _fmt_money(unit_buy, 4)
+        r["onyx_cost_src"] = "LAST_BUY"
+        r["onyx_cost_src_label"] = "توريد"
+        r["onyx_profit_pct"] = onix
+        r["onyx_profit_pct_display"] = _fmt_pct(onix)
+
+
 def _rows_from_oracle(rows: list[dict], lev: int, *, limit_pct: float) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     lim_pct = _f(limit_pct, 2)
     for r in rows:
-        prft = _f(r.get("PRFT_PCT"), 2)
-        price = _f(r.get("I_PRICE"), 4)
-        net_price = _f(r.get("NET_PRICE"), 4)
-        avg_cost = _f(r.get("AVG_COST"), 4)
-        unit_cost = _f(r.get("UNIT_COST"), 4)
+        price_raw = float(r.get("I_PRICE") or 0)
+        vat = _f(r.get("VAT_PCT"), 2)
+        avg_raw = float(r.get("AVG_COST") or 0)
+        p_size = float(r.get("P_SIZE") or 1) or 1.0
+        primary_raw = float(r.get("PRIMARY_COST") or 0)
+        # نسب محسوبة بتقريب أونكس/أوراكل (HALF_UP) من القيم الخام
+        # نسبة القرار: دقة أعلى على المتوسط · ربح أونكس: تكلفة بمنزلتين كالشاشة
+        prft = _onyx_profit_from_parts(
+            price=price_raw,
+            vat_pct=vat,
+            unit_cost=avg_raw,
+            p_size=p_size,
+            cost_decimals=6,
+        )
+        onix_prft = _onyx_profit_from_parts(
+            price=price_raw,
+            vat_pct=vat,
+            unit_cost=primary_raw if primary_raw > 0 else avg_raw,
+            p_size=p_size,
+            cost_decimals=2,
+        )
+        price = _f(price_raw, 4)
+        net_price = _f(
+            price_raw / (1.0 + vat / 100.0) if vat > -100 else price_raw,
+            4,
+        )
+        avg_cost = _f(avg_raw, 4)
+        unit_cost = _f(avg_raw * p_size, 4)
         min_price = _f(r.get("MIN_ITM_PRICE"), 4)
         min_lim_prft = r.get("MIN_LIMIT_PRFT_PCT")
         calc_lim_price = _f(r.get("LIMIT_PRICE"), 4)
@@ -259,9 +432,15 @@ def _rows_from_oracle(rows: list[dict], lev: int, *, limit_pct: float) -> list[d
             limit_price = calc_lim_price
             limit_profit_pct = lim_pct
             limit_source = "calc"
-        onix_prft = _f(r.get("ONIX_PRFT_PCT"), 2)
-        primary_unit = _f(r.get("PRIMARY_UNIT_COST"), 4)
-        primary_avg = _f(r.get("PRIMARY_COST"), 4)
+        primary_avg = _f(primary_raw, 4)
+        primary_unit = _f(primary_raw * p_size, 4)
+        onix_src = str(r.get("ONIX_COST_SRC") or "AVG").strip().upper() or "AVG"
+        onix_src_label = {
+            "AVG": "متوسط",
+            "PRIMARY": "أولية",
+            "MST_PRIMARY": "أولية بطاقة",
+            "MST_AVG": "متوسط بطاقة",
+        }.get(onix_src, "متوسط")
         out.append(
             {
                 "item_code": str(r.get("I_CODE") or "").strip(),
@@ -273,29 +452,33 @@ def _rows_from_oracle(rows: list[dict], lev: int, *, limit_pct: float) -> list[d
                 "g_code": str(r.get("G_CODE") or "").strip(),
                 "g_name": str(r.get("G_NAME") or "").strip() or "—",
                 "profit_pct": prft,
-                "profit_pct_display": f"{prft:g}",
+                "profit_pct_display": _fmt_pct(prft),
                 "onyx_profit_pct": onix_prft,
-                "onyx_profit_pct_display": f"{onix_prft:g}",
+                "onyx_profit_pct_display": _fmt_pct(onix_prft),
+                "onyx_cost_src": onix_src,
+                "onyx_cost_src_label": onix_src_label,
                 "primary_cost": primary_avg,
-                "primary_cost_display": f"{primary_avg:g}" if primary_avg > 0 else "—",
+                "primary_cost_display": _fmt_money(primary_avg, 4) if primary_avg > 0 else "—",
                 "primary_unit_cost": primary_unit,
-                "primary_unit_cost_display": f"{primary_unit:g}" if primary_unit > 0 else "—",
+                "primary_unit_cost_display": (
+                    _fmt_money(primary_unit, 4) if primary_unit > 0 else "—"
+                ),
                 "limit_profit_pct": limit_profit_pct,
-                "limit_profit_pct_display": f"{limit_profit_pct:g}",
+                "limit_profit_pct_display": _fmt_pct(limit_profit_pct),
                 "limit_price": limit_price,
-                "limit_price_display": f"{limit_price:g}" if limit_price > 0 else "—",
+                "limit_price_display": _fmt_money(limit_price, 4) if limit_price > 0 else "—",
                 "limit_source": limit_source,
                 "currency": str(r.get("A_CY") or "SAR").strip() or "SAR",
                 "price": price,
-                "price_display": f"{price:g}",
+                "price_display": _fmt_money(price, 4),
                 "net_price": net_price,
-                "net_price_display": f"{net_price:g}",
+                "net_price_display": _fmt_money(net_price, 4),
                 "avg_cost": avg_cost,
-                "avg_cost_display": f"{avg_cost:g}",
+                "avg_cost_display": _fmt_money(avg_cost, 4),
                 "unit_cost": unit_cost,
-                "unit_cost_display": f"{unit_cost:g}",
-                "vat_pct": _f(r.get("VAT_PCT"), 2),
-                "p_size": _f(r.get("P_SIZE"), 4),
+                "unit_cost_display": _fmt_money(unit_cost, 4),
+                "vat_pct": vat,
+                "p_size": _f(p_size, 4),
             }
         )
     return out
@@ -307,6 +490,7 @@ def _inner_select_sql(
     wh_sql: str,
     item_sql: str,
     avg_sql: str,
+    onix_cost_sql: str,
     vat_sql: str,
     net_price_sql: str,
 ) -> str:
@@ -326,35 +510,21 @@ def _inner_select_sql(
             / NULLIF(({avg_sql}) * NVL(p.P_SIZE, 1), 0) * 100
           , 2) AS PRFT_PCT,
           ROUND(
-            ({net_price_sql} - (
-              CASE
-                WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
-                ELSE ({avg_sql})
-              END
-            ) * NVL(p.P_SIZE, 1))
-            / NULLIF((
-              CASE
-                WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
-                ELSE ({avg_sql})
-              END
-            ) * NVL(p.P_SIZE, 1), 0) * 100
+            ({net_price_sql} - ({onix_cost_sql}) * NVL(p.P_SIZE, 1))
+            / NULLIF(({onix_cost_sql}) * NVL(p.P_SIZE, 1), 0) * 100
           , 2) AS ONIX_PRFT_PCT,
           ROUND(p.I_PRICE, 4) AS I_PRICE,
           ROUND({net_price_sql}, 4) AS NET_PRICE,
           ROUND(({avg_sql}), 4) AS AVG_COST,
           ROUND(({avg_sql}) * NVL(p.P_SIZE, 1), 4) AS UNIT_COST,
-          ROUND(
-            CASE
-              WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
-              ELSE ({avg_sql})
-            END
-          , 4) AS PRIMARY_COST,
-          ROUND(
-            CASE
-              WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN w.PRIMARY_COST
-              ELSE ({avg_sql})
-            END * NVL(p.P_SIZE, 1)
-          , 4) AS PRIMARY_UNIT_COST,
+          ROUND(({onix_cost_sql}), 4) AS PRIMARY_COST,
+          ROUND(({onix_cost_sql}) * NVL(p.P_SIZE, 1), 4) AS PRIMARY_UNIT_COST,
+          CASE
+            WHEN NVL(w.I_CWTAVG, 0) > 0 THEN 'AVG'
+            WHEN NVL(w.PRIMARY_COST, 0) > 0 THEN 'PRIMARY'
+            WHEN NVL(m.PRIMARY_COST, 0) > 0 THEN 'MST_PRIMARY'
+            ELSE 'MST_AVG'
+          END AS ONIX_COST_SRC,
           ROUND(NVL(p.P_SIZE, 1), 4) AS P_SIZE,
           ROUND(({vat_sql}), 2) AS VAT_PCT,
           CAST('SAR' AS VARCHAR2(10)) AS A_CY,
@@ -516,20 +686,23 @@ def _load_capped_rows(
         "lev": lev,
         "dflt_vat": _DEFAULT_VAT_PCT,
     }
-    wh_sql, item_sql, pos_only_sql, avg_sql, vat_sql, net_price_sql = _build_sql_parts(
-        schema,
-        wh_list=wh_list,
-        q=q,
-        include_negative=include_negative,
-        params=params,
-        branch_code=brn,
-        group_code=gcode,
+    wh_sql, item_sql, pos_only_sql, avg_sql, onix_cost_sql, vat_sql, net_price_sql = (
+        _build_sql_parts(
+            schema,
+            wh_list=wh_list,
+            q=q,
+            include_negative=include_negative,
+            params=params,
+            branch_code=brn,
+            group_code=gcode,
+        )
     )
     inner = _inner_select_sql(
         schema,
         wh_sql=wh_sql,
         item_sql=item_sql,
         avg_sql=avg_sql,
+        onix_cost_sql=onix_cost_sql,
         vat_sql=vat_sql,
         net_price_sql=net_price_sql,
     )
@@ -554,6 +727,7 @@ def _load_capped_rows(
           x.UNIT_COST,
           x.PRIMARY_COST,
           x.PRIMARY_UNIT_COST,
+          x.ONIX_COST_SRC,
           x.P_SIZE,
           x.VAT_PCT,
           x.A_CY,
@@ -577,6 +751,7 @@ def _load_capped_rows(
         params,
     )
     out = _keep_moved_stock_rows(_rows_from_oracle(rows, lev, limit_pct=max_prft))
+    _attach_onyx_last_buy(out)
     cache.set(all_key, out, _CACHE_TTL)
     if cap is not None:
         capped = out[:cap]

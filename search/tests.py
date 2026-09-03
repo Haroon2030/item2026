@@ -108,13 +108,13 @@ class AuthenticationTests(TestCase):
             user=user,
             display_name='سارة',
             phone='0505555555',
-            role_name='مدير فرع',
+            role_name='مدير مبيعات',
         )
         self.client.force_login(user)
         response = self.client.get(reverse('home'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'سارة')
-        self.assertContains(response, 'مدير فرع')
+        self.assertContains(response, 'مدير مبيعات')
         self.assertContains(response, 'منصة التحليل')
 
     def test_sync_endpoint_requires_login(self):
@@ -274,7 +274,7 @@ class UserManagementTests(TestCase):
             {
                 'name': 'موظف',
                 'phone': '0503333333',
-                'role_name': 'محاسب',
+                'role_name': 'مدير تسعيرة',
                 'password': 'EmployeePass123!',
             },
         )
@@ -282,7 +282,7 @@ class UserManagementTests(TestCase):
         user = get_user_model().objects.get(username='0503333333')
         self.assertEqual(user.first_name, 'موظف')
         self.assertEqual(user.profile.phone, '0503333333')
-        self.assertEqual(user.profile.role_name, 'محاسب')
+        self.assertEqual(user.profile.role_name, 'مدير تسعيرة')
 
     def test_staff_can_edit_and_delete_user(self):
         target = get_user_model().objects.create_user(
@@ -297,14 +297,14 @@ class UserManagementTests(TestCase):
             {
                 'name': 'محدث',
                 'phone': '0504444444',
-                'role_name': 'مدير فرع',
+                'role_name': 'مدير مشتريات',
                 'password': '',
             },
         )
         self.assertRedirects(response, reverse('user_list'))
         target.refresh_from_db()
         self.assertEqual(target.first_name, 'محدث')
-        self.assertEqual(target.profile.role_name, 'مدير فرع')
+        self.assertEqual(target.profile.role_name, 'مدير مشتريات')
 
         response = self.client.post(reverse('user_delete', args=[target.pk]))
         self.assertRedirects(response, reverse('user_list'))
@@ -438,7 +438,7 @@ class TransferRequestCompareTests(TestCase):
     def test_list_renders_when_oracle_off(self, _enabled):
         response = self.client.get(reverse('browse_tr_compare'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'طلبات التحويل')
+        self.assertContains(response, 'طلب النواقص')
         self.assertContains(response, 'أوراكل غير مفعّل')
 
     def test_detail_requires_complete_id(self):

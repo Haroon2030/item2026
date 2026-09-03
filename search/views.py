@@ -4156,6 +4156,12 @@ def browse_tr_compare_detail(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_warehouse = str(request.GET.get('warehouse') or '').strip()
     selected_date = str(request.GET.get('date') or '').strip()[:10]
+    short_only = str(request.GET.get('short_only') or '').strip() in (
+        '1',
+        'true',
+        'yes',
+        'on',
+    )
     compare = None
     error = ''
 
@@ -4177,6 +4183,16 @@ def browse_tr_compare_detail(request):
                     )
                 if compare is None:
                     error = 'طلب التحويل غير موجود أو غير نشط.'
+                elif short_only and compare:
+                    all_items = list(compare.get('items') or [])
+                    short_items = [row for row in all_items if not row.get('can_cover')]
+                    compare = {
+                        **compare,
+                        'items': short_items,
+                        'shown_item_count': len(short_items),
+                        'short_only': True,
+                        'all_item_count': len(all_items),
+                    }
         except Exception as exc:  # noqa: BLE001
             logger.warning('browse_tr_compare_detail failed: %s', exc)
             error = f'تعذّر مقارنة طلب التحويل: {exc}'
@@ -4192,6 +4208,7 @@ def browse_tr_compare_detail(request):
             'selected_branch': selected_branch,
             'selected_warehouse': selected_warehouse,
             'selected_date': selected_date,
+            'short_only': short_only,
             'compare': compare,
             'error': error,
         },

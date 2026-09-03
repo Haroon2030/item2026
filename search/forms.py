@@ -12,6 +12,11 @@ from django.db.models import Q
 
 from .debug_auth import auth_log, fingerprint
 from .models import UserProfile
+from .nav_permissions import (
+    ROLE_CHOICES,
+    ensure_user_nav_permission,
+    preset_sections_for_role,
+)
 
 User = get_user_model()
 _PHONE_RE = re.compile(r'^[0-9+\-\s]{7,20}$')
@@ -44,13 +49,12 @@ class AppUserForm(forms.Form):
             }
         ),
     )
-    role_name = forms.CharField(
-        label='اسم الدور',
-        max_length=100,
-        required=False,
-        widget=forms.TextInput(
+    role_name = forms.ChoiceField(
+        label='الدور',
+        choices=ROLE_CHOICES,
+        initial='مدير مخازن',
+        widget=forms.Select(
             attrs={
-                'placeholder': 'مثل: محاسب · مدير فرع · مشرف',
                 'autocomplete': 'organization-title',
             }
         ),
@@ -71,6 +75,15 @@ class AppUserForm(forms.Form):
     def __init__(self, *args, instance: User | None = None, **kwargs):
         self.instance = instance
         super().__init__(*args, **kwargs)
+        # اسمح بقيمة دور قديمة غير موجودة في القائمة
+        current = ''
+        if instance is not None:
+            profile = getattr(instance, 'profile', None)
+            current = ((profile.role_name if profile else '') or '').strip()
+        choices = list(ROLE_CHOICES)
+        if current and current not in {c[0] for c in choices}:
+            choices.insert(0, (current, f'{current} (حالي)'))
+            self.fields['role_name'].choices = choices
         if instance is None:
             self.fields['password'].required = True
             self.fields['password'].widget.attrs['placeholder'] = 'كلمة سر (6 أحرف على الأقل)'
@@ -86,10 +99,7 @@ class AppUserForm(forms.Form):
             self.fields['phone'].initial = (
                 (profile.phone if profile else '') or ''
             ).strip()
-            self.fields['role_name'].initial = (
-                (profile.role_name if profile else '') or ''
-            ).strip()
-
+            self.fields['role_name'].initial = current or 'مدير مخازن'
     def clean_name(self) -> str:
         name = (self.cleaned_data.get('name') or '').strip()
         if not name:
@@ -134,7 +144,7 @@ class AppUserForm(forms.Form):
     def clean_role_name(self) -> str:
         role = (self.cleaned_data.get('role_name') or '').strip()
         if not role:
-            return ''
+            raise forms.ValidationError('اختر الدور.')
         from .validators import contains_sql_injection
 
         if contains_sql_injection(role):
@@ -190,6 +200,21 @@ class AppUserForm(forms.Form):
                 'role_name': role_name,
             },
         )
+
+        if not user.is_staff:
+            preset = preset_sections_for_role(role_name)
+            if action == 'created':
+                ensure_user_nav_permission(
+                    user,
+                    sections=list(preset) if preset is not None else [],
+                )
+            elif preset is not None:
+                row = ensure_user_nav_permission(user, sections=list(preset))
+                row.sections = list(preset)
+                row.blocked_screens = []
+                row.save(update_fields=['sections', 'blocked_screens', 'updated_at'])
+                if hasattr(user, '_nav_permission_cache'):
+                    delattr(user, '_nav_permission_cache')
 
         # region agent log
         auth_log(

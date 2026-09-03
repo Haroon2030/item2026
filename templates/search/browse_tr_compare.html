@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}طلبات التحويل{% endblock %}
+{% block title %}طلب النواقص{% endblock %}
 {% block page_class %}sales-dash pr-compare-dash tr-compare-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="طلبات التحويل">
+<section class="dash-head" aria-label="طلب النواقص">
   <div class="dash-head-copy">
-    <h2>طلبات التحويل</h2>
+    <h2>طلب النواقص</h2>
     <p>حدد التاريخ والفرع لعرض الطلبات، ثم قارن الكمية المطلوبة مع رصيد المخزن المطلوب ورصيد المخزن الرئيسي للفرع</p>
   </div>
 </section>
@@ -77,9 +77,9 @@
   </div>
 </form>
 
-<section class="dash-panel dash-panel-glass pr-compare-list-panel" aria-label="طلبات التحويل">
+<section class="dash-panel dash-panel-glass pr-compare-list-panel" aria-label="طلب النواقص">
   <div class="dash-panel-head">
-    <h3>طلبات التحويل — {{ period_label }}</h3>
+    <h3>طلب النواقص — {{ period_label }}</h3>
     <span class="result-pill">{% if selected_branch %}{{ requests_today|length }}{% else %}—{% endif %}</span>
   </div>
 
@@ -98,6 +98,7 @@
             <th class="pr-compare-list-col-user">المستخدم</th>
             <th class="pr-compare-list-col-items">الأصناف</th>
             <th>الحالة</th>
+            <th class="pr-compare-list-col-short" title="أصناف لا يغطيها رصيد المخزن المطلوب منه">غير متوفر</th>
             <th class="pr-compare-list-col-action">إجراء</th>
           </tr>
         </thead>
@@ -114,6 +115,17 @@
               <td>
                 <span class="tr-status is-{{ row.status_kind }}">{{ row.status }}</span>
               </td>
+              <td class="pr-compare-list-col-short mono{% if row.source_short_count %} is-short{% endif %}">
+                {% if row.source_short_count %}
+                  <a
+                    class="pr-compare-short-link"
+                    href="{% url 'browse_tr_compare_detail' %}?tr_type={{ row.tr_type|urlencode }}&amp;tr_no={{ row.tr_no|urlencode }}&amp;tr_ser={{ row.tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;date={{ selected_date|urlencode }}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}&amp;short_only=1"
+                    title="عرض {{ row.source_short_count }} صنف غير متوفر في {{ row.from_wh_label }}"
+                  >{{ row.source_short_count }}</a>
+                {% else %}
+                  <span title="كل الأصناف متوفرة في {{ row.from_wh_label }}">0</span>
+                {% endif %}
+              </td>
               <td class="pr-compare-list-col-action">
                 <a
                   class="pr-compare-sheet-link"
@@ -126,7 +138,7 @@
       </table>
     </div>
   {% else %}
-    <p class="sales-empty">لا توجد طلبات تحويل في {{ period_label }} لهذا الفرع{% if selected_warehouse_name %} ومخزن الطلب {{ selected_warehouse }} — {{ selected_warehouse_name }}{% endif %}.</p>
+    <p class="sales-empty">لا توجد طلبات نواقص في {{ period_label }} لهذا الفرع{% if selected_warehouse_name %} ومخزن الطلب {{ selected_warehouse }} — {{ selected_warehouse_name }}{% endif %}.</p>
   {% endif %}
 </section>
 {% endblock %}

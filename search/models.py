@@ -55,6 +55,27 @@ class UserActivitySession(models.Model):
         return f'{self.user_name} @ {self.login_at}'
 
 
+class UserNavPermission(models.Model):
+    """صلاحيات أقسام الشريط: أقسام ممنوحة + شاشات فرعية محجوبة."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='nav_permission',
+        verbose_name='المستخدم',
+    )
+    sections = models.JSONField('الأقسام الممنوحة', default=list, blank=True)
+    blocked_screens = models.JSONField('الشاشات المحجوبة', default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'صلاحية أقسام'
+        verbose_name_plural = 'صلاحيات الأقسام'
+
+    def __str__(self) -> str:
+        return f'صلاحيات {self.user_id}'
+
+
 class ItemBarcode(models.Model):
     """ربط الباركود برقم الصنف من GetAllItems."""
 

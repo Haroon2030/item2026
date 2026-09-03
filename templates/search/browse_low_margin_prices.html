@@ -203,7 +203,7 @@
             <th class="lm-th-cost">متوسط التكلفة</th>
             <th class="lm-th-price">السعر شامل الضريبة</th>
             <th class="lm-th-prft" title="صافي ÷ I_CWTAVG">نسبة الربح</th>
-            <th class="lm-th-onixprft" title="صافي ÷ PRIMARY_COST">ربح أونكس</th>
+            <th class="lm-th-onixprft" title="صافي ÷ آخر سعر توريد (وحدة)">ربح أونكس</th>
             <th class="lm-th-limprft">حد الربح</th>
             <th class="lm-th-limprc">حد السعر</th>
             <th class="lm-th-cy">العملة</th>
@@ -224,7 +224,7 @@
               <td class="mono lm-td-cost">{{ r.avg_cost_display }}</td>
               <td class="mono lm-td-price">{{ r.price_display }}</td>
               <td class="mono lm-td-prft" title="I_CWTAVG {{ r.unit_cost_display }}">{{ r.profit_pct_display }}%</td>
-              <td class="mono lm-td-onixprft" title="PRIMARY {{ r.primary_cost_display }}">{{ r.onyx_profit_pct_display }}%</td>
+              <td class="mono lm-td-onixprft" title="{{ r.onyx_cost_src_label }} {{ r.primary_cost_display }}">{{ r.onyx_profit_pct_display }}%</td>
               <td class="mono lm-td-limprft" title="{% if r.limit_source == 'min' %}من أقل سعر مسموح{% else %}عند حد «إلى» {{ max_profit_input }}%{% endif %}">{{ r.limit_profit_pct_display }}%</td>
               <td class="mono lm-td-limprc" title="{% if r.limit_source == 'min' %}أقل سعر مسموح{% else %}سعر عند حد «إلى»{% endif %}">{{ r.limit_price_display }}</td>
               <td class="mono lm-td-cy">{{ r.currency }}</td>

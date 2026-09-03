@@ -13,7 +13,16 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import AppUserForm
-from .models import UserActivitySession
+from .models import UserActivitySession, UserNavPermission
+from .nav_permissions import (
+    SECTION_KEYS,
+    NAV_SECTIONS,
+    is_executive_role,
+    is_section_manager_role,
+    parse_permission_post,
+    permission_form_catalog,
+    preset_sections_for_role,
+)
 
 User = get_user_model()
 
@@ -23,7 +32,7 @@ def _is_staff(user) -> bool:
 
 
 def _user_rows(request):
-    users = list(User.objects.select_related('profile').all())
+    users = list(User.objects.select_related('profile', 'nav_permission').all())
 
     def _sort_key(user):
         profile = getattr(user, 'profile', None)
@@ -48,6 +57,21 @@ def _user_rows(request):
         role_name = ((profile.role_name if profile else '') or '').strip()
         if not role_name:
             role_name = 'مدير النظام' if user.is_staff else 'مستخدم'
+        is_exec = is_executive_role(user)
+        is_mgr = is_section_manager_role(user)
+        section_count = len(SECTION_KEYS) if (user.is_staff or is_exec) else 0
+        if not user.is_staff and not is_exec:
+            try:
+                perm = user.nav_permission
+            except UserNavPermission.DoesNotExist:
+                perm = None
+            if perm is None:
+                preset = preset_sections_for_role(role_name)
+                section_count = len(preset) if preset is not None else len(SECTION_KEYS)
+            else:
+                section_count = len(
+                    [k for k in (perm.sections or []) if k in SECTION_KEYS]
+                )
         rows.append(
             {
                 'id': user.pk,
@@ -58,6 +82,9 @@ def _user_rows(request):
                 'role_name': role_name,
                 'is_self': user.pk == request.user.pk,
                 'is_staff': user.is_staff,
+                'is_executive': is_exec,
+                'is_section_manager': is_mgr,
+                'section_count': section_count,
             }
         )
     return rows
@@ -253,5 +280,70 @@ def user_activity(request):
             'session_count': len(rows),
             'user_count': len(users_seen),
             'online_now': online_now,
+        },
+    )
+
+
+@login_required
+@user_passes_test(_is_staff)
+@require_http_methods(['GET', 'POST'])
+def user_permissions(request, user_id: int):
+    """منح أقسام رئيسية وحجب شاشات فرعية لمستخدم."""
+    target = get_object_or_404(User.objects.select_related('profile', 'nav_permission'), pk=user_id)
+    profile = getattr(target, 'profile', None)
+    display_name = (
+        (profile.display_name if profile else '')
+        or target.first_name
+        or target.username
+    )
+
+    if target.is_staff:
+        messages.info(request, 'مدير النظام يملك كل الأقسام تلقائياً.')
+        return redirect('user_list')
+
+    if is_executive_role(target):
+        role_label = ((profile.role_name if profile else '') or '').strip() or 'تنفيذي'
+        messages.info(
+            request,
+            f'دور «{role_label}» يملك كل الشاشات تلقائياً عدا إدارة المستخدمين.',
+        )
+        return redirect('user_list')
+
+    try:
+        perm = target.nav_permission
+    except UserNavPermission.DoesNotExist:
+        perm = None
+
+    if request.method == 'POST':
+        sections, blocked = parse_permission_post(request.POST)
+        if perm is None:
+            perm = UserNavPermission(user=target)
+        perm.sections = sections
+        perm.blocked_screens = blocked
+        perm.save()
+        if hasattr(target, '_nav_permission_cache'):
+            delattr(target, '_nav_permission_cache')
+        messages.success(
+            request,
+            f'تم حفظ صلاحيات «{display_name}»: {len(sections)} قسم · حجب {len(blocked)} شاشة.',
+        )
+        return redirect('user_permissions', user_id=target.pk)
+
+    selected = list(perm.sections or []) if perm else list(SECTION_KEYS)
+    blocked = list(perm.blocked_screens or []) if perm else []
+    catalog = permission_form_catalog(
+        selected_sections=selected,
+        blocked_screens=blocked,
+    )
+    return render(
+        request,
+        'search/user_permissions.html',
+        {
+            'target': target,
+            'target_name': display_name,
+            'target_phone': (profile.phone if profile else '') or target.username,
+            'catalog': catalog,
+            'section_count': len(NAV_SECTIONS),
+            'has_saved': perm is not None,
         },
     )

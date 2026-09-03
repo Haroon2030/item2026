@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}صلاحيات {{ target_name }} — منصة التحليل{% endblock %}
+{% block page_class %}sales-dash users-dash user-perms-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="users-page user-perms-page" aria-label="صلاحيات المستخدم">
+  <section class="dash-head users-dash-head" aria-label="عنوان الصفحة">
+    <div class="dash-head-copy">
+      <h2>صلاحيات الأقسام</h2>
+      <p>
+        امنح الأقسام الرئيسية لـ <strong>{{ target_name }}</strong>
+        · ثم احجب أي شاشة فرعية داخل القسم إن لزم
+      </p>
+    </div>
+    <div class="users-head-actions">
+      <span class="result-pill users-count-pill" dir="ltr">{{ target_phone }}</span>
+      <a class="sales-view-btn" href="{% url 'user_list' %}">رجوع للمستخدمين</a>
+    </div>
+  </section>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-ok{% else %}alert-warn{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if not has_saved %}
+    <div class="alert alert-warn" role="status">
+      لم تُحفظ صلاحيات لهذا المستخدم بعد — حالياً يرى كل الأقسام. بعد الحفظ تُطبَّق الاختيارات فقط.
+    </div>
+  {% endif %}
+
+  <form method="post" class="user-perms-form" aria-label="نموذج الصلاحيات">
+    {% csrf_token %}
+    <div class="user-perms-grid">
+      {% for section in catalog %}
+        <article class="user-perms-card dash-panel-glass{% if section.checked %} is-on{% endif %}" data-section="{{ section.key }}">
+          <label class="user-perms-section">
+            <input
+              type="checkbox"
+              name="section_{{ section.key }}"
+              value="1"
+              class="user-perms-section-check"
+              {% if section.checked %}checked{% endif %}
+            >
+            <span class="user-perms-section-label">{{ section.label }}</span>
+          </label>
+          <div class="user-perms-screens" {% if not section.checked %}hidden{% endif %}>
+            <p class="user-perms-screens-hint">احجب الشاشات غير المرغوبة داخل هذا القسم:</p>
+            <ul class="user-perms-screen-list">
+              {% for screen in section.screens %}
+                <li>
+                  <label class="user-perms-screen{% if screen.blocked %} is-blocked{% endif %}">
+                    <input
+                      type="checkbox"
+                      name="block_{{ screen.key }}"
+                      value="1"
+                      class="user-perms-block-check"
+                      {% if screen.blocked %}checked{% endif %}
+                    >
+                    <span>حجب · {{ screen.label }}</span>
+                  </label>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+
+    <div class="user-perms-actions">
+      <button type="submit" class="btn-primary">حفظ الصلاحيات</button>
+      <button type="button" class="sales-view-btn" id="user-perms-all">تحديد كل الأقسام</button>
+      <button type="button" class="sales-view-btn" id="user-perms-none">إلغاء كل الأقسام</button>
+      <a class="sales-view-btn" href="{% url 'user_list' %}">إلغاء</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function syncCard(card) {
+    var check = card.querySelector(".user-perms-section-check");
+    var screens = card.querySelector(".user-perms-screens");
+    var on = !!(check && check.checked);
+    card.classList.toggle("is-on", on);
+    if (screens) screens.hidden = !on;
+    if (!on) {
+      card.querySelectorAll(".user-perms-block-check").forEach(function (el) {
+        el.checked = false;
+        el.closest(".user-perms-screen")?.classList.remove("is-blocked");
+      });
+    }
+  }
+
+  document.querySelectorAll(".user-perms-card").forEach(function (card) {
+    var check = card.querySelector(".user-perms-section-check");
+    if (check) {
+      check.addEventListener("change", function () { syncCard(card); });
+    }
+    card.querySelectorAll(".user-perms-block-check").forEach(function (el) {
+      el.addEventListener("change", function () {
+        el.closest(".user-perms-screen")?.classList.toggle("is-blocked", el.checked);
+      });
+    });
+  });
+
+  var allBtn = document.getElementById("user-perms-all");
+  var noneBtn = document.getElementById("user-perms-none");
+  if (allBtn) {
+    allBtn.addEventListener("click", function () {
+      document.querySelectorAll(".user-perms-card").forEach(function (card) {
+        var check = card.querySelector(".user-perms-section-check");
+        if (check) check.checked = true;
+        syncCard(card);
+      });
+    });
+  }
+  if (noneBtn) {
+    noneBtn.addEventListener("click", function () {
+      document.querySelectorAll(".user-perms-card").forEach(function (card) {
+        var check = card.querySelector(".user-perms-section-check");
+        if (check) check.checked = false;
+        syncCard(card);
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

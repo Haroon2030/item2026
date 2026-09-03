@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}مقارنة طلب تحويل{% endblock %}
+{% block title %}مقارنة طلب النواقص{% endblock %}
 {% block page_class %}sales-dash pr-compare-dash tr-compare-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="مقارنة طلب تحويل">
+<section class="dash-head" aria-label="مقارنة طلب النواقص">
   <div class="dash-head-copy">
-    <h2>مقارنة طلب التحويل</h2>
+    <h2>مقارنة طلب النواقص</h2>
     <p>المخزن المطلوب = الرصيد المتوقع بعد خصم غير المرحّل · المخزن الرئيسي للفرع = الرصيد الحالي بعد الترحيل</p>
   </div>
   <a
@@ -67,9 +67,23 @@
 
   <section class="dash-panel dash-panel-glass pr-compare-sheet-panel" aria-label="جدول مقارنة الأصناف">
     <div class="dash-panel-head">
-      <h3>ورقة المقارنة</h3>
-      <span class="result-pill">{{ compare.item_count }} صنف · ناقص {{ compare.source_short_count }}</span>
+      <h3>{% if short_only %}الأصناف غير المتوفرة{% else %}ورقة المقارنة{% endif %}</h3>
+      <span class="result-pill">
+        {% if short_only %}
+          {{ compare.shown_item_count }} غير متوفر من {{ compare.all_item_count }}
+        {% else %}
+          {{ compare.item_count }} صنف · ناقص {{ compare.source_short_count }}
+        {% endif %}
+      </span>
     </div>
+    {% if short_only %}
+      <p class="pr-compare-sheet-note pr-compare-short-only-note">
+        عرض الأصناف التي لا يغطيها المخزن المطلوب فقط.
+        <a
+          href="{% url 'browse_tr_compare_detail' %}?tr_type={{ tr_type|urlencode }}&amp;tr_no={{ tr_no|urlencode }}&amp;tr_ser={{ tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}"
+        >عرض كل الأصناف</a>
+      </p>
+    {% endif %}
 
     {% if compare.items %}
       <div class="table-wrap pr-compare-sheet-wrap">

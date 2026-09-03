@@ -145,6 +145,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'search.middleware.NavPermissionMiddleware',
     # بعد الجلسة/CSRF حتى لا تُقرأ جسم POST قبل التحقق
     'search.middleware.SqlInjectionGuardMiddleware',
     'search.middleware.RateLimitMiddleware',
@@ -164,6 +165,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'search.context_processors.app_client',
+                'search.context_processors.nav_access',
             ],
         },
     },

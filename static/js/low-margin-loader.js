@@ -43,7 +43,7 @@
       '<td class="mono lm-td-cost">' + esc(row.avg_cost_display) + '</td>' +
       '<td class="mono lm-td-price">' + esc(row.price_display) + '</td>' +
       '<td class="mono lm-td-prft" title="I_CWTAVG ' + esc(row.unit_cost_display) + '">' + esc(row.profit_pct_display) + '%</td>' +
-      '<td class="mono lm-td-onixprft" title="PRIMARY ' + esc(row.primary_cost_display) + '">' + esc(row.onyx_profit_pct_display) + '%</td>' +
+      '<td class="mono lm-td-onixprft" title="' + esc(row.onyx_cost_src_label || 'متوسط') + ' ' + esc(row.primary_cost_display) + '">' + esc(row.onyx_profit_pct_display) + '%</td>' +
       '<td class="mono lm-td-limprft" title="' + esc(row.limit_source === 'min' ? 'من أقل سعر مسموح' : 'عند حد «إلى»') + '">' + esc(row.limit_profit_pct_display) + '%</td>' +
       '<td class="mono lm-td-limprc" title="' + esc(row.limit_source === 'min' ? 'أقل سعر مسموح' : 'سعر عند حد «إلى»') + '">' + esc(row.limit_price_display) + '</td>' +
       '<td class="mono lm-td-cy">' + esc(row.currency) + '</td>' +

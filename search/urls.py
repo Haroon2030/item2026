@@ -132,5 +132,10 @@ urlpatterns = [
     path('users/activity/', user_views.user_activity, name='user_activity'),
     path('users/add/', user_views.user_create, name='user_create'),
     path('users/<int:user_id>/edit/', user_views.user_edit, name='user_edit'),
+    path(
+        'users/<int:user_id>/permissions/',
+        user_views.user_permissions,
+        name='user_permissions',
+    ),
     path('users/<int:user_id>/delete/', user_views.user_delete, name='user_delete'),
 ]

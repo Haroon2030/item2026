@@ -9,7 +9,7 @@
   <section class="dash-head users-dash-head" aria-label="عنوان الصفحة">
     <div class="dash-head-copy">
       <h2>إدارة المستخدمين</h2>
-      <p>إضافة وتعديل وحذف حسابات الدخول — الاسم والرقم واسم الدور وكلمة السر</p>
+      <p>إضافة وتعديل وحذف حسابات الدخول — ومنح صلاحيات الأقسام والشاشات</p>
     </div>
     <div class="users-head-actions">
       <span class="result-pill users-count-pill">{{ users|length }} مستخدم</span>
@@ -48,6 +48,7 @@
             <th class="users-col-name">المستخدم</th>
             <th class="users-col-role">الدور</th>
             <th class="users-col-phone">الرقم</th>
+            <th class="users-col-perms">الأقسام</th>
             <th class="users-col-actions">الإجراءات</th>
           </tr>
         </thead>
@@ -68,10 +69,16 @@
                 </div>
               </td>
               <td class="users-col-role">
-                <span class="users-role{% if u.is_staff %} is-staff-role{% endif %}">{{ u.role_name }}</span>
+                <span class="users-role{% if u.is_staff %} is-staff-role{% elif u.is_executive %} is-exec-role{% elif u.is_section_manager %} is-mgr-role{% endif %}">{{ u.role_name }}</span>
               </td>
               <td class="mono users-col-phone users-phone" dir="ltr">{{ u.phone }}</td>
+              <td class="users-col-perms mono">
+                {% if u.is_staff or u.is_executive %}الكل{% else %}{{ u.section_count }}{% endif %}
+              </td>
               <td class="users-col-actions actions-cell">
+                {% if not u.is_staff and not u.is_executive %}
+                  <a class="btn-action btn-perms" href="{% url 'user_permissions' u.id %}">صلاحيات</a>
+                {% endif %}
                 <a class="btn-action btn-edit" href="{% url 'user_edit' u.id %}">تعديل</a>
                 {% if not u.is_self %}
                   <form method="post" action="{% url 'user_delete' u.id %}" class="inline-form" onsubmit="return confirm('حذف المستخدم؟');">
@@ -85,7 +92,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="5" class="empty-cell">لا يوجد مستخدمون بعد.</td>
+              <td colspan="6" class="empty-cell">لا يوجد مستخدمون بعد.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -109,7 +116,7 @@
         {% if editing %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}
       </h3>
       <p class="users-modal-sub">
-        {% if editing %}حدّث بيانات الحساب ثم احفظ{% else %}أدخل الاسم والرقم واسم الدور وكلمة السر{% endif %}
+        {% if editing %}حدّث بيانات الحساب ثم احفظ{% else %}أدخل الاسم والرقم واختر الدور وكلمة السر{% endif %}
       </p>
     </div>
     <button type="button" class="users-modal-x" id="users-modal-close" aria-label="إغلاق">

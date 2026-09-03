@@ -21,3 +21,13 @@ def app_client(request):
         "app_client_version": version,
         "force_hard_refresh": force_hard_refresh,
     }
+
+
+def nav_access(request):
+    """صلاحيات أقسام/شاشات الشريط الجانبي."""
+    user = getattr(request, "user", None)
+    if user is None or not getattr(user, "is_authenticated", False):
+        return {"nav_access": {"is_full": False, "sections": {}, "screens": {}}}
+    from .nav_permissions import build_nav_access
+
+    return {"nav_access": build_nav_access(user)}

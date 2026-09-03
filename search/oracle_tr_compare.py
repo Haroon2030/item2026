@@ -217,6 +217,7 @@ def fetch_today_transfer_requests(
                 "user_code": str(row.get("USER_CODE") or "").strip(),
                 "user_name": str(row.get("USER_NAME") or "").strip(),
                 "item_count": int(row.get("ITEM_COUNT") or 0),
+                "source_short_count": 0,
                 "qty_total": float(row.get("QTY_TOTAL") or 0),
                 "qty_display": _qty(row.get("QTY_TOTAL") or 0),
                 "processed": processed,
@@ -225,6 +226,7 @@ def fetch_today_transfer_requests(
                 "status_kind": status_kind,
             }
         )
+    _attach_source_short_counts(out)
     return out
 
 
@@ -306,36 +308,123 @@ def _fetch_request_header(tr_type: str, tr_no: str, tr_ser: str) -> dict | None:
 
 
 def _fetch_request_items(tr_ser: str) -> list[dict]:
+    by_ser = _fetch_request_items_for_sers([tr_ser])
+    return by_ser.get(str(tr_ser or "").strip()) or []
+
+
+def _fetch_request_items_for_sers(sers: list[str]) -> dict[str, list[dict]]:
+    """أصناف عدة طلبات دفعة واحدة — مفتاح OUT_REQ_SER كنص."""
+    clean = [str(s or "").strip() for s in sers if str(s or "").strip()]
+    if not clean:
+        return {}
     schema = _schema()
+    params: dict[str, Any] = {}
+    keys: list[str] = []
+    for i, ser in enumerate(clean):
+        key = f"s{i}"
+        keys.append(f":{key}")
+        params[key] = _bind_num(ser)
     rows = _fetch_all(
         f"""
         SELECT /*+ INDEX(d INDX_SER_OUTREQ_DTL) */
+               d.OUT_REQ_SER AS TR_SER,
                d.I_CODE AS ITEM_CODE,
                MAX(NVL(NULLIF(TRIM(i.I_NAME), ''), d.I_CODE)) AS ITEM_NAME,
                NVL(NULLIF(TRIM(d.ITM_UNT), ''), '—') AS ITEM_UNIT,
                ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS REQ_QTY
         FROM {schema}.IAS_OUT_REQUEST_DTL d
         LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-        WHERE d.OUT_REQ_SER = :tr_ser
-        GROUP BY d.I_CODE, NVL(NULLIF(TRIM(d.ITM_UNT), ''), '—')
+        WHERE d.OUT_REQ_SER IN ({", ".join(keys)})
+        GROUP BY d.OUT_REQ_SER, d.I_CODE, NVL(NULLIF(TRIM(d.ITM_UNT), ''), '—')
         HAVING ROUND(SUM(NVL(d.I_QTY, 0)), 2) <> 0
-        ORDER BY MAX(NVL(NULLIF(TRIM(i.I_NAME), ''), d.I_CODE)),
+        ORDER BY d.OUT_REQ_SER,
+                 MAX(NVL(NULLIF(TRIM(i.I_NAME), ''), d.I_CODE)),
                  NVL(NULLIF(TRIM(d.ITM_UNT), ''), '—')
         """,
-        {"tr_ser": _bind_num(tr_ser)},
+        params,
     )
-    return [
-        {
-            "code": str(row.get("ITEM_CODE") or "").strip(),
-            "name": str(row.get("ITEM_NAME") or "").strip()
-            or str(row.get("ITEM_CODE") or "").strip(),
-            "unit": str(row.get("ITEM_UNIT") or "").strip() or "—",
-            "req_qty": float(row.get("REQ_QTY") or 0),
-            "req_display": _qty(row.get("REQ_QTY") or 0),
-        }
-        for row in rows
-        if str(row.get("ITEM_CODE") or "").strip()
-    ]
+    out: dict[str, list[dict]] = {ser: [] for ser in clean}
+    for row in rows:
+        ser = str(row.get("TR_SER") or "").strip()
+        code = str(row.get("ITEM_CODE") or "").strip()
+        if not ser or not code:
+            continue
+        out.setdefault(ser, []).append(
+            {
+                "code": code,
+                "name": str(row.get("ITEM_NAME") or "").strip() or code,
+                "unit": str(row.get("ITEM_UNIT") or "").strip() or "—",
+                "req_qty": float(row.get("REQ_QTY") or 0),
+                "req_display": _qty(row.get("REQ_QTY") or 0),
+            }
+        )
+    return out
+
+
+def _enrich_packs_from_stock(packs: dict[str, float], stock_rows: list[dict]) -> None:
+    for row in stock_rows:
+        unit = str(row.get("unit") or "").strip()
+        psz = row.get("p_size")
+        if unit and psz and float(psz) > 0 and unit not in packs:
+            packs[unit] = float(psz)
+
+
+def _count_source_short(
+    items: list[dict],
+    *,
+    from_wh: str,
+    stock_map: dict[str, list[dict]],
+    packs_map: dict[str, dict[str, float]],
+) -> int:
+    """عدد أصناف الطلب التي لا يغطيها رصيد المخزن المطلوب منه (بعد المعلّق)."""
+    short = 0
+    for item in items:
+        packs = dict(packs_map.get(item["code"]) or {})
+        stock_rows = stock_map.get(item["code"]) or []
+        _enrich_packs_from_stock(packs, stock_rows)
+        stock_by_wh = _stock_cells_for_unit(
+            stock_rows,
+            req_unit=item.get("unit") or "—",
+            packs=packs,
+        )
+        source = _cell_or_empty(_wh_cell(stock_by_wh, from_wh))
+        req_qty = float(item.get("req_qty") or 0)
+        source_expected = float(source.get("expected_qty") or 0)
+        if source_expected + 1e-9 < req_qty:
+            short += 1
+    return short
+
+
+def _attach_source_short_counts(requests: list[dict]) -> None:
+    """يحسب لكل طلب عدد الأصناف غير المتوفرة في المخزن المطلوب منه."""
+    if not requests:
+        return
+    sers = [str(row.get("tr_ser") or "").strip() for row in requests]
+    items_by_ser = _fetch_request_items_for_sers(sers)
+    item_codes: list[str] = []
+    wh_codes: list[str] = []
+    seen_codes: set[str] = set()
+    seen_wh: set[str] = set()
+    for req in requests:
+        from_wh = str(req.get("from_wh_code") or "").strip()
+        if from_wh and from_wh not in seen_wh:
+            seen_wh.add(from_wh)
+            wh_codes.append(from_wh)
+        for item in items_by_ser.get(str(req.get("tr_ser") or "").strip()) or []:
+            code = item["code"]
+            if code not in seen_codes:
+                seen_codes.add(code)
+                item_codes.append(code)
+    stock_map = _fetch_stock_for_items(item_codes, warehouse_codes=wh_codes or None)
+    packs_map = _fetch_unit_packs_map(item_codes)
+    for req in requests:
+        ser = str(req.get("tr_ser") or "").strip()
+        req["source_short_count"] = _count_source_short(
+            items_by_ser.get(ser) or [],
+            from_wh=str(req.get("from_wh_code") or "").strip(),
+            stock_map=stock_map,
+            packs_map=packs_map,
+        )
 
 
 def _cell_or_empty(cell: dict | None) -> dict:
@@ -396,14 +485,11 @@ def build_transfer_request_compare(
     source_ok = 0
     source_short = 0
     for item in items:
-        packs = packs_map.get(item["code"]) or {}
-        for row in stock_map.get(item["code"]) or []:
-            unit = str(row.get("unit") or "").strip()
-            psz = row.get("p_size")
-            if unit and psz and float(psz) > 0 and unit not in packs:
-                packs[unit] = float(psz)
+        packs = dict(packs_map.get(item["code"]) or {})
+        stock_rows = stock_map.get(item["code"]) or []
+        _enrich_packs_from_stock(packs, stock_rows)
         stock_by_wh = _stock_cells_for_unit(
-            stock_map.get(item["code"]) or [],
+            stock_rows,
             req_unit=item.get("unit") or "—",
             packs=packs,
         )

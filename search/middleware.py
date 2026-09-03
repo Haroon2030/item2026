@@ -165,3 +165,32 @@ class RateLimitMiddleware:
                 )
 
         return self.get_response(request)
+
+class NavPermissionMiddleware:
+    """يمنع فتح شاشات غير مسموحة حسب صلاحيات الأقسام."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, 'user', None)
+        if (
+            user is not None
+            and getattr(user, 'is_authenticated', False)
+            and not getattr(user, 'is_staff', False)
+        ):
+            from django.contrib import messages
+            from django.shortcuts import redirect
+            from django.urls import Resolver404, resolve
+
+            from .nav_permissions import user_can_access_screen
+
+            try:
+                match = resolve(request.path_info)
+                url_name = match.url_name
+            except Resolver404:
+                url_name = None
+            if url_name and not user_can_access_screen(user, url_name):
+                messages.error(request, 'لا تملك صلاحية فتح هذه الشاشة.')
+                return redirect('home')
+        return self.get_response(request)
