@@ -93,6 +93,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavScreen("browse_purchase_returns", "مردود المشتريات"),
             NavScreen("browse_vendor_turnover", "دوران الموردين"),
             NavScreen("browse_pr_compare", "مقارنات طلب الشراء"),
+            NavScreen("browse_tr_compare", "طلب النواقص"),
         ),
     ),
     NavSection(
@@ -103,7 +104,6 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavScreen("browse_name_barcode_conflicts", "اسم مشابه · باركود مختلف"),
             NavScreen("browse_unpriced_items", "أصناف غير مسعّرة"),
             NavScreen("browse_below_cost_prices", "أقل من التكلفة"),
-            NavScreen("browse_tr_compare", "طلب النواقص"),
         ),
     ),
     NavSection(
