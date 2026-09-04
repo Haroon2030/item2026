@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% load money_fmt %}
 
-{% block title %}مردود المشتريات الشهري{% endblock %}
+{% block title %}مردود بضاعة راكدة{% endblock %}
 {% block page_class %}sales-dash purchase-dash purchase-returns-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="مردود المشتريات الشهري">
+<section class="dash-head" aria-label="مردود بضاعة راكدة">
   <div class="dash-head-copy">
-    <h2>مردود المشتريات الشهري</h2>
-    <p>مرتجعات فواتير الشراء الآجلة — فلترة بالمجموعة والفرع والبحث بالاسم، مع تصدير Excel</p>
+    <h2>مردود بضاعة راكدة</h2>
+    <p>مردود يومي لأصناف راكدة على موردي الآجل — بدون نقدي، بدون فاتورة كاملة، بدون إدخال وإرجاع بنفس اليوم، وبدون أقسام الفرش والأسماك واللحوم والدواجن</p>
   </div>
 </section>
 
@@ -98,7 +98,7 @@
     <div class="dash-panel-head">
       <div>
         <h3>الموردون حسب المردود</h3>
-        <p class="sales-ov-sub">{{ report.period_label }} · مردود آجل فقط · مرتب حسب القيمة · اضغط على المورد لعرض أصنافه · مستثنى مردود الفاتورة الكاملة</p>
+        <p class="sales-ov-sub">{{ report.period_label }} · راكد على موردي الآجل · بدون فاتورة كاملة · بدون إدخال/إرجاع نفس اليوم · بدون فرش/أسماك/لحوم/دواجن · اضغط المورد للتفاصيل</p>
       </div>
       <span class="result-pill"><span id="pr-vendors-loaded">{{ vendors|slice:":20"|length }}</span> من {{ vendors|length }} مورد</span>
     </div>

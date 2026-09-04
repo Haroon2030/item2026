@@ -1,9 +1,9 @@
-"""كشف اختلاف الوحدات/الأحجام (P_SIZE) بين المشتريات والتحويلات الواردة.
+"""كشف اختلاف عبوة نفس الوحدة بين الشراء (دخول) والتحويل الصادر (خروج).
 
-الفكرة:
-- من مشتريات الفترة: نجمع (الصنف I_CODE + المخزن W_CODE + اسم الوحدة ITM_UNT) مع P_SIZE وكمية الوحدات.
-- من تحويلات واردة الفترة (TR_INOUT_TYPE=2): نفس التجميع.
-- إذا كانت P_SIZE مختلفة لنفس (الصنف + المخزن + اسم الوحدة) فهذا غالباً خطأ في ضبط الوحدات/العبوات أو اختيار الوحدة عند الإدخال.
+الفكرة العملية:
+- الصنف دخل شراءً بوحدة مثل «كرتون» وشد/عبوة 12
+- وطلع تحويلاً صادراً بنفس اسم الوحدة «كرتون» لكن عبوة 6
+- هذا خطأ ضبط وحدة/عبوة (وليس مقارنة كرتون مع باكت)
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 900
-_CACHE_VER = "v2"
+_CACHE_VER = "v7"
 
 
 def _f(value: Any) -> float:
@@ -32,6 +32,26 @@ def _f(value: Any) -> float:
         return round(float(value or 0), 2)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _int_num(value: Any) -> int:
+    """عرض أرقام صحيحة بدون عشرية (12 بدل 12.0)."""
+    try:
+        return int(round(float(value or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _plain_ratio(value: Any) -> str:
+    """نسبة بلا فاصلة محلية؛ بلا أصفار زائدة (0.5 أو 2)."""
+    try:
+        num = round(float(value or 0), 4)
+    except (TypeError, ValueError):
+        return "0"
+    if abs(num - round(num)) < 1e-9:
+        return str(int(round(num)))
+    text = f"{num:.4f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _unit_key(unit: Any) -> str:
@@ -61,10 +81,95 @@ class _PackAgg:
     unit: str
     p_size: float
     qty: float
+    doc_nos: tuple[str, ...] = ()
 
     @property
     def base_qty(self) -> float:
         return round(self.qty * float(self.p_size or 0), 4)
+
+
+def _norm_doc_no(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.endswith(".0") and text[:-2].replace("-", "", 1).isdigit():
+        text = text[:-2]
+    if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
+        try:
+            return str(int(text))
+        except ValueError:
+            return text
+    return text
+
+
+def _doc_nos_display(nos: tuple[str, ...] | list[str], *, limit: int = 6) -> str:
+    clean: list[str] = []
+    seen: set[str] = set()
+    for raw in nos or ():
+        no = _norm_doc_no(raw)
+        if not no or no in seen:
+            continue
+        seen.add(no)
+        clean.append(no)
+    if not clean:
+        return "—"
+    shown = clean[:limit]
+    extra = len(clean) - len(shown)
+    text = "، ".join(shown)
+    return f"{text} +" if extra > 0 else text
+
+
+def _merge_pack_rows(rows: list[dict[str, Any]], *, with_docs: bool) -> list[_PackAgg]:
+    """دمج صفوف أوراكل حسب الصنف/المخزن/الوحدة/العبوة مع جمع أرقام المستندات."""
+    buckets: dict[tuple[str, str, str, float], dict[str, Any]] = {}
+    for row in rows or []:
+        item_code = str(row.get("I_CODE") or "").strip()
+        if not item_code:
+            continue
+        unit = str(row.get("UNIT") or "").strip() or "—"
+        try:
+            p_size = float(row.get("P_SIZE") or 0)
+        except (TypeError, ValueError):
+            p_size = 0.0
+        wh_code = str(row.get("W_CODE") or "").strip()
+        key = (item_code, wh_code, unit, round(p_size, 4))
+        slot = buckets.get(key)
+        if slot is None:
+            slot = {
+                "item_code": item_code,
+                "item_name": str(row.get("I_NAME") or "").strip() or item_code,
+                "wh_code": wh_code,
+                "unit": unit,
+                "p_size": p_size,
+                "qty": 0.0,
+                "docs": [],
+                "seen_docs": set(),
+            }
+            buckets[key] = slot
+        try:
+            slot["qty"] += float(row.get("QTY_TOTAL") or 0)
+        except (TypeError, ValueError):
+            pass
+        if with_docs:
+            doc = _norm_doc_no(row.get("TR_NO"))
+            if doc and doc not in slot["seen_docs"]:
+                slot["seen_docs"].add(doc)
+                slot["docs"].append(doc)
+    out: list[_PackAgg] = []
+    for slot in buckets.values():
+        qty = float(slot["qty"] or 0)
+        if abs(qty) < 1e-9:
+            continue
+        out.append(
+            _PackAgg(
+                item_code=slot["item_code"],
+                item_name=slot["item_name"],
+                wh_code=slot["wh_code"],
+                unit=slot["unit"],
+                p_size=float(slot["p_size"] or 0),
+                qty=qty,
+                doc_nos=tuple(slot["docs"]),
+            )
+        )
+    return out
 
 
 def _pick_dominant(rows: list[_PackAgg]) -> _PackAgg | None:
@@ -126,29 +231,17 @@ def _fetch_purchase_packs(
         """,
         params,
     )
-    out: list[_PackAgg] = []
-    for row in rows or []:
-        out.append(
-            _PackAgg(
-                item_code=str(row.get("I_CODE") or "").strip(),
-                item_name=str(row.get("I_NAME") or "").strip()
-                or str(row.get("I_CODE") or "").strip(),
-                wh_code=str(row.get("W_CODE") or "").strip(),
-                unit=str(row.get("UNIT") or "").strip() or "—",
-                p_size=float(row.get("P_SIZE") or 0),
-                qty=float(row.get("QTY_TOTAL") or 0),
-            )
-        )
-    return out
+    return _merge_pack_rows(rows or [], with_docs=False)
 
 
-def _fetch_inbound_transfer_packs(
+def _fetch_outbound_transfer_packs(
     date_from: date,
     date_to_excl: date,
     *,
     min_pack_size: float,
     warehouse_codes: list[str],
 ) -> list[_PackAgg]:
+    """تحويلات صادرة (خروج) من المخازن المحددة — TR_INOUT_TYPE=1 عبر F_W_CODE."""
     if not warehouse_codes:
         raise OracleStockError("يلزم تحديد مخازن لرفع الأداء.")
 
@@ -166,12 +259,13 @@ def _fetch_inbound_transfer_packs(
 
     rows = _fetch_all(
         f"""
-        SELECT
+        SELECT /*+ LEADING(m d) USE_NL(d) INDEX(d INDX_SER_WHTRNS_DTL) */
           TO_CHAR(d.I_CODE) AS I_CODE,
           NVL(NULLIF(TRIM(i.I_NAME), ''), TO_CHAR(d.I_CODE)) AS I_NAME,
-          TO_CHAR(d.W_CODE) AS W_CODE,
+          TO_CHAR(m.F_W_CODE) AS W_CODE,
           NVL(NULLIF(TRIM(TO_CHAR(d.ITM_UNT)), ''), '—') AS UNIT,
           ROUND(NVL(d.P_SIZE, 0), 4) AS P_SIZE,
+          TO_CHAR(m.TR_NO) AS TR_NO,
           ROUND(SUM(NVL(d.I_QTY, 0)), 4) AS QTY_TOTAL
         FROM {schema}.IAS_WHTRNS_MST m
         JOIN {schema}.IAS_WHTRNS_DTL d
@@ -180,36 +274,23 @@ def _fetch_inbound_transfer_packs(
           ON i.I_CODE = d.I_CODE
         WHERE m.TR_DATE >= :d_from
           AND m.TR_DATE < :d_to_excl
-          AND m.TR_INOUT_TYPE = 2
+          AND m.TR_INOUT_TYPE = 1
           AND {_hung_ok('m')}
           AND NVL(d.P_SIZE, 0) >= :min_ps
           AND d.I_CODE IS NOT NULL
-          AND TO_CHAR(d.W_CODE) IN ({', '.join(wh_keys)})
+          AND TO_CHAR(m.F_W_CODE) IN ({', '.join(wh_keys)})
         GROUP BY
           TO_CHAR(d.I_CODE),
           NVL(NULLIF(TRIM(i.I_NAME), ''), TO_CHAR(d.I_CODE)),
-          TO_CHAR(d.W_CODE),
+          TO_CHAR(m.F_W_CODE),
           NVL(NULLIF(TRIM(TO_CHAR(d.ITM_UNT)), ''), '—'),
-          ROUND(NVL(d.P_SIZE, 0), 4)
+          ROUND(NVL(d.P_SIZE, 0), 4),
+          TO_CHAR(m.TR_NO)
         HAVING ROUND(SUM(NVL(d.I_QTY, 0)), 4) <> 0
         """,
         params,
     )
-    out: list[_PackAgg] = []
-    for row in rows or []:
-        out.append(
-            _PackAgg(
-                item_code=str(row.get("I_CODE") or "").strip(),
-                item_name=str(row.get("I_NAME") or "").strip()
-                or str(row.get("I_CODE") or "").strip(),
-                wh_code=str(row.get("W_CODE") or "").strip(),
-                unit=str(row.get("UNIT") or "").strip() or "—",
-                p_size=float(row.get("P_SIZE") or 0),
-                qty=float(row.get("QTY_TOTAL") or 0),
-            )
-        )
-    return out
-
+    return _merge_pack_rows(rows or [], with_docs=True)
 
 def build_unit_pack_mismatch_report(
     date_from,
@@ -220,7 +301,7 @@ def build_unit_pack_mismatch_report(
     tolerance_pct: float = 0.1,
     limit: int = 100,
 ) -> dict[str, Any]:
-    """تقرير اختلاف P_SIZE للوحدة الكبيرة بين المشتريات والتحويلات الواردة."""
+    """دخل شراء بوحدة/عبوة، وطلع تحويل صادر بنفس اسم الوحدة وعبوة مختلفة."""
     d_from = _as_date(date_from)
     d_to = _as_date(date_to)
     if d_from > d_to:
@@ -252,14 +333,14 @@ def build_unit_pack_mismatch_report(
         min_pack_size=min_ps,
         warehouse_codes=wh_codes,
     )
-    transfers = _fetch_inbound_transfer_packs(
+    transfers = _fetch_outbound_transfer_packs(
         d_from,
         date_to_excl,
         min_pack_size=min_ps,
         warehouse_codes=wh_codes,
     )
 
-    # index by (item_code, wh_code, unit_key)
+    # نفس الصنف + المخزن + اسم الوحدة (كرتون مع كرتون فقط)
     pur_buckets: dict[tuple[str, str, str], list[_PackAgg]] = {}
     for r in purchases:
         key = (r.item_code, r.wh_code, _unit_key(r.unit))
@@ -270,30 +351,21 @@ def build_unit_pack_mismatch_report(
         key = (r.item_code, r.wh_code, _unit_key(r.unit))
         tr_buckets.setdefault(key, []).append(r)
 
-    # index by (item_code, wh_code) ignoring الوحدة — مفيد إذا كانت أسماء الوحدات لا تتطابق نصاً
-    pur_by_item_wh: dict[tuple[str, str], list[_PackAgg]] = {}
-    for r in purchases:
-        key2 = (r.item_code, r.wh_code)
-        pur_by_item_wh.setdefault(key2, []).append(r)
-
-    tr_by_item_wh: dict[tuple[str, str], list[_PackAgg]] = {}
-    for r in transfers:
-        key2 = (r.item_code, r.wh_code)
-        tr_by_item_wh.setdefault(key2, []).append(r)
-
     mismatch_rows: list[dict[str, Any]] = []
     for key, pur_list in pur_buckets.items():
         tr_list = tr_buckets.get(key)
         if not tr_list:
             continue
 
-        expected = _pick_dominant(pur_list)  # P_SIZE المتوقع من المشتريات لنفس الوحدة
+        # عبوة الشراء الغالبة لنفس اسم الوحدة = المرجع (مثل كرتون شد 12)
+        expected = _pick_dominant(pur_list)
         if not expected or expected.p_size <= 0:
             continue
 
         for tr in tr_list:
             if tr.p_size <= 0:
                 continue
+            # مثال الخطأ: شراء كرتون 12 مقابل تحويل كرتون 6
             diff_pct = (tr.p_size - expected.p_size) / expected.p_size * 100.0
             if abs(diff_pct) < tol:
                 continue
@@ -304,84 +376,27 @@ def build_unit_pack_mismatch_report(
                     "item_name": expected.item_name,
                     "wh_code": expected.wh_code,
                     "unit": expected.unit,
-                    "purchase_p_size": round(expected.p_size, 4),
-                    "transfer_p_size": round(tr.p_size, 4),
-                    "ratio": round(ratio, 4),
-                    "diff_pct": round(diff_pct, 3),
-                    "purchase_qty": round(expected.qty, 4),
-                    "transfer_qty": round(tr.qty, 4),
-                    "purchase_base_qty": round(expected.base_qty, 4),
-                    "transfer_base_qty": round(tr.base_qty, 4),
+                    "purchase_unit": expected.unit,
+                    "purchase_p_size": _int_num(expected.p_size),
+                    "transfer_p_size": _int_num(tr.p_size),
+                    "pack_diff": _int_num(abs(tr.p_size - expected.p_size)),
+                    "ratio": _plain_ratio(ratio),
+                    "diff_pct": _int_num(diff_pct),
+                    "purchase_qty": _int_num(expected.qty),
+                    "transfer_qty": _int_num(tr.qty),
+                    "purchase_base_qty": _int_num(expected.base_qty),
+                    "transfer_base_qty": _int_num(tr.base_qty),
                     "transfer_unit": tr.unit,
-                    "match_mode": "unit_name",
+                    "transfer_tr_nos": _doc_nos_display(tr.doc_nos),
+                    "match_mode": "same_unit_pack",
                     "error_kind": "P_SIZE",
                 }
             )
 
-    # وضع ثانٍ: قارن أكبر P_SIZE في المشتريات مع أي P_SIZE في التحويل مختلف (حتى لو الوحدة النصية مختلفة)
-    strict_seen: set[tuple[str, str, str, float, float]] = set()
-    for r in mismatch_rows:
-        strict_seen.add(
-            (
-                str(r.get("item_code") or ""),
-                str(r.get("wh_code") or ""),
-                str(r.get("unit") or ""),
-                float(r.get("purchase_p_size") or 0),
-                float(r.get("transfer_p_size") or 0),
-            )
-        )
-
-    for key2, pur_list in pur_by_item_wh.items():
-        tr_list = tr_by_item_wh.get(key2) or []
-        if not tr_list:
-            continue
-        # المتوقع: أكبر P_SIZE ظهرت في مشتريات نفس المخزن/الصنف (عادة هي "الوحدة الكبيرة" فعلاً)
-        pur_max = max(pur_list or [], key=lambda r: (r.p_size, r.qty))
-        if not pur_max or pur_max.p_size <= 0:
-            continue
-        expected_p = float(pur_max.p_size)
-        for tr in tr_list:
-            if tr.p_size <= 0:
-                continue
-            diff_pct = (tr.p_size - expected_p) / expected_p * 100.0
-            if abs(diff_pct) < tol:
-                continue
-            ratio = tr.p_size / expected_p if expected_p else 0.0
-            dedup_key = (
-                str(key2[0]),
-                str(key2[1]),
-                str(tr.unit),
-                float(pur_max.p_size),
-                float(tr.p_size),
-            )
-            if dedup_key in strict_seen:
-                continue
-            mismatch_rows.append(
-                {
-                    "item_code": pur_max.item_code,
-                    "item_name": pur_max.item_name,
-                    "wh_code": pur_max.wh_code,
-                    "unit": tr.unit,
-                    "purchase_p_size": round(pur_max.p_size, 4),
-                    "transfer_p_size": round(tr.p_size, 4),
-                    "ratio": round(ratio, 4),
-                    "diff_pct": round(diff_pct, 3),
-                    "purchase_qty": round(pur_max.qty, 4),
-                    "transfer_qty": round(tr.qty, 4),
-                    "purchase_base_qty": round(pur_max.base_qty, 4),
-                    "transfer_base_qty": round(tr.base_qty, 4),
-                    "transfer_unit": tr.unit,
-                    "match_mode": "dominant_max_ps",
-                    "error_kind": "P_SIZE",
-                }
-            )
-            strict_seen.add(dedup_key)
-
-    # فرق % = فرق عبوة الشراء عن عبوة التحويل فقط (لا مقارنة كميات)
     for r in mismatch_rows:
         buy_ps = float(r.get("purchase_p_size") or 0)
         tr_ps = float(r.get("transfer_p_size") or 0)
-        r["impact_base_diff"] = round(abs(tr_ps - buy_ps), 4)
+        r["impact_base_diff"] = _int_num(abs(tr_ps - buy_ps))
 
     mismatch_rows.sort(
         key=lambda r: (
@@ -411,4 +426,173 @@ def build_unit_pack_mismatch_report(
     except Exception:
         pass
     return report
+
+
+def build_pack_mismatch_branch_detail(
+    date_from,
+    date_to,
+    *,
+    item_code: str,
+    wh_code: str,
+    unit: str,
+    purchase_p_size: float,
+    transfer_p_size: float,
+) -> dict[str, Any]:
+    """تفاصيل فرق الشد للتحويلات الصادرة حسب فرع الوجهة."""
+    from .oracle_stock import _branch_names
+
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+
+    code = str(item_code or "").strip()
+    src_wh = str(wh_code or "").strip()
+    unit_name = str(unit or "").strip()
+    unit_want = _unit_key(unit_name)
+    buy_ps = float(purchase_p_size or 0)
+    out_ps = float(transfer_p_size or 0)
+    if not code or not src_wh:
+        raise OracleStockError("يلزم كود الصنف ومخزن المصدر.")
+    if buy_ps <= 0 or out_ps <= 0:
+        raise OracleStockError("عبوة الشراء/الخروج غير صالحة.")
+
+    schema = _schema()
+    date_to_excl = d_to + timedelta(days=1)
+    pack_diff = abs(out_ps - buy_ps)
+    # لا نفلتر اسم الوحدة في SQL: كرتون ≠ كرتــون نصاً لكن نفس المفتاح بعد التطبيع
+    params: dict[str, Any] = {
+        "d_from": d_from,
+        "d_to_excl": date_to_excl,
+        "icode": code,
+        "src_wh": src_wh,
+        "out_ps": out_ps,
+    }
+
+    rows = _fetch_all(
+        f"""
+        SELECT /*+ LEADING(m d) USE_NL(d) INDEX(d INDX_SER_WHTRNS_DTL) */
+          TO_CHAR(NVL(tw.CONN_BRN_NO, '')) AS BRN_NO,
+          TO_CHAR(m.T_W_CODE) AS DST_WH,
+          NVL(NULLIF(TRIM(tw.W_NAME), ''), TO_CHAR(m.T_W_CODE)) AS DST_WH_NAME,
+          TO_CHAR(m.TR_NO) AS TR_NO,
+          TO_CHAR(m.TR_DATE, 'YYYY-MM-DD') AS TR_DATE,
+          NVL(NULLIF(TRIM(TO_CHAR(d.ITM_UNT)), ''), '—') AS UNIT,
+          ROUND(NVL(d.P_SIZE, 0), 4) AS P_SIZE,
+          ROUND(SUM(NVL(d.I_QTY, 0)), 4) AS QTY_TOTAL
+        FROM {schema}.IAS_WHTRNS_MST m
+        JOIN {schema}.IAS_WHTRNS_DTL d
+          ON d.TR_SER = m.TR_SER
+        LEFT JOIN {schema}.WAREHOUSE_DETAILS tw
+          ON tw.W_CODE = m.T_W_CODE
+        WHERE m.TR_DATE >= :d_from
+          AND m.TR_DATE < :d_to_excl
+          AND m.TR_INOUT_TYPE = 1
+          AND {_hung_ok('m')}
+          AND TO_CHAR(m.F_W_CODE) = :src_wh
+          AND TO_CHAR(d.I_CODE) = :icode
+          AND ABS(NVL(d.P_SIZE, 0) - :out_ps) < 0.0001
+        GROUP BY
+          TO_CHAR(NVL(tw.CONN_BRN_NO, '')),
+          TO_CHAR(m.T_W_CODE),
+          NVL(NULLIF(TRIM(tw.W_NAME), ''), TO_CHAR(m.T_W_CODE)),
+          TO_CHAR(m.TR_NO),
+          TO_CHAR(m.TR_DATE, 'YYYY-MM-DD'),
+          NVL(NULLIF(TRIM(TO_CHAR(d.ITM_UNT)), ''), '—'),
+          ROUND(NVL(d.P_SIZE, 0), 4)
+        HAVING ROUND(SUM(NVL(d.I_QTY, 0)), 4) <> 0
+        """,
+        params,
+    )
+
+    item_name = code
+    name_rows = _fetch_all(
+        f"""
+        SELECT NVL(NULLIF(TRIM(I_NAME), ''), TO_CHAR(I_CODE)) AS I_NAME
+        FROM {schema}.IAS_ITM_MST
+        WHERE TO_CHAR(I_CODE) = :icode
+          AND ROWNUM = 1
+        """,
+        {"icode": code},
+    )
+    if name_rows:
+        item_name = str(name_rows[0].get("I_NAME") or code).strip() or code
+
+    branch_names = _branch_names()
+    by_brn: dict[str, dict[str, Any]] = {}
+    seen_unit_label = unit_name
+    for row in rows or []:
+        row_unit = str(row.get("UNIT") or "").strip() or "—"
+        if unit_want and _unit_key(row_unit) != unit_want:
+            continue
+        if not seen_unit_label or seen_unit_label == unit_name:
+            seen_unit_label = row_unit
+        brn = str(row.get("BRN_NO") or "").strip() or "—"
+        slot = by_brn.get(brn)
+        if slot is None:
+            slot = {
+                "branch_code": brn,
+                "branch_name": branch_names.get(brn) or brn,
+                "qty": 0.0,
+                "tr_nos": [],
+                "seen": set(),
+                "dst_whs": set(),
+            }
+            by_brn[brn] = slot
+        try:
+            slot["qty"] += float(row.get("QTY_TOTAL") or 0)
+        except (TypeError, ValueError):
+            pass
+        tr_no = _norm_doc_no(row.get("TR_NO"))
+        if tr_no and tr_no not in slot["seen"]:
+            slot["seen"].add(tr_no)
+            slot["tr_nos"].append(tr_no)
+        dst = str(row.get("DST_WH") or "").strip()
+        if dst:
+            slot["dst_whs"].add(dst)
+
+    branch_rows: list[dict[str, Any]] = []
+    for slot in by_brn.values():
+        qty = float(slot["qty"] or 0)
+        branch_rows.append(
+            {
+                "branch_code": slot["branch_code"],
+                "branch_name": slot["branch_name"],
+                "transfer_qty": _int_num(qty),
+                "pack_diff": _int_num(pack_diff),
+                "base_diff": _int_num(qty * pack_diff),
+                "transfer_p_size": _int_num(out_ps),
+                "purchase_p_size": _int_num(buy_ps),
+                "tr_count": len(slot["tr_nos"]),
+                "transfer_tr_nos": _doc_nos_display(slot["tr_nos"], limit=12),
+                "dst_wh_count": len(slot["dst_whs"]),
+            }
+        )
+
+    branch_rows.sort(
+        key=lambda r: (
+            -abs(int(r.get("base_diff") or 0)),
+            -abs(int(r.get("transfer_qty") or 0)),
+            str(r.get("branch_name") or ""),
+        )
+    )
+
+    return {
+        "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
+        "item_code": code,
+        "item_name": item_name,
+        "wh_code": src_wh,
+        "unit": seen_unit_label or unit_name,
+        "purchase_p_size": _int_num(buy_ps),
+        "transfer_p_size": _int_num(out_ps),
+        "pack_diff": _int_num(pack_diff),
+        "rows": branch_rows,
+        "kpis": {
+            "branch_count": len(branch_rows),
+            "transfer_qty": _int_num(sum(float(r.get("transfer_qty") or 0) for r in branch_rows)),
+            "base_diff": _int_num(
+                sum(float(r.get("base_diff") or 0) for r in branch_rows)
+            ),
+        },
+    }
 

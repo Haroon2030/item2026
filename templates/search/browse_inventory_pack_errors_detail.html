@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}فرق الشد حسب الفرع — {{ detail.item_code }}{% endblock %}
+{% block page_class %}sales-dash inv-pack-err-dash inv-pack-err-detail-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="فرق الشد حسب الفرع">
+  <div class="dash-head-copy">
+    <h2>فرق الشد حسب الفرع</h2>
+    <p>
+      الصنف <strong class="mono">{{ detail.item_code }}</strong>
+      — {{ detail.item_name }}
+      · وحدة {{ detail.unit }}
+      · شراء {{ detail.purchase_p_size }} / خروج {{ detail.transfer_p_size }}
+      · فرق الشد {{ detail.pack_diff }}
+    </p>
+  </div>
+  <div class="dash-head-actions">
+    <a class="btn-ghost" href="{{ back_url }}">رجوع للقائمة</a>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if detail and detail.rows %}
+  <section class="dash-panel dash-panel-glass perf-panel inv-pack-err-panel" aria-label="فرق الشد حسب الفرع">
+    <div class="dash-panel-head">
+      <h3>التحويلات الصادرة المخالفة</h3>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ detail.kpis.branch_count }} فرع</span>
+        <span class="result-pill">كمية {{ detail.kpis.transfer_qty }}</span>
+        <span class="result-pill">فرق أساس {{ detail.kpis.base_diff }}</span>
+      </div>
+    </div>
+
+    <div class="table-wrap inv-pack-err-scroll">
+      <table class="data-table inv-pack-err-table" aria-label="فرق الشد حسب الفرع">
+        <thead>
+          <tr>
+            <th class="pe-th-idx">#</th>
+            <th class="pe-th-item">الفرع</th>
+            <th class="pe-th-trno">أرقام التحويل</th>
+            <th class="pe-th-buy">عبوة شراء</th>
+            <th class="pe-th-tr">عبوة خروج</th>
+            <th class="pe-th-packdiff">فرق الشد</th>
+            <th class="pe-th-qty">الكمية</th>
+            <th class="pe-th-base">فرق الأساس</th>
+            <th class="pe-th-tr">عدد التحويلات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in detail.rows %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %}">
+              <td class="mono pe-td-idx">{{ forloop.counter }}</td>
+              <td class="pe-td-item">
+                <strong>{{ r.branch_name }}</strong>
+                <span class="pe-item-name mono">{{ r.branch_code }}</span>
+              </td>
+              <td class="mono pe-td-trno" title="{{ r.transfer_tr_nos }}">{{ r.transfer_tr_nos }}</td>
+              <td class="mono pe-td-buy">{{ r.purchase_p_size }}</td>
+              <td class="mono pe-td-tr">{{ r.transfer_p_size }}</td>
+              <td class="mono pe-td-packdiff">{{ r.pack_diff }}</td>
+              <td class="mono pe-td-qty">{{ r.transfer_qty }}</td>
+              <td class="mono pe-td-base">{{ r.base_diff }}</td>
+              <td class="mono pe-td-tr">{{ r.tr_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% elif detail %}
+  <p class="sales-empty">لا تحويلات صادرة مطابقة لهذه العبوة ضمن الفترة.</p>
+{% endif %}
+{% endblock %}

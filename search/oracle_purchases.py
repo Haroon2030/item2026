@@ -653,6 +653,21 @@ def build_purchase_dashboard(
 _RETURNS_ROW_LIMIT = 8000
 _RETURNS_PAGE_SIZE = 50
 
+# أقسام طازجة/سريعة التلف — ليست من مردود البضاعة الراكدة على المورد
+_EXCLUDED_FRESH_GCODES: tuple[int, ...] = (
+    5,  # الفرش
+    15,  # الأسماك
+    16,  # الملحمة
+    26,  # مجموعة الطازج
+    29,  # الدواجن والبيض
+    42,  # ملحمة خارجية
+    43,  # ملحمه بلدي
+)
+
+
+def excluded_fresh_return_group_codes() -> set[str]:
+    return {str(code) for code in _EXCLUDED_FRESH_GCODES}
+
 
 def _returns_where(
     d_from,
@@ -676,6 +691,9 @@ def _returns_where(
         params["vendor_code"] = vendor
     # مردود آجل فقط — استبعاد النقدي (CASH_NO يُملأ في المردود النقدي)
     where = f"({where}) AND r.CASH_NO IS NULL"
+    # استثناء أقسام الفرش / الأسماك / اللحوم / الدواجن / الطازج
+    excl = ", ".join(str(int(code)) for code in _EXCLUDED_FRESH_GCODES)
+    where = f"({where}) AND (i.G_CODE IS NULL OR i.G_CODE NOT IN ({excl}))"
     # استثناء مردود الفاتورة الكاملة: مستند مردود مرتبط بفاتورة أصلية
     # ويطابقها بعدد السطور وصافي القيمة
     schema = _schema()
@@ -699,11 +717,22 @@ def _returns_where(
         "  AND d2.RT_BILL_DOC_TYPE = r2.RT_BILL_DOC_TYPE"
         " WHERE r2.RT_BILL_DATE >= :d_from"
         "   AND r2.RT_BILL_DATE < :d_to_excl"
-        "   AND NVL(r2.HUNG, 0) = 0"
+        "   AND (r2.HUNG IS NULL OR r2.HUNG = 0)"
         "   AND d2.BILL_SER IS NOT NULL"
         " GROUP BY d2.RT_BILL_SER, d2.BILL_SER"
         ") x)"
         " WHERE PL = RL AND ABS(PN - RN) < 0.02)"
+    )
+    # استثناء إدخال وإرجاع بنفس اليوم (رفض فوري — ليس مردود راكد للمورد)
+    where = (
+        f"({where}) AND ("
+        "d.BILL_SER IS NULL OR NOT EXISTS ("
+        f" SELECT 1 FROM {schema}.IAS_PI_BILL_MST pm"
+        " WHERE pm.BILL_SER = d.BILL_SER"
+        "   AND pm.BILL_DATE >= TRUNC(r.RT_BILL_DATE)"
+        "   AND pm.BILL_DATE < TRUNC(r.RT_BILL_DATE) + 1"
+        "   AND (pm.HUNG IS NULL OR pm.HUNG = 0)"
+        "))"
     )
     if query:
         params["q_like"] = f"%{query}%"
@@ -741,7 +770,7 @@ def fetch_purchase_returns_vendors(
     group = str(group_code or "").strip()
     query = str(q or "").strip()[:80]
     cache_key = (
-        f"purchases:returns:vendors:v3:{d_from}:{d_to}:{branch}:{group}:{query.lower()}"
+        f"purchases:returns:vendors:v8:{d_from}:{d_to}:{branch}:{group}:{query.lower()}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, list):
@@ -823,7 +852,7 @@ def fetch_purchase_returns_branches(
     vendor = str(vendor_code or "").strip()
     query = str(q or "").strip()[:80]
     cache_key = (
-        f"purchases:returns:branches:v2:{d_from}:{d_to}:{branch}:{group}:{vendor}:{query.lower()}"
+        f"purchases:returns:branches:v7:{d_from}:{d_to}:{branch}:{group}:{vendor}:{query.lower()}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, list):
@@ -1003,7 +1032,7 @@ def build_purchase_returns_report(
     vendor = str(vendor_code or "").strip()
     query = str(q or "").strip()[:80]
     cache_key = (
-        f"purchases:returns:v7:{d_from}:{d_to}:{branch}:{group}:{vendor}:{query.lower()}"
+        f"purchases:returns:v12:{d_from}:{d_to}:{branch}:{group}:{vendor}:{query.lower()}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
@@ -1173,8 +1202,9 @@ def build_purchase_returns_excel(
     )
     q_note = f" · بحث: {q}" if q else ""
     buf.write(
-        f"<caption>مردود المشتريات الشهري — {period}"
-        f'<br><span class="sub">مستندات {int(kpis.get("doc_count") or 0):,} · '
+        f"<caption>مردود بضاعة راكدة — {period}"
+        f'<br><span class="sub">مردود راكد على موردي الآجل · بدون فاتورة كاملة · بدون إدخال/إرجاع نفس اليوم · بدون فرش/أسماك/لحوم/دواجن · '
+        f'مستندات {int(kpis.get("doc_count") or 0):,} · '
         f'أصناف {int(kpis.get("item_count") or 0):,} · '
         f'إجمالي شامل الضريبة {_money(kpis.get("total_amount") or 0)}'
         f"{q_note}</span></caption>"

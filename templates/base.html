@@ -164,9 +164,9 @@
             </a>
             {% endif %}
             {% if nav_access.screens.browse_purchase_returns %}
-            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_returns' %}is-active{% endif %}" href="{% url 'browse_purchase_returns' %}" title="مردود المشتريات الشهري">
+            <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_returns' %}is-active{% endif %}" href="{% url 'browse_purchase_returns' %}" title="مردود بضاعة راكدة — بدون نقدي وفاتورة كاملة وأقسام طازجة">
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h13"/><path d="M12 7l5 5-5 5"/><path d="M21 5v14"/></svg>
-              <span>مردود المشتريات</span>
+              <span>مردود بضاعة راكدة</span>
             </a>
             {% endif %}
             {% if nav_access.screens.browse_vendor_turnover %}

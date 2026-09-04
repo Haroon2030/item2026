@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="أخطاء وحدات/أحجام الأصناف">
   <div class="dash-head-copy">
     <h2>أخطاء وحدات/أحجام الأصناف</h2>
-    <p>مقارنة العبوة الكبيرة بين المشتريات والتحويلات الواردة لنفس الصنف والمخزن</p>
+    <p>دخل شراء بوحدة وعبوة (مثل كرتون شد 12) وطلع تحويل صادر بنفس الوحدة وعبوة مختلفة (مثل كرتون شد 6)</p>
   </div>
 </section>
 
@@ -88,15 +88,14 @@
             <th class="pe-th-idx">#</th>
             <th class="pe-th-item">الصنف</th>
             <th class="pe-th-wh">المخزن</th>
-            <th class="pe-th-unit">الوحدة</th>
+            <th class="pe-th-unit">وحدة شراء</th>
+            <th class="pe-th-unit2">وحدة خروج</th>
+            <th class="pe-th-trno">رقم التحويل</th>
             <th class="pe-th-buy">عبوة شراء</th>
-            <th class="pe-th-tr">عبوة تحويل</th>
-            <th class="pe-th-ratio">النسبة</th>
+            <th class="pe-th-tr">عبوة خروج</th>
+            <th class="pe-th-packdiff">فرق الشد</th>
+            <th class="pe-th-qty">الكمية</th>
             <th class="pe-th-diff">فرق العبوة %</th>
-            <th class="pe-th-buy">كمية شراء</th>
-            <th class="pe-th-tr">كمية تحويل</th>
-            <th class="pe-th-base">أساس شراء</th>
-            <th class="pe-th-base2">أساس تحويل</th>
           </tr>
         </thead>
         <tbody>
@@ -111,15 +110,24 @@
                 <span>{{ r.wh_name }}</span>
                 <strong class="mono">{{ r.wh_code }}</strong>
               </td>
-              <td class="pe-td-unit">{{ r.unit }}</td>
+              <td class="pe-td-unit">{{ r.purchase_unit|default:r.unit }}</td>
+              <td class="pe-td-unit2">{% if r.transfer_unit %}{{ r.transfer_unit }}{% else %}{{ r.unit }}{% endif %}</td>
+              <td class="mono pe-td-trno">
+                {% if r.transfer_tr_nos and r.transfer_tr_nos != "—" %}
+                  <a
+                    class="pe-trno-link"
+                    href="{% url 'browse_inventory_pack_errors_detail' %}?date_from={{ date_from|urlencode }}&amp;date_to={{ date_to|urlencode }}&amp;item={{ r.item_code|urlencode }}&amp;wh={{ r.wh_code|urlencode }}&amp;unit={{ r.purchase_unit|default:r.unit|urlencode }}&amp;buy_ps={{ r.purchase_p_size }}&amp;out_ps={{ r.transfer_p_size }}&amp;warehouses={{ warehouses_raw|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;min_pack_size={{ min_pack_size }}&amp;tolerance_pct={{ tolerance_pct }}&amp;limit={{ limit }}"
+                    title="فرق الشد حسب الفرع للتحويلات الصادرة"
+                  >{{ r.transfer_tr_nos }}</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
               <td class="mono pe-td-buy">{{ r.purchase_p_size }}</td>
               <td class="mono pe-td-tr">{{ r.transfer_p_size }}</td>
-              <td class="mono pe-td-ratio">{{ r.ratio }}</td>
+              <td class="mono pe-td-packdiff">{{ r.pack_diff }}</td>
+              <td class="mono pe-td-qty">{{ r.transfer_qty }}</td>
               <td class="mono pe-td-diff">{% if r.diff_pct > 0 %}+{% endif %}{{ r.diff_pct }}%</td>
-              <td class="mono pe-td-buy">{{ r.purchase_qty }}</td>
-              <td class="mono pe-td-tr">{{ r.transfer_qty }}</td>
-              <td class="mono pe-td-base">{{ r.purchase_base_qty }}</td>
-              <td class="mono pe-td-base2">{{ r.transfer_base_qty }}</td>
             </tr>
           {% endfor %}
         </tbody>

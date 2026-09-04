@@ -25,6 +25,11 @@ urlpatterns = [
         name='browse_inventory_pack_errors',
     ),
     path(
+        'inventory/pack-errors/detail/',
+        views.browse_inventory_pack_errors_detail,
+        name='browse_inventory_pack_errors_detail',
+    ),
+    path(
         'inventory/transfers/request/',
         views.browse_tr_compare_detail,
         name='browse_tr_compare_detail',

@@ -2220,6 +2220,93 @@ def browse_inventory_pack_errors(request):
 @login_required
 @require_GET
 @never_cache
+def browse_inventory_pack_errors_detail(request):
+    """فرق الشد للتحويلات الصادرة المخالفة — مجمّع حسب فرع الوجهة."""
+    from datetime import date as date_cls
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    error = ''
+    detail = None
+    today = date_cls.today()
+    month_start = today.replace(day=1)
+
+    date_from_raw = str(request.GET.get('date_from') or month_start.isoformat()).strip()
+    date_to_raw = str(request.GET.get('date_to') or today.isoformat()).strip()
+    item_code = str(request.GET.get('item') or '').strip()
+    wh_code = str(request.GET.get('wh') or '').strip()
+    unit = str(request.GET.get('unit') or '').strip()
+    buy_ps_raw = str(request.GET.get('buy_ps') or '').strip()
+    out_ps_raw = str(request.GET.get('out_ps') or '').strip()
+
+    back_parts = []
+    for key, val in (
+        ('date_from', date_from_raw),
+        ('date_to', date_to_raw),
+        ('warehouses', str(request.GET.get('warehouses') or '').strip()),
+        ('branch', str(request.GET.get('branch') or '').strip()),
+        ('min_pack_size', str(request.GET.get('min_pack_size') or '').strip()),
+        ('tolerance_pct', str(request.GET.get('tolerance_pct') or '').strip()),
+        ('limit', str(request.GET.get('limit') or '').strip()),
+    ):
+        if val:
+            back_parts.append((key, val))
+    back_url = reverse('browse_inventory_pack_errors')
+    if back_parts:
+        back_url = f"{back_url}?{urlencode(back_parts)}"
+
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+        buy_ps = float(buy_ps_raw)
+        out_ps = float(out_ps_raw)
+    except (ValidationError, ValueError, TypeError) as exc:
+        error = str(exc) if isinstance(exc, ValidationError) else 'معاملات التفصيل غير مكتملة.'
+        date_from, date_to = month_start, today
+        buy_ps = out_ps = 0.0
+
+    if not error and (not item_code or not wh_code or not unit):
+        error = 'يلزم الصنف والمخزن والوحدة لعرض التفصيل.'
+
+    if not error:
+        try:
+            from .oracle_stock import oracle_enabled, oracle_session
+            from .oracle_unit_pack_mismatch import build_pack_mismatch_branch_detail
+
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل.'
+            else:
+                with oracle_session():
+                    detail = build_pack_mismatch_branch_detail(
+                        date_from,
+                        date_to,
+                        item_code=item_code,
+                        wh_code=wh_code,
+                        unit=unit,
+                        purchase_p_size=buy_ps,
+                        transfer_p_size=out_ps,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_inventory_pack_errors_detail failed: %s', exc)
+            error = f'تعذّر تحميل تفصيل فرق الشد: {exc}'
+            detail = None
+
+    return render(
+        request,
+        'search/browse_inventory_pack_errors_detail.html',
+        {
+            'detail': detail,
+            'error': error,
+            'back_url': back_url,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_vendor_turnover(request):
     """دوران مخزون الموردين — كمية واردة مقابل مباعة واستحقاق السداد."""
     from datetime import date
@@ -3447,11 +3534,10 @@ def browse_purchases(request):
 @require_GET
 @never_cache
 def browse_purchase_returns(request):
-    """مردود المشتريات الشهري — فلاتر الفرع والمجموعة والبحث بالاسم + Excel."""
+    """مردود يومي لبضاعة راكدة على موردي الآجل."""
     from datetime import date
 
     today = date.today()
-    month_start = today.replace(day=1)
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_group = str(request.GET.get('group') or '').strip()
     selected_vendor = str(request.GET.get('vendor') or '').strip()[:40]
@@ -3469,8 +3555,9 @@ def browse_purchase_returns(request):
     branch_rows: list[dict] = []
 
     try:
+        # افتراضي: اليوم — مردود راكد يومي على موردي الآجل
         date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_from') or today.isoformat(),
             request.GET.get('date_to') or today.isoformat(),
         )
     except ValidationError as exc:
@@ -3480,7 +3567,7 @@ def browse_purchase_returns(request):
             {
                 'date_from': (request.GET.get('date_from') or '')[:10],
                 'date_to': (request.GET.get('date_to') or '')[:10],
-                'default_from': month_start.isoformat(),
+                'default_from': today.isoformat(),
                 'default_to': today.isoformat(),
                 'selected_branch': selected_branch,
                 'selected_group': selected_group,
@@ -3500,6 +3587,7 @@ def browse_purchase_returns(request):
         from .oracle_purchases import (
             build_purchase_returns_excel,
             build_purchase_returns_report,
+            excluded_fresh_return_group_codes,
             fetch_purchase_returns_branches,
             fetch_purchase_returns_vendors,
         )
@@ -3514,7 +3602,12 @@ def browse_purchase_returns(request):
         else:
             with oracle_session():
                 branches = fetch_income_branches()
-                groups = fetch_sales_group_options()
+                skip_groups = excluded_fresh_return_group_codes()
+                groups = [
+                    row
+                    for row in fetch_sales_group_options()
+                    if str(row.get('code') or '').strip() not in skip_groups
+                ]
                 if selected_branch not in {row['code'] for row in branches}:
                     selected_branch = ''
                 if selected_group not in {row['code'] for row in groups}:
@@ -3566,7 +3659,7 @@ def browse_purchase_returns(request):
         {
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
-            'default_from': month_start.isoformat(),
+            'default_from': today.isoformat(),
             'default_to': today.isoformat(),
             'selected_branch': selected_branch,
             'selected_group': selected_group,
