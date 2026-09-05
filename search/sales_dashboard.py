@@ -228,7 +228,9 @@ def _reconcile_group_sales_to_target(
             item["vat_total"] = round(sales - net, 2)
         if "gross_total" in item:
             item["gross_total"] = round(float(row.get("gross_total") or 0) * factor, 2)
-        inv = int(row.get("invoice_count") or 0)
+        inv_raw = int(row.get("invoice_count") or 0)
+        inv = int(round(inv_raw * factor)) if inv_raw else 0
+        item["invoice_count"] = inv
         item["avg_basket"] = round(sales / inv, 2) if inv else 0.0
         running = round(running + sales, 2)
         adjusted.append(item)

@@ -4171,6 +4171,7 @@ def _fold_pos_item_rows_to_group_sales(
             continue
         b_code = str(row.get("BRANCH_CODE") or "").strip() if by_branch else ""
         key = (g_code, b_code)
+        bill_key = (g_code, b_code)
         bucket = amt.get(key)
         if bucket is None:
             bucket = {"qty": 0.0, "net": 0.0, "vat": 0.0}
@@ -4183,11 +4184,12 @@ def _fold_pos_item_rows_to_group_sales(
             if bill_no is None or str(bill_no).strip() == "":
                 continue
             srl = row.get("BILL_SRL")
-            bset = bills.get(key)
+            brn_for_bill = str(row.get("BRANCH_CODE") or b_code or "").strip()
+            bset = bills.get(bill_key)
             if bset is None:
                 bset = set()
-                bills[key] = bset
-            bset.add((b_code, str(bill_no), str(srl if srl is not None else 0)))
+                bills[bill_key] = bset
+            bset.add((brn_for_bill, str(bill_no), str(srl if srl is not None else 0)))
 
     sales_rows: list[dict] = []
     for (g_code, b_code), bucket in amt.items():
@@ -4461,12 +4463,13 @@ def _fetch_pos_group_totals_light(
                 group_code=group_code,
                 max_bills=max_bills,
                 sample_mod=sample_mod,
+                per_bill=True,
             )
         rows = _fold_pos_item_rows_to_group_sales(
             item_rows,
             by_branch=False,
             group_code=group_code,
-            with_bills=False,
+            with_bills=True,
         )
         # #region agent log
         _agent_dbg(
@@ -5000,7 +5003,7 @@ def _groups_cache_key(
     split_by_branch: bool,
     mode: str,
     *,
-    version: str = "v23",
+    version: str = "v24",
 ) -> str:
     return (
         f"sales:groups:{version}:{system}:{_as_date(date_from).isoformat()}:"
@@ -5019,8 +5022,8 @@ def _groups_cache_lookup(
     *,
     allow_stale: bool = True,
 ):
-    """يقرأ v23 فقط — صيغة I_PRICE_VAT الشاملة؛ لا نعيد استخدام كاش أقدم."""
-    for ver in ("v23",):
+    """يقرأ v24 — يشمل عدّ فواتير المجموعات؛ لا نعيد استخدام كاش أقدم بلا فواتير."""
+    for ver in ("v24",):
         key = _groups_cache_key(
             system,
             date_from,
@@ -6263,8 +6266,12 @@ def _fetch_pos_item_sales_agg(
     recent_bills: int | None = None,
     max_bills: int | None = None,
     sample_mod: int = 1,
+    per_bill: bool = False,
 ) -> list[dict]:
-    """تجميع مبيعات أصناف POS — Top-N أو عيّنة فواتير لتسريع اللوحة."""
+    """تجميع مبيعات أصناف POS — Top-N أو عيّنة فواتير لتسريع اللوحة.
+
+    per_bill=True: صف لكل (صنف×فاتورة) لعدّ فواتير المجموعات بدقة داخل العيّنة.
+    """
     pos = _pos_owner()
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
@@ -6277,13 +6284,14 @@ def _fetch_pos_item_sales_agg(
         params["gcode"] = _bind_gcode(group_code)
         group_filter = "AND i.G_CODE = :gcode"
     hung_m = _hung_ok("m")
+
     need_item_join = bool(group_code)
     if need_item_join:
         item_join = f"LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE"
         name_expr = "MAX(NVL(i.I_NAME, TO_CHAR(d.I_CODE)))"
     else:
         item_join = ""
-        name_expr = "TO_CHAR(d.I_CODE)"
+        name_expr = "MAX(TO_CHAR(d.I_CODE))" if per_bill else "TO_CHAR(d.I_CODE)"
 
     if recent_bills and int(recent_bills) > 0:
         params["bill_cap"] = int(recent_bills)
@@ -6298,8 +6306,6 @@ def _fetch_pos_item_sales_agg(
               ) WHERE ROWNUM <= :bill_cap
         """
     elif max_bills and int(max_bills) > 0:
-        # عيّنة موزّعة من رأس الفاتورة فقط (خفيف) ثم تجميع بنودها —
-        # أسرع بكثير من GROUP BY على كل IAS_POS_BILL_DTL للفترة.
         params["bill_cap"] = int(max_bills)
         mod = max(1, int(sample_mod or 1))
         hash_filter = ""
@@ -6328,7 +6334,32 @@ def _fetch_pos_item_sales_agg(
                 {branch_filter}
         """
 
-    core = f"""
+    if per_bill:
+        core = f"""
+          SELECT
+              TO_CHAR(d.I_CODE) AS ITEM_CODE,
+              {name_expr} AS ITEM_NAME,
+              TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+              m.BILL_NO AS BILL_NO,
+              NVL(m.BILL_SRL, 0) AS BILL_SRL,
+              1 AS INVOICE_COUNT,
+              ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
+              ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL,
+              ROUND(SUM(NVL(d.VAT_AMT, 0)), 2) AS VAT_TOTAL
+          FROM (
+              {mst_from}
+          ) m
+          JOIN {pos}.IAS_POS_BILL_DTL d
+            ON d.BILL_NO = m.BILL_NO
+           AND d.BRN_NO = m.BRN_NO
+           AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
+          {item_join}
+          WHERE d.I_CODE IS NOT NULL
+            {group_filter}
+          GROUP BY d.I_CODE, m.BRN_NO, m.BILL_NO, NVL(m.BILL_SRL, 0)
+        """
+    else:
+        core = f"""
           SELECT
               TO_CHAR(d.I_CODE) AS ITEM_CODE,
               {name_expr} AS ITEM_NAME,
@@ -6347,7 +6378,7 @@ def _fetch_pos_item_sales_agg(
           WHERE d.I_CODE IS NOT NULL
             {group_filter}
           GROUP BY d.I_CODE
-    """
+        """
     if limit is not None:
         order_sql = _item_order_sql(order_by)
         sql = f"""
