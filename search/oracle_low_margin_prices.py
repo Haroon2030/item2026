@@ -1020,8 +1020,8 @@ def build_low_margin_excel(
         "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الباركود</th><th>الوحدة</th>"
         "<th>المخزن</th><th>اسم المخزن</th><th>المجموعة</th><th>كود المجموعة</th>"
         "<th>متوسط التكلفة</th><th>السعر شامل الضريبة</th>"
-        "<th>نسبة الربح</th><th>ربح أونكس</th><th>حد الربح %</th><th>حد السعر</th>"
-        "<th>العملة</th><th>المستوى</th><th>اسم المستوى</th>"
+        "<th>نسبة الربح</th><th>ربح أونكس</th>"
+        "<th>المستوى</th><th>اسم المستوى</th>"
         "</tr></thead><tbody>"
     )
     for i, r in enumerate(report.get("rows") or [], start=1):
@@ -1041,9 +1041,6 @@ def build_low_margin_excel(
         buf.write(_xls_num(r.get("price"), css="num", digits=4))
         buf.write(_xls_num(r.get("profit_pct"), css="pct", digits=2))
         buf.write(_xls_num(r.get("onyx_profit_pct"), css="pct", digits=2))
-        buf.write(_xls_num(r.get("limit_profit_pct"), css="pct", digits=2))
-        buf.write(_xls_num(r.get("limit_price"), css="num", digits=4))
-        buf.write(_xls_text(r.get("currency"), css="txt"))
         buf.write(f'<td class="int">{int(r.get("lev_no") or lev_no or 1)}</td>')
         buf.write(_xls_text(r.get("lev_name"), css="txt"))
         buf.write("</tr>")
