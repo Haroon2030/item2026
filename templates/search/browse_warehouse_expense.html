@@ -78,22 +78,97 @@
       <strong class="mono">{{ report.kpis.qty_display }}</strong>
       <small>{{ report.kpis.branch_count }} فرع</small>
     </article>
-    <article class="wh-exp-kpi is-alloc">
+    <button
+      type="button"
+      class="wh-exp-kpi is-alloc is-action{% if show_cc %} is-open{% endif %}"
+      id="wh-exp-alloc-kpi"
+      aria-expanded="{% if show_cc %}true{% else %}false{% endif %}"
+      aria-controls="wh-exp-accounts-panel"
+      title="عرض إجمالي كل مصروف"
+    >
       <span>المصروف الموزع</span>
       <strong class="mono">{{ report.kpis.allocated_total }}</strong>
       <small>
         {% if report.filters.expense_source == 'cost_center' %}
           مركز {{ report.filters.cc_code }} — {{ report.filters.cc_name }}
+          {% if report.kpis.cc_account_count %} · {{ report.kpis.cc_account_count }} حساب{% endif %}
         {% elif report.filters.source_wh_filter_name %}
           مخزن: {{ report.filters.source_wh_filter_name }}
         {% else %}
           إدخال: {{ report.filters.expense_display }}
         {% endif %}
       </small>
-    </article>
+    </button>
   </section>
 
-  <section class="dash-panel dash-panel-glass perf-panel wh-exp-panel" aria-label="التوزيع على الفروع">
+  <section
+    id="wh-exp-accounts-panel"
+    class="dash-panel dash-panel-glass perf-panel wh-exp-panel wh-exp-accounts-panel{% if not show_cc %} is-collapsed{% endif %}"
+    aria-label="إجمالي المصروف حسب الحساب"
+    {% if not show_cc %}hidden{% endif %}
+  >
+    <div class="dash-panel-head">
+      <h3>إجمالي كل مصروف — مركز {{ report.filters.cc_code }}</h3>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ report.expense_totals.account_count }} حساب</span>
+        <a
+          class="btn-ghost wh-exp-excel-btn"
+          href="?date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;src_wh={{ src_wh|urlencode }}&amp;cc={{ cc_code|default:'103'|urlencode }}&amp;expense={{ expense|urlencode }}&amp;posted={% if posted_only %}1{% else %}0{% endif %}{% if src_one %}&amp;src_one={{ src_one|urlencode }}{% endif %}&amp;show_cc=1&amp;export=expense"
+          title="تصدير إلى Excel"
+        >Excel</a>
+        <button
+          type="button"
+          class="btn-ghost wh-exp-print-btn js-fit-print"
+          data-print-scope="wh-exp-cc"
+          title="طباعة PDF"
+        >PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap wh-exp-scroll">
+      <table class="data-table wh-exp-table wh-exp-accounts-table" aria-label="إجمالي المصروف حسب الحساب">
+        <thead>
+          <tr>
+            <th class="we-th-idx">#</th>
+            <th class="we-th-code">رقم الحساب</th>
+            <th class="we-th-branch">اسم المصروف</th>
+            <th class="we-th-count">مدين</th>
+            <th class="we-th-qty">دائن</th>
+            <th class="we-th-alloc">الإجمالي</th>
+            <th class="we-th-share">قيود</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.by_expense %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %}">
+              <td class="mono we-td-idx">{{ forloop.counter }}</td>
+              <td class="mono we-td-code">{{ row.account_code }}</td>
+              <td class="we-td-branch" title="{{ row.account_name }}">{{ row.account_name }}</td>
+              <td class="mono we-td-count">{{ row.dr_display }}</td>
+              <td class="mono we-td-qty">{{ row.cr_display }}</td>
+              <td class="mono we-td-alloc">{{ row.amount_display }}</td>
+              <td class="mono we-td-share">{{ row.line_count }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">لا توجد مصاريف على مركز التكلفة ضمن الفترة.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.by_expense %}
+          <tfoot>
+            <tr class="wh-exp-tfoot">
+              <td></td>
+              <td colspan="2">الإجمالي</td>
+              <td class="mono we-td-count">{{ report.expense_totals.dr_display }}</td>
+              <td class="mono we-td-qty">{{ report.expense_totals.cr_display }}</td>
+              <td class="mono we-td-alloc">{{ report.expense_totals.amount_display }}</td>
+              <td class="mono we-td-share">{{ report.expense_totals.line_count }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel wh-exp-panel wh-exp-branches-panel" aria-label="التوزيع على الفروع">
     <div class="dash-panel-head">
       <h3>تحميل المصروف حسب الفرع</h3>
       <div class="dash-panel-head-actions">
@@ -104,6 +179,7 @@
           <input type="hidden" name="cc" value="{{ cc_code|default:'103' }}">
           <input type="hidden" name="expense" value="{{ expense }}">
           <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
+          {% if show_cc %}<input type="hidden" name="show_cc" value="1">{% endif %}
           <label class="sr-only" for="wh-exp-src-one-branch">مخزن المصدر</label>
           <select id="wh-exp-src-one-branch" name="src_one" onchange="this.form.submit()">
             <option value="">كل مخازن المصدر</option>
@@ -113,7 +189,7 @@
           </select>
         </form>
         <span class="result-pill">{{ report.by_branch|length }} فرع</span>
-        <button type="button" class="btn-ghost wh-exp-print-btn js-fit-print" title="طباعة PDF">PDF</button>
+        <button type="button" class="btn-ghost wh-exp-print-btn js-fit-print" data-print-scope="wh-exp-branches" title="طباعة PDF">PDF</button>
       </div>
     </div>
     <div class="table-wrap wh-exp-scroll">
@@ -150,4 +226,30 @@
     </div>
   </section>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var btn = document.getElementById('wh-exp-alloc-kpi');
+  var panel = document.getElementById('wh-exp-accounts-panel');
+  if (!btn || !panel) return;
+
+  function setOpen(open) {
+    btn.classList.toggle('is-open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panel.classList.toggle('is-collapsed', !open);
+    if (open) {
+      panel.removeAttribute('hidden');
+      try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+    } else {
+      panel.setAttribute('hidden', '');
+    }
+  }
+
+  btn.addEventListener('click', function () {
+    setOpen(panel.hasAttribute('hidden'));
+  });
+})();
+</script>
 {% endblock %}

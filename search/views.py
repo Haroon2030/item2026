@@ -4800,6 +4800,9 @@ def browse_warehouse_expense(request):
     report = None
     error = ''
     expense_value = 0.0
+    export_raw = str(request.GET.get('export') or '').strip().lower()
+    want_expense_excel = export_raw in ('expense', 'expense_excel', 'cc_excel')
+    show_cc = str(request.GET.get('show_cc') or '').strip() in ('1', 'true', 'yes', 'on')
     try:
         expense_value = round(float(expense_raw or 0), 2)
     except ValueError:
@@ -4820,6 +4823,7 @@ def browse_warehouse_expense(request):
                 'cc_code': cc_code_raw,
                 'expense': expense_raw,
                 'posted_only': posted_only,
+                'show_cc': show_cc or want_expense_excel,
                 'report': None,
                 'error': str(exc),
             },
@@ -4827,7 +4831,10 @@ def browse_warehouse_expense(request):
     if not error:
         try:
             from .oracle_stock import oracle_enabled, oracle_session
-            from .oracle_warehouse_expense import build_warehouse_expense_distribution
+            from .oracle_warehouse_expense import (
+                build_warehouse_expense_accounts_excel,
+                build_warehouse_expense_distribution,
+            )
 
             if not oracle_enabled():
                 error = 'أوراكل غير مفعّل — لا يمكن عرض توزيع مصاريف المستودع.'
@@ -4842,6 +4849,8 @@ def browse_warehouse_expense(request):
                         source_wh_filter=src_filter_raw,
                         cc_code=cc_code_raw,
                     )
+                    if want_expense_excel and report is not None:
+                        return build_warehouse_expense_accounts_excel(report)
         except Exception as exc:  # noqa: BLE001
             logger.warning('browse_warehouse_expense failed: %s', exc)
             error = f'تعذّر تحميل توزيع مصاريف المستودع: {exc}'
@@ -4861,6 +4870,7 @@ def browse_warehouse_expense(request):
             'cc_code': (report or {}).get('filters', {}).get('cc_code') or cc_code_raw,
             'expense': f'{expense_value:.2f}' if expense_raw else '0',
             'posted_only': posted_only,
+            'show_cc': show_cc,
             'report': report,
             'error': error,
         },

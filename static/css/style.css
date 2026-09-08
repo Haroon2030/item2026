@@ -15895,6 +15895,62 @@ a.sidebar-brand-lockup {
   background: linear-gradient(145deg, #f5f3ff, #f8fafc);
 }
 
+.wh-exp-dash .wh-exp-kpi.is-action {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.wh-exp-dash .wh-exp-kpi.is-action:hover,
+.wh-exp-dash .wh-exp-kpi.is-action:focus-visible {
+  border-color: rgba(109, 40, 217, 0.55);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.16);
+  outline: none;
+}
+
+.wh-exp-dash .wh-exp-kpi.is-action.is-open {
+  border-color: rgba(91, 33, 182, 0.65);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.22);
+}
+
+.wh-exp-dash .wh-exp-accounts-panel.is-collapsed {
+  display: none;
+}
+
+.wh-exp-dash .wh-exp-excel-btn {
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.wh-exp-dash .wh-exp-table .we-th-code,
+.wh-exp-dash .wh-exp-table .we-td-code {
+  width: 1%;
+  white-space: nowrap;
+  color: #5b21b6;
+  font-weight: 800;
+}
+
+.wh-exp-dash .wh-exp-table tfoot .wh-exp-tfoot td {
+  background: #ede9fe;
+  color: #4c1d95;
+  font-weight: 800;
+  border-top: 2px solid #8b5cf6;
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+}
+
 .wh-exp-dash .wh-exp-panel {
   overflow: hidden;
 }
@@ -16200,6 +16256,7 @@ a.sidebar-brand-lockup {
   .wh-exp-dash .income-filter-bar,
   .wh-exp-dash .alert,
   .wh-exp-dash .wh-exp-print-btn,
+  .wh-exp-dash .wh-exp-excel-btn,
   .wh-exp-dash .wh-exp-src-filter {
     display: none !important;
   }
@@ -16308,6 +16365,24 @@ a.sidebar-brand-lockup {
   .wh-exp-dash .wh-exp-table .we-td-to {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  body.fit-printing[data-print-scope="wh-exp-cc"] .wh-exp-branches-panel,
+  body.fit-printing[data-print-scope="wh-exp-cc"] .wh-exp-kpi-grid {
+    display: none !important;
+  }
+
+  body.fit-printing[data-print-scope="wh-exp-cc"] .wh-exp-accounts-panel {
+    display: block !important;
+  }
+
+  body.fit-printing[data-print-scope="wh-exp-cc"] .wh-exp-accounts-panel[hidden],
+  body.fit-printing[data-print-scope="wh-exp-cc"] .wh-exp-accounts-panel.is-collapsed {
+    display: block !important;
+  }
+
+  body.fit-printing[data-print-scope="wh-exp-branches"] .wh-exp-accounts-panel {
+    display: none !important;
   }
 }
 

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
 from datetime import date
+from html import escape
 from typing import Any
 
 from django.core.cache import cache
+from django.http import HttpResponse
 
 from .oracle_stock import (
     OracleStockError,
@@ -19,7 +22,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 900
-_CACHE_VER = "v4"
+_CACHE_VER = "v5"
 _DEFAULT_CC = "103"
 
 
@@ -174,29 +177,42 @@ def _fetch_cc_name(cc_code: str) -> str:
     return str(rows[0].get("CC_NAME") or "").strip() or code
 
 
+def _expense_amount(exp_net: float, exp_dr: float) -> float:
+    """صافي مدين للمصروف؛ إن سالب نأخذ إجمالي المدين."""
+    return exp_net if exp_net > 0 else max(exp_dr, 0.0)
+
+
 def _fetch_cc_expense_total(
     date_from: date,
     date_to: date,
     *,
     cc_code: str,
 ) -> dict[str, Any]:
-    """إجمالي مصاريف (حسابات تبدأ بـ 5) على مركز التكلفة في الفترة."""
+    """إجمالي مصاريف (حسابات تبدأ بـ 5) على مركز التكلفة — مجمّع لكل حساب."""
     code = _norm_code(cc_code) or _DEFAULT_CC
     schema = _schema()
     dates = _date_params(date_from, date_to)
     # فهرس CC ثم التاريخ — INDX_IASPOSTDTL_CCCODE / INDX_IASPOSTDTL_CS
     rows = _fetch_all(
         f"""
-        SELECT /*+ INDEX(p INDX_IASPOSTDTL_CCCODE) */
+        SELECT /*+ INDEX(p INDX_IASPOSTDTL_CCCODE) USE_NL(a) */
+               TO_CHAR(p.A_CODE) AS A_CODE,
+               MAX(NVL(NULLIF(TRIM(a.A_NAME), ''), TO_CHAR(p.A_CODE))) AS A_NAME,
                ROUND(SUM(NVL(p.DR_AMT, 0) - NVL(p.CR_AMT, 0)), 2) AS EXP_NET,
                ROUND(SUM(NVL(p.DR_AMT, 0)), 2) AS EXP_DR,
+               ROUND(SUM(NVL(p.CR_AMT, 0)), 2) AS EXP_CR,
                COUNT(*) AS LINE_COUNT
         FROM {schema}.IAS_POST_DTL p
+        LEFT JOIN {schema}.ACCOUNT a
+          ON a.A_CODE = p.A_CODE
         WHERE p.DOC_DATE >= :d_from
           AND p.DOC_DATE < :d_to_excl
           AND TO_CHAR(p.CC_CODE) = :cc
           AND TO_CHAR(p.A_CODE) LIKE '5%'
           AND ABS(NVL(p.AMT, 0)) < 1000000000
+        GROUP BY p.A_CODE
+        HAVING ROUND(SUM(NVL(p.DR_AMT, 0) - NVL(p.CR_AMT, 0)), 2) <> 0
+            OR ROUND(SUM(NVL(p.DR_AMT, 0)), 2) <> 0
         """,
         {
             "d_from": dates["d_from"],
@@ -204,19 +220,60 @@ def _fetch_cc_expense_total(
             "cc": code,
         },
     )
-    row = (rows or [{}])[0] or {}
-    exp_net = _f(row.get("EXP_NET"))
-    exp_dr = _f(row.get("EXP_DR"))
-    # صافي مدين للمصروف؛ إن سالب نأخذ إجمالي المدين
-    amount = exp_net if exp_net > 0 else max(exp_dr, 0.0)
+
+    by_account: list[dict[str, Any]] = []
+    total_net = 0.0
+    total_dr = 0.0
+    total_cr = 0.0
+    total_lines = 0
+    for row in rows or []:
+        a_code = _norm_code(row.get("A_CODE"))
+        if not a_code:
+            continue
+        exp_net = _f(row.get("EXP_NET"))
+        exp_dr = _f(row.get("EXP_DR"))
+        exp_cr = _f(row.get("EXP_CR"))
+        amount = _expense_amount(exp_net, exp_dr)
+        line_count = int(row.get("LINE_COUNT") or 0)
+        a_name = str(row.get("A_NAME") or "").strip() or a_code
+        by_account.append(
+            {
+                "account_code": a_code,
+                "account_name": a_name,
+                "amount": amount,
+                "amount_display": _fmt_money(amount),
+                "dr": exp_dr,
+                "dr_display": _fmt_money(exp_dr),
+                "cr": exp_cr,
+                "cr_display": _fmt_money(exp_cr),
+                "net": exp_net,
+                "net_display": _fmt_money(exp_net),
+                "line_count": line_count,
+            }
+        )
+        total_net = round(total_net + exp_net, 2)
+        total_dr = round(total_dr + exp_dr, 2)
+        total_cr = round(total_cr + exp_cr, 2)
+        total_lines += line_count
+
+    by_account.sort(
+        key=lambda r: (-r["amount"], r["account_code"] or ""),
+    )
+    for i, row in enumerate(by_account, 1):
+        row["rank"] = i
+
+    amount = _expense_amount(total_net, total_dr)
     return {
         "cc_code": code,
         "cc_name": _fetch_cc_name(code),
         "amount": amount,
         "amount_display": _fmt_money(amount),
-        "line_count": int(row.get("LINE_COUNT") or 0),
-        "exp_net": exp_net,
-        "exp_dr": exp_dr,
+        "line_count": total_lines,
+        "account_count": len(by_account),
+        "exp_net": total_net,
+        "exp_dr": total_dr,
+        "exp_cr": total_cr,
+        "by_account": by_account,
     }
 
 
@@ -403,6 +460,7 @@ def build_warehouse_expense_distribution(
             "cc_name": cc_expense.get("cc_name") or cc,
             "cc_expense_display": cc_expense.get("amount_display") or _fmt_money(0),
             "cc_line_count": int(cc_expense.get("line_count") or 0),
+            "cc_account_count": int(cc_expense.get("account_count") or 0),
         },
         "source_options": source_options,
         "kpis": {
@@ -419,12 +477,120 @@ def build_warehouse_expense_distribution(
                 if expense_source == "manual"
                 else f"مركز {cc_expense.get('cc_code') or cc}"
             ),
+            "cc_account_count": int(cc_expense.get("account_count") or 0),
         },
         "by_branch": by_branch,
         "by_source": source_rows,
+        "by_expense": cc_expense.get("by_account") or [],
+        "expense_totals": {
+            "amount": _f(cc_expense.get("amount")),
+            "amount_display": cc_expense.get("amount_display") or _fmt_money(0),
+            "dr": _f(cc_expense.get("exp_dr")),
+            "dr_display": _fmt_money(cc_expense.get("exp_dr")),
+            "cr": _f(cc_expense.get("exp_cr")),
+            "cr_display": _fmt_money(cc_expense.get("exp_cr")),
+            "net": _f(cc_expense.get("exp_net")),
+            "net_display": _fmt_money(cc_expense.get("exp_net")),
+            "line_count": int(cc_expense.get("line_count") or 0),
+            "account_count": int(cc_expense.get("account_count") or 0),
+        },
     }
     try:
         cache.set(cache_key, result, _CACHE_TTL)
     except Exception:
         pass
     return result
+
+
+def _xls_num(value: Any) -> str:
+    try:
+        return f"{float(value or 0):.2f}"
+    except (TypeError, ValueError):
+        return "0.00"
+
+
+def build_warehouse_expense_accounts_excel(report: dict[str, Any]) -> HttpResponse:
+    """تصدير إجمالي كل مصروف (حساب) لمركز التكلفة إلى Excel مرتّب."""
+    rows = report.get("by_expense") or []
+    filters = report.get("filters") or {}
+    totals = report.get("expense_totals") or {}
+    period = report.get("period_label") or ""
+    cc_code = escape(str(filters.get("cc_code") or ""))
+    cc_name = escape(str(filters.get("cc_name") or ""))
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    buf.write(
+        "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
+        "xmlns:x=\"urn:schemas-microsoft-com:office:excel\" "
+        "xmlns=\"http://www.w3.org/TR/REC-html40\">"
+        "<head><meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>مصاريف المركز</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>"
+        "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;vertical-align:middle;}"
+        "th{background:#5b21b6;color:#fff;font-weight:700;}"
+        "th.amt{background:#166534;}"
+        "th.dr{background:#0e7490;}"
+        "th.cr{background:#9a3412;}"
+        "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
+        "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
+        "td.amt{background:#ecfdf3;color:#166534;font-weight:700;}"
+        "td.dr{background:#ecfeff;color:#0e7490;font-weight:700;}"
+        "td.cr{background:#fff7ed;color:#9a3412;font-weight:700;}"
+        "tr.even td{background:#f8fafc;}"
+        "tr.even td.amt{background:#dcfce7;}"
+        "tr.even td.dr{background:#cffafe;}"
+        "tr.even td.cr{background:#ffedd5;}"
+        "tr.foot td{background:#ede9fe;font-weight:800;}"
+        "h3,p,caption{font-family:Tahoma,Arial;text-align:right;}"
+        "caption{font-size:13px;font-weight:700;margin:8px 0;}"
+        ".sub{font-size:10px;color:#475569;font-weight:400;}"
+        "</style></head><body dir=\"rtl\">"
+    )
+    buf.write(
+        "<table><caption>إجمالي المصروف حسب الحساب — مرتّب من الأكبر إلى الأصغر"
+        f'<br><span class="sub">مركز {cc_code} — {cc_name}'
+        f" · {escape(str(period))}"
+        f" · {escape(str(totals.get('account_count') or len(rows)))} حساب</span></caption>"
+        "<thead><tr>"
+        "<th>#</th>"
+        "<th>رقم الحساب</th>"
+        "<th>اسم المصروف</th>"
+        "<th class=\"dr\">مدين</th>"
+        "<th class=\"cr\">دائن</th>"
+        "<th class=\"amt\">الصافي / الإجمالي</th>"
+        "<th>عدد القيود</th>"
+        "</tr></thead><tbody>"
+    )
+    for i, row in enumerate(rows, 1):
+        even = ' class="even"' if i % 2 == 0 else ""
+        buf.write(f"<tr{even}>")
+        buf.write(f'<td class="int">{i}</td>')
+        buf.write(f"<td>{escape(str(row.get('account_code') or ''))}</td>")
+        buf.write(f"<td>{escape(str(row.get('account_name') or ''))}</td>")
+        buf.write(f'<td class="num dr">{_xls_num(row.get("dr"))}</td>')
+        buf.write(f'<td class="num cr">{_xls_num(row.get("cr"))}</td>')
+        buf.write(f'<td class="num amt">{_xls_num(row.get("amount"))}</td>')
+        buf.write(f'<td class="int">{escape(str(row.get("line_count") or 0))}</td>')
+        buf.write("</tr>")
+    buf.write(
+        '<tr class="foot">'
+        "<td></td><td></td><td>الإجمالي</td>"
+        f'<td class="num dr">{_xls_num(totals.get("dr"))}</td>'
+        f'<td class="num cr">{_xls_num(totals.get("cr"))}</td>'
+        f'<td class="num amt">{_xls_num(totals.get("amount"))}</td>'
+        f'<td class="int">{escape(str(totals.get("line_count") or 0))}</td>'
+        "</tr>"
+    )
+    buf.write("</tbody></table></body></html>")
+    payload = buf.getvalue().encode("utf-8")
+    filename = (
+        f"wh-expense-accounts-{filters.get('cc_code') or 'cc'}"
+        f"-{filters.get('date_from') or ''}.xls"
+    )
+    resp = HttpResponse(payload, content_type="application/vnd.ms-excel; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
