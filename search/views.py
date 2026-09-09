@@ -2220,6 +2220,186 @@ def browse_inventory_pack_errors(request):
 @login_required
 @require_GET
 @never_cache
+def browse_pos_unavailable(request):
+    """كميات نقاط البيع الغير متوفرة — صافي POS غير مرحّل (كتسوية أونكس)."""
+    from datetime import date as date_cls
+
+    today = date_cls.today()
+    month_start = today.replace(day=1)
+    date_from_raw = str(request.GET.get('date_from') or month_start.isoformat()).strip()
+    date_to_raw = str(request.GET.get('date_to') or today.isoformat()).strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(
+        request.GET.get('warehouse')
+        or request.GET.get('warehouses')
+        or request.GET.get('wh')
+        or ''
+    ).strip()
+    # دعم القيمة القديمة إن وُجدت قائمة مفصولة بفاصلة — نأخذ الأول
+    if ',' in selected_warehouse or '،' in selected_warehouse:
+        selected_warehouse = (
+            selected_warehouse.replace('،', ',').split(',')[0].strip()
+        )
+    selected_group = str(request.GET.get('group') or '').strip()
+    sign_raw = str(request.GET.get('sign') or 'all').strip().lower()
+    if sign_raw not in ('all', 'pos', 'neg', 'positive', 'negative'):
+        sign_raw = 'all'
+    if sign_raw == 'positive':
+        sign_raw = 'pos'
+    if sign_raw == 'negative':
+        sign_raw = 'neg'
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        'xls',
+        'excel',
+        'xlsx',
+    }
+    want_run = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes')
+    want_run = want_run or want_excel or bool(
+        request.GET.get('warehouse') or request.GET.get('warehouses')
+    )
+
+    report = None
+    error = ''
+    hint = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+    all_warehouses: list[dict] = []
+    branch_warehouses: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_pos_unavailable.html',
+            {
+                'date_from': (date_from_raw or '')[:10],
+                'date_to': (date_to_raw or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'branches': [],
+                'groups': [],
+                'all_warehouses': [],
+                'branch_warehouses': [],
+                'selected_branch': selected_branch,
+                'selected_warehouse': selected_warehouse,
+                'selected_group': selected_group,
+                'sign': sign_raw,
+                'report': None,
+                'error': str(exc),
+                'hint': '',
+            },
+        )
+
+    try:
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_pos_unavailable import (
+            build_pos_unavailable_excel,
+            build_pos_unavailable_report,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض كميات POS الغير متوفرة.'
+        else:
+            with oracle_session():
+                wh_rows = fetch_warehouse_options(active_only=True) or []
+                all_warehouses = [
+                    {
+                        'code': str(w.get('code') or '').strip(),
+                        'name': str(w.get('name') or '').strip()
+                        or str(w.get('code') or '').strip(),
+                        'branch_code': str(w.get('branch_code') or '').strip(),
+                        'branch_name': str(w.get('branch_name') or '').strip(),
+                    }
+                    for w in wh_rows
+                    if str(w.get('code') or '').strip()
+                ]
+                branch_map: dict[str, str] = {}
+                for w in all_warehouses:
+                    brn = w['branch_code']
+                    if brn:
+                        branch_map[brn] = w['branch_name'] or brn
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
+                ]
+                groups = fetch_sales_group_options() or []
+                group_codes = {str(g.get('code') or '').strip() for g in groups}
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+
+                if selected_branch and selected_branch not in branch_map:
+                    selected_branch = ''
+
+                branch_warehouses = [
+                    w
+                    for w in all_warehouses
+                    if not selected_branch
+                    or w['branch_code'] == selected_branch
+                ]
+                branch_warehouses.sort(
+                    key=lambda w: (w['name'], w['code'])
+                )
+                wh_allowed = {w['code'] for w in branch_warehouses}
+                if selected_warehouse and selected_warehouse not in wh_allowed:
+                    # مخزن لا يتبع الفرع المختار — أفرغه
+                    selected_warehouse = ''
+
+                if want_run:
+                    if not selected_warehouse:
+                        raise ValidationError('اختر مخزناً لإنزال الأصناف.')
+                    report = build_pos_unavailable_report(
+                        date_from,
+                        date_to,
+                        warehouse_codes=selected_warehouse,
+                        sign=sign_raw,
+                        group_code=selected_group,
+                    )
+                    if want_excel and report is not None:
+                        return build_pos_unavailable_excel(report)
+                else:
+                    hint = 'حدد الفترة والفرع والمخزن ثم اضغط «إنزال الأصناف».'
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_pos_unavailable failed: %s', exc)
+        error = f'تعذّر تحميل كميات POS الغير متوفرة: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_pos_unavailable.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'branches': branches,
+            'groups': groups,
+            'all_warehouses': all_warehouses,
+            'branch_warehouses': branch_warehouses,
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'sign': sign_raw,
+            'report': report,
+            'error': error,
+            'hint': hint,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_inventory_pack_errors_detail(request):
     """فرق الشد للتحويلات الصادرة المخالفة — مجمّع حسب فرع الوجهة."""
     from datetime import date as date_cls

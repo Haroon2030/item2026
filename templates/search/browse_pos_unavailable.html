@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}كميات POS الغير متوفرة{% endblock %}
+{% block page_class %}sales-dash pos-unavl-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="كميات نقاط البيع الغير متوفرة">
+  <div class="dash-head-copy">
+    <h2>كميات POS الغير متوفرة</h2>
+    <p>صافي كميات نقاط البيع غير المرحّلة — مطابق إنزال «كميات نقاط البيع الغير متوفرة» في تسوية المخزون</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+<form
+  method="get"
+  action="{% url 'browse_pos_unavailable' %}"
+  class="dash-panel-glass pos-unavl-filter"
+  role="search"
+  aria-label="فلاتر كميات POS الغير متوفرة"
+  id="pos-unavl-filter-form"
+>
+  <input type="hidden" name="run" value="1">
+
+  <div class="field pos-unavl-field-period" role="group" aria-label="الفترة">
+    <span class="pos-unavl-period-label">الفترة</span>
+    <div class="pos-unavl-period-fields">
+      <div class="pos-unavl-period-item">
+        <label for="pos-unavl-from">من</label>
+        <input id="pos-unavl-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+      </div>
+      <span class="pos-unavl-period-sep" aria-hidden="true">—</span>
+      <div class="pos-unavl-period-item">
+        <label for="pos-unavl-to">إلى</label>
+        <input id="pos-unavl-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+      </div>
+    </div>
+  </div>
+
+  <div class="field pos-unavl-field-branch">
+    <label for="pos-unavl-branch">الفرع</label>
+    <select id="pos-unavl-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" title="{{ b.code }} — {{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field pos-unavl-field-wh">
+    <label for="pos-unavl-wh">المخزن <span class="pos-unavl-req" aria-hidden="true">*</span></label>
+    <select id="pos-unavl-wh" name="warehouse" required aria-required="true">
+      <option value="">اختر مخزناً</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field pos-unavl-field-group">
+    <label for="pos-unavl-group">المجموعة</label>
+    <select id="pos-unavl-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field pos-unavl-field-sign">
+    <label for="pos-unavl-sign">الإشارة</label>
+    <select id="pos-unavl-sign" name="sign">
+      <option value="all" {% if sign == 'all' %}selected{% endif %}>الكل</option>
+      <option value="pos" {% if sign == 'pos' %}selected{% endif %}>موجب فقط</option>
+      <option value="neg" {% if sign == 'neg' %}selected{% endif %}>سالب فقط</option>
+    </select>
+  </div>
+
+  <div class="field pos-unavl-field-actions">
+    <button type="submit" class="btn-primary">إنزال الأصناف</button>
+  </div>
+</form>
+
+{% if report %}
+  <section class="pos-unavl-kpi-grid" aria-label="ملخص الكميات">
+    <article class="pos-unavl-kpi is-count">
+      <span>عدد الأصناف</span>
+      <strong class="mono">{{ report.kpis.item_count }}</strong>
+      <small>{{ report.period_label }}</small>
+    </article>
+    <article class="pos-unavl-kpi is-pos">
+      <span>موجب / سالب</span>
+      <strong class="mono">{{ report.kpis.pos_count }} / {{ report.kpis.neg_count }}</strong>
+      <small>مخزن {{ selected_warehouse }}{% if selected_group %} · مجموعة محددة{% endif %}</small>
+    </article>
+    <article class="pos-unavl-kpi is-in">
+      <span>إجمالي التكلفة الواردة</span>
+      <strong class="mono">{{ report.kpis.in_cost_display }}</strong>
+      <small>كميات موجبة × متوسط التكلفة</small>
+    </article>
+    <article class="pos-unavl-kpi is-out">
+      <span>إجمالي التكلفة المنصرفة</span>
+      <strong class="mono">{{ report.kpis.out_cost_display }}</strong>
+      <small>صافي: {{ report.kpis.net_cost_display }}</small>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel pos-unavl-panel" aria-label="جدول كميات POS الغير متوفرة">
+    <div class="dash-panel-head">
+      <h3>الأصناف — غير مرحّل</h3>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ report.kpis.item_count }} صنف</span>
+        <a
+          class="btn-ghost pos-unavl-excel-btn"
+          href="?run=1&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;branch={{ selected_branch|urlencode }}&amp;warehouse={{ selected_warehouse|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;sign={{ sign }}&amp;export=excel"
+          title="تصدير إلى Excel"
+        >Excel</a>
+        <button type="button" class="btn-ghost pos-unavl-print-btn js-fit-print" title="طباعة PDF">PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap pos-unavl-scroll">
+      <table class="data-table pos-unavl-table" aria-label="كميات نقاط البيع الغير متوفرة">
+        <thead>
+          <tr>
+            <th class="pu-th-idx">#</th>
+            <th class="pu-th-code">رقم الصنف</th>
+            <th class="pu-th-name">اسم الصنف</th>
+            <th class="pu-th-group">المجموعة</th>
+            <th class="pu-th-unit">الوحدة</th>
+            <th class="pu-th-pack">العبوة</th>
+            <th class="pu-th-wh">المخزن</th>
+            <th class="pu-th-cost">متوسط التكلفة</th>
+            <th class="pu-th-avl">الكمية المتوفرة</th>
+            <th class="pu-th-qty">الكمية</th>
+            <th class="pu-th-line">التكلفة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %} {% if row.sign == 'neg' %}is-neg{% else %}is-pos{% endif %}">
+              <td class="mono pu-td-idx">{{ forloop.counter }}</td>
+              <td class="mono pu-td-code">{{ row.item_code }}</td>
+              <td class="pu-td-name" title="{{ row.item_name }}">{{ row.item_name }}</td>
+              <td class="pu-td-group" title="{{ row.g_code }}">{{ row.g_name }}</td>
+              <td class="pu-td-unit">{{ row.unit }}</td>
+              <td class="mono pu-td-pack">{{ row.p_size_display }}</td>
+              <td class="mono pu-td-wh">{{ row.wh_code }}</td>
+              <td class="mono pu-td-cost">{{ row.avg_cost_display }}</td>
+              <td class="mono pu-td-avl">{{ row.avl_display }}</td>
+              <td class="mono pu-td-qty">{{ row.qty_display }}</td>
+              <td class="mono pu-td-line">{{ row.line_cost_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11">لا توجد كميات POS غير مرحّلة ضمن الفلتر.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="pos-unavl-tfoot">
+              <td></td>
+              <td colspan="8">الإجمالي — وارد {{ report.kpis.in_cost_display }} · منصرف {{ report.kpis.out_cost_display }}</td>
+              <td class="mono pu-td-qty">{{ report.kpis.item_count }}</td>
+              <td class="mono pu-td-line">{{ report.kpis.net_cost_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{{ all_warehouses|json_script:"pos-unavl-wh-data" }}
+<script src="/static/js/pos-unavl-filter.js?v={{ app_client_version }}"></script>
+{% endblock %}

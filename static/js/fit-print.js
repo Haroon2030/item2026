@@ -2,7 +2,7 @@
   'use strict';
 
   var BTN =
-    '.js-fit-print, .lm-pdf-btn, .up-pdf-btn, .wh-out-pdf-btn, .wh-exp-print-btn, .inv-pack-err-print-btn';
+    '.js-fit-print, .lm-pdf-btn, .up-pdf-btn, .wh-out-pdf-btn, .wh-exp-print-btn, .inv-pack-err-print-btn, .pos-unavl-print-btn';
 
   function prepare(scope) {
     document.body.classList.add('fit-printing');
