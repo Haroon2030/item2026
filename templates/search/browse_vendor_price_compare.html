@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}مقارنة أسعار الموردين{% endblock %}
+{% block page_class %}sales-dash purchase-dash vpc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مقارنة أسعار شراء الموردين">
+  <div class="dash-head-copy">
+    <h2>مقارنة أسعار الموردين</h2>
+    <p>آخر سعر شراء لكل صنف×مخزن من فواتير الشراء لنفس المورد</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+<form
+  method="get"
+  action="{% url 'browse_vendor_price_compare' %}"
+  class="dash-panel-glass vpc-filter"
+  role="search"
+  aria-label="فلاتر مقارنة أسعار الموردين"
+  id="vpc-filter-form"
+>
+  <input type="hidden" name="run" value="1">
+
+  <div class="vpc-filter-row vpc-filter-row-scope">
+    <div class="field vpc-field-period" role="group" aria-label="الفترة">
+      <span class="vpc-period-label">الفترة</span>
+      <div class="vpc-period-fields">
+        <div class="vpc-period-item">
+          <label for="vpc-from">من</label>
+          <input id="vpc-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+        </div>
+        <span class="vpc-period-sep" aria-hidden="true">—</span>
+        <div class="vpc-period-item">
+          <label for="vpc-to">إلى</label>
+          <input id="vpc-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="field vpc-field-branch">
+      <label for="vpc-branch">الفرع</label>
+      <select id="vpc-branch" name="branch">
+        <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field vpc-field-wh">
+      <label for="vpc-wh">المخزن</label>
+      <select id="vpc-wh" name="warehouse">
+        <option value="">كل المخازن</option>
+        {% for w in branch_warehouses %}
+          <option value="{{ w.code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="vpc-filter-row vpc-filter-row-vendor">
+    <div class="field vpc-field-vendor">
+      <label for="vpc-q">المورد <span class="vpc-req">*</span></label>
+      <div class="vendor-suggest vpc-vendor-suggest">
+        <input
+          id="vpc-q"
+          type="search"
+          name="q"
+          value="{% if selected_vendor_name %}{{ selected_vendor_name }} · {{ selected_vendor }}{% elif vendor_q %}{{ vendor_q }}{% endif %}"
+          placeholder="ابحث باسم المورد أو الرقم (مجموعة الشركة)…"
+          autocomplete="off"
+          spellcheck="false"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded="false"
+          aria-controls="vpc-vendor-suggestions"
+          aria-label="بحث المورد"
+        >
+        <ul id="vpc-vendor-suggestions" class="vendor-suggest-list" role="listbox" hidden></ul>
+      </div>
+      <select id="vpc-vendor" name="vendor" class="vpc-vendor-native" required aria-label="موردو الشركة" tabindex="-1">
+        <option value="">اختر مورداً</option>
+        {% for v in vendors %}
+          <option value="{{ v.code }}" {% if v.code == selected_vendor %}selected{% endif %}>{{ v.name }} · {{ v.code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field vpc-field-diffs">
+      <span class="vpc-period-label">التصفية</span>
+      <label class="vpc-check-label" for="vpc-diffs">
+        <input type="hidden" name="diffs" value="0">
+        <input id="vpc-diffs" type="checkbox" name="diffs" value="1" {% if diffs_only %}checked{% endif %}>
+        <span>فروقات فقط</span>
+      </label>
+    </div>
+
+    <div class="field vpc-field-actions">
+      <span class="vpc-period-label vpc-actions-spacer" aria-hidden="true">&nbsp;</span>
+      <button type="submit" class="btn-primary">عرض الأسعار</button>
+    </div>
+  </div>
+</form>
+
+{% if report %}
+  <section class="vpc-kpi-grid" aria-label="ملخص المقارنة">
+    <article class="vpc-kpi is-items">
+      <span>أصناف المقارنة</span>
+      <strong class="mono">{{ report.kpis.item_count }}</strong>
+      <small>{{ report.vendor_name }}</small>
+    </article>
+    <article class="vpc-kpi is-flag">
+      <span>أصناف بفروقات</span>
+      <strong class="mono">{{ report.kpis.flagged_count }}</strong>
+      <small>اختلاف سعر بين المخازن</small>
+    </article>
+    <article class="vpc-kpi is-loc">
+      <span>صفوف المخازن</span>
+      <strong class="mono">{{ report.kpis.location_count }}</strong>
+      <small>{{ report.period_label }}</small>
+    </article>
+    <article class="vpc-kpi is-max">
+      <span>أكبر فرق</span>
+      <strong class="mono">{{ report.kpis.max_spread_pct_display }}</strong>
+      <small>بين أرخص وأغلى مخزن</small>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel vpc-panel vpc-summary-panel" aria-label="ملخص فروقات الأسعار">
+    <div class="dash-panel-head">
+      <h3>ملخص حسب الصنف — {{ report.vendor_code }}</h3>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ report.rows|length }} صنف</span>
+        <a
+          class="btn-ghost vpc-excel-btn"
+          href="?run=1&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}&amp;branch={{ selected_branch|urlencode }}&amp;warehouse={{ selected_warehouse|urlencode }}&amp;vendor={{ selected_vendor|urlencode }}&amp;q={{ vendor_q|urlencode }}&amp;diffs={% if diffs_only %}1{% else %}0{% endif %}&amp;export=excel"
+          title="تصدير Excel"
+        >Excel</a>
+        <button type="button" class="btn-ghost vpc-print-btn js-fit-print" data-print-scope="vpc-summary" title="طباعة ملخص الأصناف PDF">PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap vpc-scroll">
+      <table class="data-table vpc-table" aria-label="ملخص فروق أسعار الشراء">
+        <thead>
+          <tr>
+            <th class="vpc-th-idx">#</th>
+            <th class="vpc-th-code">رقم الصنف</th>
+            <th class="vpc-th-name">الاسم</th>
+            <th class="vpc-th-unit">الوحدة</th>
+            <th class="vpc-th-n">مخازن</th>
+            <th class="vpc-th-n">فروع</th>
+            <th class="vpc-th-price">أقل سعر شراء</th>
+            <th class="vpc-th-date">تاريخ الأقل</th>
+            <th class="vpc-th-n">فاتورة الأقل</th>
+            <th class="vpc-th-price">أعلى سعر شراء</th>
+            <th class="vpc-th-date">تاريخ الأعلى</th>
+            <th class="vpc-th-n">فاتورة الأعلى</th>
+            <th class="vpc-th-spread">الفرق %</th>
+            <th class="vpc-th-loc">أرخص</th>
+            <th class="vpc-th-loc">أغلى</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %} {% if row.is_flag %}is-flag{% endif %}">
+              <td class="mono vpc-td-idx">{{ forloop.counter }}</td>
+              <td class="mono vpc-td-code">{{ row.item_code }}</td>
+              <td class="vpc-td-name" title="{{ row.item_name }}">{{ row.item_name }}</td>
+              <td class="vpc-td-unit">{{ row.unit }}</td>
+              <td class="mono vpc-td-n">{{ row.loc_count }}</td>
+              <td class="mono vpc-td-n">{{ row.branch_count }}</td>
+              <td class="mono vpc-td-price">{{ row.min_price_display }}</td>
+              <td class="mono vpc-td-date">{{ row.min_bill_date }}</td>
+              <td class="mono vpc-td-n">{{ row.min_bill_no }}</td>
+              <td class="mono vpc-td-price">{{ row.max_price_display }}</td>
+              <td class="mono vpc-td-date">{{ row.max_bill_date }}</td>
+              <td class="mono vpc-td-n">{{ row.max_bill_no }}</td>
+              <td class="mono vpc-td-spread">{{ row.spread_pct_display }}</td>
+              <td class="vpc-td-loc" title="{{ row.min_wh_name }}">{{ row.min_branch }} · {{ row.min_wh }}</td>
+              <td class="vpc-td-loc" title="{{ row.max_wh_name }}">{{ row.max_branch }} · {{ row.max_wh }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="15">لا أسعار شراء للمورد في الفترة — أو ألغِ «فروقات فقط» لعرض كل الأصناف.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="dash-panel dash-panel-glass perf-panel vpc-panel vpc-pivot-panel" aria-label="مقارنة سعر الشراء حسب الفرع">
+    <div class="dash-panel-head">
+      <h3>سعر الشراء حسب الفرع — نفس الوحدة</h3>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ report.pivot_rows|length }} صف · {{ report.pivot_branches|length }} فرع</span>
+        <button type="button" class="btn-ghost vpc-print-btn js-fit-print" data-print-scope="vpc-pivot" title="طباعة جدول الفروع PDF">PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap vpc-scroll vpc-pivot-wrap">
+      <table class="data-table vpc-table vpc-pivot-table" aria-label="سعر الشراء لكل صنف ووحدة وأعمدة الفروع">
+        <thead>
+          <tr>
+            <th class="vpc-th-idx vpc-sticky-col">#</th>
+            <th class="vpc-th-code vpc-sticky-col vpc-sticky-code">رقم الصنف</th>
+            <th class="vpc-th-name vpc-sticky-col vpc-sticky-name">الاسم</th>
+            <th class="vpc-th-unit vpc-sticky-col vpc-sticky-unit">الوحدة</th>
+            {% for b in report.pivot_branches %}
+              <th class="vpc-th-price" title="{{ b.code }}">{{ b.name }}</th>
+              <th class="vpc-th-bdate" title="تاريخ فاتورة {{ b.name }}">تاريخ</th>
+              <th class="vpc-th-bno" title="رقم فاتورة {{ b.name }}">رقم الفاتورة</th>
+            {% endfor %}
+            <th class="vpc-th-spread">الفرق %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.pivot_rows %}
+            <tr class="{% if forloop.counter|divisibleby:2 %}is-even{% endif %} {% if row.is_flag %}is-flag{% endif %}">
+              <td class="mono vpc-td-idx vpc-sticky-col">{{ forloop.counter }}</td>
+              <td class="mono vpc-td-code vpc-sticky-col vpc-sticky-code">{{ row.item_code }}</td>
+              <td class="vpc-td-name vpc-sticky-col vpc-sticky-name" title="{{ row.item_name }}">{{ row.item_name }}</td>
+              <td class="vpc-td-unit vpc-sticky-col vpc-sticky-unit">{{ row.unit }}</td>
+              {% for cell in row.branch_cells %}
+                <td
+                  class="mono vpc-td-price {% if cell.is_min %}is-min{% endif %} {% if cell.is_max %}is-max{% endif %} {% if not cell.has_price %}is-empty{% endif %}"
+                  title="{{ cell.title }}"
+                >{{ cell.price_display }}</td>
+                <td class="mono vpc-td-bdate {% if not cell.has_price %}is-empty{% endif %}">{{ cell.bill_date_display }}</td>
+                <td class="mono vpc-td-bno {% if not cell.has_price %}is-empty{% endif %}">{{ cell.bill_no_display }}</td>
+              {% endfor %}
+              <td class="mono vpc-td-spread">{{ row.spread_pct_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="99">لا أسعار للمقارنة حسب الفرع.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{{ all_warehouses|json_script:"vpc-wh-data" }}
+<script src="/static/js/vpc-filter.js?v={{ app_client_version }}"></script>
+{% endblock %}

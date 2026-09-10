@@ -287,13 +287,13 @@
           {% endif %}
           {% if nav_access.sections.purchases %}
           <div
-            class="sidebar-group{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_purchase_returns' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' or request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %} is-open is-current{% endif %}"
+            class="sidebar-group{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_purchase_returns' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_vendor_price_compare' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' or request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %} is-open is-current{% endif %}"
             data-sidebar-group
           >
             <button
               type="button"
               class="sidebar-link sidebar-group-toggle"
-              aria-expanded="{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_purchase_returns' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' or request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %}true{% else %}false{% endif %}"
+              aria-expanded="{% if request.resolver_match.url_name == 'item_search' or request.resolver_match.url_name == 'browse_purchases' or request.resolver_match.url_name == 'browse_purchase_returns' or request.resolver_match.url_name == 'browse_vendor_turnover' or request.resolver_match.url_name == 'browse_vendor_price_compare' or request.resolver_match.url_name == 'browse_pr_compare' or request.resolver_match.url_name == 'browse_pr_compare_detail' or request.resolver_match.url_name == 'browse_tr_compare' or request.resolver_match.url_name == 'browse_tr_compare_detail' %}true{% else %}false{% endif %}"
               title="إدارة المشتريات"
             >
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h2l2 10h10l2-7H7"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M12 3v8M9 6l3-3 3 3"/></svg>
@@ -323,6 +323,12 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_vendor_turnover' %}is-active{% endif %}" href="{% url 'browse_vendor_turnover' %}" title="دوران مخزون الموردين">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
                 <span>دوران الموردين</span>
+              </a>
+              {% endif %}
+              {% if nav_access.screens.browse_vendor_price_compare %}
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_vendor_price_compare' %}is-active{% endif %}" href="{% url 'browse_vendor_price_compare' %}" title="مقارنة أسعار شراء المورد بين الفروع">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M8 16V9M12 16V7M16 16v-5M20 16V8"/><path d="M14 4l6 3-6 3"/></svg>
+                <span>مقارنة أسعار الموردين</span>
               </a>
               {% endif %}
               {% if nav_access.screens.browse_pr_compare %}

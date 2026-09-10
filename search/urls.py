@@ -55,6 +55,11 @@ urlpatterns = [
         views.browse_vendor_turnover,
         name='browse_vendor_turnover',
     ),
+    path(
+        'purchases/price-compare/',
+        views.browse_vendor_price_compare,
+        name='browse_vendor_price_compare',
+    ),
     path('purchases/compare/', views.browse_pr_compare, name='browse_pr_compare'),
     path(
         'purchases/compare/request/',

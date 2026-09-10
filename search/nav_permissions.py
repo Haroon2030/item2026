@@ -93,6 +93,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavScreen("browse_purchases", "تحليل المشتريات"),
             NavScreen("browse_purchase_returns", "مردود بضاعة راكدة"),
             NavScreen("browse_vendor_turnover", "دوران الموردين"),
+            NavScreen("browse_vendor_price_compare", "مقارنة أسعار الموردين"),
             NavScreen("browse_pr_compare", "مقارنات طلب الشراء"),
             NavScreen("browse_tr_compare", "طلب النواقص"),
         ),

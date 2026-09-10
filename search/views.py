@@ -2805,6 +2805,184 @@ def browse_vendor_turnover(request):
 @login_required
 @require_GET
 @never_cache
+def browse_vendor_price_compare(request):
+    """مقارنة أسعار شراء المورد بين الفروع/المخازن لكشف فروقات التسعير."""
+    from datetime import date as date_cls
+
+    today = date_cls.today()
+    month_start = today.replace(day=1)
+    date_from_raw = str(request.GET.get('date_from') or month_start.isoformat()).strip()
+    date_to_raw = str(request.GET.get('date_to') or today.isoformat()).strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_vendor = str(request.GET.get('vendor') or '').strip()
+    vendor_q = str(request.GET.get('q') or '').strip()[:80]
+    # افتراضي: كل أسعار الشراء من الفواتير (بدون حد فرق)
+    diffs_only = False
+    diffs_vals = request.GET.getlist('diffs')
+    if diffs_vals:
+        diffs_only = str(diffs_vals[-1]).strip() not in ('0', 'false', 'no', 'off')
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    run_raw = str(request.GET.get('run') or '').strip().lower()
+    want_run = run_raw in ('1', 'true', 'yes') or want_excel
+
+    report = None
+    error = ''
+    hint = ''
+    branches: list[dict] = []
+    vendors: list[dict] = []
+    all_warehouses: list[dict] = []
+    branch_warehouses: list[dict] = []
+    selected_vendor_name = ''
+
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_vendor_price_compare.html',
+            {
+                'date_from': (date_from_raw or '')[:10],
+                'date_to': (date_to_raw or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_warehouse': selected_warehouse,
+                'selected_vendor': selected_vendor,
+                'vendor_q': vendor_q,
+                'diffs_only': diffs_only,
+                'branches': [],
+                'vendors': [],
+                'all_warehouses': [],
+                'branch_warehouses': [],
+                'report': None,
+                'error': str(exc),
+                'hint': '',
+            },
+        )
+
+    try:
+        from .oracle_stock import (
+            fetch_company_vendor_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_vendor_price_compare import (
+            build_vendor_price_compare,
+            build_vendor_price_compare_excel,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن مقارنة أسعار الشراء.'
+        else:
+            with oracle_session():
+                wh_rows = fetch_warehouse_options(active_only=True) or []
+                all_warehouses = [
+                    {
+                        'code': str(w.get('code') or '').strip(),
+                        'name': str(w.get('name') or '').strip()
+                        or str(w.get('code') or '').strip(),
+                        'branch_code': str(w.get('branch_code') or '').strip(),
+                        'branch_name': str(w.get('branch_name') or '').strip(),
+                    }
+                    for w in wh_rows
+                    if str(w.get('code') or '').strip()
+                ]
+                branch_map: dict[str, str] = {}
+                for w in all_warehouses:
+                    brn = w['branch_code']
+                    if brn:
+                        branch_map[brn] = w['branch_name'] or brn
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
+                ]
+                if selected_branch and selected_branch not in branch_map:
+                    selected_branch = ''
+
+                branch_warehouses = [
+                    w
+                    for w in all_warehouses
+                    if not selected_branch or w['branch_code'] == selected_branch
+                ]
+                branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+                wh_allowed = {w['code'] for w in branch_warehouses}
+                if selected_warehouse and selected_warehouse not in wh_allowed:
+                    selected_warehouse = ''
+
+                # موردو مجموعة 23 / «موردين الشركة» — نفس مصدر بحث الأصناف
+                vendors = fetch_company_vendor_options() or []
+                all_vendor_codes = {
+                    str(v.get('code') or '').strip() for v in vendors if v.get('code')
+                }
+                if selected_vendor and selected_vendor not in all_vendor_codes:
+                    selected_vendor = ''
+                selected_vendor_name = ''
+                for v in vendors:
+                    if str(v.get('code') or '').strip() == selected_vendor:
+                        selected_vendor_name = str(v.get('name') or '').strip()
+                        break
+
+                if want_run and not error:
+                    if not selected_vendor:
+                        raise ValidationError('اختر مورداً لمقارنة أسعار الشراء بين الفروع.')
+                    report = build_vendor_price_compare(
+                        date_from,
+                        date_to,
+                        vendor_code=selected_vendor,
+                        branch_code=selected_branch,
+                        warehouse_code=selected_warehouse,
+                        min_spread_pct=0.0,
+                        diffs_only=diffs_only,
+                    )
+                    if want_excel and report is not None:
+                        return build_vendor_price_compare_excel(report)
+                elif not error:
+                    hint = 'اختر المورد ثم اضغط «عرض الأسعار» لجلب آخر سعر شراء من الفواتير.'
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_vendor_price_compare failed: %s', exc)
+        error = f'تعذّر تحميل مقارنة أسعار الموردين: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_vendor_price_compare.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_vendor': selected_vendor,
+            'selected_vendor_name': selected_vendor_name,
+            'vendor_q': vendor_q,
+            'diffs_only': diffs_only,
+            'branches': branches,
+            'vendors': vendors,
+            'all_warehouses': all_warehouses,
+            'branch_warehouses': branch_warehouses,
+            'report': report,
+            'error': error,
+            'hint': hint,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_low_margin_prices(request):
     """أصناف مسعّرة بنسبة ربح أقل من حد معيّن (افتراضي 15%)."""
     from django.urls import reverse
