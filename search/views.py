@@ -5239,15 +5239,26 @@ def browse_warehouse_expense(request):
 @require_GET
 @never_cache
 def browse_wh_outgoing(request):
-    """تحويلات صادرة من مستودعات 401/3/90/902 مع حالة الاستلام."""
+    """تحويلات صادرة مع فلتر من فرع/مخزن إلى فرع/مخزن ومتابعة الاستلام."""
     from datetime import date, timedelta
 
     today = date.today()
     default_from = today - timedelta(days=30)
     date_from_raw = request.GET.get('date_from') or default_from.isoformat()
     date_to_raw = request.GET.get('date_to') or today.isoformat()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_branch_from = str(request.GET.get('branch_from') or '').strip()
+    selected_branch_to = str(
+        request.GET.get('branch_to') or request.GET.get('branch') or ''
+    ).strip()
+    selected_warehouse_from = str(
+        request.GET.get('warehouse_from') or request.GET.get('wh_from') or ''
+    ).strip()
+    selected_warehouse_to = str(
+        request.GET.get('warehouse_to')
+        or request.GET.get('warehouse')
+        or request.GET.get('wh_to')
+        or ''
+    ).strip()
     selected_group = str(request.GET.get('group') or '').strip()
     status_raw = str(request.GET.get('status') or 'all').strip().lower()
     if status_raw not in ('all', 'received', 'pending', 'late'):
@@ -5261,39 +5272,46 @@ def browse_wh_outgoing(request):
     report = None
     error = ''
     branches: list[dict] = []
-    warehouses: list[dict] = []
+    warehouses_from: list[dict] = []
+    warehouses_to: list[dict] = []
     groups: list[dict] = []
+
+    ctx_base = {
+        'date_from': (date_from_raw or '')[:10],
+        'date_to': (date_to_raw or '')[:10],
+        'default_from': default_from.isoformat(),
+        'default_to': today.isoformat(),
+        'selected_branch_from': selected_branch_from,
+        'selected_branch_to': selected_branch_to,
+        'selected_branch': selected_branch_to,
+        'selected_warehouse_from': selected_warehouse_from,
+        'selected_warehouse_to': selected_warehouse_to,
+        'selected_warehouse': selected_warehouse_to,
+        'selected_group': selected_group,
+        'status': status_raw,
+        'branches': [],
+        'warehouses_from': [],
+        'warehouses_to': [],
+        'warehouses': [],
+        'groups': [],
+        'report': None,
+    }
 
     try:
         date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
     except ValidationError as exc:
-        return render(
-            request,
-            'search/browse_wh_outgoing.html',
-            {
-                'date_from': (date_from_raw or '')[:10],
-                'date_to': (date_to_raw or '')[:10],
-                'default_from': default_from.isoformat(),
-                'default_to': today.isoformat(),
-                'selected_branch': selected_branch,
-                'selected_warehouse': selected_warehouse,
-                'selected_group': selected_group,
-                'status': status_raw,
-                'branches': [],
-                'warehouses': [],
-                'groups': [],
-                'report': None,
-                'error': str(exc),
-            },
-        )
+        ctx_base['error'] = str(exc)
+        return render(request, 'search/browse_wh_outgoing.html', ctx_base)
 
     try:
         from .oracle_stock import (
             fetch_sales_group_options,
+            fetch_warehouse_options,
             oracle_enabled,
             oracle_session,
         )
         from .oracle_wh_outgoing import (
+            _DEFAULT_SRC,
             build_outgoing_transfers_excel,
             build_outgoing_transfers_report,
         )
@@ -5303,21 +5321,69 @@ def browse_wh_outgoing(request):
         else:
             with oracle_session():
                 (
-                    selected_branch,
-                    selected_warehouse,
-                    _wh_name,
+                    selected_branch_to,
+                    selected_warehouse_to,
+                    _dst_wh_name,
                     branches,
-                    warehouses,
-                ) = _load_branch_warehouses(selected_branch, selected_warehouse)
+                    warehouses_to,
+                ) = _load_branch_warehouses(
+                    selected_branch_to, selected_warehouse_to
+                )
+                (
+                    selected_branch_from,
+                    selected_warehouse_from,
+                    _src_wh_name,
+                    branches_src,
+                    warehouses_from,
+                ) = _load_branch_warehouses(
+                    selected_branch_from, selected_warehouse_from
+                )
+                if not branches and branches_src:
+                    branches = branches_src
+
+                # بلا فرع مصدر: قائمة المصادر المركزية للاختيار الاختياري
+                if not selected_branch_from:
+                    all_wh = fetch_warehouse_options(active_only=True) or []
+                    default_set = {str(c) for c in _DEFAULT_SRC}
+                    warehouses_from = [
+                        row
+                        for row in all_wh
+                        if str(row.get('code') or '').strip() in default_set
+                    ]
+                    warehouses_from.sort(
+                        key=lambda r: str(r.get('code') or '')
+                    )
+                    if selected_warehouse_from:
+                        allowed = {
+                            str(w.get('code') or '').strip()
+                            for w in warehouses_from
+                        }
+                        if selected_warehouse_from not in allowed:
+                            selected_warehouse_from = ''
+
                 groups = fetch_sales_group_options()
                 group_codes = {str(g.get('code') or '').strip() for g in groups}
                 if selected_group and selected_group not in group_codes:
                     selected_group = ''
+
+                if selected_warehouse_from:
+                    source_wh = selected_warehouse_from
+                elif selected_branch_from:
+                    source_wh = ','.join(
+                        str(w.get('code') or '').strip()
+                        for w in (warehouses_from or [])
+                        if str(w.get('code') or '').strip()
+                    )
+                else:
+                    source_wh = ''
+
                 report = build_outgoing_transfers_report(
                     date_from,
                     date_to,
-                    branch_code=selected_branch,
-                    warehouse_code=selected_warehouse,
+                    source_warehouses=source_wh,
+                    branch_from=selected_branch_from,
+                    branch_to=selected_branch_to,
+                    warehouse_code=selected_warehouse_to,
                     group_code=selected_group,
                     status=status_raw,
                 )
@@ -5336,12 +5402,18 @@ def browse_wh_outgoing(request):
             'date_to': date_to.isoformat(),
             'default_from': default_from.isoformat(),
             'default_to': today.isoformat(),
-            'selected_branch': selected_branch,
-            'selected_warehouse': selected_warehouse,
+            'selected_branch_from': selected_branch_from,
+            'selected_branch_to': selected_branch_to,
+            'selected_branch': selected_branch_to,
+            'selected_warehouse_from': selected_warehouse_from,
+            'selected_warehouse_to': selected_warehouse_to,
+            'selected_warehouse': selected_warehouse_to,
             'selected_group': selected_group,
             'status': status_raw,
             'branches': branches,
-            'warehouses': warehouses,
+            'warehouses_from': warehouses_from,
+            'warehouses_to': warehouses_to,
+            'warehouses': warehouses_to,
             'groups': groups,
             'report': report,
             'error': error,

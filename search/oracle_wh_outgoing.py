@@ -24,9 +24,10 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 300
-_CACHE_VER = "v8"
+_CACHE_VER = "v10"
 _DEFAULT_SRC = ("401", "3", "90", "902")
 _LATE_DAYS = 2
+_NONE_WH = "__none__"
 
 
 def _f(value: Any) -> float:
@@ -64,17 +65,21 @@ def _wh_name_sql(alias: str) -> str:
     return f"NVL(NULLIF(TRIM({alias}.W_NAME), ''), TO_CHAR({alias}.W_CODE))"
 
 
-def _parse_wh_codes(raw: str | None) -> list[str]:
+def _parse_wh_codes(raw: str | None, *, allow_empty: bool = False) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
     text = str(raw or "").replace("،", ",")
     for part in text.split(","):
         code = _norm_code(part)
-        if not code or code in seen:
+        if not code or code in seen or code == _NONE_WH:
             continue
         seen.add(code)
         out.append(code)
-    return out or list(_DEFAULT_SRC)
+    if out:
+        return out
+    if allow_empty:
+        return []
+    return list(_DEFAULT_SRC)
 
 
 def _validate(date_from, date_to):
@@ -141,7 +146,8 @@ def _fetch_outgoing_rows(
     date_to: date,
     *,
     wh_codes: list[str],
-    branch_code: str = "",
+    branch_from: str = "",
+    branch_to: str = "",
     warehouse_code: str = "",
 ) -> list[dict]:
     schema = _schema()
@@ -150,17 +156,27 @@ def _fetch_outgoing_rows(
         "d_from": dates["d_from"],
         "d_to_excl": dates["d_to_excl"],
     }
+    codes = [c for c in wh_codes if _norm_code(c)]
+    if not codes:
+        return []
+
     wh_keys: list[str] = []
-    for i, code in enumerate(wh_codes):
+    for i, code in enumerate(codes):
         key = f"w{i}"
         params[key] = _bind_wh(code)
         wh_keys.append(f":{key}")
 
-    branch_sql = ""
-    brn = _bind_brn(branch_code) if branch_code else None
-    if brn not in ("", None):
-        params["dst_brn"] = brn
-        branch_sql = "AND tw.CONN_BRN_NO = :dst_brn"
+    src_branch_sql = ""
+    src_brn = _bind_brn(branch_from) if branch_from else None
+    if src_brn not in ("", None):
+        params["src_brn"] = src_brn
+        src_branch_sql = "AND fw.CONN_BRN_NO = :src_brn"
+
+    dst_branch_sql = ""
+    dst_brn = _bind_brn(branch_to) if branch_to else None
+    if dst_brn not in ("", None):
+        params["dst_brn"] = dst_brn
+        dst_branch_sql = "AND tw.CONN_BRN_NO = :dst_brn"
 
     wh_sql = ""
     dst_wh = _norm_code(warehouse_code)
@@ -180,6 +196,7 @@ def _fetch_outgoing_rows(
                NVL(NULLIF(TRIM(m.TR_DESC), ''), 'تحويل #' || TO_CHAR(m.TR_NO)) AS TR_NAME,
                m.F_W_CODE AS SRC_WH,
                {_wh_name_sql("fw")} AS SRC_WH_NAME,
+               fw.CONN_BRN_NO AS SRC_BRN,
                m.T_W_CODE AS DST_WH,
                {_wh_name_sql("tw")} AS DST_WH_NAME,
                tw.CONN_BRN_NO AS DST_BRN,
@@ -199,10 +216,11 @@ def _fetch_outgoing_rows(
           AND m.TR_INOUT_TYPE = 1
           AND {_hung_ok("m")}
           AND m.F_W_CODE IN ({", ".join(wh_keys)})
-          {branch_sql}
+          {src_branch_sql}
+          {dst_branch_sql}
           {wh_sql}
         GROUP BY m.TR_NO, m.TR_SER, m.TR_DATE, m.AD_DATE, m.TR_DESC,
-                 m.F_W_CODE, fw.W_NAME, fw.W_CODE,
+                 m.F_W_CODE, fw.W_NAME, fw.W_CODE, fw.CONN_BRN_NO,
                  m.T_W_CODE, tw.W_NAME, tw.W_CODE, tw.CONN_BRN_NO,
                  m.PROCESSED
         ORDER BY m.TR_DATE DESC, m.TR_NO DESC
@@ -311,6 +329,8 @@ def build_outgoing_transfers_report(
     date_to,
     *,
     source_warehouses: str = "",
+    branch_from: str = "",
+    branch_to: str = "",
     branch_code: str = "",
     warehouse_code: str = "",
     group_code: str = "",
@@ -318,8 +338,15 @@ def build_outgoing_transfers_report(
 ) -> dict:
     """جدول التحويلات الصادرة من مستودعات المصدر مع حالة الاستلام."""
     d_from, d_to = _validate(date_from, date_to)
-    wh_codes = _parse_wh_codes(source_warehouses)
-    branch = _norm_code(branch_code)
+    src_brn = _norm_code(branch_from)
+    dst_brn = _norm_code(branch_to) or _norm_code(branch_code)
+    # عند اختيار «من فرع» تُستخدم مخازن ذلك الفرع؛ وإلا المصادر الافتراضية
+    wh_codes = _parse_wh_codes(
+        source_warehouses,
+        allow_empty=bool(src_brn),
+    )
+    if src_brn and not wh_codes:
+        wh_codes = []
     warehouse = _norm_code(warehouse_code)
     group = _norm_code(group_code)
     g_bind = _bind_gcode(group) if group else None
@@ -329,7 +356,8 @@ def build_outgoing_transfers_report(
 
     cache_key = (
         f"whout:{_CACHE_VER}:{d_from.isoformat()}:{d_to.isoformat()}:"
-        f"{','.join(wh_codes)}:{branch}:{warehouse}:{group}:{status_key}"
+        f"{','.join(wh_codes) or _NONE_WH}:{src_brn}:{dst_brn}:"
+        f"{warehouse}:{group}:{status_key}"
     )
     cached = cache.get(cache_key)
     if cached is not None:
@@ -340,7 +368,8 @@ def build_outgoing_transfers_report(
         d_from,
         d_to,
         wh_codes=wh_codes,
-        branch_code=branch,
+        branch_from=src_brn,
+        branch_to=dst_brn,
         warehouse_code=warehouse,
     )
     sers = [row.get("TR_SER") for row in raw if row.get("TR_SER") is not None]
@@ -434,8 +463,12 @@ def build_outgoing_transfers_report(
     report = {
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "source_warehouses": wh_codes,
-        "branch_code": branch,
+        "branch_from": src_brn,
+        "branch_to": dst_brn,
+        "branch_code": dst_brn,
+        "warehouse_from": "",
         "warehouse_code": warehouse,
+        "warehouse_to": warehouse,
         "group_code": group,
         "status": status_key,
         "late_days": _LATE_DAYS,

@@ -17234,6 +17234,25 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   max-width: 16rem;
 }
 
+.wh-out-dash .wh-out-branch-pair {
+  min-width: min(100%, 26rem);
+}
+
+.wh-out-dash .wh-out-branch-pair .income-filter-period-fields,
+.wh-out-dash .wh-out-wh-pair .income-filter-period-fields {
+  flex-wrap: wrap;
+}
+
+.wh-out-dash .wh-out-branch-pair select,
+.wh-out-dash .wh-out-wh-pair select {
+  min-width: 11rem;
+  max-width: 15rem;
+}
+
+.wh-out-dash .wh-out-wh-pair {
+  min-width: min(100%, 28rem);
+}
+
 .wh-out-dash .wh-out-actions {
   display: flex;
   align-items: flex-end;
