@@ -24,7 +24,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 300
-_CACHE_VER = "v10"
+_CACHE_VER = "v11"
 _DEFAULT_SRC = ("401", "3", "90", "902")
 _LATE_DAYS = 2
 _NONE_WH = "__none__"
@@ -65,7 +65,8 @@ def _wh_name_sql(alias: str) -> str:
     return f"NVL(NULLIF(TRIM({alias}.W_NAME), ''), TO_CHAR({alias}.W_CODE))"
 
 
-def _parse_wh_codes(raw: str | None, *, allow_empty: bool = False) -> list[str]:
+def _parse_wh_codes(raw: str | None, *, allow_empty: bool = True) -> list[str]:
+    """قائمة مخازن مصدر؛ القائمة الفارغة = كل المخازن (بدون قيد F_W_CODE)."""
     seen: set[str] = set()
     out: list[str] = []
     text = str(raw or "").replace("،", ",")
@@ -157,14 +158,15 @@ def _fetch_outgoing_rows(
         "d_to_excl": dates["d_to_excl"],
     }
     codes = [c for c in wh_codes if _norm_code(c)]
-    if not codes:
-        return []
 
-    wh_keys: list[str] = []
-    for i, code in enumerate(codes):
-        key = f"w{i}"
-        params[key] = _bind_wh(code)
-        wh_keys.append(f":{key}")
+    src_wh_sql = ""
+    if codes:
+        wh_keys: list[str] = []
+        for i, code in enumerate(codes):
+            key = f"w{i}"
+            params[key] = _bind_wh(code)
+            wh_keys.append(f":{key}")
+        src_wh_sql = f"AND m.F_W_CODE IN ({', '.join(wh_keys)})"
 
     src_branch_sql = ""
     src_brn = _bind_brn(branch_from) if branch_from else None
@@ -215,7 +217,7 @@ def _fetch_outgoing_rows(
           AND m.TR_DATE < :d_to_excl
           AND m.TR_INOUT_TYPE = 1
           AND {_hung_ok("m")}
-          AND m.F_W_CODE IN ({", ".join(wh_keys)})
+          {src_wh_sql}
           {src_branch_sql}
           {dst_branch_sql}
           {wh_sql}
@@ -340,13 +342,8 @@ def build_outgoing_transfers_report(
     d_from, d_to = _validate(date_from, date_to)
     src_brn = _norm_code(branch_from)
     dst_brn = _norm_code(branch_to) or _norm_code(branch_code)
-    # عند اختيار «من فرع» تُستخدم مخازن ذلك الفرع؛ وإلا المصادر الافتراضية
-    wh_codes = _parse_wh_codes(
-        source_warehouses,
-        allow_empty=bool(src_brn),
-    )
-    if src_brn and not wh_codes:
-        wh_codes = []
+    # قائمة فارغة = كل مخازن المصدر (أو تقييد بالفرع عبر branch_from فقط)
+    wh_codes = _parse_wh_codes(source_warehouses, allow_empty=True)
     warehouse = _norm_code(warehouse_code)
     group = _norm_code(group_code)
     g_bind = _bind_gcode(group) if group else None

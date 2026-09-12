@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="حركة التحويلات">
   <div class="dash-head-copy">
     <h2>حركة التحويلات</h2>
-    <p>تحويلات بين الفروع والمستودعات — اختر من فرع إلى فرع مع متابعة الاستلام</p>
+    <p>تحويلات بين كل الفروع والمخازن — فلتر من/إلى مع متابعة الاستلام</p>
   </div>
 </section>
 
@@ -90,7 +90,7 @@
             name="branch_from"
             onchange="this.form.warehouse_from && (this.form.warehouse_from.value=''); this.form.submit()"
           >
-            <option value="">كل الفروع (مصادر مركزية)</option>
+            <option value="">كل الفروع</option>
             {% for b in branches %}
               <option value="{{ b.code }}" {% if b.code == selected_branch_from %}selected{% endif %}>{{ b.name }}</option>
             {% endfor %}
@@ -125,14 +125,12 @@
             {% if selected_branch_from %}
               <option value="">كل مخازن فرع المصدر</option>
             {% else %}
-              <option value="">كل المصادر المركزية</option>
+              <option value="">كل مخازن الفروع</option>
             {% endif %}
             {% for w in warehouses_from %}
               <option value="{{ w.code }}" {% if w.code == selected_warehouse_from %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
             {% empty %}
-              {% if selected_branch_from %}
-                <option value="">لا توجد مخازن لهذا الفرع</option>
-              {% endif %}
+              <option value="">لا توجد مخازن</option>
             {% endfor %}
           </select>
         </div>
@@ -142,19 +140,18 @@
           <select
             id="wh-out-warehouse-to"
             name="warehouse_to"
-            {% if not selected_branch_to %}disabled{% endif %}
             onchange="this.form.submit()"
           >
-            {% if not selected_branch_to %}
-              <option value="">اختر فرع الوصول أولاً</option>
-            {% else %}
+            {% if selected_branch_to %}
               <option value="">كل مخازن فرع الوصول</option>
-              {% for w in warehouses_to %}
-                <option value="{{ w.code }}" {% if w.code == selected_warehouse_to %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
-              {% empty %}
-                <option value="">لا توجد مخازن لهذا الفرع</option>
-              {% endfor %}
+            {% else %}
+              <option value="">كل مخازن الفروع</option>
             {% endif %}
+            {% for w in warehouses_to %}
+              <option value="{{ w.code }}" {% if w.code == selected_warehouse_to %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% empty %}
+              <option value="">لا توجد مخازن</option>
+            {% endfor %}
           </select>
         </div>
       </div>

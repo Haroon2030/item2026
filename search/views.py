@@ -5311,7 +5311,6 @@ def browse_wh_outgoing(request):
             oracle_session,
         )
         from .oracle_wh_outgoing import (
-            _DEFAULT_SRC,
             build_outgoing_transfers_excel,
             build_outgoing_transfers_report,
         )
@@ -5320,6 +5319,7 @@ def browse_wh_outgoing(request):
             error = 'أوراكل غير مفعّل — لا يمكن عرض تحويلات المستودعات.'
         else:
             with oracle_session():
+                all_wh = fetch_warehouse_options(active_only=True) or []
                 (
                     selected_branch_to,
                     selected_warehouse_to,
@@ -5341,17 +5341,14 @@ def browse_wh_outgoing(request):
                 if not branches and branches_src:
                     branches = branches_src
 
-                # بلا فرع مصدر: قائمة المصادر المركزية للاختيار الاختياري
+                # بلا فرع مصدر: كل مخازن كل الفروع
                 if not selected_branch_from:
-                    all_wh = fetch_warehouse_options(active_only=True) or []
-                    default_set = {str(c) for c in _DEFAULT_SRC}
-                    warehouses_from = [
-                        row
-                        for row in all_wh
-                        if str(row.get('code') or '').strip() in default_set
-                    ]
-                    warehouses_from.sort(
-                        key=lambda r: str(r.get('code') or '')
+                    warehouses_from = sorted(
+                        all_wh,
+                        key=lambda r: (
+                            str(r.get('branch_name') or ''),
+                            str(r.get('code') or ''),
+                        ),
                     )
                     if selected_warehouse_from:
                         allowed = {
@@ -5361,6 +5358,23 @@ def browse_wh_outgoing(request):
                         if selected_warehouse_from not in allowed:
                             selected_warehouse_from = ''
 
+                # بلا فرع وصول: كل المخازن متاحة للاختيار الاختياري
+                if not selected_branch_to:
+                    warehouses_to = sorted(
+                        all_wh,
+                        key=lambda r: (
+                            str(r.get('branch_name') or ''),
+                            str(r.get('code') or ''),
+                        ),
+                    )
+                    if selected_warehouse_to:
+                        allowed = {
+                            str(w.get('code') or '').strip()
+                            for w in warehouses_to
+                        }
+                        if selected_warehouse_to not in allowed:
+                            selected_warehouse_to = ''
+
                 groups = fetch_sales_group_options()
                 group_codes = {str(g.get('code') or '').strip() for g in groups}
                 if selected_group and selected_group not in group_codes:
@@ -5368,13 +5382,8 @@ def browse_wh_outgoing(request):
 
                 if selected_warehouse_from:
                     source_wh = selected_warehouse_from
-                elif selected_branch_from:
-                    source_wh = ','.join(
-                        str(w.get('code') or '').strip()
-                        for w in (warehouses_from or [])
-                        if str(w.get('code') or '').strip()
-                    )
                 else:
+                    # فرع فقط أو الكل: بدون قائمة مخازن محددة (كل مخازن النطاق)
                     source_wh = ''
 
                 report = build_outgoing_transfers_report(
