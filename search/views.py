@@ -5352,6 +5352,159 @@ def browse_wh_outgoing(request):
 @login_required
 @require_GET
 @never_cache
+def browse_wh_qty_compare(request):
+    """مقارنة كميات الأصناف بين مستودعين (رصيد IAS_ITM_WCODE)."""
+    selected_wh_a = str(
+        request.GET.get('wh_a') or request.GET.get('warehouse_a') or ''
+    ).strip()
+    selected_wh_b = str(
+        request.GET.get('wh_b') or request.GET.get('warehouse_b') or ''
+    ).strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    item_q = str(request.GET.get('q') or request.GET.get('item') or '').strip()
+    mode_raw = str(request.GET.get('mode') or 'all').strip().lower()
+    if mode_raw not in ('all', 'zero_b', 'both', 'diff', 'gap', 'a_only', 'b_only'):
+        mode_raw = 'all'
+    qty_basis = str(
+        request.GET.get('qty') or request.GET.get('qty_basis') or 'avail'
+    ).strip().lower()
+    if qty_basis in ('available', 'expected', 'after'):
+        qty_basis = 'avail'
+    if qty_basis in ('current', 'stock', 'balance'):
+        qty_basis = 'avl'
+    if qty_basis not in ('avail', 'avl'):
+        qty_basis = 'avail'
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        'xls',
+        'excel',
+        'xlsx',
+    }
+    want_run = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes')
+    want_run = want_run or want_excel
+
+    report = None
+    error = ''
+    hint = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+    all_warehouses: list[dict] = []
+    wh_a_name = selected_wh_a
+    wh_b_name = selected_wh_b
+
+    try:
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_wh_qty_compare import (
+            build_wh_qty_compare_excel,
+            build_wh_qty_compare_report,
+        )
+        from .validators import sanitize_search_query
+
+        if item_q:
+            item_q = sanitize_search_query(item_q)
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن مقارنة كميات المستودعات.'
+        else:
+            with oracle_session():
+                wh_rows = fetch_warehouse_options(active_only=True) or []
+                all_warehouses = [
+                    {
+                        'code': str(w.get('code') or '').strip(),
+                        'name': str(w.get('name') or '').strip()
+                        or str(w.get('code') or '').strip(),
+                        'branch_code': str(w.get('branch_code') or '').strip(),
+                        'branch_name': str(w.get('branch_name') or '').strip(),
+                    }
+                    for w in wh_rows
+                    if str(w.get('code') or '').strip()
+                ]
+                branch_map: dict[str, str] = {}
+                wh_name_map: dict[str, str] = {}
+                for w in all_warehouses:
+                    wh_name_map[w['code']] = w['name']
+                    brn = w['branch_code']
+                    if brn:
+                        branch_map[brn] = w['branch_name'] or brn
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
+                ]
+                groups = fetch_sales_group_options() or []
+                group_codes = {str(g.get('code') or '').strip() for g in groups}
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+
+                allowed = set(wh_name_map)
+                if selected_wh_a and selected_wh_a not in allowed:
+                    selected_wh_a = ''
+                if selected_wh_b and selected_wh_b not in allowed:
+                    selected_wh_b = ''
+                wh_a_name = wh_name_map.get(selected_wh_a, selected_wh_a)
+                wh_b_name = wh_name_map.get(selected_wh_b, selected_wh_b)
+
+                if want_run:
+                    if not selected_wh_a or not selected_wh_b:
+                        raise ValidationError('حدد مستودع الأول والثاني ثم اضغط «بحث».')
+                    if selected_wh_a == selected_wh_b:
+                        raise ValidationError('اختر مستودعين مختلفين.')
+                    report = build_wh_qty_compare_report(
+                        warehouse_a=selected_wh_a,
+                        warehouse_b=selected_wh_b,
+                        group_code=selected_group,
+                        item_q=item_q,
+                        mode=mode_raw,
+                        qty_basis=qty_basis,
+                        wh_a_name=wh_a_name,
+                        wh_b_name=wh_b_name,
+                    )
+                    if want_excel and report is not None:
+                        return build_wh_qty_compare_excel(report)
+                else:
+                    hint = (
+                        'اختر المستودع الأول ثم الثاني — '
+                        'تُعرض أصناف الأول فقط مع كميتها في الثاني '
+                        '(المتوفّر = الرصيد بعد خصم مبيعات POS غير المرحّلة).'
+                    )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_wh_qty_compare failed: %s', exc)
+        error = f'تعذّر تحميل مقارنة الكميات: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_wh_qty_compare.html',
+        {
+            'branches': branches,
+            'groups': groups,
+            'all_warehouses': all_warehouses,
+            'selected_wh_a': selected_wh_a,
+            'selected_wh_b': selected_wh_b,
+            'wh_a_name': wh_a_name,
+            'wh_b_name': wh_b_name,
+            'selected_group': selected_group,
+            'item_q': item_q,
+            'mode': mode_raw,
+            'qty_basis': qty_basis,
+            'report': report,
+            'error': error,
+            'hint': hint,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_sold_no_supply(request):
     """أصناف تُباع بلا مشتريات على الفرع ولا تحويل وارد إليه."""
     from datetime import date

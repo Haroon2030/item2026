@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}مقارنة كميات المستودعات{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مقارنة كميات المستودعات">
+  <div class="dash-head-copy">
+    <h2>مقارنة كميات المستودعات</h2>
+    <p>أصناف المستودع الأول فقط — الكميات بأكبر عبوة مع عمود الوحدة</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+<form
+  method="get"
+  action="{% url 'browse_wh_qty_compare' %}"
+  class="dash-panel-glass wqc-filter"
+  role="search"
+  aria-label="فلاتر مقارنة الكميات"
+  id="wqc-filter-form"
+>
+  <input type="hidden" name="run" value="1">
+
+  <div class="field wqc-field-wh-a">
+    <label for="wqc-wh-a">المستودع الأول <span class="wqc-req" aria-hidden="true">*</span></label>
+    <select id="wqc-wh-a" name="wh_a" required aria-required="true">
+      <option value="">اختر مستودعاً</option>
+      {% for w in all_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_a %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wqc-field-wh-b">
+    <label for="wqc-wh-b">المستودع الثاني <span class="wqc-req" aria-hidden="true">*</span></label>
+    <select id="wqc-wh-b" name="wh_b" required aria-required="true">
+      <option value="">اختر مستودعاً</option>
+      {% for w in all_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_b %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wqc-field-group">
+    <label for="wqc-group">المجموعة</label>
+    <select id="wqc-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wqc-field-item">
+    <label for="wqc-q">الصنف</label>
+    <input id="wqc-q" type="search" name="q" value="{{ item_q }}" placeholder="رقم أو اسم" maxlength="80" autocomplete="off">
+  </div>
+
+  <div class="field wqc-field-qty">
+    <label for="wqc-qty">الكمية</label>
+    <select id="wqc-qty" name="qty">
+      <option value="avail" {% if qty_basis == 'avail' or not qty_basis %}selected{% endif %}>المتوفّر</option>
+      <option value="avl" {% if qty_basis == 'avl' %}selected{% endif %}>الرصيد الحالي</option>
+    </select>
+  </div>
+
+  <div class="field wqc-field-mode">
+    <label for="wqc-mode">العرض</label>
+    <select id="wqc-mode" name="mode">
+      <option value="all" {% if mode == 'all' or mode == 'b_only' %}selected{% endif %}>كل أصناف المستودع الأول</option>
+      <option value="zero_b" {% if mode == 'zero_b' or mode == 'gap' or mode == 'a_only' %}selected{% endif %}>في الأول ولا يتوفر في الثاني</option>
+      <option value="diff" {% if mode == 'diff' %}selected{% endif %}>كمية مختلفة</option>
+      <option value="both" {% if mode == 'both' %}selected{% endif %}>موجود في الاثنين</option>
+    </select>
+  </div>
+
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">بحث</button>
+  </div>
+</form>
+
+{% if report %}
+  <section class="wqc-kpi-grid" aria-label="ملخص المقارنة">
+    <article class="wqc-kpi is-count">
+      <span>المعروض</span>
+      <strong class="mono">{{ report.kpis.item_count }}</strong>
+      <small>من أصل {{ report.kpis.item_count_all|default:report.kpis.item_count }} · {{ report.filters.qty_basis_label }} · {{ report.filters.mode_label }}</small>
+    </article>
+    <article class="wqc-kpi is-gap">
+      <span>لا يتوفر في الثاني / مختلف</span>
+      <strong class="mono">{{ report.kpis.zero_b_count_all|default:report.kpis.zero_b_count }} / {{ report.kpis.diff_count_all|default:report.kpis.diff_count }}</strong>
+      <small>أصناف الأول {{ report.kpis.item_count_all|default:report.kpis.item_count }} · متطابق {{ report.kpis.both_count_all|default:report.kpis.both_count }}</small>
+    </article>
+    <article class="wqc-kpi is-a">
+      <span>{{ report.filters.qty_basis_label|default:"الكمية" }} — الأول</span>
+      <strong class="mono">{{ report.kpis.qty_a_display }}</strong>
+      <small>{{ wh_a_name|default:selected_wh_a }}</small>
+    </article>
+    <article class="wqc-kpi is-b">
+      <span>{{ report.filters.qty_basis_label|default:"الكمية" }} — الثاني</span>
+      <strong class="mono">{{ report.kpis.qty_b_display }}</strong>
+      <small>{{ wh_b_name|default:selected_wh_b }}</small>
+    </article>
+  </section>
+
+  <section class="wqc-sheet" aria-label="جدول المقارنة" data-print-scope="wqc-table">
+    <div class="wqc-sheet-head">
+      <div class="wqc-sheet-title">
+        <h3>{{ wh_a_name|default:selected_wh_a }} ↔ {{ wh_b_name|default:selected_wh_b }}</h3>
+        <span class="wqc-sheet-count">{{ report.kpis.item_count }} صنف</span>
+        {% if report.kpis.truncated %}
+          <span class="wqc-sheet-count" title="ضيّق بالمجموعة أو الصنف لعرض الباقي">أول {{ report.kpis.max_rows }} من {{ report.kpis.matched_count }}</span>
+        {% endif %}
+      </div>
+      <div class="wqc-sheet-actions">
+        <a
+          class="btn-ghost wqc-excel-btn"
+          href="?run=1&amp;wh_a={{ selected_wh_a|urlencode }}&amp;wh_b={{ selected_wh_b|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;q={{ item_q|urlencode }}&amp;mode={{ mode|urlencode }}&amp;qty={{ qty_basis|urlencode }}&amp;export=excel"
+          title="تصدير Excel"
+        >Excel</a>
+        <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="جدول المقارنة — اسحب أفقياً وعمودياً">
+      <table class="wqc-table" aria-label="مقارنة كميات المستودعات">
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">رقم الصنف</th>
+            <th scope="col">اسم الصنف</th>
+            <th scope="col">المجموعة</th>
+            <th scope="col">الوحدة</th>
+            <th scope="col">الحالة</th>
+            <th scope="col">{{ selected_wh_a }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
+            <th scope="col">{{ selected_wh_b }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
+            <th scope="col">الفرق</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr class="wqc-row is-{{ row.kind }}">
+              <td class="mono wqc-td-idx">{{ forloop.counter }}</td>
+              <td class="mono wqc-td-code">{{ row.item_code }}</td>
+              <td class="wqc-td-name">{{ row.item_name }}</td>
+              <td class="wqc-td-group">{{ row.g_name }}</td>
+              <td class="wqc-td-unit">{{ row.unit }}</td>
+              <td class="wqc-td-status is-{{ row.kind }}">{{ row.kind_label }}</td>
+              <td class="mono wqc-td-a">{{ row.qty_a_display }}</td>
+              <td class="mono wqc-td-b">{{ row.qty_b_display }}</td>
+              <td class="mono wqc-td-gap">{{ row.qty_gap_display }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9" class="wqc-empty">لا توجد أصناف ضمن العرض المحدد.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td></td>
+              <td colspan="4">الإجمالي</td>
+              <td></td>
+              <td class="mono">{{ report.totals.qty_a_display }}</td>
+              <td class="mono">{{ report.totals.qty_b_display }}</td>
+              <td class="mono">{{ report.totals.qty_gap_display }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if report %}
+<script src="/static/js/wqc-scroll.js?v={{ app_client_version }}" defer></script>
+{% endif %}
+{% endblock %}

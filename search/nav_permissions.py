@@ -132,7 +132,10 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
     NavSection(
         "warehouses",
         "إدارة المستودعات",
-        (NavScreen("browse_wh_outgoing", "حركة التحويلات"),),
+        (
+            NavScreen("browse_wh_outgoing", "حركة التحويلات"),
+            NavScreen("browse_wh_qty_compare", "مقارنة كميات المستودعات"),
+        ),
     ),
 )
 
