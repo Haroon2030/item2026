@@ -60,6 +60,40 @@
         </select>
       </div>
     </div>
+    <div class="field">
+      <label for="tr-company">اسم الشركة</label>
+      <input
+        id="tr-company"
+        type="search"
+        name="company"
+        value="{{ company_q|default:'' }}"
+        placeholder="مخزن / فرع…"
+        autocomplete="off"
+      >
+    </div>
+    <div class="field">
+      <label for="tr-user">المستخدم</label>
+      <input
+        id="tr-user"
+        type="search"
+        name="user"
+        value="{{ user_q|default:'' }}"
+        placeholder="الاسم أو الرقم…"
+        autocomplete="off"
+      >
+    </div>
+    <div class="field">
+      <label for="tr-req-no">رقم الطلب</label>
+      <input
+        id="tr-req-no"
+        type="search"
+        name="req_no"
+        value="{{ req_no_q|default:'' }}"
+        placeholder="رقم المستند…"
+        inputmode="numeric"
+        autocomplete="off"
+      >
+    </div>
     <div class="field pr-compare-filter-actions">
       <label class="sr-only" for="tr-compare-submit">عرض</label>
       <button id="tr-compare-submit" type="submit" class="btn-primary pr-compare-submit">عرض الطلبات</button>
@@ -73,6 +107,9 @@
     {% endif %}
     {% if selected_warehouse_name %}
       <span class="pr-compare-chip is-wh">مخزن الطلب: {{ selected_warehouse }} — {{ selected_warehouse_name }}</span>
+    {% endif %}
+    {% if company_q or user_q or req_no_q %}
+      <span class="pr-compare-chip is-wh">بحث مفعّل</span>
     {% endif %}
   </div>
 </form>

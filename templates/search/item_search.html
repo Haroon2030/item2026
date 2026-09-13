@@ -41,8 +41,8 @@
         </div>
         <div class="field branch-field ss-branch">
           <label for="branch">الفرع</label>
-          <select id="branch" name="branch" aria-label="اختر الفرع">
-            <option value="">كل الفروع</option>
+          <select id="branch" name="branch" aria-label="اختر الفرع"{% if not compare_mode %} required{% endif %}>
+            <option value="" data-all-branches="1"{% if not compare_mode %} hidden disabled{% endif %}>كل الفروع</option>
             {% for b in branches %}
               <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
             {% endfor %}
@@ -50,12 +50,18 @@
         </div>
         <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
           <label for="warehouse">المخزن</label>
-          <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+          <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن"{% if not compare_mode %} required{% endif %}>
+            <option
+              value="all"
+              data-all="1"
+              data-branch=""
+              {% if compare_mode %}{% if warehouse_all_selected %}selected{% endif %}{% else %}hidden disabled{% endif %}
+            >{% if selected_branch %}كل مخازن الفرع{% else %}كل المخازن{% endif %}</option>
             {% for wh in all_warehouses %}
               <option
                 value="{{ wh.code }}"
                 data-branch="{{ wh.branch_code }}"
-                {% if wh.code == warehouse %}selected{% endif %}
+                {% if not warehouse_all_selected and wh.code == warehouse %}selected{% endif %}
                 {% if selected_branch and wh.branch_code != selected_branch %}hidden disabled{% endif %}
               >{{ wh.name }}</option>
             {% endfor %}
@@ -687,6 +693,26 @@
       }
     });
     if (field) field.hidden = compare;
+    if (branch) {
+      branch.required = !compare;
+      var allBrn = branch.querySelector('option[data-all-branches="1"]');
+      if (allBrn) {
+        allBrn.hidden = !compare;
+        allBrn.disabled = !compare;
+      }
+      if (!compare && !String(branch.value || "").trim()) {
+        var firstBrn = "";
+        Array.prototype.forEach.call(branch.options, function (opt) {
+          if (firstBrn || !opt.value || opt.disabled || opt.hidden) return;
+          firstBrn = opt.value;
+        });
+        if (firstBrn) branch.value = firstBrn;
+      }
+    }
+    if (warehouse) {
+      warehouse.required = !compare;
+    }
+    syncWarehouses(compare);
   }
 
   function normCode(value) {
@@ -702,26 +728,47 @@
     return s;
   }
 
-  function syncWarehouses() {
+  function syncWarehouses(compareOverride) {
     if (!warehouse) return;
+    var cmpRadio = form.querySelector('input[name="scope"][value="compare"]');
+    var compare =
+      typeof compareOverride === "boolean"
+        ? compareOverride
+        : !!(cmpRadio && cmpRadio.checked);
     var brn = branch ? String(branch.value || "").trim() : "";
     var brnNorm = normCode(brn);
     var options = warehouse.querySelectorAll("option");
     var keep = warehouse.value;
-    var firstVisible = "";
+    var firstWh = "";
+    var allOpt = null;
     var keepVisible = false;
     options.forEach(function (opt) {
+      var isAll = opt.getAttribute("data-all") === "1" || String(opt.value) === "all";
+      if (isAll) {
+        allOpt = opt;
+        // في وضع مخزن واحد: لا خيار «كل المخازن»
+        var showAll = !!compare;
+        opt.hidden = !showAll;
+        opt.disabled = !showAll;
+        opt.textContent = brn ? "كل مخازن الفرع" : "كل المخازن";
+        if (showAll && (String(keep) === "all" || keep === "")) keepVisible = true;
+        return;
+      }
       var optBrn = String(opt.getAttribute("data-branch") || "").trim();
       var show = !brn || optBrn === brn || normCode(optBrn) === brnNorm;
       opt.hidden = !show;
       opt.disabled = !show;
-      if (show && !firstVisible) firstVisible = opt.value;
+      if (show && !firstWh) firstWh = opt.value;
       if (show && String(opt.value) === String(keep)) keepVisible = true;
     });
-    if (keepVisible) {
-      warehouse.value = keep;
-    } else if (firstVisible) {
-      warehouse.value = firstVisible;
+    if (keepVisible && !(String(keep) === "all" && !compare)) {
+      warehouse.value = keep === "" && compare && allOpt ? "all" : keep;
+    } else if (compare && !brn && allOpt) {
+      warehouse.value = "all";
+    } else if (firstWh) {
+      warehouse.value = firstWh;
+    } else if (compare && allOpt) {
+      warehouse.value = "all";
     }
     warehouse.dispatchEvent(new Event("change", { bubbles: true }));
     if (typeof window.invSelectRefresh === "function") {
@@ -748,7 +795,6 @@
     });
   }
   syncScope();
-  syncWarehouses();
 })();
 </script>
 {% endblock %}

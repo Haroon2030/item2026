@@ -454,13 +454,19 @@ def item_search(request):
     scope_raw = str(request.GET.get('scope') or 'one').strip().lower()
     raw_wh = str(request.GET.get('warehouse') or '').strip()
     # توافق مع الروابط القديمة warehouse=all
-    compare_mode = scope_raw in ('compare', 'all') or raw_wh == 'all'
-    if raw_wh == 'all':
+    warehouse_all_selected = raw_wh.lower() == 'all' or (
+        not raw_wh and scope_raw in ('compare', 'all')
+    )
+    compare_mode = scope_raw in ('compare', 'all') or raw_wh.lower() == 'all'
+    if raw_wh.lower() == 'all':
         raw_wh = ''
 
     branch_codes = {b['code'] for b in branches}
     if selected_branch and selected_branch not in branch_codes:
         selected_branch = ''
+    # مخزن واحد: يلزم فرع محدد (بدون «كل الفروع»)
+    if not compare_mode and not selected_branch and branches:
+        selected_branch = str(branches[0].get('code') or '').strip()
 
     warehouses = (
         _warehouses_for_branch(all_warehouses, selected_branch)
@@ -516,6 +522,7 @@ def item_search(request):
                 'warehouse': warehouse,
                 'detail_warehouse': warehouse,
                 'compare_mode': compare_mode,
+                'warehouse_all_selected': warehouse_all_selected,
                 'warehouse_compare': [],
                 'date_from': date_from.isoformat(),
                 'date_to': date_to.isoformat(),
@@ -844,6 +851,7 @@ def item_search(request):
             'warehouse': warehouse,
             'detail_warehouse': detail_wh,
             'compare_mode': compare_mode,
+            'warehouse_all_selected': warehouse_all_selected,
             'warehouse_compare': warehouse_compare,
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
@@ -4301,6 +4309,7 @@ def browse_pr_compare(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_warehouse = str(request.GET.get('warehouse') or '').strip()
     date_raw = str(request.GET.get('date') or '').strip()[:10]
+    search_q = _pr_list_search_filters(request)
     selected_date = today
     if date_raw:
         try:
@@ -4415,6 +4424,13 @@ def browse_pr_compare(request):
                         day=selected_date,
                         warehouse_code=selected_warehouse,
                     )
+                    requests_today = _filter_request_list_rows(
+                        requests_today,
+                        company_q=search_q['company_q'],
+                        user_q=search_q['user_q'],
+                        req_no_q=search_q['req_no_q'],
+                        kind='pr',
+                    )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_pr_compare failed: %s', exc)
         error = f'تعذّر تحميل طلبات الشراء: {exc}'
@@ -4434,6 +4450,9 @@ def browse_pr_compare(request):
             'selected_branch': selected_branch,
             'selected_warehouse': selected_warehouse,
             'selected_warehouse_name': selected_warehouse_name,
+            'company_q': search_q['company_q'],
+            'user_q': search_q['user_q'],
+            'req_no_q': search_q['req_no_q'],
             'branches': branches,
             'warehouses': warehouses,
             'requests_today': requests_today,
@@ -4512,6 +4531,102 @@ def _pr_compare_filters(request):
         except ValueError:
             selected_date = today
     return today, selected_date, selected_branch, selected_warehouse
+
+
+def _pr_list_search_filters(request) -> dict[str, str]:
+    """بحث قائمة الطلبات: شركة/مورد · مستخدم · رقم الطلب."""
+    return {
+        'company_q': str(
+            request.GET.get('company')
+            or request.GET.get('vendor')
+            or request.GET.get('q_company')
+            or ''
+        ).strip()[:80],
+        'user_q': str(
+            request.GET.get('user') or request.GET.get('q_user') or ''
+        ).strip()[:80],
+        'req_no_q': str(
+            request.GET.get('req_no')
+            or request.GET.get('pr_no')
+            or request.GET.get('tr_no')
+            or request.GET.get('q_no')
+            or ''
+        ).strip()[:40],
+    }
+
+
+def _filter_request_list_rows(
+    rows: list[dict],
+    *,
+    company_q: str = '',
+    user_q: str = '',
+    req_no_q: str = '',
+    kind: str = 'pr',
+) -> list[dict]:
+    """تصفية صفوف قائمة الطلبات محلياً بعد الجلب."""
+    company = str(company_q or '').strip().casefold()
+    user = str(user_q or '').strip().casefold()
+    req_no = str(req_no_q or '').strip().casefold()
+    if not (company or user or req_no):
+        return list(rows or [])
+
+    out: list[dict] = []
+    for row in rows or []:
+        if company:
+            if kind == 'pr':
+                hay = ' '.join(
+                    (
+                        str(row.get('vendor_name') or ''),
+                        str(row.get('vendor_code') or ''),
+                    )
+                ).casefold()
+            else:
+                hay = ' '.join(
+                    (
+                        str(row.get('from_wh_name') or ''),
+                        str(row.get('from_wh_code') or ''),
+                        str(row.get('from_wh_label') or ''),
+                        str(row.get('to_wh_name') or ''),
+                        str(row.get('to_wh_code') or ''),
+                        str(row.get('to_wh_label') or ''),
+                        str(row.get('main_wh_label') or ''),
+                        str(row.get('main_wh_code') or ''),
+                        str(row.get('branch_name') or ''),
+                        str(row.get('branch_code') or ''),
+                    )
+                ).casefold()
+            if company not in hay:
+                continue
+        if user:
+            hay_u = ' '.join(
+                (
+                    str(row.get('user_name') or ''),
+                    str(row.get('user_code') or ''),
+                )
+            ).casefold()
+            if user not in hay_u:
+                continue
+        if req_no:
+            if kind == 'pr':
+                hay_n = ' '.join(
+                    (
+                        str(row.get('pr_no') or ''),
+                        str(row.get('pr_ser') or ''),
+                        str(row.get('pr_type') or ''),
+                    )
+                ).casefold()
+            else:
+                hay_n = ' '.join(
+                    (
+                        str(row.get('tr_no') or ''),
+                        str(row.get('tr_ser') or ''),
+                        str(row.get('tr_type') or ''),
+                    )
+                ).casefold()
+            if req_no not in hay_n:
+                continue
+        out.append(row)
+    return out
 
 
 def _load_branch_warehouses(selected_branch: str, selected_warehouse: str):
@@ -4608,6 +4723,7 @@ def browse_tr_compare(request):
     today, selected_date, selected_branch, selected_warehouse = _pr_compare_filters(
         request
     )
+    search_q = _pr_list_search_filters(request)
     requests_today: list[dict] = []
     branches: list[dict] = []
     warehouses: list[dict] = []
@@ -4635,6 +4751,13 @@ def browse_tr_compare(request):
                         day=selected_date,
                         warehouse_code=selected_warehouse,
                     )
+                    requests_today = _filter_request_list_rows(
+                        requests_today,
+                        company_q=search_q['company_q'],
+                        user_q=search_q['user_q'],
+                        req_no_q=search_q['req_no_q'],
+                        kind='tr',
+                    )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_tr_compare failed: %s', exc)
         error = f'تعذّر تحميل طلبات التحويل: {exc}'
@@ -4654,6 +4777,9 @@ def browse_tr_compare(request):
             'selected_branch': selected_branch,
             'selected_warehouse': selected_warehouse,
             'selected_warehouse_name': selected_warehouse_name,
+            'company_q': search_q['company_q'],
+            'user_q': search_q['user_q'],
+            'req_no_q': search_q['req_no_q'],
             'branches': branches,
             'warehouses': warehouses,
             'requests_today': requests_today,
