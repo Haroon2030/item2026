@@ -9532,6 +9532,72 @@ html.users-modal-open {
   min-width: 0;
 }
 
+.pr-compare-dash .req-user-suggest {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-list {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  max-height: 14rem;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #cfdceb;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 35, 65, 0.14);
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-list[hidden] {
+  display: none !important;
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  color: #1d334d;
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-option:hover,
+.pr-compare-dash .req-user-suggest .vendor-suggest-option.is-active {
+  background: #eef8f1;
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-code {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #5d738c;
+}
+
+.pr-compare-dash .req-user-suggest .vendor-suggest-empty {
+  padding: 0.55rem 0.7rem;
+  color: #6a7f96;
+  font-size: 0.85rem;
+}
+
 .pr-compare-dash .pr-compare-filter label {
   color: #148f52;
   font-size: 0.72rem;

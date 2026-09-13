@@ -4317,6 +4317,7 @@ def browse_pr_compare(request):
         except ValueError:
             selected_date = today
     requests_today: list[dict] = []
+    request_users: list[dict] = []
     branches: list[dict] = []
     warehouses: list[dict] = []
     selected_warehouse_name = ''
@@ -4424,6 +4425,7 @@ def browse_pr_compare(request):
                         day=selected_date,
                         warehouse_code=selected_warehouse,
                     )
+                    request_users = _request_list_users(requests_today)
                     requests_today = _filter_request_list_rows(
                         requests_today,
                         company_q=search_q['company_q'],
@@ -4453,6 +4455,7 @@ def browse_pr_compare(request):
             'company_q': search_q['company_q'],
             'user_q': search_q['user_q'],
             'req_no_q': search_q['req_no_q'],
+            'request_users': request_users,
             'branches': branches,
             'warehouses': warehouses,
             'requests_today': requests_today,
@@ -4553,6 +4556,24 @@ def _pr_list_search_filters(request) -> dict[str, str]:
             or ''
         ).strip()[:40],
     }
+
+
+def _request_list_users(rows: list[dict]) -> list[dict]:
+    """مستخدمو الطلبات في المصدر الحالي (تاريخ/فرع/مخزن) لاقتراح البحث."""
+    seen: dict[str, dict[str, str]] = {}
+    for row in rows or []:
+        code = str(row.get('user_code') or '').strip()
+        name = str(row.get('user_name') or '').strip()
+        if not code and not name:
+            continue
+        key = code or name.casefold()
+        if key in seen:
+            continue
+        seen[key] = {'code': code, 'name': name or code}
+    return sorted(
+        seen.values(),
+        key=lambda r: (str(r.get('name') or '').casefold(), str(r.get('code') or '')),
+    )
 
 
 def _filter_request_list_rows(
@@ -4725,6 +4746,7 @@ def browse_tr_compare(request):
     )
     search_q = _pr_list_search_filters(request)
     requests_today: list[dict] = []
+    request_users: list[dict] = []
     branches: list[dict] = []
     warehouses: list[dict] = []
     selected_warehouse_name = ''
@@ -4751,6 +4773,7 @@ def browse_tr_compare(request):
                         day=selected_date,
                         warehouse_code=selected_warehouse,
                     )
+                    request_users = _request_list_users(requests_today)
                     requests_today = _filter_request_list_rows(
                         requests_today,
                         company_q=search_q['company_q'],
@@ -4780,6 +4803,7 @@ def browse_tr_compare(request):
             'company_q': search_q['company_q'],
             'user_q': search_q['user_q'],
             'req_no_q': search_q['req_no_q'],
+            'request_users': request_users,
             'branches': branches,
             'warehouses': warehouses,
             'requests_today': requests_today,
