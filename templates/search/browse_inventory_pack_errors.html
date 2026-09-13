@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}أخطاء وحدات/أحجام الأصناف{% endblock %}
+{% block title %}اختلاف شد الشراء/التحويل{% endblock %}
 {% block page_class %}sales-dash inv-pack-err-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="أخطاء وحدات/أحجام الأصناف">
+<section class="dash-head" aria-label="اختلاف شد الشراء/التحويل">
   <div class="dash-head-copy">
-    <h2>أخطاء وحدات/أحجام الأصناف</h2>
+    <h2>اختلاف شد الشراء/التحويل</h2>
     <p>دخل شراء بوحدة وعبوة (مثل كرتون شد 12) وطلع تحويل صادر بنفس الوحدة وعبوة مختلفة (مثل كرتون شد 6)</p>
   </div>
 </section>
@@ -19,7 +19,7 @@
   </div>
 {% endif %}
 
-<form method="get" action="{% url 'browse_inventory_pack_errors' %}" class="income-filter-bar inv-pack-err-filter" role="search" aria-label="فلاتر أخطاء وحدات الأصناف">
+<form method="get" action="{% url 'browse_inventory_pack_errors' %}" class="income-filter-bar inv-pack-err-filter" role="search" aria-label="فلاتر اختلاف شد الشراء/التحويل">
   <div class="income-filter-bar-main inv-pack-err-main">
     <div class="income-filter-period" role="group" aria-label="الفترة">
       <span class="income-filter-period-label">الفترة</span>
@@ -72,7 +72,7 @@
 </form>
 
 {% if report and report.rows %}
-  <section class="dash-panel dash-panel-glass perf-panel inv-pack-err-panel" aria-label="نتائج أخطاء وحدات/أحجام الأصناف">
+  <section class="dash-panel dash-panel-glass perf-panel inv-pack-err-panel" aria-label="نتائج اختلاف شد الشراء/التحويل">
     <div class="dash-panel-head">
       <h3>الأصناف المخالفة</h3>
       <div class="dash-panel-head-actions">
@@ -82,7 +82,7 @@
     </div>
 
     <div class="table-wrap inv-pack-err-scroll">
-      <table class="data-table inv-pack-err-table" aria-label="قائمة أخطاء وحدات الأصناف">
+      <table class="data-table inv-pack-err-table" aria-label="قائمة اختلاف شد الشراء/التحويل">
         <thead>
           <tr>
             <th class="pe-th-idx">#</th>

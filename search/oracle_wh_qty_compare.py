@@ -643,8 +643,10 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
     rows = report.get("rows") or []
     filters = report.get("filters") or {}
     kpis = report.get("kpis") or {}
-    a_label = filters.get("wh_a_name") or filters.get("warehouse_a") or "أ"
-    b_label = filters.get("wh_b_name") or filters.get("warehouse_b") or "ب"
+    a_code = filters.get("warehouse_a") or "أ"
+    b_code = filters.get("warehouse_b") or "ب"
+    a_label = f"مخزن {a_code}"
+    b_label = f"مخزن {b_code}"
     basis_label = filters.get("qty_basis_label") or _QTY_BASES["avail"]
     buf = io.StringIO()
     buf.write("\ufeff")

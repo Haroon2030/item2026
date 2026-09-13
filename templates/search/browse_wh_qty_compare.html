@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}مقارنة كميات المستودعات{% endblock %}
+{% block title %}مقارنة رصيد مخزنين{% endblock %}
 {% block page_class %}sales-dash wqc-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="مقارنة كميات المستودعات">
+<section class="dash-head" aria-label="مقارنة رصيد مخزنين">
   <div class="dash-head-copy">
-    <h2>مقارنة كميات المستودعات</h2>
+    <h2>مقارنة رصيد مخزنين</h2>
     <p>أصناف المستودع الأول فقط — الكميات بأكبر عبوة مع عمود الوحدة</p>
   </div>
 </section>
@@ -134,7 +134,7 @@
       </div>
     </div>
     <div class="table-wrap wqc-scroll" tabindex="0" aria-label="جدول المقارنة — اسحب أفقياً وعمودياً">
-      <table class="wqc-table" aria-label="مقارنة كميات المستودعات">
+      <table class="wqc-table" aria-label="مقارنة رصيد مخزنين">
         <thead>
           <tr>
             <th scope="col">#</th>
@@ -143,8 +143,8 @@
             <th scope="col">المجموعة</th>
             <th scope="col">الوحدة</th>
             <th scope="col">الحالة</th>
-            <th scope="col">{{ selected_wh_a }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
-            <th scope="col">{{ selected_wh_b }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
+            <th scope="col">مخزن {{ selected_wh_a }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
+            <th scope="col">مخزن {{ selected_wh_b }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
             <th scope="col">الفرق</th>
           </tr>
         </thead>
