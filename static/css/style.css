@@ -15344,9 +15344,7 @@ a.sidebar-brand-lockup {
     minmax(14rem, 1.1fr)
     minmax(18rem, 1.5fr)
     minmax(20rem, 1.6fr)
-    minmax(5.5rem, 0.65fr)
-    minmax(6rem, 0.7fr)
-    minmax(5.5rem, 0.65fr);
+    minmax(5.5rem, 0.7fr);
   align-items: end;
   gap: 0.55rem 0.7rem;
   flex: unset;
@@ -19183,6 +19181,65 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   align-items: end;
   margin: 0 0 0.85rem;
   padding: 0.85rem 1rem;
+}
+
+.wnt-dash .wnt-filter {
+  grid-template-columns:
+    minmax(16rem, 1.3fr)
+    minmax(9rem, 1fr)
+    minmax(12rem, 1.2fr)
+    minmax(9rem, 1fr)
+    minmax(8rem, 0.9fr)
+    auto;
+}
+
+.wnt-dash .wnt-period-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 0.35rem;
+}
+
+.wnt-dash .wnt-period-fields {
+  display: flex;
+  align-items: end;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.wnt-dash .wnt-period-item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.wnt-dash .wnt-period-item label {
+  font-size: 0.72rem;
+}
+
+.wnt-dash .wnt-period-sep {
+  color: #94a3b8;
+  padding-bottom: 0.55rem;
+  font-weight: 700;
+}
+
+.wnt-dash .wnt-td-last {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wnt-dash .wnt-td-cost {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.wnt-dash .wnt-gcode {
+  font-weight: 700;
+  color: #334155;
 }
 
 .wqc-dash .wqc-filter .field {

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}رصيد بلا تحويل صادر{% endblock %}
+{% block page_class %}sales-dash wqc-dash wnt-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="رصيد بلا تحويل صادر">
+  <div class="dash-head-copy">
+    <h2>رصيد بلا تحويل صادر</h2>
+    <p>أصناف لها كمية في المخزن ولم تخرج بتحويل صادر منه خلال الفترة المحددة</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+<form
+  method="get"
+  action="{% url 'browse_wh_no_transfer' %}"
+  class="dash-panel-glass wqc-filter wnt-filter"
+  role="search"
+  aria-label="فلاتر رصيد بلا تحويل صادر"
+  id="wnt-filter-form"
+>
+  <input type="hidden" name="run" value="1">
+
+  <div class="field wnt-field-period" role="group" aria-label="الفترة">
+    <span class="wnt-period-label">الفترة</span>
+    <div class="wnt-period-fields">
+      <div class="wnt-period-item">
+        <label for="wnt-from">من</label>
+        <input id="wnt-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+      </div>
+      <span class="wnt-period-sep" aria-hidden="true">—</span>
+      <div class="wnt-period-item">
+        <label for="wnt-to">إلى</label>
+        <input id="wnt-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+      </div>
+    </div>
+  </div>
+
+  <div class="field wnt-field-branch">
+    <label for="wnt-branch">الفرع</label>
+    <select id="wnt-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wnt-field-wh">
+    <label for="wnt-wh">المخزن <span class="wqc-req" aria-hidden="true">*</span></label>
+    <select id="wnt-wh" name="warehouse" required aria-required="true">
+      <option value="">اختر مخزناً</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wnt-field-group">
+    <label for="wnt-group">المجموعة</label>
+    <select id="wnt-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wnt-field-qty">
+    <label for="wnt-qty">الكمية</label>
+    <select id="wnt-qty" name="qty">
+      <option value="avail" {% if qty_basis == 'avail' or not qty_basis %}selected{% endif %}>المتوفّر</option>
+      <option value="avl" {% if qty_basis == 'avl' %}selected{% endif %}>الرصيد الحالي</option>
+    </select>
+  </div>
+
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report %}
+  <section class="wqc-kpi-grid" aria-label="ملخص الرصيد بلا تحويل">
+    <article class="wqc-kpi is-count">
+      <span>أصناف بلا تحويل</span>
+      <strong class="mono">{{ report.kpis.item_count }}</strong>
+        <small>من أصل {{ report.kpis.stock_count }} برصيد · خرج منها {{ report.kpis.moved_count }}</small>
+    </article>
+    <article class="wqc-kpi is-a">
+      <span>{{ report.filters.qty_basis_label|default:"الكمية" }} (أكبر عبوة)</span>
+      <strong class="mono">{{ report.kpis.qty_display }}</strong>
+      <small>مخزن {{ selected_warehouse }} · {{ wh_name|default:selected_warehouse }} · {{ report.period_label }}</small>
+    </article>
+    <article class="wqc-kpi is-b">
+      <span>إجمالي التكلفة</span>
+      <strong class="mono">{{ report.kpis.cost_display }}</strong>
+      <small>حسب متوسط تكلفة المخزن {{ selected_warehouse }}</small>
+    </article>
+  </section>
+
+  <section class="wqc-sheet" aria-label="جدول الأصناف" data-print-scope="wnt-table">
+    <div class="wqc-sheet-head">
+      <div class="wqc-sheet-title">
+        <h3><span class="mono">{{ selected_warehouse }}</span> — {{ wh_name|default:selected_warehouse }}</h3>
+        <span class="wqc-sheet-count">{{ report.kpis.item_count }} صنف</span>
+        {% if report.kpis.truncated %}
+          <span class="wqc-sheet-count" title="ضيّق بالمجموعة لعرض الباقي">أول {{ report.kpis.max_rows }} من {{ report.kpis.matched_count }}</span>
+        {% endif %}
+      </div>
+      <div class="wqc-sheet-actions">
+        <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+      </div>
+    </div>
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="جدول الأصناف — اسحب أفقياً وعمودياً">
+      <table class="wqc-table wnt-table" aria-label="رصيد بلا تحويل صادر">
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">رقم الصنف</th>
+            <th scope="col">اسم الصنف</th>
+            <th scope="col">المجموعة</th>
+            <th scope="col">الوحدة</th>
+            <th scope="col">مخزن {{ selected_warehouse }} · {{ report.filters.qty_basis_label|default:"الكمية" }}</th>
+            <th scope="col">إجمالي التكلفة</th>
+            <th scope="col">آخر تحويل صادر</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr>
+              <td class="mono wqc-td-idx">{{ forloop.counter }}</td>
+              <td class="mono wqc-td-code">{{ row.item_code }}</td>
+              <td class="wqc-td-name">{{ row.item_name }}</td>
+              <td class="wqc-td-group" title="{{ row.g_code }}">{% if row.g_code %}<span class="mono wnt-gcode">{{ row.g_code }}</span> — {% endif %}{{ row.g_name }}</td>
+              <td class="wqc-td-unit">{{ row.unit }}</td>
+              <td class="mono wqc-td-a">{{ row.qty_display }}</td>
+              <td class="mono wnt-td-cost">{{ row.cost_display }}</td>
+              <td class="mono wnt-td-last">{{ row.last_transfer_display }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="wqc-empty">كل الأصناف ذات الرصيد خرجت بتحويل خلال الفترة، أو لا رصيد.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td></td>
+              <td colspan="4">الإجمالي</td>
+              <td class="mono">{{ report.totals.qty_display }}</td>
+              <td class="mono">{{ report.totals.cost_display }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{{ all_warehouses|json_script:"wnt-wh-data" }}
+<script src="/static/js/wnt-filter.js?v={{ app_client_version }}"></script>
+{% if report %}
+<script src="/static/js/wqc-scroll.js?v={{ app_client_version }}" defer></script>
+{% endif %}
+{% endblock %}

@@ -2115,21 +2115,18 @@ def browse_inventory_pack_errors(request):
             selected_warehouse_from = legacy_parts[0]
             warehouses_legacy = ''
 
-    min_pack_size_raw = str(request.GET.get('min_pack_size') or '2').strip()
-    tolerance_raw = str(request.GET.get('tolerance_pct') or '0.1').strip()
     limit_raw = str(request.GET.get('limit') or '120').strip()
 
     date_from_raw = str(request.GET.get('date_from') or month_start.isoformat()).strip()
     date_to_raw = str(request.GET.get('date_to') or today.isoformat()).strip()
 
+    # ثابتان داخلياً — أُلغيا من واجهة الفلاتر
+    min_pack_size = 2.0
+    tolerance_pct = 0.1
     try:
-        min_pack_size = float(min_pack_size_raw or 2)
-        tolerance_pct = float(tolerance_raw or 0.1)
         limit = int(limit_raw or 120)
     except ValueError:
-        error = 'قيمة min_pack_size / tolerance_pct / limit غير صحيحة.'
-        min_pack_size = 2.0
-        tolerance_pct = 0.1
+        error = 'قيمة عدد النتائج غير صحيحة.'
         limit = 120
 
     try:
@@ -2278,8 +2275,6 @@ def browse_inventory_pack_errors(request):
             'warehouses_from': warehouses_from,
             'warehouses_to': warehouses_to,
             'warehouses_raw': wh_codes_raw,
-            'min_pack_size': min_pack_size,
-            'tolerance_pct': tolerance_pct,
             'limit': limit,
             'report': report,
             'error': error,
@@ -2499,8 +2494,6 @@ def browse_inventory_pack_errors_detail(request):
         ('warehouse_from', str(request.GET.get('warehouse_from') or request.GET.get('warehouse') or '').strip()),
         ('warehouse_to', str(request.GET.get('warehouse_to') or '').strip()),
         ('warehouses', str(request.GET.get('warehouses') or '').strip()),
-        ('min_pack_size', str(request.GET.get('min_pack_size') or '').strip()),
-        ('tolerance_pct', str(request.GET.get('tolerance_pct') or '').strip()),
         ('limit', str(request.GET.get('limit') or '').strip()),
     ):
         if val:
@@ -5649,6 +5642,174 @@ def browse_wh_qty_compare(request):
             'item_q': item_q,
             'mode': mode_raw,
             'qty_basis': qty_basis,
+            'report': report,
+            'error': error,
+            'hint': hint,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_wh_no_transfer(request):
+    """أصناف لها رصيد في المخزن ولم تخرج بتحويل صادر خلال الفترة."""
+    from datetime import date as date_cls, timedelta
+
+    today = date_cls.today()
+    default_from = today - timedelta(days=365)
+    date_from_raw = str(request.GET.get('date_from') or default_from.isoformat()).strip()
+    date_to_raw = str(request.GET.get('date_to') or today.isoformat()).strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(
+        request.GET.get('warehouse') or request.GET.get('wh') or ''
+    ).strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    qty_basis = str(
+        request.GET.get('qty') or request.GET.get('qty_basis') or 'avail'
+    ).strip().lower()
+    if qty_basis in ('available', 'expected', 'after'):
+        qty_basis = 'avail'
+    if qty_basis in ('current', 'stock', 'balance'):
+        qty_basis = 'avl'
+    if qty_basis not in ('avail', 'avl'):
+        qty_basis = 'avail'
+    want_run = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes')
+    want_run = want_run or bool(selected_warehouse)
+
+    report = None
+    error = ''
+    hint = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+    all_warehouses: list[dict] = []
+    branch_warehouses: list[dict] = []
+    wh_name = selected_warehouse
+
+    try:
+        date_from, date_to = _parse_sales_dates(date_from_raw, date_to_raw)
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_wh_no_transfer.html',
+            {
+                'date_from': (date_from_raw or '')[:10],
+                'date_to': (date_to_raw or '')[:10],
+                'default_from': default_from.isoformat(),
+                'default_to': today.isoformat(),
+                'branches': [],
+                'groups': [],
+                'all_warehouses': [],
+                'branch_warehouses': [],
+                'selected_branch': selected_branch,
+                'selected_warehouse': selected_warehouse,
+                'selected_group': selected_group,
+                'qty_basis': qty_basis,
+                'wh_name': wh_name,
+                'report': None,
+                'error': str(exc),
+                'hint': '',
+            },
+        )
+
+    try:
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_wh_no_transfer import build_wh_no_transfer_report
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض الرصيد بلا تحويل.'
+        else:
+            with oracle_session():
+                wh_rows = fetch_warehouse_options(active_only=True) or []
+                all_warehouses = [
+                    {
+                        'code': str(w.get('code') or '').strip(),
+                        'name': str(w.get('name') or '').strip()
+                        or str(w.get('code') or '').strip(),
+                        'branch_code': str(w.get('branch_code') or '').strip(),
+                        'branch_name': str(w.get('branch_name') or '').strip(),
+                    }
+                    for w in wh_rows
+                    if str(w.get('code') or '').strip()
+                ]
+                branch_map: dict[str, str] = {}
+                wh_name_map: dict[str, str] = {}
+                for w in all_warehouses:
+                    wh_name_map[w['code']] = w['name']
+                    brn = w['branch_code']
+                    if brn:
+                        branch_map[brn] = w['branch_name'] or brn
+                branches = [
+                    {'code': code, 'name': name}
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
+                ]
+                groups = fetch_sales_group_options() or []
+                group_codes = {str(g.get('code') or '').strip() for g in groups}
+                if selected_group and selected_group not in group_codes:
+                    selected_group = ''
+
+                if selected_branch and selected_branch not in branch_map:
+                    selected_branch = ''
+
+                branch_warehouses = [
+                    w
+                    for w in all_warehouses
+                    if not selected_branch or w['branch_code'] == selected_branch
+                ]
+                branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+                allowed = {w['code'] for w in branch_warehouses}
+                if selected_warehouse and selected_warehouse not in allowed:
+                    selected_warehouse = ''
+                wh_name = wh_name_map.get(selected_warehouse, selected_warehouse)
+
+                if want_run:
+                    if not selected_warehouse:
+                        raise ValidationError('اختر المخزن ثم اضغط «عرض».')
+                    report = build_wh_no_transfer_report(
+                        warehouse=selected_warehouse,
+                        date_from=date_from,
+                        date_to=date_to,
+                        group_code=selected_group,
+                        qty_basis=qty_basis,
+                        warehouse_name=wh_name,
+                    )
+                else:
+                    hint = (
+                        'اختر الفترة والمخزن — تُعرض الأصناف ذات الرصيد '
+                        'التي لم تخرج بتحويل صادر من هذا المخزن خلال الفترة.'
+                    )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_wh_no_transfer failed: %s', exc)
+        error = f'تعذّر تحميل رصيد بلا تحويل: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_wh_no_transfer.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': default_from.isoformat(),
+            'default_to': today.isoformat(),
+            'branches': branches,
+            'groups': groups,
+            'all_warehouses': all_warehouses,
+            'branch_warehouses': branch_warehouses,
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'qty_basis': qty_basis,
+            'wh_name': wh_name,
             'report': report,
             'error': error,
             'hint': hint,

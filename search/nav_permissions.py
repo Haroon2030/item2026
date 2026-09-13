@@ -134,6 +134,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
         (
             NavScreen("browse_wh_outgoing", "حركة التحويلات"),
             NavScreen("browse_wh_qty_compare", "مقارنة رصيد مخزنين"),
+            NavScreen("browse_wh_no_transfer", "رصيد بلا تحويل صادر"),
             NavScreen("browse_inventory_pack_errors", "اختلاف شد الشراء/التحويل"),
         ),
     ),
