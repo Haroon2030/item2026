@@ -15341,13 +15341,12 @@ a.sidebar-brand-lockup {
 .inv-pack-err-dash .inv-pack-err-main {
   display: grid;
   grid-template-columns:
-    minmax(15rem, 1.4fr)
-    minmax(9rem, 1fr)
-    minmax(11rem, 1.2fr)
-    minmax(5.5rem, 0.7fr)
-    minmax(6rem, 0.75fr)
-    minmax(6rem, 0.75fr)
-    minmax(5.5rem, 0.7fr);
+    minmax(14rem, 1.1fr)
+    minmax(18rem, 1.5fr)
+    minmax(20rem, 1.6fr)
+    minmax(5.5rem, 0.65fr)
+    minmax(6rem, 0.7fr)
+    minmax(5.5rem, 0.65fr);
   align-items: end;
   gap: 0.55rem 0.7rem;
   flex: unset;
@@ -15355,8 +15354,7 @@ a.sidebar-brand-lockup {
 
 .inv-pack-err-dash .inv-pack-err-main .income-filter-field select,
 .inv-pack-err-dash .inv-pack-err-main .income-filter-field input[type="date"],
-.inv-pack-err-dash .inv-pack-err-main .income-filter-field input[type="number"],
-.inv-pack-err-dash .inv-pack-err-main .income-filter-field input[type="text"] {
+.inv-pack-err-dash .inv-pack-err-main .income-filter-field input[type="number"] {
   width: 100%;
   min-width: 0;
   height: 2.05rem;
@@ -15376,6 +15374,17 @@ a.sidebar-brand-lockup {
 .inv-pack-err-dash .inv-pack-err-main .income-filter-period-fields .income-filter-field {
   flex: 1 1 0;
   min-width: 0;
+}
+
+.inv-pack-err-dash .inv-pack-err-branch-pair,
+.inv-pack-err-dash .inv-pack-err-wh-pair {
+  min-width: 0;
+}
+
+.inv-pack-err-dash .inv-pack-err-branch-pair select,
+.inv-pack-err-dash .inv-pack-err-wh-pair select {
+  min-width: 0;
+  max-width: none;
 }
 
 .inv-pack-err-dash .inv-pack-err-actions {

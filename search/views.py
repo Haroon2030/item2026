@@ -2081,7 +2081,7 @@ def browse_inventory(request):
 @require_GET
 @never_cache
 def browse_inventory_pack_errors(request):
-    """كشف اختلاف P_SIZE للوحدة الكبيرة بين المشتريات والتحويلات الواردة."""
+    """كشف اختلاف P_SIZE — فلتر من فرع/مخزن إلى فرع/مخزن."""
     from datetime import date as date_cls
 
     error = ''
@@ -2090,8 +2090,31 @@ def browse_inventory_pack_errors(request):
     today = date_cls.today()
     month_start = today.replace(day=1)
 
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    wh_codes_raw = str(request.GET.get('warehouses') or '3,901,902,401').strip()
+    # من / إلى — مع توافق الروابط القديمة (branch / warehouse)
+    selected_branch_from = str(
+        request.GET.get('branch_from') or request.GET.get('branch') or ''
+    ).strip()
+    selected_branch_to = str(request.GET.get('branch_to') or '').strip()
+    selected_warehouse_from = str(
+        request.GET.get('warehouse_from')
+        or request.GET.get('warehouse')
+        or request.GET.get('wh')
+        or ''
+    ).strip()
+    selected_warehouse_to = str(
+        request.GET.get('warehouse_to') or request.GET.get('wh_to') or ''
+    ).strip()
+    warehouses_legacy = str(request.GET.get('warehouses') or '').strip()
+    if not selected_warehouse_from and warehouses_legacy:
+        legacy_parts = [
+            p.strip()
+            for p in warehouses_legacy.replace('،', ',').replace('-', ',').split(',')
+            if p.strip()
+        ]
+        if len(legacy_parts) == 1:
+            selected_warehouse_from = legacy_parts[0]
+            warehouses_legacy = ''
+
     min_pack_size_raw = str(request.GET.get('min_pack_size') or '2').strip()
     tolerance_raw = str(request.GET.get('tolerance_pct') or '0.1').strip()
     limit_raw = str(request.GET.get('limit') or '120').strip()
@@ -2118,7 +2141,10 @@ def browse_inventory_pack_errors(request):
         date_from, date_to = month_start, today
 
     branches: list[dict] = []
-    warehouses: list[dict] = []
+    all_warehouses: list[dict] = []
+    warehouses_from: list[dict] = []
+    warehouses_to: list[dict] = []
+    wh_codes_raw = ''
 
     try:
         from .oracle_stock import fetch_warehouse_options, oracle_enabled, oracle_session
@@ -2127,45 +2153,85 @@ def browse_inventory_pack_errors(request):
             error = 'أوراكل غير مفعّل — لا يمكن عرض تقرير أخطاء الوحدات.'
         else:
             with oracle_session():
-                warehouses = fetch_warehouse_options(active_only=True)
+                wh_rows = fetch_warehouse_options(active_only=True) or []
+                all_warehouses = [
+                    {
+                        'code': str(w.get('code') or '').strip(),
+                        'name': str(w.get('name') or '').strip()
+                        or str(w.get('code') or '').strip(),
+                        'branch_code': str(w.get('branch_code') or '').strip(),
+                        'branch_name': str(w.get('branch_name') or '').strip(),
+                    }
+                    for w in wh_rows
+                    if str(w.get('code') or '').strip()
+                ]
                 branch_map: dict[str, str] = {}
-                for w in warehouses:
-                    brn = str(w.get('branch_code') or '').strip()
+                for w in all_warehouses:
+                    brn = w['branch_code']
                     if brn:
-                        branch_map[brn] = str(w.get('branch_name') or brn)
+                        branch_map[brn] = w['branch_name'] or brn
                 branches = [
                     {'code': code, 'name': name}
-                    for code, name in sorted(branch_map.items(), key=lambda x: (x[1], x[0]))
+                    for code, name in sorted(
+                        branch_map.items(), key=lambda x: (x[1], x[0])
+                    )
                 ]
 
-                wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
-                if selected_branch and selected_branch not in {b['code'] for b in branches}:
-                    selected_branch = ''
-                if selected_branch:
-                    warehouses = [
-                        w
-                        for w in warehouses
-                        if str(w.get('branch_code') or '') == selected_branch
-                    ]
-                    wh_allowed = {w.get('code') for w in warehouses if w.get('code')}
+                if selected_branch_from and selected_branch_from not in branch_map:
+                    selected_branch_from = ''
+                if selected_branch_to and selected_branch_to not in branch_map:
+                    selected_branch_to = ''
 
-                if wh_codes_raw:
-                    parsed = (
-                        wh_codes_raw.replace('،', ',')
+                warehouses_from = [
+                    w
+                    for w in all_warehouses
+                    if not selected_branch_from
+                    or w['branch_code'] == selected_branch_from
+                ]
+                warehouses_from.sort(key=lambda w: (w['name'], w['code']))
+                warehouses_to = [
+                    w
+                    for w in all_warehouses
+                    if not selected_branch_to
+                    or w['branch_code'] == selected_branch_to
+                ]
+                warehouses_to.sort(key=lambda w: (w['name'], w['code']))
+
+                from_allowed = {w['code'] for w in warehouses_from}
+                to_allowed = {w['code'] for w in warehouses_to}
+                if (
+                    selected_warehouse_from
+                    and selected_warehouse_from not in from_allowed
+                ):
+                    selected_warehouse_from = ''
+                if (
+                    selected_warehouse_to
+                    and selected_warehouse_to not in to_allowed
+                ):
+                    selected_warehouse_to = ''
+
+                if selected_warehouse_from:
+                    wh_codes_raw = selected_warehouse_from
+                elif warehouses_legacy:
+                    parsed = [
+                        p.strip()
+                        for p in warehouses_legacy.replace('،', ',')
                         .replace('-', ',')
                         .split(',')
-                    )
-                    parsed = [p.strip() for p in parsed if p.strip()]
-                    parsed = [p for p in parsed if p in wh_allowed]
+                        if p.strip() and p.strip() in from_allowed
+                    ]
                     wh_codes_raw = ','.join(parsed)
+                elif selected_branch_from:
+                    # فرع مصدر فقط: أوراكل يفلتر عبر CONN_BRN_NO
+                    wh_codes_raw = ''
                 else:
-                    if not wh_codes_raw:
-                        if selected_branch:
-                            wh_codes_raw = ','.join(
-                                sorted({str(w['code']) for w in warehouses if w.get('code')})
-                            )
-                        else:
-                            raise ValidationError('حدد فرع أو مخازن (warehouses) لهذا التقرير.')
+                    # كل المصادر: بدون قائمة مخازن إن وُجدت وجهة؛ وإلا كل المخازن
+                    if selected_branch_to or selected_warehouse_to:
+                        wh_codes_raw = ''
+                    else:
+                        wh_codes_raw = ','.join(
+                            sorted({w['code'] for w in all_warehouses})
+                        )
 
                 from .oracle_unit_pack_mismatch import build_unit_pack_mismatch_report
 
@@ -2173,16 +2239,15 @@ def browse_inventory_pack_errors(request):
                     date_from,
                     date_to,
                     warehouse_codes=wh_codes_raw,
+                    branch_from=selected_branch_from,
+                    branch_to=selected_branch_to,
+                    warehouse_to=selected_warehouse_to,
                     min_pack_size=min_pack_size,
                     tolerance_pct=tolerance_pct,
                     limit=limit,
                 )
 
-                wh_name_map = {
-                    str(w.get('code') or '').strip(): str(w.get('name') or '').strip()
-                    or str(w.get('code') or '').strip()
-                    for w in warehouses
-                }
+                wh_name_map = {w['code']: w['name'] for w in all_warehouses}
                 for r in report.get('rows') or []:
                     r['wh_name'] = (
                         wh_name_map.get(str(r.get('wh_code') or '').strip())
@@ -2205,8 +2270,13 @@ def browse_inventory_pack_errors(request):
             'default_from': month_start.isoformat(),
             'default_to': today.isoformat(),
             'branches': branches,
-            'selected_branch': selected_branch,
-            'warehouses': warehouses,
+            'selected_branch_from': selected_branch_from,
+            'selected_branch_to': selected_branch_to,
+            'selected_warehouse_from': selected_warehouse_from,
+            'selected_warehouse_to': selected_warehouse_to,
+            'all_warehouses': all_warehouses,
+            'warehouses_from': warehouses_from,
+            'warehouses_to': warehouses_to,
             'warehouses_raw': wh_codes_raw,
             'min_pack_size': min_pack_size,
             'tolerance_pct': tolerance_pct,
@@ -2424,8 +2494,11 @@ def browse_inventory_pack_errors_detail(request):
     for key, val in (
         ('date_from', date_from_raw),
         ('date_to', date_to_raw),
+        ('branch_from', str(request.GET.get('branch_from') or request.GET.get('branch') or '').strip()),
+        ('branch_to', str(request.GET.get('branch_to') or '').strip()),
+        ('warehouse_from', str(request.GET.get('warehouse_from') or request.GET.get('warehouse') or '').strip()),
+        ('warehouse_to', str(request.GET.get('warehouse_to') or '').strip()),
         ('warehouses', str(request.GET.get('warehouses') or '').strip()),
-        ('branch', str(request.GET.get('branch') or '').strip()),
         ('min_pack_size', str(request.GET.get('min_pack_size') or '').strip()),
         ('tolerance_pct', str(request.GET.get('tolerance_pct') or '').strip()),
         ('limit', str(request.GET.get('limit') or '').strip()),

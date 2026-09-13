@@ -19,7 +19,7 @@
   </div>
 {% endif %}
 
-<form method="get" action="{% url 'browse_inventory_pack_errors' %}" class="income-filter-bar inv-pack-err-filter" role="search" aria-label="فلاتر اختلاف شد الشراء/التحويل">
+<form method="get" action="{% url 'browse_inventory_pack_errors' %}" class="income-filter-bar inv-pack-err-filter" role="search" aria-label="فلاتر اختلاف شد الشراء/التحويل" id="pack-err-filter-form">
   <div class="income-filter-bar-main inv-pack-err-main">
     <div class="income-filter-period" role="group" aria-label="الفترة">
       <span class="income-filter-period-label">الفترة</span>
@@ -36,19 +36,66 @@
       </div>
     </div>
 
-    <div class="income-filter-field">
-      <label for="pack-err-branch">الفرع</label>
-      <select id="pack-err-branch" name="branch">
-        <option value="">كل الفروع</option>
-        {% for b in branches %}
-          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-        {% endfor %}
-      </select>
+    <div class="income-filter-period inv-pack-err-branch-pair" role="group" aria-label="من فرع إلى فرع">
+      <span class="income-filter-period-label">الفرع</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="pack-err-branch-from">من</label>
+          <select id="pack-err-branch-from" name="branch_from">
+            <option value="" {% if not selected_branch_from %}selected{% endif %}>كل الفروع</option>
+            {% for b in branches %}
+              <option value="{{ b.code }}" {% if b.code == selected_branch_from %}selected{% endif %}>{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">→</span>
+        <div class="income-filter-field">
+          <label for="pack-err-branch-to">إلى</label>
+          <select id="pack-err-branch-to" name="branch_to">
+            <option value="" {% if not selected_branch_to %}selected{% endif %}>كل الفروع</option>
+            {% for b in branches %}
+              <option value="{{ b.code }}" {% if b.code == selected_branch_to %}selected{% endif %}>{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
     </div>
 
-    <div class="income-filter-field inv-pack-err-wh">
-      <label for="pack-err-wh">المخازن</label>
-      <input id="pack-err-wh" type="text" name="warehouses" value="{{ warehouses_raw }}" placeholder="3,901,902,401" dir="ltr">
+    <div class="income-filter-period inv-pack-err-wh-pair" role="group" aria-label="من مخزن إلى مخزن">
+      <span class="income-filter-period-label">المخزن</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="pack-err-wh-from">من</label>
+          <select id="pack-err-wh-from" name="warehouse_from">
+            {% if selected_branch_from %}
+              <option value="" {% if not selected_warehouse_from %}selected{% endif %}>كل مخازن فرع المصدر</option>
+            {% else %}
+              <option value="" {% if not selected_warehouse_from %}selected{% endif %}>كل المخازن</option>
+            {% endif %}
+            {% for w in warehouses_from %}
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse_from %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% empty %}
+              <option value="">لا توجد مخازن</option>
+            {% endfor %}
+          </select>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">→</span>
+        <div class="income-filter-field">
+          <label for="pack-err-wh-to">إلى</label>
+          <select id="pack-err-wh-to" name="warehouse_to">
+            {% if selected_branch_to %}
+              <option value="" {% if not selected_warehouse_to %}selected{% endif %}>كل مخازن فرع الوصول</option>
+            {% else %}
+              <option value="" {% if not selected_warehouse_to %}selected{% endif %}>كل المخازن</option>
+            {% endif %}
+            {% for w in warehouses_to %}
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse_to %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% empty %}
+              <option value="">لا توجد مخازن</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
     </div>
 
     <div class="income-filter-field">
@@ -116,7 +163,7 @@
                 {% if r.transfer_tr_nos and r.transfer_tr_nos != "—" %}
                   <a
                     class="pe-trno-link"
-                    href="{% url 'browse_inventory_pack_errors_detail' %}?date_from={{ date_from|urlencode }}&amp;date_to={{ date_to|urlencode }}&amp;item={{ r.item_code|urlencode }}&amp;wh={{ r.wh_code|urlencode }}&amp;unit={{ r.purchase_unit|default:r.unit|urlencode }}&amp;buy_ps={{ r.purchase_p_size }}&amp;out_ps={{ r.transfer_p_size }}&amp;warehouses={{ warehouses_raw|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;min_pack_size={{ min_pack_size }}&amp;tolerance_pct={{ tolerance_pct }}&amp;limit={{ limit }}"
+                    href="{% url 'browse_inventory_pack_errors_detail' %}?date_from={{ date_from|urlencode }}&amp;date_to={{ date_to|urlencode }}&amp;item={{ r.item_code|urlencode }}&amp;wh={{ r.wh_code|urlencode }}&amp;unit={{ r.purchase_unit|default:r.unit|urlencode }}&amp;buy_ps={{ r.purchase_p_size }}&amp;out_ps={{ r.transfer_p_size }}&amp;branch_from={{ selected_branch_from|urlencode }}&amp;branch_to={{ selected_branch_to|urlencode }}&amp;warehouse_from={{ selected_warehouse_from|urlencode }}&amp;warehouse_to={{ selected_warehouse_to|urlencode }}&amp;min_pack_size={{ min_pack_size }}&amp;tolerance_pct={{ tolerance_pct }}&amp;limit={{ limit }}"
                     title="فرق الشد حسب الفرع للتحويلات الصادرة"
                   >{{ r.transfer_tr_nos }}</a>
                 {% else %}
@@ -137,4 +184,7 @@
 {% elif report %}
   <p class="sales-empty">لا أخطاء ضمن الفترة/المخازن المحددة.</p>
 {% endif %}
+
+{{ all_warehouses|json_script:"pack-err-wh-data" }}
+<script src="/static/js/pack-err-filter.js?v={{ app_client_version }}"></script>
 {% endblock %}

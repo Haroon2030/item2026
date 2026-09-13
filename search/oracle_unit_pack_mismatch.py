@@ -17,6 +17,7 @@ from django.core.cache import cache
 from .oracle_stock import (
     OracleStockError,
     _as_date,
+    _bind_brn,
     _hung_ok,
     _schema,
     _fetch_all,
@@ -24,7 +25,24 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 900
-_CACHE_VER = "v7"
+_CACHE_VER = "v8"
+
+
+def _norm_wh(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.endswith(".0") and text[:-2].replace("-", "", 1).isdigit():
+        text = text[:-2]
+    return text
+
+
+def _bind_wh(value: Any):
+    text = _norm_wh(value)
+    if text.isdigit():
+        try:
+            return int(text)
+        except ValueError:
+            return text
+    return text
 
 
 def _f(value: Any) -> float:
@@ -240,10 +258,13 @@ def _fetch_outbound_transfer_packs(
     *,
     min_pack_size: float,
     warehouse_codes: list[str],
+    branch_from: str = "",
+    branch_to: str = "",
+    warehouse_to: str = "",
 ) -> list[_PackAgg]:
-    """تحويلات صادرة (خروج) من المخازن المحددة — TR_INOUT_TYPE=1 عبر F_W_CODE."""
-    if not warehouse_codes:
-        raise OracleStockError("يلزم تحديد مخازن لرفع الأداء.")
+    """تحويلات صادرة: من مخزن/فرع → إلى مخزن/فرع (F_W_CODE / T_W_CODE)."""
+    if not warehouse_codes and not branch_from and not branch_to and not warehouse_to:
+        raise OracleStockError("يلزم تحديد نطاق مصدر أو وجهة للتحويلات.")
 
     schema = _schema()
     params: dict[str, Any] = {
@@ -251,11 +272,47 @@ def _fetch_outbound_transfer_packs(
         "d_to_excl": date_to_excl,
         "min_ps": float(min_pack_size),
     }
-    wh_keys: list[str] = []
-    for i, wh in enumerate(warehouse_codes):
-        key = f"w{i}"
-        wh_keys.append(f":{key}")
-        params[key] = wh
+
+    src_wh_sql = ""
+    codes = [_norm_wh(c) for c in warehouse_codes if _norm_wh(c)]
+    if codes:
+        wh_keys: list[str] = []
+        for i, wh in enumerate(codes):
+            key = f"w{i}"
+            wh_keys.append(f":{key}")
+            params[key] = _bind_wh(wh)
+        src_wh_sql = f"AND m.F_W_CODE IN ({', '.join(wh_keys)})"
+
+    src_branch_sql = ""
+    src_brn = _bind_brn(branch_from) if branch_from else None
+    if src_brn not in ("", None):
+        params["src_brn"] = src_brn
+        src_branch_sql = "AND fw.CONN_BRN_NO = :src_brn"
+
+    dst_branch_sql = ""
+    dst_brn = _bind_brn(branch_to) if branch_to else None
+    if dst_brn not in ("", None):
+        params["dst_brn"] = dst_brn
+        dst_branch_sql = "AND tw.CONN_BRN_NO = :dst_brn"
+
+    dst_wh_sql = ""
+    dst_wh = _norm_wh(warehouse_to)
+    if dst_wh:
+        params["dst_wh"] = _bind_wh(dst_wh)
+        dst_wh_sql = "AND m.T_W_CODE = :dst_wh"
+
+    need_fw = bool(src_branch_sql)
+    need_tw = bool(dst_branch_sql)
+    fw_join = (
+        f"LEFT JOIN {schema}.WAREHOUSE_DETAILS fw ON fw.W_CODE = m.F_W_CODE"
+        if need_fw
+        else ""
+    )
+    tw_join = (
+        f"LEFT JOIN {schema}.WAREHOUSE_DETAILS tw ON tw.W_CODE = m.T_W_CODE"
+        if need_tw
+        else ""
+    )
 
     rows = _fetch_all(
         f"""
@@ -272,13 +329,18 @@ def _fetch_outbound_transfer_packs(
           ON d.TR_SER = m.TR_SER
         LEFT JOIN {schema}.IAS_ITM_MST i
           ON i.I_CODE = d.I_CODE
+        {fw_join}
+        {tw_join}
         WHERE m.TR_DATE >= :d_from
           AND m.TR_DATE < :d_to_excl
           AND m.TR_INOUT_TYPE = 1
           AND {_hung_ok('m')}
           AND NVL(d.P_SIZE, 0) >= :min_ps
           AND d.I_CODE IS NOT NULL
-          AND TO_CHAR(m.F_W_CODE) IN ({', '.join(wh_keys)})
+          {src_wh_sql}
+          {src_branch_sql}
+          {dst_wh_sql}
+          {dst_branch_sql}
         GROUP BY
           TO_CHAR(d.I_CODE),
           NVL(NULLIF(TRIM(i.I_NAME), ''), TO_CHAR(d.I_CODE)),
@@ -292,11 +354,15 @@ def _fetch_outbound_transfer_packs(
     )
     return _merge_pack_rows(rows or [], with_docs=True)
 
+
 def build_unit_pack_mismatch_report(
     date_from,
     date_to,
     *,
     warehouse_codes: str,
+    branch_from: str = "",
+    branch_to: str = "",
+    warehouse_to: str = "",
     min_pack_size: float = 2,
     tolerance_pct: float = 0.1,
     limit: int = 100,
@@ -310,8 +376,11 @@ def build_unit_pack_mismatch_report(
         raise OracleStockError("الفترة القصوى لهذا التقرير 90 يوم لتجنب بطء أوراكل.")
 
     wh_codes = _parse_wh_codes(warehouse_codes)
-    if not wh_codes:
-        raise OracleStockError("حدد مخازن (مثال: 3,901,902,401).")
+    src_brn = str(branch_from or "").strip()
+    dst_brn = str(branch_to or "").strip()
+    dst_wh = _norm_wh(warehouse_to)
+    if not wh_codes and not src_brn and not dst_brn and not dst_wh:
+        raise OracleStockError("حدد فرع/مخزن مصدر أو وجهة.")
 
     min_ps = float(min_pack_size or 2)
     if min_ps < 2:
@@ -320,25 +389,39 @@ def build_unit_pack_mismatch_report(
 
     date_to_excl = d_to + timedelta(days=1)
     cache_key = (
-        f"packmismatch:{_CACHE_VER}:{d_from}:{d_to}:{','.join(wh_codes)}:"
+        f"packmismatch:{_CACHE_VER}:{d_from}:{d_to}:"
+        f"src={','.join(wh_codes)}|b{src_brn}:"
+        f"dst={dst_wh}|b{dst_brn}:"
         f"minps={min_ps:.4f}:tol={tol:.4f}:lim={int(limit)}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
         return cached
 
-    purchases = _fetch_purchase_packs(
-        d_from,
-        date_to_excl,
-        min_pack_size=min_ps,
-        warehouse_codes=wh_codes,
-    )
+    # الشراء على مخازن المصدر؛ إن فُتحت الوجهة فقط نضيّق الشراء بعد التحويلات
     transfers = _fetch_outbound_transfer_packs(
         d_from,
         date_to_excl,
         min_pack_size=min_ps,
         warehouse_codes=wh_codes,
+        branch_from=src_brn,
+        branch_to=dst_brn,
+        warehouse_to=dst_wh,
     )
+
+    purch_codes = list(wh_codes)
+    if not purch_codes:
+        # وجهة فقط أو فرع مصدر بلا قائمة مخازن: خذ مصادر التحويلات الفعلية
+        purch_codes = sorted({r.wh_code for r in transfers if r.wh_code})
+    if not purch_codes:
+        purchases: list[_PackAgg] = []
+    else:
+        purchases = _fetch_purchase_packs(
+            d_from,
+            date_to_excl,
+            min_pack_size=min_ps,
+            warehouse_codes=purch_codes,
+        )
 
     # نفس الصنف + المخزن + اسم الوحدة (كرتون مع كرتون فقط)
     pur_buckets: dict[tuple[str, str, str], list[_PackAgg]] = {}
@@ -411,6 +494,9 @@ def build_unit_pack_mismatch_report(
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "filters": {
             "warehouse_codes": warehouse_codes,
+            "branch_from": src_brn,
+            "branch_to": dst_brn,
+            "warehouse_to": dst_wh,
             "min_pack_size": min_ps,
             "tolerance_pct": tol,
             "limit": int(limit or 100),
