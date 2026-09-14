@@ -72,15 +72,24 @@
         {% elif short_only %}الأصناف غير المتوفرة
         {% else %}ورقة المقارنة{% endif %}
       </h3>
-      <span class="result-pill">
-        {% if pr_match %}
-          {{ compare.shown_item_count }} صنف · {{ compare.short_pr_hit_count }} في طلب شراء
-        {% elif short_only %}
-          {{ compare.shown_item_count }} غير متوفر من {{ compare.all_item_count }}
-        {% else %}
-          {{ compare.item_count }} صنف · ناقص {{ compare.source_short_count }}
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">
+          {% if pr_match %}
+            {{ compare.shown_item_count }} صنف · {{ compare.short_pr_hit_count }} في طلب شراء
+          {% elif short_only %}
+            {{ compare.shown_item_count }} غير متوفر من {{ compare.all_item_count }}
+          {% else %}
+            {{ compare.item_count }} صنف · ناقص {{ compare.source_short_count }}
+          {% endif %}
+        </span>
+        {% if compare.source_short_count or compare.short_item_count or short_only or pr_match %}
+          <a
+            class="btn-ghost pr-compare-excel-btn"
+            href="?tr_type={{ tr_type|urlencode }}&amp;tr_no={{ tr_no|urlencode }}&amp;tr_ser={{ tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}{% if short_only %}&amp;short_only=1{% endif %}{% if pr_match %}&amp;pr_match=1{% endif %}&amp;export=excel"
+            title="تصدير الأصناف غير المتوفرة التي بلا طلب شراء خلال 7 أيام"
+          >تصدير Excel</a>
         {% endif %}
-      </span>
+      </div>
     </div>
     {% if pr_match %}
       <p class="pr-compare-sheet-note pr-compare-short-only-note">

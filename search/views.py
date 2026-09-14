@@ -4474,6 +4474,11 @@ def browse_pr_compare_detail(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_warehouse = str(request.GET.get('warehouse') or '').strip()
     selected_date = str(request.GET.get('date') or '').strip()[:10]
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        'xls',
+        'excel',
+        'xlsx',
+    }
     compare = None
     error = ''
 
@@ -4481,13 +4486,16 @@ def browse_pr_compare_detail(request):
         error = 'معرّف طلب الشراء غير مكتمل.'
     else:
         try:
-            from .oracle_pr_compare import build_purchase_request_compare
+            from .oracle_pr_compare import (
+                build_purchase_request_compare,
+                build_purchase_request_compare_excel,
+            )
             from .oracle_stock import oracle_enabled, oracle_session
 
             if not oracle_enabled():
                 error = 'أوراكل غير مفعّل — لا يمكن مقارنة الطلب.'
             else:
-                # ورقة المقارنة: كل المخازن ذات الرصيد فقط (بدون تقييد بفرع/مقصد الفلتر)
+                # ورقة المقارنة: كل المخازن ذات الرصيد فقط (بدون تقييد بفرع/مخزن الفلتر)
                 with oracle_session():
                     compare = build_purchase_request_compare(
                         pr_type=pr_type,
@@ -4498,6 +4506,8 @@ def browse_pr_compare_detail(request):
                     )
                 if compare is None:
                     error = 'طلب الشراء غير موجود أو غير نشط.'
+                elif want_excel and compare is not None:
+                    return build_purchase_request_compare_excel(compare)
         except Exception as exc:  # noqa: BLE001
             logger.warning('browse_pr_compare_detail failed: %s', exc)
             error = f'تعذّر مقارنة طلب الشراء: {exc}'
@@ -4835,6 +4845,12 @@ def browse_tr_compare_detail(request):
         'yes',
         'on',
     )
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        'xls',
+        'excel',
+        'xlsx',
+        'no_pr',
+    }
     compare = None
     error = ''
 
@@ -4843,7 +4859,10 @@ def browse_tr_compare_detail(request):
     else:
         try:
             from .oracle_stock import oracle_enabled, oracle_session
-            from .oracle_tr_compare import build_transfer_request_compare
+            from .oracle_tr_compare import (
+                build_transfer_request_compare,
+                build_transfer_short_no_pr_excel,
+            )
 
             if not oracle_enabled():
                 error = 'أوراكل غير مفعّل — لا يمكن مقارنة الطلب.'
@@ -4856,6 +4875,9 @@ def browse_tr_compare_detail(request):
                     )
                 if compare is None:
                     error = 'طلب التحويل غير موجود أو غير نشط.'
+                elif want_excel and compare is not None:
+                    # تصدير غير المتوفر بلا طلب شراء (من كامل نتيجة المقارنة)
+                    return build_transfer_short_no_pr_excel(compare)
                 elif (short_only or pr_match) and compare:
                     all_items = list(compare.get('items') or [])
                     short_items = [row for row in all_items if not row.get('can_cover')]
@@ -4872,6 +4894,11 @@ def browse_tr_compare_detail(request):
                             1
                             for row in short_items
                             if row.get('recent_prs') or row.get('recent_pr_nos')
+                        ),
+                        'short_no_pr_count': sum(
+                            1
+                            for row in short_items
+                            if not (row.get('recent_prs') or row.get('recent_pr_nos'))
                         ),
                     }
         except Exception as exc:  # noqa: BLE001

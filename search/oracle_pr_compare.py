@@ -194,7 +194,7 @@ def fetch_today_purchase_requests(
     day: date | None = None,
     warehouse_code: str = "",
 ) -> list[dict]:
-    """طلبات شراء اليوم لفرع محدد من P_REQUEST (اختياريًا حسب مخزن المقصد)."""
+    """طلبات شراء اليوم لفرع محدد من P_REQUEST (اختياريًا حسب المخزن)."""
     if not oracle_enabled():
         return []
     brn = str(branch_code or "").strip()
@@ -672,3 +672,126 @@ def build_purchase_request_compare(
         "with_stock_count": sum(1 for row in compare_items if row["has_stock"]),
         "without_stock_count": sum(1 for row in compare_items if not row["has_stock"]),
     }
+
+
+def build_purchase_request_compare_excel(compare: dict[str, Any]) -> Any:
+    """تصدير ورقة مقارنة طلب الشراء إلى Excel (HTML)."""
+    import io
+    from html import escape
+
+    from django.http import HttpResponse
+
+    header = compare.get("header") or {}
+    items = compare.get("items") or []
+    warehouses = compare.get("warehouses") or []
+    pr_no = str(header.get("pr_no") or "").strip() or "pr"
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    buf.write(
+        "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
+        "xmlns:x=\"urn:schemas-microsoft-com:office:excel\" "
+        "xmlns=\"http://www.w3.org/TR/REC-html40\">"
+        "<head><meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>مقارنة طلب شراء</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>"
+        "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 6px;white-space:nowrap;}"
+        "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "th.req{background:#9a3412;}"
+        "th.tot{background:#166534;}"
+        "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
+        "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
+        "td.neg{color:#b91c1c;font-weight:700;}"
+        "td.low{color:#c2410c;}"
+        "tr.even td{background:#f8fafc;}"
+        "tr.empty td{background:#fff7ed;}"
+        "caption{font-family:Tahoma,Arial;font-size:13px;font-weight:700;"
+        "text-align:right;margin:8px 0;}"
+        ".sub{font-size:10px;color:#475569;font-weight:400;}"
+        "</style></head><body dir=\"rtl\">"
+    )
+    vendor = escape(str(header.get("vendor_name") or ""))
+    branch = escape(str(header.get("branch_name") or ""))
+    when = escape(str(header.get("date_label") or ""))
+    user = escape(str(header.get("user_name") or header.get("user_code") or ""))
+    buf.write(
+        "<table><caption>ورقة مقارنة طلب شراء"
+        f'<br><span class="sub">طلب {escape(pr_no)}'
+        f" · {branch} · {when} · {vendor} · {user}"
+        f" · {int(compare.get('item_count') or 0)} صف"
+        f" · {int(compare.get('warehouse_count') or 0)} مخزن"
+        "</span></caption><thead><tr>"
+        "<th>#</th><th>الصنف</th><th>الكود</th><th>الوحدة</th>"
+        '<th class="req">مطلوب</th>'
+    )
+    for wh in warehouses:
+        label = str(wh.get("name") or wh.get("code") or "")
+        brn = str(wh.get("branch_name") or "")
+        code = str(wh.get("code") or "")
+        title = f"{label} — {brn} (#{code})" if brn else f"{label} (#{code})"
+        buf.write(f"<th title=\"{escape(title)}\">{escape(label)}</th>")
+    buf.write(
+        '<th class="tot">إجمالي بعد الترحيل</th>'
+        "<th>عدد المخازن</th></tr></thead><tbody>"
+    )
+
+    for i, item in enumerate(items, 1):
+        if not item.get("has_stock"):
+            row_cls = ' class="empty"'
+        elif i % 2 == 0:
+            row_cls = ' class="even"'
+        else:
+            row_cls = ""
+        buf.write(f"<tr{row_cls}>")
+        buf.write(f'<td class="int">{i}</td>')
+        buf.write(f"<td>{escape(str(item.get('name') or ''))}</td>")
+        buf.write(f"<td>{escape(str(item.get('code') or ''))}</td>")
+        buf.write(f"<td>{escape(str(item.get('unit') or ''))}</td>")
+        try:
+            req_num = float(item.get("req_qty") or 0)
+            buf.write(f'<td class="num">{req_num:g}</td>')
+        except (TypeError, ValueError):
+            buf.write(f"<td>{escape(str(item.get('req_display') or ''))}</td>")
+
+        for cell in item.get("cells") or []:
+            if not cell:
+                buf.write("<td></td>")
+                continue
+            cls = "num"
+            if cell.get("expected_neg"):
+                cls += " neg"
+            elif cell.get("expected_low"):
+                cls += " low"
+            try:
+                val = float(cell.get("expected_qty") or 0)
+                buf.write(f'<td class="{cls}">{val:g}</td>')
+            except (TypeError, ValueError):
+                buf.write(
+                    f'<td class="{cls}">'
+                    f"{escape(str(cell.get('expected_display') or ''))}</td>"
+                )
+
+        if item.get("has_stock"):
+            try:
+                tot = float(item.get("expected_total") or 0)
+                buf.write(f'<td class="num">{tot:g}</td>')
+            except (TypeError, ValueError):
+                buf.write(
+                    f"<td>{escape(str(item.get('expected_total_display') or ''))}</td>"
+                )
+        else:
+            buf.write("<td>—</td>")
+        buf.write(f'<td class="int">{int(item.get("stock_count") or 0)}</td>')
+        buf.write("</tr>")
+
+    buf.write("</tbody></table></body></html>")
+    payload = buf.getvalue().encode("utf-8")
+    safe_no = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in pr_no)[:40]
+    filename = f"pr-compare-{safe_no or 'sheet'}.xls"
+    resp = HttpResponse(payload, content_type="application/vnd.ms-excel; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+

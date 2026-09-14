@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="مقارنات طلب الشراء">
   <div class="dash-head-copy">
     <h2>مقارنات طلب الشراء</h2>
-    <p>حدد التاريخ والفرع والمقصد لعرض الطلبات، ثم افتح الطلب لمقارنة الكميات مع مخازن الفرع ذات الرصيد فقط</p>
+    <p>حدد التاريخ والفرع والمخزن لعرض الطلبات، ثم افتح الطلب لمقارنة الكميات مع مخازن الفرع ذات الرصيد فقط</p>
   </div>
 </section>
 
@@ -44,15 +44,15 @@
       </div>
     </div>
     <div class="field">
-      <label for="pr-warehouse">المقصد</label>
+      <label for="pr-warehouse">المخزن</label>
       <div class="pr-compare-select-wrap">
         <select id="pr-warehouse" name="warehouse" {% if not selected_branch %}disabled{% endif %} onchange="this.form.submit()">
           {% if not selected_branch %}
             <option value="">اختر الفرع أولاً</option>
           {% else %}
-            <option value="">كل المقاصد</option>
+            <option value="">كل المخازن</option>
             {% for w in warehouses %}
-              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
             {% empty %}
               <option value="">لا توجد مخازن لهذا الفرع</option>
             {% endfor %}
@@ -115,7 +115,7 @@
       <span class="pr-compare-chip-muted">{{ warehouses|length }} مخزن للفرع</span>
     {% endif %}
     {% if selected_warehouse_name %}
-      <span class="pr-compare-chip is-wh">المقصد: {{ selected_warehouse_name }}</span>
+      <span class="pr-compare-chip is-wh">المخزن: {{ selected_warehouse }} — {{ selected_warehouse_name }}</span>
     {% endif %}
     {% if company_q or user_q or req_no_q %}
       <span class="pr-compare-chip is-wh">بحث مفعّل</span>
@@ -166,7 +166,7 @@
       </table>
     </div>
   {% else %}
-    <p class="sales-empty">لا توجد طلبات شراء في {{ period_label }} لهذا الفرع{% if selected_warehouse_name %} ومقصد {{ selected_warehouse_name }}{% endif %}.</p>
+    <p class="sales-empty">لا توجد طلبات شراء في {{ period_label }} لهذا الفرع{% if selected_warehouse_name %} ومخزن {{ selected_warehouse }} — {{ selected_warehouse_name }}{% endif %}.</p>
   {% endif %}
 </section>
 {{ request_users|json_script:"pr-request-users" }}

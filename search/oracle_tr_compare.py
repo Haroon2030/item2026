@@ -733,3 +733,119 @@ def build_transfer_request_compare(
         "source_short_count": source_short,
         "short_pr_lookback_days": _SHORT_PR_LOOKBACK_DAYS,
     }
+
+
+def build_transfer_short_no_pr_excel(compare: dict[str, Any]) -> Any:
+    """تصدير الأصناف غير المتوفرة التي بلا طلب شراء خلال نافذة المطابقة."""
+    import io
+    from html import escape
+
+    from django.http import HttpResponse
+
+    header = compare.get("header") or {}
+    all_items = list(compare.get("items") or [])
+    # غير متوفر + بلا طلب شراء
+    items = [
+        row
+        for row in all_items
+        if not row.get("can_cover")
+        and not (row.get("recent_prs") or row.get("recent_pr_nos"))
+    ]
+    lookback = int(
+        compare.get("short_pr_lookback_days") or _SHORT_PR_LOOKBACK_DAYS
+    )
+    tr_no = str(header.get("tr_no") or "").strip() or "tr"
+    from_label = str(header.get("from_wh_label") or header.get("from_wh_code") or "")
+    main_label = str(header.get("main_wh_label") or header.get("main_wh_code") or "")
+
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    buf.write(
+        "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
+        "xmlns:x=\"urn:schemas-microsoft-com:office:excel\" "
+        "xmlns=\"http://www.w3.org/TR/REC-html40\">"
+        "<head><meta charset=\"utf-8\">"
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>غير متوفر بلا شراء</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>"
+        "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 6px;white-space:nowrap;}"
+        "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "th.req{background:#9a3412;}"
+        "th.gap{background:#b91c1c;}"
+        "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
+        "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
+        "td.miss{color:#b91c1c;font-weight:700;}"
+        "tr.even td{background:#f8fafc;}"
+        "caption{font-family:Tahoma,Arial;font-size:13px;font-weight:700;"
+        "text-align:right;margin:8px 0;}"
+        ".sub{font-size:10px;color:#475569;font-weight:400;}"
+        "</style></head><body dir=\"rtl\">"
+    )
+    branch = escape(str(header.get("branch_name") or ""))
+    when = escape(str(header.get("date_label") or ""))
+    user = escape(str(header.get("user_name") or header.get("user_code") or ""))
+    buf.write(
+        "<table><caption>أصناف غير متوفرة بلا طلب شراء"
+        f'<br><span class="sub">طلب نواقص {escape(tr_no)}'
+        f" · {branch} · {when} · {user}"
+        f" · آخر {lookback} أيام"
+        f" · {len(items)} صنف"
+        f" من أصل {int(compare.get('source_short_count') or compare.get('short_item_count') or len(all_items))} غير متوفر"
+        "</span></caption><thead><tr>"
+        "<th>#</th><th>الصنف</th><th>الكود</th><th>الوحدة</th>"
+        '<th class="req">مطلوب</th>'
+        f"<th>{escape(from_label or 'المخزن المطلوب')}</th>"
+        f"<th>{escape(main_label or 'المخزن الرئيسي')}</th>"
+        '<th class="gap">النقص</th>'
+        f"<th>طلب شراء ({lookback} أيام)</th>"
+        "</tr></thead><tbody>"
+    )
+
+    def _num_cell(value: Any, display: Any = "") -> str:
+        try:
+            return f'<td class="num">{float(value or 0):g}</td>'
+        except (TypeError, ValueError):
+            return f"<td>{escape(str(display or ''))}</td>"
+
+    for i, item in enumerate(items, 1):
+        even = ' class="even"' if i % 2 == 0 else ""
+        buf.write(f"<tr{even}>")
+        buf.write(f'<td class="int">{i}</td>')
+        buf.write(f"<td>{escape(str(item.get('name') or ''))}</td>")
+        buf.write(f"<td>{escape(str(item.get('code') or ''))}</td>")
+        buf.write(f"<td>{escape(str(item.get('unit') or ''))}</td>")
+        buf.write(_num_cell(item.get("req_qty"), item.get("req_display")))
+        source = item.get("source") or {}
+        dest = item.get("dest") or {}
+        if source.get("has_qty"):
+            buf.write(
+                _num_cell(source.get("expected_qty"), source.get("expected_display"))
+            )
+        else:
+            buf.write("<td>—</td>")
+        if dest.get("has_qty"):
+            buf.write(
+                _num_cell(dest.get("expected_qty"), dest.get("expected_display"))
+            )
+        else:
+            buf.write("<td>—</td>")
+        buf.write(_num_cell(item.get("gap_qty"), item.get("gap_display")))
+        buf.write('<td class="miss">لا يوجد طلبات لشراء</td>')
+        buf.write("</tr>")
+
+    if not items:
+        buf.write(
+            '<tr><td colspan="9">لا توجد أصناف غير متوفرة بلا طلب شراء.</td></tr>'
+        )
+
+    buf.write("</tbody></table></body></html>")
+    payload = buf.getvalue().encode("utf-8")
+    safe_no = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in tr_no)[:40]
+    filename = f"tr-short-no-pr-{safe_no or 'sheet'}.xls"
+    resp = HttpResponse(payload, content_type="application/vnd.ms-excel; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+

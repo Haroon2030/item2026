@@ -58,7 +58,16 @@
   <section class="dash-panel dash-panel-glass pr-compare-sheet-panel" aria-label="جدول مقارنة الأصناف">
     <div class="dash-panel-head">
       <h3>ورقة المقارنة</h3>
-      <span class="result-pill">{{ compare.item_count }} صف · {{ compare.warehouse_count }} مخزن</span>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ compare.item_count }} صف · {{ compare.warehouse_count }} مخزن</span>
+        {% if compare.items %}
+          <a
+            class="btn-ghost pr-compare-excel-btn"
+            href="?pr_type={{ pr_type|urlencode }}&amp;pr_no={{ pr_no|urlencode }}&amp;pr_ser={{ pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}&amp;export=excel"
+            title="تصدير ورقة المقارنة إلى Excel"
+          >تصدير Excel</a>
+        {% endif %}
+      </div>
     </div>
 
     {% if compare.items %}
