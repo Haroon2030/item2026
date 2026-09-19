@@ -568,9 +568,9 @@ class CostAdjustmentsViewTests(TestCase):
         )
         UserProfile.objects.create(
             user=user,
-            display_name='مشتريات',
+            display_name='تسعيرة',
             phone='0507000001',
-            role_name='مدير مشتريات',
+            role_name='مدير تسعيرة',
         )
         self.client.force_login(user)
         response = self.client.get(reverse('browse_cost_adjustments'))
@@ -578,20 +578,20 @@ class CostAdjustmentsViewTests(TestCase):
         self.assertContains(response, 'تسوية التكاليف')
         self.assertContains(response, 'أوراكل غير مفعّل')
 
-    def test_denied_without_purchases_nav_access(self):
+    def test_denied_without_pricing_nav_access(self):
         user = get_user_model().objects.create_user(
-            username='pricing-only',
+            username='purchases-only',
             password='StrongPassword123!',
         )
         UserProfile.objects.create(
             user=user,
-            display_name='تسعيرة',
+            display_name='مشتريات',
             phone='0507000002',
-            role_name='مدير تسعيرة',
+            role_name='مدير مشتريات',
         )
         UserNavPermission.objects.create(
             user=user,
-            sections=['pricing'],
+            sections=['purchases'],
             blocked_screens=[],
         )
         self.client.force_login(user)
