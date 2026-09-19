@@ -487,11 +487,11 @@ class CostAdjustmentsTests(TestCase):
         self.assertEqual(row['acct_code'], '21101001')
         self.assertEqual(row['acct_name'], 'مخزون بضاعة')
         self.assertEqual(row['detail_code'], '2326785')
-        self.assertEqual(row['detail_name'], 'مؤسسة الأغذية')
+        self.assertEqual(row['detail_name'], 'مؤسسة الأغذية (2326785)')
         self.assertEqual(row['inc_cost'], 4.48)
         self.assertEqual(row['dtl_type'], 4)
         self.assertEqual(row['vendor_code'], '2326785')
-        self.assertEqual(row['vendor_name'], 'مؤسسة الأغذية')
+        self.assertEqual(row['vendor_name'], 'مؤسسة الأغذية (2326785)')
         self.assertEqual(row['when'], '2026-09-18')
         self.assertEqual(row['wtavg_display'], '3.9')
         self.assertEqual(row['dtl_type_label'], 'مورد')
@@ -501,6 +501,67 @@ class CostAdjustmentsTests(TestCase):
         self.assertEqual(report['kpis']['total_docs_display'], '1')
         self.assertEqual(report['kpis']['total_lines_display'], '1')
         self.assertEqual(report['kpis']['distinct_accounts_display'], '1')
+        self.assertEqual(len(report['docs']), 1)
+        self.assertEqual(report['docs'][0]['doc_no_display'], '5501')
+        self.assertEqual(report['docs'][0]['line_count'], 1)
+        self.assertEqual(len(report['docs'][0]['lines']), 1)
+
+    @patch('search.oracle_cost_adjustments.oracle_enabled', return_value=True)
+    @patch('search.oracle_cost_adjustments._fetch_all')
+    def test_groups_lines_by_document(self, fetch_all, _enabled):
+        from datetime import date, datetime
+
+        from search.oracle_cost_adjustments import fetch_cost_adjustments
+
+        base = {
+            'DOC_NO': 7568,
+            'DOC_SER': 99001,
+            'DOC_DATE': datetime(2026, 9, 19, 0, 0),
+            'STK_DESC': 'تسوية',
+            'BRN_NO': 9,
+            'A_CODE': '21101001',
+            'AC_CODE_DTL': '230302',
+            'AC_DTL_TYP': 4,
+            'M_V_CODE': None,
+            'A_NAME': 'مخزون',
+            'DTL_NAME': 'مورد أ',
+            'W_CODE': 902,
+            'ITM_UNT': 'حبة',
+            'P_SIZE': 1,
+            'WTAVG': 10,
+            'D_V_CODE': None,
+        }
+        fetch_all.return_value = [
+            {**base, 'I_CODE': 'A1', 'I_NAME': 'صنف 1', 'INC_COST': 5},
+            {**base, 'I_CODE': 'A2', 'I_NAME': 'صنف 2', 'INC_COST': 7},
+            {
+                **base,
+                'DOC_NO': 7569,
+                'DOC_SER': 99002,
+                'I_CODE': 'B1',
+                'I_NAME': 'صنف ب',
+                'INC_COST': 3,
+            },
+        ]
+        report = fetch_cost_adjustments(date(2026, 9, 19), date(2026, 9, 19), limit=20)
+        self.assertEqual(len(report['rows']), 3)
+        self.assertEqual(len(report['docs']), 2)
+        first = report['docs'][0]
+        self.assertEqual(first['doc_no_display'], '7568')
+        self.assertEqual(first['line_count'], 2)
+        self.assertEqual(first['adj_total'], 12.0)
+        self.assertEqual([ln['item_code'] for ln in first['lines']], ['A1', 'A2'])
+
+    def test_party_label_strips_nested_parens_and_uses_vendor_code(self):
+        from search.oracle_cost_adjustments import _party_label
+
+        self.assertEqual(
+            _party_label(
+                'مصنع الجميح لتعبئة المرطبات (300056269810003)',
+                '231039',
+            ),
+            'مصنع الجميح لتعبئة المرطبات (231039)',
+        )
 
     @patch('search.oracle_cost_adjustments.oracle_enabled', return_value=True)
     @patch('search.oracle_cost_adjustments._fetch_all')

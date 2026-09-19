@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="تسوية التكاليف">
   <div class="dash-head-copy">
     <h2>تسوية التكاليف</h2>
-    <p>أصناف عُدّلت تكلفتها خلال الفترة والحساب المحاسبي (GL) الذي رُحّلت إليه كل تسوية</p>
+    <p>مستندات تسوية التكلفة مجمّعة — اضغط رقم المستند لعرض أصناف كل مستند والحساب المحاسبي</p>
   </div>
 </section>
 
@@ -26,17 +26,17 @@
   <section class="up-kpi-grid" aria-label="ملخص تسوية التكاليف">
     <article class="up-kpi is-match">
       <span class="up-kpi-label">المستندات</span>
-      <strong class="up-kpi-value mono">{{ report.kpis.doc_count_display }}</strong>
+      <strong class="up-kpi-value mono">{{ report.kpis.total_docs_display|default:report.kpis.doc_count_display }}</strong>
       <small class="up-kpi-hint">{{ report.period_label }}</small>
     </article>
     <article class="up-kpi is-shown">
       <span class="up-kpi-label">البنود</span>
-      <strong class="up-kpi-value mono">{{ report.kpis.move_count_display }}</strong>
+      <strong class="up-kpi-value mono">{{ report.kpis.total_lines_display|default:report.kpis.move_count_display }}</strong>
       <small class="up-kpi-hint">أسطر التسوية</small>
     </article>
     <article class="up-kpi is-wh">
       <span class="up-kpi-label">حسابات محاسبية</span>
-      <strong class="up-kpi-value mono">{{ report.kpis.account_count_display }}</strong>
+      <strong class="up-kpi-value mono">{{ report.kpis.distinct_accounts_display|default:report.kpis.account_count_display }}</strong>
       <small class="up-kpi-hint">عدد الحسابات المميّزة</small>
     </article>
   </section>
@@ -100,55 +100,92 @@
   </div>
 </form>
 
-{% if report and report.rows %}
+{% if report and report.docs %}
   <section class="up-sheet" aria-label="نتائج تسوية التكاليف">
     <div class="up-sheet-head">
       <div class="up-sheet-title">
-        <h3>بنود تسوية التكاليف</h3>
-        <span class="up-sheet-count">{{ report.rows|length }} بند{% if report.kpis.capped %} · حد أقصى للعرض{% endif %}</span>
+        <h3>مستندات تسوية التكاليف</h3>
+        <span class="up-sheet-count">{{ report.docs|length }} مستند{% if report.kpis.capped %} · حد أقصى للعرض{% endif %}</span>
       </div>
       <div class="up-sheet-actions">
-        <a class="btn-ghost up-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير إلى Excel">Excel</a>
+        <a class="btn-ghost up-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير البنود إلى Excel">Excel</a>
       </div>
     </div>
 
-    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول تسوية التكاليف">
-      <table class="up-table cadj-table" aria-label="أصناف عُدّلت تكلفتها">
+    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول مستندات تسوية التكاليف">
+      <table class="up-table cadj-table" aria-label="مستندات مجمّعة حسب رقم المستند">
         <thead>
           <tr>
             <th>#</th>
             <th>المستند</th>
             <th>التاريخ</th>
-            <th>الصنف</th>
-            <th>الاسم</th>
-            <th>الوحدة</th>
-            <th>المخزن</th>
-            <th>تكلفة التسوية</th>
-            <th>متوسط التكلفة</th>
+            <th>الفرع</th>
+            <th>البنود</th>
+            <th>مجموع التسوية</th>
             <th>الحساب</th>
             <th>اسم الحساب</th>
-            <th>الطرف التفصيلي</th>
-            <th>المورد</th>
+            <th>الطرف</th>
             <th>البيان</th>
+            <th>المستخدم</th>
           </tr>
         </thead>
         <tbody>
-          {% for r in report.rows %}
-            <tr>
+          {% for doc in report.docs %}
+            <tr class="cadj-doc-row" data-doc-key="{{ doc.doc_key }}">
               <td class="mono">{{ forloop.counter }}</td>
-              <td class="mono">{{ r.doc_no_display }}</td>
-              <td class="mono">{{ r.date_display }}</td>
-              <td class="mono">{{ r.item_code }}</td>
-              <td>{{ r.item_name }}</td>
-              <td>{{ r.unit }}</td>
-              <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
-              <td class="mono num">{{ r.inc_cost_display }}</td>
-              <td class="mono num">{{ r.avg_cost_display }}</td>
-              <td class="mono">{{ r.account_code }}</td>
-              <td>{{ r.account_name }}</td>
-              <td class="mono" title="{{ r.detail_code }}">{{ r.detail_name }}</td>
-              <td title="{{ r.vendor_code }}">{{ r.vendor_name }}</td>
-              <td>{{ r.stk_desc }}</td>
+              <td>
+                <button
+                  type="button"
+                  class="cadj-doc-btn mono"
+                  data-cadj-toggle="{{ doc.doc_key }}"
+                  aria-expanded="false"
+                  aria-controls="cadj-lines-{{ doc.doc_key }}"
+                  title="عرض أصناف المستند"
+                >{{ doc.doc_no_display }}</button>
+              </td>
+              <td class="mono">{{ doc.date_display }}</td>
+              <td class="mono">{{ doc.branch_code }}</td>
+              <td class="mono num">{{ doc.line_count_display }}</td>
+              <td class="mono num">{{ doc.adj_total_display }}</td>
+              <td class="mono">{{ doc.account_code }}</td>
+              <td>{{ doc.account_name }}</td>
+              <td title="{{ doc.detail_code }}">{{ doc.detail_name }}</td>
+              <td>{{ doc.stk_desc }}</td>
+              <td>{{ doc.user_name }}</td>
+            </tr>
+            <tr class="cadj-lines-row is-collapsed" id="cadj-lines-{{ doc.doc_key }}" hidden>
+              <td colspan="11">
+                <div class="cadj-lines-wrap">
+                  <table class="up-table cadj-lines-table" aria-label="أصناف المستند {{ doc.doc_no_display }}">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>الصنف</th>
+                        <th>الاسم</th>
+                        <th>الوحدة</th>
+                        <th>المخزن</th>
+                        <th>تكلفة التسوية</th>
+                        <th>متوسط التكلفة</th>
+                        <th>المورد</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for line in doc.lines %}
+                        <tr>
+                          <td class="mono">{{ forloop.counter }}</td>
+                          <td class="mono">{{ line.item_code }}</td>
+                          <td>{{ line.item_name }}</td>
+                          <td>{{ line.unit }}</td>
+                          <td class="mono" title="{{ line.wh_name }}">{{ line.wh_code }}</td>
+                          <td class="mono num">{{ line.inc_cost_display }}</td>
+                          <td class="mono num">{{ line.avg_cost_display|default:line.wtavg_display }}</td>
+                          <td title="{{ line.vendor_code }}">{{ line.vendor_name }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -160,4 +197,9 @@
     <span>لا توجد تسويات تكلفة في هذه الفترة وفق الفلاتر الحالية.</span>
   </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ all_warehouses|json_script:"cadj-wh-data" }}
+<script src="/static/js/cost-adjustments-filter.js?v={{ app_client_version }}" defer></script>
 {% endblock %}

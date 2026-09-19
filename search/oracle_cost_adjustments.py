@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import io
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -41,6 +42,7 @@ _DTL_TYPE_LABELS = {
     4: "مورد",
     5: "مركز تكلفة",
 }
+_TRAILING_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*$")
 
 
 def _f(value: Any, nd: int = 4) -> float:
@@ -54,6 +56,26 @@ def _money(value: Any, nd: int = 4) -> str:
     return f"{_f(value, nd):,.{nd}f}".rstrip("0").rstrip(".") or "0"
 
 
+def _company_name_only(raw: Any) -> str:
+    """اسم الشركة بدون أقواس لاحقة (أرقام تجارية/سجل داخل الاسم)."""
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    cleaned = _TRAILING_PAREN_RE.sub("", text).strip()
+    return cleaned or text
+
+
+def _party_label(name: Any, code: Any) -> str:
+    """اسم الشركة فقط مع رقم المورد بين قوسين: شركة (123)."""
+    code_s = str(code or "").strip()
+    name_s = _company_name_only(name)
+    if name_s and code_s:
+        if name_s == code_s:
+            return code_s
+        return f"{name_s} ({code_s})"
+    return name_s or code_s or "—"
+
+
 def _bind_wh(raw: str):
     text = str(raw or "").strip()
     if not text:
@@ -62,6 +84,53 @@ def _bind_wh(raw: str):
         return int(text)
     except ValueError:
         return text
+
+
+def _group_docs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """تجميع بنود التسوية حسب DOC_SER (مستند واحد → عدة أصناف)."""
+    order: list[str] = []
+    by_doc: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = str(row.get("doc_ser") if row.get("doc_ser") is not None else row.get("doc_no") or "")
+        if not key:
+            key = f"row-{len(order)}"
+        bucket = by_doc.get(key)
+        if bucket is None:
+            bucket = {
+                "doc_key": key,
+                "doc_ser": row.get("doc_ser"),
+                "doc_no": row.get("doc_no"),
+                "doc_no_display": row.get("doc_no_display") or "—",
+                "date_display": row.get("date_display") or "—",
+                "branch_code": row.get("branch_code") or "—",
+                "account_code": row.get("account_code") or "—",
+                "account_name": row.get("account_name") or "—",
+                "detail_code": row.get("detail_code") or "—",
+                "detail_name": row.get("detail_name") or "—",
+                "stk_desc": row.get("stk_desc") or "—",
+                "user_name": row.get("user_name") or "—",
+                "line_count": 0,
+                "adj_total": 0.0,
+                "lines": [],
+            }
+            by_doc[key] = bucket
+            order.append(key)
+        bucket["lines"].append(row)
+        bucket["line_count"] += 1
+        inc = row.get("inc_cost")
+        if inc is not None:
+            try:
+                bucket["adj_total"] += float(inc)
+            except (TypeError, ValueError):
+                pass
+    docs: list[dict[str, Any]] = []
+    for key in order:
+        bucket = by_doc[key]
+        bucket["adj_total"] = round(float(bucket["adj_total"]), 4)
+        bucket["adj_total_display"] = _money(bucket["adj_total"])
+        bucket["line_count_display"] = f"{bucket['line_count']:,}"
+        docs.append(bucket)
+    return docs
 
 
 def fetch_cost_adjustments(
@@ -228,15 +297,14 @@ def fetch_cost_adjustments(
             dtl_typ_n = 0
 
         vendor_code = d_v or m_v or (dtl_code if dtl_typ_n == _DTL_TYPE_VENDOR else "")
-        vendor_name = (
-            str(r.get("DTL_NAME") or "").strip()
-            if (not d_v and not m_v and dtl_typ_n == _DTL_TYPE_VENDOR)
-            else (str(r.get("DTL_NAME") or "").strip() if vendor_code == dtl_code and dtl_typ_n == _DTL_TYPE_VENDOR else "")
+        raw_dtl_name = str(r.get("DTL_NAME") or "").strip()
+        vendor_name = _party_label(
+            raw_dtl_name if (vendor_code == dtl_code or not d_v) else "",
+            vendor_code,
         )
-        if not vendor_name and vendor_code and dtl_typ_n == _DTL_TYPE_VENDOR and vendor_code == dtl_code:
-            vendor_name = str(r.get("DTL_NAME") or "").strip()
-        if not vendor_name:
-            vendor_name = vendor_code or "—"
+        if vendor_name == "—" and vendor_code:
+            vendor_name = vendor_code
+        detail_label = _party_label(raw_dtl_name, dtl_code)
 
         wtavg = _f(r.get("WTAVG"), 4)
         wtavg_display = _money(wtavg) if wtavg else "—"
@@ -267,8 +335,8 @@ def fetch_cost_adjustments(
                 "acct_name": str(r.get("A_NAME") or "").strip() or a_code or "—",
                 "detail_code": dtl_code or "—",
                 "sub_code": dtl_code or "—",
-                "detail_name": str(r.get("DTL_NAME") or "").strip() or dtl_code or "—",
-                "sub_name": str(r.get("DTL_NAME") or "").strip() or dtl_code or "—",
+                "detail_name": detail_label,
+                "sub_name": detail_label,
                 "dtl_type": dtl_typ_n,
                 "dtl_type_label": dtl_label,
                 "stk_desc": str(r.get("STK_DESC") or "").strip() or "—",
@@ -280,9 +348,10 @@ def fetch_cost_adjustments(
             }
         )
 
+    docs = _group_docs(rows)
     period_label = f"{d_from.isoformat()} — {d_to.isoformat()}"
     n_lines = len(rows)
-    n_docs = len(doc_keys)
+    n_docs = len(docs)
     n_accts = len(acct_keys)
     return {
         "filters": {
@@ -313,6 +382,7 @@ def fetch_cost_adjustments(
             "distinct_accounts_display": f"{n_accts:,}",
             "capped": n_lines >= lim,
         },
+        "docs": docs,
         "rows": rows,
     }
 
