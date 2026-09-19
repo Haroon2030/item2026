@@ -775,6 +775,7 @@ def build_transfer_short_no_pr_excel(compare: dict[str, Any]) -> Any:
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
         "th.req{background:#9a3412;}"
         "th.gap{background:#b91c1c;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "td.miss{color:#b91c1c;font-weight:700;}"
@@ -815,7 +816,7 @@ def build_transfer_short_no_pr_excel(compare: dict[str, Any]) -> Any:
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f"<td>{escape(str(item.get('name') or ''))}</td>")
-        buf.write(f"<td>{escape(str(item.get('code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(item.get("code") or ""))}</td>')
         buf.write(f"<td>{escape(str(item.get('unit') or ''))}</td>")
         buf.write(_num_cell(item.get("req_qty"), item.get("req_display")))
         source = item.get("source") or {}

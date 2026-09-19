@@ -347,6 +347,7 @@ def build_suppliers_excel(report: dict[str, Any]) -> HttpResponse:
         "th.buy{background:#fdeecd;color:#92400e;}"
         "th.stock{background:#dcedfa;color:#0c4a6e;}"
         "th.pay{background:#d7f3e3;color:#166534;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "td.buy{background:#fef7e8;color:#92400e;font-weight:700;}"
@@ -387,7 +388,7 @@ def build_suppliers_excel(report: dict[str, Any]) -> HttpResponse:
         even = " even" if i % 2 == 0 and kind == "none" else ""
         buf.write(f'<tr class="{kind}{even}">')
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('name') or ''))}</td>")
         buf.write(f'<td class="int">{int(row.get("invoice_count") or 0)}</td>')
         buf.write(

@@ -535,6 +535,7 @@ def build_warehouse_expense_accounts_excel(report: dict[str, Any]) -> HttpRespon
         "th.amt{background:#166534;}"
         "th.dr{background:#0e7490;}"
         "th.cr{background:#9a3412;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "td.amt{background:#ecfdf3;color:#166534;font-weight:700;}"
@@ -569,7 +570,7 @@ def build_warehouse_expense_accounts_excel(report: dict[str, Any]) -> HttpRespon
         even = ' class="even"' if i % 2 == 0 else ""
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('account_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("account_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('account_name') or ''))}</td>")
         buf.write(f'<td class="num dr">{_xls_num(row.get("dr"))}</td>')
         buf.write(f'<td class="num cr">{_xls_num(row.get("cr"))}</td>')

@@ -65,9 +65,9 @@
   </section>
 {% endif %}
 
-<form method="get" action="{% url 'browse_assets' %}" class="assets-filter dash-panel-glass" role="search">
-  <div class="assets-filter-fields">
-    <div class="field">
+<form method="get" action="{% url 'browse_assets' %}" class="income-filter-bar assets-filter" role="search" aria-label="فلاتر الأصول">
+  <div class="income-filter-bar-main">
+    <div class="income-filter-field">
       <label for="as-branch">الفرع</label>
       <select id="as-branch" name="branch">
         <option value="">كل الفروع</option>
@@ -76,7 +76,7 @@
         {% endfor %}
       </select>
     </div>
-    <div class="field">
+    <div class="income-filter-field">
       <label for="as-group">مجموعة الأصل</label>
       <select id="as-group" name="group">
         <option value="">كل المجموعات</option>
@@ -85,15 +85,17 @@
         {% endfor %}
       </select>
     </div>
-    <div class="field assets-q-field">
+    <div class="income-filter-field assets-q-field">
       <label for="as-q">بحث بالاسم / الكود</label>
       <input id="as-q" type="search" name="q" value="{{ q }}" placeholder="اسم الأصل أو كوده…" maxlength="80" autocomplete="off">
     </div>
   </div>
-  <button type="submit" class="btn-primary">عرض</button>
-  {% if report %}
-    <button type="submit" class="btn-ghost assets-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">Excel</button>
-  {% endif %}
+  <div class="finance-filter-actions">
+    <button type="submit" class="btn-primary income-filter-submit">عرض</button>
+    {% if report %}
+      <button type="submit" class="btn-ghost finance-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">Excel</button>
+    {% endif %}
+  </div>
 </form>
 
 {% if report %}

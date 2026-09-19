@@ -1709,6 +1709,7 @@ def build_browse_groups_excel(
         'td.line{background:#dbeafe;color:#1e3a8a;font-weight:800;}'
         'td.unit{background:#e0f2fe;color:#0c4a6e;font-weight:700;text-align:center;}'
         'td.code{font-family:Consolas,monospace;color:#1e3a5f;font-weight:700;}'
+        'td.txt{mso-number-format:\'\\@\';}'
         'td.idx{mso-number-format:\'\\#\\,\\#\\#0\';color:#64748b;text-align:center;}'
         'tr.even td{background:#f8fafc;}'
         'tr.even td.qty{background:#eafaf0;}'
@@ -1761,7 +1762,7 @@ def build_browse_groups_excel(
             line_used += 1
         buf.write(f'<tr class="{even.strip()}">')
         buf.write(f'<td class="idx">{i}</td>')
-        buf.write(f'<td class="code">{escape(str(item.get("code") or ""))}</td>')
+        buf.write(f'<td class="code txt">{escape(str(item.get("code") or ""))}</td>')
         buf.write(f'<td>{escape(str(item.get("name") or "—"))}</td>')
         buf.write(f'<td class="unit">{escape(unit)}</td>')
         buf.write(_cell_num(item.get('price'), 'num price', 2))

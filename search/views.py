@@ -33,8 +33,128 @@ from .validators import ValidationError, looks_like_item_code, resolve_group, re
 logger = logging.getLogger(__name__)
 
 
+def _welcome_cards_for_user(user) -> list[dict]:
+    """بطاقات الترحيب حسب الشاشات المسموح بها."""
+    from django.urls import reverse
+
+    from .nav_permissions import user_can_access_screen
+
+    catalog = (
+        (
+            'browse_sales',
+            'المبيعات',
+            'صافي الفروع والقنوات بعد المرتجع',
+            'welcome-card--sales',
+            'M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4',
+        ),
+        (
+            'browse_performance',
+            'تحليل الأداء',
+            'مقارنة الفترات ومؤشرات التشغيل',
+            'welcome-card--perf',
+            'M12 20V10M18 20V4M6 20v-4M4 20h16',
+        ),
+        (
+            'sales_search',
+            'بحث المبيعات',
+            'مبيعات صنف خلال فترة',
+            'welcome-card--sales',
+            'M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0M20 20l-3-3',
+        ),
+        (
+            'browse_inventory',
+            'المخزون',
+            'الأرصدة وحركة المجموعات',
+            'welcome-card--inv',
+            'M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4',
+        ),
+        (
+            'browse_purchases',
+            'المشتريات',
+            'التوريد ودورة الموردين',
+            'welcome-card--purch',
+            'M6 6h15l-1.5 9H8L6 6zM9 20a1.5 1.5 0 1 0 0-0.01M18 20a1.5 1.5 0 1 0 0-0.01M6 6L5 3H2',
+        ),
+        (
+            'item_search',
+            'بحث الأصناف',
+            'الباركود والاسم والوحدة',
+            'welcome-card--search',
+            'M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0M20 20l-3-3',
+        ),
+        (
+            'browse_pr_compare',
+            'مقارنات طلب الشراء',
+            'الأصناف مقابل أرصدة المخازن',
+            'welcome-card--purch',
+            'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+        ),
+        (
+            'browse_tr_compare',
+            'طلب النواقص',
+            'مقارنة المخزن المطلوب مع الرئيسي',
+            'welcome-card--inv',
+            'M7 7h10v10H7zM17 11h4l-3 3 3 3h-4M7 13H3l3-3-3-3h4',
+        ),
+        (
+            'browse_low_margin_prices',
+            'حد ربح التسعير',
+            'مراجعة هوامش التسعير',
+            'welcome-card--perf',
+            'M4 19h16M7 16V9M12 16V5M17 16v-3',
+        ),
+        (
+            'browse_vendor_price_compare',
+            'مقارنة أسعار الموردين',
+            'فروقات أسعار الشراء بين الفروع',
+            'welcome-card--purch',
+            'M4 19V5M8 16V9M12 16V7M16 16v-5M20 16V8M14 4l6 3-6 3',
+        ),
+        (
+            'browse_wh_outgoing',
+            'حركة التحويلات',
+            'التحويلات الصادرة بين المخازن',
+            'welcome-card--inv',
+            'M3 7h13v10H3zM16 10h5l-2 3 2 3h-5',
+        ),
+        (
+            'browse_income',
+            'قائمة الدخل',
+            'النتيجة المالية للفترة',
+            'welcome-card--income',
+            'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+        ),
+    )
+    cards: list[dict] = []
+    for key, title, hint, css, path_d in catalog:
+        if not user_can_access_screen(user, key):
+            continue
+        try:
+            href = reverse(key)
+        except Exception:  # noqa: BLE001
+            continue
+        cards.append(
+            {
+                'key': key,
+                'title': title,
+                'hint': hint,
+                'css': css,
+                'href': href,
+                'path_d': path_d,
+            }
+        )
+    return cards
+
+
 def _welcome_user_context(user) -> dict:
-    """اسم العرض واسم الدور لشاشة الترحيب."""
+    """اسم العرض واسم الدور ونص الترحيب حسب الدور."""
+    from .nav_permissions import (
+        EXECUTIVE_ROLE_NAMES,
+        SECTION_MANAGER_ROLES,
+        has_full_app_access,
+        user_role_name,
+    )
+
     profile = getattr(user, 'profile', None)
     display_name = (
         ((profile.display_name if profile else '') or '').strip()
@@ -42,20 +162,62 @@ def _welcome_user_context(user) -> dict:
         or (user.username or '').strip()
         or 'مستخدم'
     )
-    role_name = ((profile.role_name if profile else '') or '').strip()
+    role_name = user_role_name(user)
     if not role_name:
         role_name = 'مدير النظام' if user.is_staff else 'مستخدم'
+
+    role_copy = {
+        'مدير مبيعات': (
+            'لإدارة المبيعات',
+            'لوحة مبيعاتك: صافي الفروع، بحث المبيعات، وتحليل الأداء ضمن صلاحياتك.',
+        ),
+        'مدير مشتريات': (
+            'لإدارة المشتريات',
+            'لوحة مشترياتك: بحث الأصناف، تحليل التوريد، ودوران الموردين وطلبات الشراء.',
+        ),
+        'مدير تسعيرة': (
+            'لإدارة التسعيرة',
+            'لوحة التسعير: حد الربح، الأصناف غير المسعّرة، ومقارنة أسعار الموردين.',
+        ),
+        'مدير مخازن': (
+            'لإدارة المخزون',
+            'لوحة المخزون: الأرصدة، المجموعات، والرصيد بلا مبيعات ضمن صلاحياتك.',
+        ),
+        'مدير مستودع': (
+            'لإدارة المستودعات',
+            'لوحة المستودعات: التحويلات، مقارنة الأرصدة، ومتابعة الحركة الصادرة.',
+        ),
+    }
+
+    if has_full_app_access(user) or role_name in EXECUTIVE_ROLE_NAMES:
+        kicker = 'للإدارة العليا'
+        subtitle = (
+            'تحليل تشغيلي موحّد: صافي المبيعات، أرصدة المخزون، دورة التوريد، '
+            'ومؤشرات الأداء — قراءة واحدة تدعم قرار الإدارة.'
+        )
+    elif role_name in role_copy:
+        kicker, subtitle = role_copy[role_name]
+    elif role_name in SECTION_MANAGER_ROLES:
+        kicker = f'لدور {role_name}'
+        subtitle = 'البطاقات أدناه تعرض الشاشات المتاحة حسب صلاحيات دورك.'
+    else:
+        kicker = 'حسب صلاحياتك'
+        subtitle = 'البطاقات أدناه تعرض الأقسام والشاشات المسموح لك بفتحها فقط.'
+
     return {
         'display_name': display_name,
         'role_name': role_name,
         'is_staff': bool(user.is_staff),
+        'welcome_kicker': kicker,
+        'welcome_subtitle': subtitle,
+        'welcome_cards': _welcome_cards_for_user(user),
     }
 
 
 @login_required
 @never_cache
 def home(request):
-    """الصفحة الرئيسية بعد الدخول — ترحيب باسم الدور."""
+    """الصفحة الرئيسية بعد الدخول — ترحيب وبطاقات حسب الدور والصلاحيات."""
     ctx = _welcome_user_context(request.user)
     return render(
         request,
@@ -64,6 +226,9 @@ def home(request):
             'display_name': ctx['display_name'],
             'role_name': ctx['role_name'],
             'is_staff_user': ctx['is_staff'],
+            'welcome_kicker': ctx['welcome_kicker'],
+            'welcome_subtitle': ctx['welcome_subtitle'],
+            'welcome_cards': ctx['welcome_cards'],
         },
     )
 
@@ -1888,6 +2053,7 @@ def browse_sales_top_users_api(request):
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_top_users_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
 
 
 @login_required
@@ -3762,6 +3928,379 @@ def browse_below_cost_prices(request):
             'groups': groups,
             'selected_group': selected_group,
             'item_q': item_q,
+            'report': report,
+            'error': error,
+            'hint': hint,
+            'wh_name': wh_name_map.get(selected_warehouse) or '',
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_price_changes(request):
+    """أصناف عُدّل سعر بيعها (المستوى 1) خلال يوم محدد."""
+    from datetime import date as date_cls
+
+    error = ''
+    hint = ''
+    report = None
+    today = date_cls.today()
+
+    day_raw = str(request.GET.get('day') or request.GET.get('date') or '').strip()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()
+    changed_only = str(request.GET.get('changed') or '1').strip() not in {
+        '0',
+        'false',
+        'no',
+        'off',
+    }
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
+
+    try:
+        day, _ = _parse_sales_dates(day_raw or today.isoformat(), day_raw or today.isoformat())
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_price_changes.html',
+            {
+                'day': today.isoformat(),
+                'branches': [],
+                'selected_branch': selected_branch,
+                'branch_warehouses': [],
+                'all_warehouses': [],
+                'selected_warehouse': selected_warehouse,
+                'groups': [],
+                'selected_group': selected_group,
+                'item_q': item_q,
+                'changed_only': changed_only,
+                'report': None,
+                'error': str(exc),
+                'hint': '',
+                'wh_name': '',
+            },
+        )
+
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    wh_name_map: dict[str, str] = {}
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_price_changes import (
+            _EXCEL_LIMIT,
+            _FETCH_LIMIT,
+            build_price_changes_excel,
+            fetch_price_changes,
+        )
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض تعديلات الأسعار.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True) or []
+                groups = fetch_sales_group_options() or []
+                branches = _low_margin_branches(warehouses) or fetch_income_branches()
+            wh_name_map = _low_margin_wh_name_map(warehouses)
+
+            if selected_branch and selected_branch not in {b['code'] for b in branches}:
+                selected_branch = ''
+            if selected_group and selected_group not in {
+                str(g.get('code') or '') for g in groups
+            }:
+                selected_group = ''
+
+            branch_wh_codes = {
+                str(w.get('code') or '').strip()
+                for w in warehouses
+                if (
+                    not selected_branch
+                    or str(w.get('branch_code') or '').strip() == selected_branch
+                )
+                and str(w.get('code') or '').strip()
+            }
+            if selected_warehouse and selected_warehouse not in branch_wh_codes:
+                if not selected_branch:
+                    if selected_warehouse not in {
+                        str(w.get('code') or '').strip() for w in warehouses
+                    }:
+                        selected_warehouse = ''
+                else:
+                    selected_warehouse = ''
+
+            if submitted and not error:
+                with oracle_session():
+                    report = fetch_price_changes(
+                        day=day,
+                        warehouse_code=selected_warehouse,
+                        branch_code=selected_branch,
+                        group_code=selected_group,
+                        item_q=item_q,
+                        changed_only=changed_only,
+                        limit=_EXCEL_LIMIT if want_excel else _FETCH_LIMIT,
+                    )
+                for r in report.get('rows') or []:
+                    code = str(r.get('wh_code') or '').strip()
+                    r['wh_name'] = wh_name_map.get(code) or code or '—'
+                if want_excel:
+                    return build_price_changes_excel(report)
+            elif not error:
+                hint = (
+                    'اختر اليوم (الافتراضي اليوم) ثم اعرض الأصناف التي تغيّر '
+                    'سعر بيعها في المستوى 1.'
+                )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_price_changes failed: %s', exc)
+        error = f'تعذّر تحميل تعديلات الأسعار: {exc}'
+        report = None
+
+    branch_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+        and (
+            not selected_branch
+            or str(w.get('branch_code') or '').strip() == selected_branch
+        )
+    ]
+    branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+    all_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+    ]
+
+    return render(
+        request,
+        'search/browse_price_changes.html',
+        {
+            'day': day.isoformat(),
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'branch_warehouses': branch_warehouses,
+            'all_warehouses': all_warehouses,
+            'selected_warehouse': selected_warehouse,
+            'groups': groups,
+            'selected_group': selected_group,
+            'item_q': item_q,
+            'changed_only': changed_only,
+            'report': report,
+            'error': error,
+            'hint': hint,
+            'wh_name': wh_name_map.get(selected_warehouse) or '',
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_cost_adjustments(request):
+    """تسوية التكاليف — أصناف عُدّلت تكلفتها والحساب المحاسبي المرحّل إليه."""
+    from datetime import date as date_cls
+    from datetime import timedelta
+
+    error = ''
+    hint = ''
+    report = None
+    today = date_cls.today()
+
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()[:80]
+    account_q = str(request.GET.get('account') or '').strip()[:80]
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {
+        '1',
+        'excel',
+        'xls',
+        'xlsx',
+    }
+    submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
+
+    try:
+        # الافتراضي: آخر 7 أيام (اليوم و6 أيام قبله)
+        raw_from = request.GET.get('date_from') or (today - timedelta(days=6)).isoformat()
+        raw_to = request.GET.get('date_to') or today.isoformat()
+        date_from, date_to = _parse_sales_dates(raw_from, raw_to)
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_cost_adjustments.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': (today - timedelta(days=6)).isoformat(),
+                'default_to': today.isoformat(),
+                'branches': [],
+                'selected_branch': selected_branch,
+                'branch_warehouses': [],
+                'all_warehouses': [],
+                'selected_warehouse': selected_warehouse,
+                'groups': [],
+                'selected_group': selected_group,
+                'item_q': item_q,
+                'account_q': account_q,
+                'report': None,
+                'error': str(exc),
+                'hint': '',
+                'wh_name': '',
+            },
+        )
+
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    wh_name_map: dict[str, str] = {}
+
+    try:
+        from .oracle_cost_adjustments import (
+            _EXCEL_LIMIT,
+            _FETCH_LIMIT,
+            build_cost_adjustments_excel,
+            fetch_cost_adjustments,
+        )
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض تسوية التكاليف.'
+        else:
+            with oracle_session():
+                warehouses = fetch_warehouse_options(active_only=True) or []
+                groups = fetch_sales_group_options() or []
+                branches = _low_margin_branches(warehouses) or fetch_income_branches()
+            wh_name_map = _low_margin_wh_name_map(warehouses)
+
+            if selected_branch and selected_branch not in {b['code'] for b in branches}:
+                selected_branch = ''
+            if selected_group and selected_group not in {
+                str(g.get('code') or '') for g in groups
+            }:
+                selected_group = ''
+
+            branch_wh_codes = {
+                str(w.get('code') or '').strip()
+                for w in warehouses
+                if (
+                    not selected_branch
+                    or str(w.get('branch_code') or '').strip() == selected_branch
+                )
+                and str(w.get('code') or '').strip()
+            }
+            if selected_warehouse and selected_warehouse not in branch_wh_codes:
+                if not selected_branch:
+                    if selected_warehouse not in {
+                        str(w.get('code') or '').strip() for w in warehouses
+                    }:
+                        selected_warehouse = ''
+                else:
+                    selected_warehouse = ''
+
+            if submitted and not error:
+                with oracle_session():
+                    report = fetch_cost_adjustments(
+                        date_from,
+                        date_to,
+                        branch_code=selected_branch,
+                        warehouse_code=selected_warehouse,
+                        group_code=selected_group,
+                        item_q=item_q,
+                        account_q=account_q,
+                        limit=_EXCEL_LIMIT if want_excel else _FETCH_LIMIT,
+                    )
+                for r in report.get('rows') or []:
+                    code = str(r.get('wh_code') or '').strip()
+                    r['wh_name'] = wh_name_map.get(code) or code or '—'
+                if want_excel:
+                    return build_cost_adjustments_excel(report)
+            elif not error:
+                hint = (
+                    'اختر الفترة (الافتراضي آخر 7 أيام) ثم اعرض الأصناف التي عُدّلت '
+                    'تكلفتها والحساب المحاسبي الذي رُحّلت إليه كل تسوية.'
+                )
+    except ValidationError as exc:
+        error = str(exc)
+        report = None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_cost_adjustments failed: %s', exc)
+        error = f'تعذّر تحميل تسوية التكاليف: {exc}'
+        report = None
+
+    branch_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+        and (
+            not selected_branch
+            or str(w.get('branch_code') or '').strip() == selected_branch
+        )
+    ]
+    branch_warehouses.sort(key=lambda w: (w['name'], w['code']))
+    all_warehouses = [
+        {
+            'code': str(w.get('code') or '').strip(),
+            'name': str(w.get('name') or w.get('code') or '').strip(),
+            'branch_code': str(w.get('branch_code') or '').strip(),
+        }
+        for w in warehouses
+        if str(w.get('code') or '').strip()
+    ]
+
+    return render(
+        request,
+        'search/browse_cost_adjustments.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': (today - timedelta(days=6)).isoformat(),
+            'default_to': today.isoformat(),
+            'branches': branches,
+            'selected_branch': selected_branch,
+            'branch_warehouses': branch_warehouses,
+            'all_warehouses': all_warehouses,
+            'selected_warehouse': selected_warehouse,
+            'groups': groups,
+            'selected_group': selected_group,
+            'item_q': item_q,
+            'account_q': account_q,
             'report': report,
             'error': error,
             'hint': hint,

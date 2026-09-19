@@ -5,7 +5,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from search.models import UserActivitySession, UserProfile
+from search.models import UserActivitySession, UserNavPermission, UserProfile
 from search.validators import contains_sql_injection, sanitize_search_query, ValidationError
 
 
@@ -116,6 +116,28 @@ class AuthenticationTests(TestCase):
         self.assertContains(response, 'سارة')
         self.assertContains(response, 'مدير مبيعات')
         self.assertContains(response, 'منصة التحليل')
+
+    def test_home_shows_role_cards_for_sales_manager(self):
+        user = get_user_model().objects.create_user(
+            username='0505666777',
+            password='StrongPassword123!',
+            first_name='نورة',
+            is_staff=False,
+        )
+        UserProfile.objects.create(
+            user=user,
+            display_name='نورة',
+            phone='0505666777',
+            role_name='مدير مبيعات',
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'لإدارة المبيعات')
+        self.assertContains(response, 'المبيعات')
+        self.assertContains(response, 'تحليل الأداء')
+        self.assertNotContains(response, 'قائمة الدخل')
+        self.assertNotContains(response, 'حد ربح التسعير')
 
     def test_sync_endpoint_requires_login(self):
         response = self.client.post(reverse('sync_barcodes'))
@@ -419,6 +441,166 @@ class VendorTurnoverCostAdjTests(TestCase):
         self.assertTrue(hit['cost_adj'])
         self.assertEqual(hit['cost_adj_hint'], 'خصم 14%')
         self.assertEqual(hit['cost_adj_cost_display'], '')
+
+
+class CostAdjustmentsTests(TestCase):
+    @patch('search.oracle_cost_adjustments.oracle_enabled', return_value=True)
+    @patch('search.oracle_cost_adjustments._fetch_all')
+    def test_shapes_rows_with_account_and_item(self, fetch_all, _enabled):
+        from datetime import date, datetime
+
+        from search.oracle_cost_adjustments import fetch_cost_adjustments
+
+        fetch_all.return_value = [
+            {
+                'DOC_NO': 5501,
+                'DOC_SER': 9001,
+                'DOC_DATE': datetime(2026, 9, 18, 13, 40),
+                'STK_DESC': 'تسوية تكاليف فاتورة شراء',
+                'BRN_NO': 6,
+                'A_CODE': '21101001',
+                'AC_CODE_DTL': '2326785',
+                'AC_DTL_TYP': 4,
+                'M_V_CODE': None,
+                'A_NAME': 'مخزون بضاعة',
+                'DTL_NAME': 'مؤسسة الأغذية',
+                'I_CODE': '06100',
+                'W_CODE': 60,
+                'ITM_UNT': 'حبة',
+                'P_SIZE': 12,
+                'INC_COST': 4.48,
+                'WTAVG': 3.9,
+                'D_V_CODE': '2326785',
+                'I_NAME': 'حليب طازج',
+            }
+        ]
+        report = fetch_cost_adjustments(
+            date(2026, 9, 12), date(2026, 9, 18), limit=5
+        )
+        rows = report['rows']
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row['item_code'], '06100')
+        self.assertEqual(row['item_name'], 'حليب طازج')
+        self.assertEqual(row['account_code'], '21101001')
+        self.assertEqual(row['account_name'], 'مخزون بضاعة')
+        self.assertEqual(row['acct_code'], '21101001')
+        self.assertEqual(row['acct_name'], 'مخزون بضاعة')
+        self.assertEqual(row['detail_code'], '2326785')
+        self.assertEqual(row['detail_name'], 'مؤسسة الأغذية')
+        self.assertEqual(row['inc_cost'], 4.48)
+        self.assertEqual(row['dtl_type'], 4)
+        self.assertEqual(row['vendor_code'], '2326785')
+        self.assertEqual(row['vendor_name'], 'مؤسسة الأغذية')
+        self.assertEqual(row['when'], '2026-09-18')
+        self.assertEqual(row['wtavg_display'], '3.9')
+        self.assertEqual(row['dtl_type_label'], 'مورد')
+        self.assertEqual(report['kpis']['move_count'], 1)
+        self.assertEqual(report['kpis']['doc_count'], 1)
+        self.assertEqual(report['kpis']['account_count'], 1)
+        self.assertEqual(report['kpis']['total_docs_display'], '1')
+        self.assertEqual(report['kpis']['total_lines_display'], '1')
+        self.assertEqual(report['kpis']['distinct_accounts_display'], '1')
+
+    @patch('search.oracle_cost_adjustments.oracle_enabled', return_value=True)
+    @patch('search.oracle_cost_adjustments._fetch_all')
+    def test_adjust_type_hung_filter_and_binds(self, fetch_all, _enabled):
+        from datetime import date
+
+        from search.oracle_cost_adjustments import fetch_cost_adjustments
+
+        fetch_all.return_value = []
+        fetch_cost_adjustments(
+            date(2026, 9, 12),
+            date(2026, 9, 18),
+            branch_code='6',
+            warehouse_code='60',
+            group_code='3',
+            item_q='حليب',
+            account_q='211',
+            limit=10,
+        )
+        sql, params = fetch_all.call_args[0]
+        self.assertEqual(params['adj_type'], 2)
+        self.assertEqual(params['brn'], 6)
+        self.assertEqual(params['wh'], 60)
+        self.assertIn('m.ADJUST_TYPE = :adj_type', sql)
+        self.assertIn('(m.HUNG IS NULL OR m.HUNG = 0)', sql)
+        self.assertIn('d.DOC_SER = m.DOC_SER', sql)
+        self.assertIn('INDX_SER_STK_ADJUSTMENT_DET', sql)
+        self.assertIn('i.G_CODE = :gcode', sql)
+        self.assertEqual(params['iq'], '%حليب%')
+        self.assertEqual(params['aq'], '%211%')
+
+    @patch('search.oracle_cost_adjustments.oracle_enabled', return_value=False)
+    def test_raises_when_oracle_disabled(self, _enabled):
+        from datetime import date
+
+        from search.oracle_cost_adjustments import fetch_cost_adjustments
+        from search.oracle_stock import OracleStockError
+
+        with self.assertRaises(OracleStockError):
+            fetch_cost_adjustments(date(2026, 9, 12), date(2026, 9, 18))
+
+
+class CostAdjustmentsViewTests(TestCase):
+    def test_browse_cost_adjustments_url_resolves(self):
+        self.assertEqual(
+            reverse('browse_cost_adjustments'),
+            '/purchases/cost-adjustments/',
+        )
+
+    def test_browse_cost_adjustments_view_importable(self):
+        from search.views import browse_cost_adjustments
+
+        self.assertTrue(callable(browse_cost_adjustments))
+
+    def test_anonymous_user_redirected_to_login(self):
+        response = self.client.get(reverse('browse_cost_adjustments'))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse('login')))
+
+    @patch('search.oracle_stock.oracle_enabled', return_value=False)
+    def test_authenticated_user_can_open_page_when_oracle_off(self, _enabled):
+        user = get_user_model().objects.create_user(
+            username='cadj-user',
+            password='StrongPassword123!',
+        )
+        UserProfile.objects.create(
+            user=user,
+            display_name='مشتريات',
+            phone='0507000001',
+            role_name='مدير مشتريات',
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse('browse_cost_adjustments'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'تسوية التكاليف')
+        self.assertContains(response, 'أوراكل غير مفعّل')
+
+    def test_denied_without_purchases_nav_access(self):
+        user = get_user_model().objects.create_user(
+            username='pricing-only',
+            password='StrongPassword123!',
+        )
+        UserProfile.objects.create(
+            user=user,
+            display_name='تسعيرة',
+            phone='0507000002',
+            role_name='مدير تسعيرة',
+        )
+        UserNavPermission.objects.create(
+            user=user,
+            sections=['pricing'],
+            blocked_screens=[],
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse('browse_cost_adjustments'))
+        self.assertRedirects(
+            response,
+            reverse('home'),
+            fetch_redirect_response=False,
+        )
 
 
 class TransferRequestCompareTests(TestCase):

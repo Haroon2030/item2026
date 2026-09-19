@@ -702,6 +702,7 @@ def build_purchase_request_compare_excel(compare: dict[str, Any]) -> Any:
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
         "th.req{background:#9a3412;}"
         "th.tot{background:#166534;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "td.neg{color:#b91c1c;font-weight:700;}"
@@ -748,7 +749,7 @@ def build_purchase_request_compare_excel(compare: dict[str, Any]) -> Any:
         buf.write(f"<tr{row_cls}>")
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f"<td>{escape(str(item.get('name') or ''))}</td>")
-        buf.write(f"<td>{escape(str(item.get('code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(item.get("code") or ""))}</td>')
         buf.write(f"<td>{escape(str(item.get('unit') or ''))}</td>")
         try:
             req_num = float(item.get("req_qty") or 0)

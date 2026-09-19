@@ -965,6 +965,7 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;}"
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.link{color:#1d4f91;font-weight:700;}"
         "tr.tot td{background:#dbeafe;font-weight:800;}"
@@ -990,12 +991,12 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
         for row in rows:
             buf.write(
                 "<tr>"
-                f"<td>{escape(str(row.get('account_code') or ''))}</td>"
+                f'<td class="txt">{escape(str(row.get("account_code") or ""))}</td>'
                 f"<td>{escape(str(row.get('account_name') or ''))}</td>"
                 f"<td>{escape(str(row.get('dtl_typ_label') or row.get('dtl_typ') or ''))}</td>"
-                f"<td class=\"link\">{escape(str(row.get('dtl_code') or ''))}</td>"
+                f'<td class="txt link">{escape(str(row.get("dtl_code") or ""))}</td>'
                 f"<td>{escape(str(row.get('dtl_name') or ''))}</td>"
-                f"<td>{escape(str(row.get('branch_name') or ''))}</td>"
+                f'<td class="txt">{escape(str(row.get("branch_code") or row.get("branch_name") or ""))}</td>'
                 "<td>SAR</td>"
                 f"<td class=\"num\">{escape(str(row.get('open_dr_display') or ''))}</td>"
                 f"<td class=\"num\">{escape(str(row.get('open_cr_display') or ''))}</td>"
@@ -1033,12 +1034,12 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
             for row in rows:
                 buf.write(
                     "<tr>"
-                    f"<td>{escape(str(row.get('account_code') or ''))}</td>"
+                    f'<td class="txt">{escape(str(row.get("account_code") or ""))}</td>'
                     f"<td>{escape(str(row.get('account_name') or ''))}</td>"
                     f"<td>{escape(str(row.get('dtl_typ_label') or row.get('dtl_typ') or ''))}</td>"
-                    f"<td class=\"link\">{escape(str(row.get('dtl_code') or ''))}</td>"
+                    f'<td class="txt link">{escape(str(row.get("dtl_code") or ""))}</td>'
                     f"<td>{escape(str(row.get('dtl_name') or ''))}</td>"
-                    f"<td>{escape(str(row.get('branch_name') or ''))}</td>"
+                    f'<td class="txt">{escape(str(row.get("branch_code") or row.get("branch_name") or ""))}</td>'
                     "<td>SAR</td>"
                     f"<td class=\"num\">{escape(str(row.get('debit_display') or ''))}</td>"
                     f"<td class=\"num\">{escape(str(row.get('credit_display') or ''))}</td>"
@@ -1065,9 +1066,9 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
             for row in rows:
                 buf.write(
                     "<tr>"
-                    f"<td>{escape(str(row.get('account_code') or ''))}</td>"
+                    f'<td class="txt">{escape(str(row.get("account_code") or ""))}</td>'
                     f"<td>{escape(str(row.get('account_name') or ''))}</td>"
-                    f"<td>{escape(str(row.get('branch_name') or ''))}</td>"
+                    f'<td class="txt">{escape(str(row.get("branch_code") or row.get("branch_name") or ""))}</td>'
                     "<td>SAR</td>"
                     f"<td class=\"num\">{escape(str(row.get('debit_display') or ''))}</td>"
                     f"<td class=\"num\">{escape(str(row.get('credit_display') or ''))}</td>"

@@ -10876,6 +10876,39 @@ html.users-modal-open {
   flex: 0 0 auto;
 }
 
+.finance-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  align-self: end;
+}
+
+.btn-ghost.finance-excel-btn,
+.finance-excel-btn,
+.suppliers-dash .suppliers-excel-btn,
+.assets-excel-btn,
+.trial-balance-dash .tb-excel-btn {
+  height: 2.15rem;
+  min-height: 2.15rem;
+  padding: 0 0.95rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid #86efac;
+  background: #ecfdf5;
+  color: #166534;
+  white-space: nowrap;
+}
+
+.btn-ghost.finance-excel-btn:hover,
+.finance-excel-btn:hover {
+  background: #d1fae5;
+  border-color: #4ade80;
+  color: #14532d;
+}
+
 .income-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -13521,23 +13554,14 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   }
 }
 
-/* ?? ???????? (???????) ?? */
-.suppliers-dash .suppliers-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem 0.75rem;
-  align-items: end;
-  padding: 0.75rem 0.9rem;
+/* الموردون — فلتر موحّد مع income-filter-bar */
+.suppliers-dash .suppliers-filter.income-filter-bar {
   margin: 0 0 0.9rem;
 }
 
-.suppliers-dash .suppliers-filter .field {
-  min-width: 8.5rem;
-}
-
 .suppliers-dash .suppliers-q-field {
-  flex: 1 1 14rem;
-  min-width: 12rem;
+  flex: 1 1 12rem;
+  min-width: 11rem;
 }
 
 .suppliers-dash .suppliers-q-field input[type="search"] {
@@ -14533,6 +14557,17 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   animation: welcome-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
 }
 
+.welcome-empty {
+  margin: 0.35rem 0 0;
+  padding: 0.85rem 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .welcome-shortcuts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -15076,65 +15111,17 @@ a.sidebar-brand-lockup {
   background: linear-gradient(90deg, #7eb6ef, #2f6fbd);
 }
 
-.assets-filter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-  padding: 0.85rem 1rem;
+.assets-filter.income-filter-bar {
   margin-bottom: 0.9rem;
 }
 
-.assets-filter-fields {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.7rem 0.9rem;
-  flex: 1 1 auto;
-}
-
-.assets-filter .field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  min-width: 9rem;
-}
-
-.assets-filter .field label {
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #3a5578;
-}
-
-.assets-filter .field input,
-.assets-filter .field select {
-  min-height: 2.35rem;
-  padding: 0.35rem 0.55rem;
-  border: 1px solid #c5d4e8;
-  border-radius: 0.55rem;
-  background: #fff;
-  font: inherit;
-  color: #12345f;
-}
-
 .assets-q-field {
-  flex: 1 1 14rem;
-  min-width: 12rem;
+  flex: 1 1 12rem;
+  min-width: 11rem;
 }
 
-.assets-filter .btn-primary,
-.assets-filter .assets-excel-btn {
-  min-height: 2.35rem;
-  padding: 0 1.1rem;
-  white-space: nowrap;
-}
-
-.assets-excel-btn {
-  font-weight: 700;
-  border: 1px solid #86efac;
-  background: #ecfdf5;
-  color: #166534;
-  border-radius: 0.65rem;
+.assets-q-field input[type="search"] {
+  width: 100%;
 }
 
 .assets-duo {
@@ -19699,5 +19686,144 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
     position: static !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+}
+/* تعديل أسعار اليوم — مستوى 1 */
+.price-changes-dash .unpriced-filter {
+  grid-template-columns:
+    minmax(7.2rem, 0.85fr)
+    minmax(0, 1.15fr)
+    minmax(0, 1.25fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    auto
+    auto;
+}
+
+.price-changes-dash .pc-filter-label {
+  color: #294f78;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.price-changes-dash .pc-kpi-up {
+  background: linear-gradient(135deg, #166534 0%, #16a34a 100%);
+}
+.price-changes-dash .pc-kpi-up .up-kpi-label,
+.price-changes-dash .pc-kpi-up .up-kpi-hint {
+  color: #dcfce7;
+}
+
+.price-changes-dash .pc-kpi-down {
+  background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%);
+}
+.price-changes-dash .pc-kpi-down .up-kpi-label,
+.price-changes-dash .pc-kpi-down .up-kpi-hint {
+  color: #fee2e2;
+}
+
+.price-changes-dash .pc-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.2rem;
+  padding: 0 0.7rem;
+  border: 1px solid #c9d9eb;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #294f78;
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.price-changes-dash .pc-check-label input[type="checkbox"] {
+  width: 1rem;
+  min-width: 1rem;
+  height: 1rem;
+  min-height: 1rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  accent-color: #166534;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.price-changes-dash .pc-check-label:has(input[type="checkbox"]:checked) {
+  border-color: #86efac;
+  background: #ecfdf3;
+  color: #14532d;
+}
+
+.price-changes-dash .pc-dir {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.price-changes-dash .pc-dir-up {
+  background: #ecfdf5;
+  color: #15803d;
+}
+.price-changes-dash .pc-dir-down {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.price-changes-dash .pc-dir-same {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.price-changes-dash .up-table tbody tr.pc-row-up td {
+  background: #f0fdf4;
+}
+.price-changes-dash .up-table tbody tr.pc-row-down td {
+  background: #fef2f2;
+}
+.price-changes-dash .pc-table td.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .price-changes-dash .unpriced-filter .pc-day-field,
+  .price-changes-dash .unpriced-filter .pc-changed-field {
+    grid-column: 1 / -1;
+  }
+}
+
+/* تسوية التكاليف — ADJUST_TYPE 2 */
+.cost-adjustments-dash .unpriced-filter {
+  grid-template-columns:
+    minmax(7rem, 0.9fr)
+    minmax(7rem, 0.9fr)
+    minmax(0, 1.1fr)
+    minmax(0, 1.2fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    auto;
+}
+
+.cost-adjustments-dash .ca-table {
+  min-width: 88rem;
+}
+
+.cost-adjustments-dash .ca-table td.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .cost-adjustments-dash .unpriced-filter .up-field-actions {
+    grid-column: 1 / -1;
   }
 }

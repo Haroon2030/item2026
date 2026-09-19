@@ -50,41 +50,51 @@
   </section>
 {% endif %}
 
-<form method="get" action="{% url 'browse_suppliers' %}" class="suppliers-filter dash-panel-glass" role="search">
-  <div class="field">
-    <label for="sup-from">من</label>
-    <input id="sup-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+<form method="get" action="{% url 'browse_suppliers' %}" class="income-filter-bar suppliers-filter" role="search" aria-label="فلاتر الموردين">
+  <div class="income-filter-bar-main">
+    <div class="income-filter-period" role="group" aria-label="الفترة">
+      <span class="income-filter-period-label">الفترة</span>
+      <div class="income-filter-period-fields">
+        <div class="income-filter-field">
+          <label for="sup-from">من</label>
+          <input id="sup-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+        </div>
+        <span class="income-filter-sep" aria-hidden="true">—</span>
+        <div class="income-filter-field">
+          <label for="sup-to">إلى</label>
+          <input id="sup-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+        </div>
+      </div>
+    </div>
+    <div class="income-filter-field">
+      <label for="sup-branch">الفرع</label>
+      <select id="sup-branch" name="branch">
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="sup-scope">النوع</label>
+      <select id="sup-scope" name="scope">
+        <option value="all" {% if scope == 'all' %}selected{% endif %}>الكل</option>
+        <option value="both" {% if scope == 'both' %}selected{% endif %}>توريد وسداد معاً</option>
+        <option value="inv_only" {% if scope == 'inv_only' %}selected{% endif %}>توريد بدون سداد</option>
+        <option value="pay_only" {% if scope == 'pay_only' %}selected{% endif %}>سداد بدون توريد</option>
+      </select>
+    </div>
+    <div class="income-filter-field suppliers-q-field">
+      <label for="sup-q">بحث المورد</label>
+      <input id="sup-q" type="search" name="q" value="{{ q }}" placeholder="رقم أو اسم المورد" autocomplete="off">
+    </div>
   </div>
-  <div class="field">
-    <label for="sup-to">إلى</label>
-    <input id="sup-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  <div class="finance-filter-actions">
+    <button type="submit" class="btn-primary income-filter-submit">عرض</button>
+    {% if report %}
+      <button type="submit" class="btn-ghost finance-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">Excel</button>
+    {% endif %}
   </div>
-  <div class="field">
-    <label for="sup-branch">الفرع</label>
-    <select id="sup-branch" name="branch">
-      <option value="">كل الفروع</option>
-      {% for b in branches %}
-        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="sup-scope">النوع</label>
-    <select id="sup-scope" name="scope">
-      <option value="all" {% if scope == 'all' %}selected{% endif %}>الكل</option>
-      <option value="both" {% if scope == 'both' %}selected{% endif %}>توريد وسداد معاً</option>
-      <option value="inv_only" {% if scope == 'inv_only' %}selected{% endif %}>توريد بدون سداد</option>
-      <option value="pay_only" {% if scope == 'pay_only' %}selected{% endif %}>سداد بدون توريد</option>
-    </select>
-  </div>
-  <div class="field suppliers-q-field">
-    <label for="sup-q">بحث المورد</label>
-    <input id="sup-q" type="search" name="q" value="{{ q }}" placeholder="رقم أو اسم المورد" autocomplete="off">
-  </div>
-  <button type="submit" class="btn-primary">عرض</button>
-  {% if report %}
-    <button type="submit" class="btn-ghost suppliers-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">Excel</button>
-  {% endif %}
 </form>
 
 {% if report %}

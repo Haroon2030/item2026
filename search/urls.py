@@ -87,6 +87,16 @@ urlpatterns = [
         name='browse_below_cost_prices',
     ),
     path(
+        'purchases/price-changes/',
+        views.browse_price_changes,
+        name='browse_price_changes',
+    ),
+    path(
+        'purchases/cost-adjustments/',
+        views.browse_cost_adjustments,
+        name='browse_cost_adjustments',
+    ),
+    path(
         'purchases/name-barcode/',
         views.browse_name_barcode_conflicts,
         name='browse_name_barcode_conflicts',

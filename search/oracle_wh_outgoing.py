@@ -509,6 +509,7 @@ def build_outgoing_transfers_excel(report: dict[str, Any]) -> HttpResponse:
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;vertical-align:middle;}"
         "th{background:#d9e2f3;color:#1e293b;font-weight:700;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:center;}"
         "td.ok{background:#c6efce;color:#14532d;font-weight:700;}"
         "td.pending{background:#ffeb9c;color:#7a4d00;font-weight:700;}"
@@ -546,7 +547,7 @@ def build_outgoing_transfers_excel(report: dict[str, Any]) -> HttpResponse:
         buf.write(
             f'<td class="{kind}">{escape(str(row.get("status_label") or ""))}</td>'
         )
-        buf.write(f'<td class="int">{escape(str(row.get("tr_no") or ""))}</td>')
+        buf.write(f'<td class="txt">{escape(str(row.get("tr_no") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('tr_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('branch_label') or ''))}</td>")
         buf.write(f'<td class="int">{int(row.get("days") or 0)}</td>')

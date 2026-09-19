@@ -664,6 +664,7 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         "th,td{border:1px solid #94a3b8;padding:4px 6px;white-space:nowrap;}"
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
         "th.a{background:#166534;} th.b{background:#9a3412;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.000';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "tr.even td{background:#f8fafc;}"
@@ -691,7 +692,7 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         even = ' class="even"' if i % 2 == 0 else ""
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('g_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('unit') or ''))}</td>")

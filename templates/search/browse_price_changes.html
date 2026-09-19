@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}تعديل أسعار اليوم{% endblock %}
+{% block page_class %}sales-dash purchase-dash unpriced-dash price-changes-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="تعديل أسعار البيع">
+  <div class="dash-head-copy">
+    <h2>تعديل أسعار اليوم</h2>
+    <p>أصناف تغيّر سعر بيعها في المستوى 1 خلال اليوم المحدد — من سجل التسعير</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="up-kpi-grid pc-kpi-grid" aria-label="ملخص تعديلات الأسعار">
+    <article class="up-kpi is-match">
+      <span class="up-kpi-label">إجمالي الحركات</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.total_display }}</strong>
+      <small class="up-kpi-hint">مستوى 1 · {{ day }}</small>
+    </article>
+    <article class="up-kpi is-shown pc-kpi-up">
+      <span class="up-kpi-label">رفع سعر</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.up_display }}</strong>
+      <small class="up-kpi-hint">سعر جديد أعلى من السابق</small>
+    </article>
+    <article class="up-kpi is-wh pc-kpi-down">
+      <span class="up-kpi-label">تخفيض سعر</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.down_display }}</strong>
+      <small class="up-kpi-hint">سعر جديد أقل من السابق</small>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_price_changes' %}" class="dash-panel-glass unpriced-filter" role="search" aria-label="فلاتر تعديلات الأسعار" id="pc-filter-form">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field pc-day-field">
+    <label for="pc-day">اليوم</label>
+    <input id="pc-day" type="date" name="day" value="{{ day }}" required>
+  </div>
+
+  <div class="field up-field-branch">
+    <label for="pc-branch">الفرع</label>
+    <select id="pc-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-wh">
+    <label for="pc-wh">المخزن</label>
+    <select id="pc-wh" name="warehouse">
+      <option value="">كل المخازن</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-group">
+    <label for="pc-group">المجموعة</label>
+    <select id="pc-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-q">
+    <label for="pc-q">صنف <span class="up-opt">(اختياري)</span></label>
+    <input id="pc-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
+  </div>
+
+  <div class="field pc-changed-field">
+    <span class="pc-filter-label">التصفية</span>
+    <label class="pc-check-label" for="pc-changed">
+      <input type="hidden" name="changed" value="0">
+      <input id="pc-changed" type="checkbox" name="changed" value="1" {% if changed_only %}checked{% endif %}>
+      <span>تغيّر السعر فقط</span>
+    </label>
+  </div>
+
+  <div class="field up-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report and report.rows %}
+  <section class="up-sheet" aria-label="نتائج تعديلات الأسعار">
+    <div class="up-sheet-head">
+      <div class="up-sheet-title">
+        <h3>سجل تعديل سعر البيع — المستوى 1</h3>
+        <span class="up-sheet-count">{{ report.rows|length }} حركة{% if report.kpis.capped %} · حد أقصى للعرض{% endif %}</span>
+      </div>
+      <div class="up-sheet-actions">
+        <a class="btn-ghost up-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير إلى Excel">Excel</a>
+      </div>
+    </div>
+
+    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول تعديلات الأسعار">
+      <table class="up-table pc-table" aria-label="أصناف عُدّل سعرها">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الوقت</th>
+            <th>النوع</th>
+            <th>الصنف</th>
+            <th>الاسم</th>
+            <th>الوحدة</th>
+            <th>المخزن</th>
+            <th>السابق</th>
+            <th>الجديد</th>
+            <th>متوسط التكلفة</th>
+            <th>آخر سعر توريد</th>
+            <th>آخر مورد</th>
+            <th>الفرق</th>
+            <th>الاتجاه</th>
+            <th>المستخدم</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+            <tr class="pc-row-{{ r.direction }}">
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="mono">{{ r.when }}</td>
+              <td>{{ r.aud_type_label }}</td>
+              <td class="mono">{{ r.item_code }}</td>
+              <td>{{ r.item_name }}</td>
+              <td>{{ r.unit }}</td>
+              <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
+              <td class="mono num">{{ r.prev_price_display }}</td>
+              <td class="mono num">{{ r.price_display }}</td>
+              <td class="mono num">{{ r.avg_cost_display }}</td>
+              <td class="mono num">{{ r.last_buy_display }}</td>
+              <td title="{{ r.last_vendor_code }}">{{ r.last_vendor_name }}</td>
+              <td class="mono num">{{ r.diff_display }}</td>
+              <td><span class="pc-dir pc-dir-{{ r.direction }}">{{ r.direction_label }}</span></td>
+              <td>{{ r.user_name }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% elif report %}
+  <div class="alert alert-info" role="status">
+    <span>لا توجد تعديلات سعر للمستوى 1 في هذا اليوم وفق الفلاتر الحالية.</span>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ all_warehouses|json_script:"pc-wh-data" }}
+<script src="/static/js/price-changes-filter.js?v={{ app_client_version }}" defer></script>
+{% endblock %}

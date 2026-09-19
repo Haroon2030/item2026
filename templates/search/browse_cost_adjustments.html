@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}تسوية التكاليف{% endblock %}
+{% block page_class %}sales-dash purchase-dash unpriced-dash cost-adj-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="تسوية التكاليف">
+  <div class="dash-head-copy">
+    <h2>تسوية التكاليف</h2>
+    <p>أصناف عُدّلت تكلفتها خلال الفترة والحساب المحاسبي (GL) الذي رُحّلت إليه كل تسوية</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <span>{{ error }}</span>
+  </div>
+{% elif hint and not report %}
+  <div class="alert alert-info" role="status">
+    <span>{{ hint }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="up-kpi-grid" aria-label="ملخص تسوية التكاليف">
+    <article class="up-kpi is-match">
+      <span class="up-kpi-label">المستندات</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.doc_count_display }}</strong>
+      <small class="up-kpi-hint">{{ report.period_label }}</small>
+    </article>
+    <article class="up-kpi is-shown">
+      <span class="up-kpi-label">البنود</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.move_count_display }}</strong>
+      <small class="up-kpi-hint">أسطر التسوية</small>
+    </article>
+    <article class="up-kpi is-wh">
+      <span class="up-kpi-label">حسابات محاسبية</span>
+      <strong class="up-kpi-value mono">{{ report.kpis.account_count_display }}</strong>
+      <small class="up-kpi-hint">عدد الحسابات المميّزة</small>
+    </article>
+  </section>
+{% endif %}
+
+<form method="get" action="{% url 'browse_cost_adjustments' %}" class="dash-panel-glass unpriced-filter" role="search" aria-label="فلاتر تسوية التكاليف" id="cadj-filter-form">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field">
+    <label for="cadj-from">من تاريخ</label>
+    <input id="cadj-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+
+  <div class="field">
+    <label for="cadj-to">إلى تاريخ</label>
+    <input id="cadj-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+
+  <div class="field up-field-branch">
+    <label for="cadj-branch">الفرع</label>
+    <select id="cadj-branch" name="branch">
+      <option value="" {% if not selected_branch %}selected{% endif %}>كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-wh">
+    <label for="cadj-wh">المخزن</label>
+    <select id="cadj-wh" name="warehouse">
+      <option value="">كل المخازن</option>
+      {% for w in branch_warehouses %}
+        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-group">
+    <label for="cadj-group">المجموعة</label>
+    <select id="cadj-group" name="group">
+      <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field up-field-q">
+    <label for="cadj-q">صنف <span class="up-opt">(اختياري)</span></label>
+    <input id="cadj-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو اسم" autocomplete="off">
+  </div>
+
+  <div class="field up-field-q">
+    <label for="cadj-account">الحساب <span class="up-opt">(اختياري)</span></label>
+    <input id="cadj-account" type="text" name="account" value="{{ account_q }}" placeholder="رقم أو اسم الحساب" autocomplete="off">
+  </div>
+
+  <div class="field up-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report and report.rows %}
+  <section class="up-sheet" aria-label="نتائج تسوية التكاليف">
+    <div class="up-sheet-head">
+      <div class="up-sheet-title">
+        <h3>بنود تسوية التكاليف</h3>
+        <span class="up-sheet-count">{{ report.rows|length }} بند{% if report.kpis.capped %} · حد أقصى للعرض{% endif %}</span>
+      </div>
+      <div class="up-sheet-actions">
+        <a class="btn-ghost up-excel-btn" href="?{{ request.GET.urlencode }}&amp;export=excel" title="تصدير إلى Excel">Excel</a>
+      </div>
+    </div>
+
+    <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول تسوية التكاليف">
+      <table class="up-table cadj-table" aria-label="أصناف عُدّلت تكلفتها">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>المستند</th>
+            <th>التاريخ</th>
+            <th>الصنف</th>
+            <th>الاسم</th>
+            <th>الوحدة</th>
+            <th>المخزن</th>
+            <th>تكلفة التسوية</th>
+            <th>متوسط التكلفة</th>
+            <th>الحساب</th>
+            <th>اسم الحساب</th>
+            <th>الطرف التفصيلي</th>
+            <th>المورد</th>
+            <th>البيان</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="mono">{{ r.doc_no_display }}</td>
+              <td class="mono">{{ r.date_display }}</td>
+              <td class="mono">{{ r.item_code }}</td>
+              <td>{{ r.item_name }}</td>
+              <td>{{ r.unit }}</td>
+              <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
+              <td class="mono num">{{ r.inc_cost_display }}</td>
+              <td class="mono num">{{ r.avg_cost_display }}</td>
+              <td class="mono">{{ r.account_code }}</td>
+              <td>{{ r.account_name }}</td>
+              <td class="mono" title="{{ r.detail_code }}">{{ r.detail_name }}</td>
+              <td title="{{ r.vendor_code }}">{{ r.vendor_name }}</td>
+              <td>{{ r.stk_desc }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% elif report %}
+  <div class="alert alert-info" role="status">
+    <span>لا توجد تسويات تكلفة في هذه الفترة وفق الفلاتر الحالية.</span>
+  </div>
+{% endif %}
+{% endblock %}

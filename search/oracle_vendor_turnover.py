@@ -1129,6 +1129,7 @@ def build_vendor_item_detail_excel(detail: dict[str, Any]) -> HttpResponse:
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:3px 6px;white-space:nowrap;}"
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.pct{mso-number-format:'0\\.0';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
@@ -1148,7 +1149,7 @@ def build_vendor_item_detail_excel(detail: dict[str, Any]) -> HttpResponse:
     for i, row in enumerate(rows, 1):
         buf.write("<tr>")
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         pack = float(row.get("pack_size") or 0)
         if pack <= 1:
@@ -1268,6 +1269,7 @@ def build_vendor_turnover_excel(report: dict[str, Any]) -> HttpResponse:
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:3px 6px;white-space:nowrap;}"
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.pct{mso-number-format:'0\\.0';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
@@ -1299,7 +1301,7 @@ def build_vendor_turnover_excel(report: dict[str, Any]) -> HttpResponse:
         key = escape(str(row.get("decision_key") or "hold"))
         buf.write(f'<tr class="{key}">')
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('vendor_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("vendor_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('vendor_name') or ''))}</td>")
         buf.write(f'<td class="num">{float(row.get("recv_qty") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(row.get("sold_qty") or 0):.2f}</td>')

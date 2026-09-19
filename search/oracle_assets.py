@@ -278,6 +278,7 @@ def build_assets_excel(report: dict[str, Any]) -> HttpResponse:
         "th.cost{background:#166534;}"
         "th.depr{background:#9a3412;}"
         "th.book{background:#5b21b6;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "td.cost{background:#ecfdf3;color:#166534;font-weight:700;}"
@@ -320,11 +321,11 @@ def build_assets_excel(report: dict[str, Any]) -> HttpResponse:
         even = " class=\"even\"" if i % 2 == 0 else ""
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('asset_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("asset_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('asset_name') or ''))}</td>")
-        buf.write(f"<td>{escape(str(row.get('group_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("group_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('group_name') or ''))}</td>")
-        buf.write(f'<td class="int">{escape(str(row.get("branch_code") or ""))}</td>')
+        buf.write(f'<td class="txt">{escape(str(row.get("branch_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('branch_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('purchase_date') or ''))}</td>")
         buf.write(f'<td class="num cost">{_xls_num(row.get("cost"))}</td>')
@@ -357,7 +358,7 @@ def build_assets_excel(report: dict[str, Any]) -> HttpResponse:
         even = " class=\"even\"" if i % 2 == 0 else ""
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f'<td class="int">{escape(str(row.get("branch_code") or ""))}</td>')
+        buf.write(f'<td class="txt">{escape(str(row.get("branch_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('branch_name') or ''))}</td>")
         buf.write(f'<td class="int">{int(row.get("asset_count") or 0)}</td>')
         buf.write(f'<td class="num cost">{_xls_num(row.get("cost_total"))}</td>')

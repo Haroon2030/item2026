@@ -422,6 +422,7 @@ def build_pos_unavailable_excel(report: dict[str, Any]) -> HttpResponse:
         "th.qty{background:#5b21b6;}"
         "th.avl{background:#0e7490;}"
         "th.cost{background:#166534;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.000';text-align:left;}"
         "td.money{mso-number-format:'\\#\\,\\#\\#0\\.0000';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
@@ -463,12 +464,12 @@ def build_pos_unavailable_excel(report: dict[str, Any]) -> HttpResponse:
         qty_cls = "neg" if float(row.get("qty") or 0) < 0 else "qty"
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
-        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('g_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('unit') or ''))}</td>")
         buf.write(f'<td class="num">{_xls_num(row.get("p_size"))}</td>')
-        buf.write(f"<td>{escape(str(row.get('wh_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("wh_code") or ""))}</td>')
         buf.write(f'<td class="money cost">{_xls_num(row.get("avg_cost"))}</td>')
         buf.write(f'<td class="num avl">{_xls_num(row.get("avl_qty"))}</td>')
         buf.write(f'<td class="num {qty_cls}">{_xls_num(row.get("qty"))}</td>')

@@ -481,6 +481,7 @@ def build_vendor_price_compare_excel(report: dict[str, Any]) -> HttpResponse:
         "th{background:#1e3a5f;color:#fff;font-weight:700;}"
         "th.spread{background:#9a3412;}"
         "th.price{background:#166534;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.0000';}"
         "td.pct{mso-number-format:'\\#\\,\\#\\#0\\.00';}"
         "td.flag{background:#ffedd5;color:#9a3412;font-weight:700;}"
@@ -516,17 +517,17 @@ def build_vendor_price_compare_excel(report: dict[str, Any]) -> HttpResponse:
         flag = ' class="flag"' if row.get("is_flag") else ""
         buf.write(f"<tr{even}>")
         buf.write(f"<td>{i}</td>")
-        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('unit') or row.get('min_unit') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('loc_count') or 0))}</td>")
         buf.write(f"<td>{escape(str(row.get('branch_count') or 0))}</td>")
         buf.write(f'<td class="num">{_xls_num(row.get("min_price"))}</td>')
         buf.write(f"<td>{escape(str(row.get('min_bill_date') or ''))}</td>")
-        buf.write(f"<td>{escape(str(row.get('min_bill_no') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("min_bill_no") or ""))}</td>')
         buf.write(f'<td class="num">{_xls_num(row.get("max_price"))}</td>')
         buf.write(f"<td>{escape(str(row.get('max_bill_date') or ''))}</td>")
-        buf.write(f"<td>{escape(str(row.get('max_bill_no') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("max_bill_no") or ""))}</td>')
         buf.write(f'<td class="pct{flag}">{_xls_num(row.get("spread_pct"), 2)}</td>')
         buf.write(
             f"<td>{escape(str(row.get('min_branch') or ''))} / "
@@ -554,7 +555,7 @@ def build_vendor_price_compare_excel(report: dict[str, Any]) -> HttpResponse:
         even = ' class="even"' if i % 2 == 0 else ""
         buf.write(f"<tr{even}>")
         buf.write(f"<td>{i}</td>")
-        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('unit') or ''))}</td>")
         for cell in row.get("branch_cells") or []:
@@ -569,7 +570,7 @@ def build_vendor_price_compare_excel(report: dict[str, Any]) -> HttpResponse:
                     f"<td>{escape(str(cell.get('bill_date_display') or cell.get('bill_date') or ''))}</td>"
                 )
                 buf.write(
-                    f"<td>{escape(str(cell.get('bill_no_display') or cell.get('bill_no') or ''))}</td>"
+                    f'<td class="txt">{escape(str(cell.get("bill_no_display") or cell.get("bill_no") or ""))}</td>'
                 )
             else:
                 buf.write("<td>—</td><td>—</td><td>—</td>")

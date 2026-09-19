@@ -9,6 +9,7 @@
 <section class="dash-head" aria-label="ميزان المراجعة">
   <div class="dash-head-copy">
     <h2>ميزان المراجعة</h2>
+    <p>أرصدة الحسابات من دفتر الترحيل — مدين ودائن وصافي الفترة</p>
   </div>
 </section>
 
@@ -144,10 +145,10 @@
       </select>
     </div>
   </div>
-  <div class="tb-filter-actions">
+  <div class="finance-filter-actions tb-filter-actions">
     <button type="submit" class="btn-primary income-filter-submit">عرض</button>
     {% if report %}
-      <button type="submit" class="btn-ghost tb-excel-btn" name="export" value="excel" title="تصدير إلى Excel">Excel</button>
+      <button type="submit" class="btn-ghost finance-excel-btn" name="export" value="excel" title="تصدير إلى Excel">Excel</button>
     {% endif %}
   </div>
 </form>

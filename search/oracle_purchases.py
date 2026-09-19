@@ -1192,6 +1192,7 @@ def build_purchase_returns_excel(
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;}"
         "th{background:#7f1d1d;color:#fff;font-weight:700;}"
+        "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "tr.even td{background:#fef2f2;}"
@@ -1230,11 +1231,11 @@ def build_purchase_returns_excel(
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f"<td>{escape(str(row.get('doc_date') or ''))}</td>")
-        buf.write(f"<td>{escape(str(row.get('doc_no') or ''))}</td>")
-        buf.write(f"<td>{branch_label}</td>")
-        buf.write(f"<td>{vendor_label}</td>")
-        buf.write(f"<td>{group_label}</td>")
-        buf.write(f"<td>{escape(str(row.get('item_code') or ''))}</td>")
+        buf.write(f'<td class="txt">{escape(str(row.get("doc_no") or ""))}</td>')
+        buf.write(f'<td class="txt">{branch_label}</td>')
+        buf.write(f'<td class="txt">{vendor_label}</td>')
+        buf.write(f'<td class="txt">{group_label}</td>')
+        buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f'<td class="num">{float(row.get("qty") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(row.get("price") or 0):.2f}</td>')
