@@ -642,39 +642,6 @@ def _assemble_sales_branches_dashboard(
 
     wholesale_raw = _sales_system_excluding_pos(pos_raw, cash_raw, credit_raw)
 
-    if not from_cache:
-        # #region agent log
-        try:
-            from .oracle_stock import _agent_dbg
-
-            b6p = next(
-                (r for r in pos_raw if str(r.get("branch_code")) == "6"), {}
-            )
-            b6c = next(
-                (r for r in cash_raw if str(r.get("branch_code")) == "6"), {}
-            )
-            b6w = next(
-                (r for r in credit_raw if str(r.get("branch_code")) == "6"), {}
-            )
-            b6o = next(
-                (r for r in wholesale_raw if str(r.get("branch_code")) == "6"),
-                {},
-            )
-            _agent_dbg(
-                "A",
-                "sales_dashboard.py:build_sales_branches:dedupe",
-                "branch6 sales system after POS dedupe",
-                {
-                    "pos": float(b6p.get("sales_total") or 0),
-                    "cash_1_5": float(b6c.get("sales_total") or 0),
-                    "credit_4_8": float(b6w.get("sales_total") or 0),
-                    "panel": float(b6o.get("sales_total") or 0),
-                },
-            )
-        except Exception:
-            pass
-        # #endregion
-
     pos_branches, pos_totals = _format_branch_rows(
         _pad_pos_store_branches(pos_raw, _pos_store_branches(), brn)
     )
@@ -737,23 +704,6 @@ def build_sales_branches_from_cache(
     cash_raw = _cached_branch_totals(date_from, date_to, "onix")
     if pos_raw is None and credit_raw is None and cash_raw is None:
         return None
-    # #region agent log
-    try:
-        from .oracle_stock import _agent_dbg
-
-        _agent_dbg(
-            "G",
-            "sales_dashboard.py:build_sales_branches_from_cache",
-            "oracle down — serving branch cache",
-            {
-                "pos_rows": len(pos_raw or []),
-                "credit_rows": len(credit_raw or []),
-                "cash_rows": len(cash_raw or []),
-            },
-        )
-    except Exception:
-        pass
-    # #endregion
     return _assemble_sales_branches_dashboard(
         list(pos_raw or []),
         list(credit_raw or []),
@@ -892,25 +842,6 @@ def peek_sales_groups(
                 round(sum(float(r.get("sales_total") or 0) for r in raw), 2)
                 - pos_total
             ) < 0.05
-            # #region agent log
-            try:
-                from .oracle_stock import _agent_dbg
-
-                _agent_dbg(
-                    "F",
-                    "sales_dashboard.py:peek_sales_groups:reconcile",
-                    "peek reconciled to branch cache",
-                    {
-                        "raw_total": raw_total,
-                        "pos_total": pos_total,
-                        "matched": matched,
-                        "incomplete": incomplete,
-                        "missing_months": len(missing or []),
-                    },
-                )
-            except Exception:
-                pass
-            # #endregion
 
     rows, totals = _format_group_rows(raw, by_branch=by_branch)
     if matched and pos_total is not None:
@@ -1010,24 +941,6 @@ def build_sales_groups(
     )
     if do_reconcile:
         try:
-            # #region agent log
-            import time as _time
-
-            _rt0 = _time.monotonic()
-            from .oracle_stock import _agent_dbg
-
-            _agent_dbg(
-                "E",
-                "sales_dashboard.py:build_sales_groups:reconcile:start",
-                "reconcile start",
-                {
-                    "raw_groups_total": raw_groups_total,
-                    "incomplete": incomplete,
-                    "months_ready": months_ready,
-                    "months_total": months_total,
-                },
-            )
-            # #endregion
             with oracle_session():
                 pos_raw = _filter_branch_rows(
                     fetch_branch_sales_totals(date_from, date_to, system="pos"),
@@ -1044,19 +957,6 @@ def build_sales_groups(
             )
             matched = abs(after - pos_total) < 0.05
             # لا تُلغِ incomplete هنا — التوزيع قد يبقى تقريبياً حتى تكتمل الشهور
-            # #region agent log
-            _agent_dbg(
-                "E",
-                "sales_dashboard.py:build_sales_groups:reconcile:ok",
-                "reconcile ok",
-                {
-                    "elapsed_ms": int((_time.monotonic() - _rt0) * 1000),
-                    "pos_total": pos_total,
-                    "matched": matched,
-                    "incomplete": incomplete,
-                },
-            )
-            # #endregion
             if not matched and not warning:
                 warning = (
                     f"إجمالي المجموعات {_money(before)} لا يطابق الفروع "
@@ -1074,42 +974,10 @@ def build_sales_groups(
                     "الإجمالي مطابق للفروع؛ التوزيع يُكمَّل مع الشهور"
                 )
         except Exception as exc:  # noqa: BLE001
-            # #region agent log
-            try:
-                from .oracle_stock import _agent_dbg
-
-                _agent_dbg(
-                    "E",
-                    "sales_dashboard.py:build_sales_groups:reconcile:err",
-                    "reconcile failed",
-                    {"error": str(exc)[:300]},
-                )
-            except Exception:
-                pass
-            # #endregion
             logger.warning("groups reconcile skipped: %s", exc)
             if not warning:
                 warning = "تم العرض بدون مطابقة ملخص الفروع"
     elif incomplete and not warning:
-        # #region agent log
-        try:
-            from .oracle_stock import _agent_dbg
-
-            _agent_dbg(
-                "F",
-                "sales_dashboard.py:build_sales_groups:reconcile:skipped",
-                "reconcile skipped",
-                {
-                    "reason": "no_rows_or_by_branch",
-                    "incomplete": incomplete,
-                    "raw_groups_total": raw_groups_total,
-                    "gcode": gcode,
-                    "by_branch": by_branch,
-                },
-            )
-        except Exception:
-            pass
-        # #endregion
         warning = (
             f"جزئي JSON {months_ready}/{months_total or '?'} — "
             "الإجمالي غير مطابق للفروع حتى تكتمل الشهور"

@@ -1,12 +1,8 @@
 """مصادقة بالاسم أو الرقم أو اسم الدخول."""
 
-import os
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 from django.db.models import Q
-
-from .debug_auth import auth_log, fingerprint
 
 
 class UsernameOrPhoneBackend(ModelBackend):
@@ -51,50 +47,10 @@ class UsernameOrPhoneBackend(ModelBackend):
 
         if user is None:
             user_model().set_password(cleaned)
-            # region agent log
-            auth_log(
-                'LOGIN',
-                'search/auth_backend.py:authenticate',
-                'login_user_not_found',
-                {
-                    'runId': 'post-fix',
-                    'loginFingerprint': fingerprint(login_id),
-                    'loginLength': len(login_id),
-                    'usersCount': user_model.objects.count(),
-                    'submittedPasswordLength': len(submitted),
-                    'cleanedPasswordLength': len(cleaned),
-                },
-            )
-            # endregion
             return None
 
         password_ok = user.check_password(cleaned)
-        env_password = os.environ.get('APP_LOGIN_PASSWORD', '')
-        env_fingerprint = fingerprint(env_password) if env_password else ''
-        submitted_fingerprint = fingerprint(cleaned)
         active_ok = self.user_can_authenticate(user)
-        # region agent log
-        auth_log(
-            'LOGIN',
-            'search/auth_backend.py:authenticate',
-            'login_user_evaluated',
-            {
-                'runId': 'post-fix',
-                'loginFingerprint': fingerprint(login_id),
-                'userFingerprint': fingerprint(user.username),
-                'matchedBy': matched_by,
-                'passwordOk': password_ok,
-                'activeOk': active_ok,
-                'isStaff': user.is_staff,
-                'submittedPasswordLength': len(submitted),
-                'cleanedPasswordLength': len(cleaned),
-                'hadSurroundingWhitespace': submitted != cleaned,
-                'matchesEnvPasswordFingerprint': bool(
-                    env_fingerprint and submitted_fingerprint == env_fingerprint
-                ),
-            },
-        )
-        # endregion
         if password_ok and active_ok:
             return user
         return None

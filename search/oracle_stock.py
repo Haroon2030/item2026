@@ -388,10 +388,6 @@ def oracle_enabled() -> bool:
     return bool(cfg.get("ENABLED"))
 
 
-def _agent_dbg(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> dict:
-    """توافق قديم — لا يكتب سجلات."""
-    return {}
-
 
 def _groups_sql_mode() -> str:
     """light = عيّنة فواتير (افتراضي لـ WAN) · full = مسح DTL كامل (بطيء جداً)."""
@@ -4321,15 +4317,6 @@ def _fetch_pos_one_group_by_branch(
         params["brn"] = brn
         branch_filter = "AND m.BRN_NO = :brn"
     hung_m = _hung_ok("m")
-    # #region agent log
-    t0 = __import__("time").monotonic()
-    _agent_dbg(
-        "F",
-        "oracle_stock.py:_fetch_pos_one_group_by_branch:start",
-        "group-by-branch start",
-        {"group": gcode, "branch": brn, "date_from": str(date_from), "date_to": str(date_to)},
-    )
-    # #endregion
     try:
         sales_rows = _fetch_all(
             f"""
@@ -4367,26 +4354,6 @@ def _fetch_pos_one_group_by_branch(
             params,
         )
         rows = _assemble_group_rows(sales_rows, {}, by_branch=True)
-        # #region agent log
-        _sales_tot = round(
-            sum(float(r.get("sales_total") or 0) for r in (rows or [])), 2
-        )
-        _agent_dbg(
-            "M",
-            "oracle_stock.py:_fetch_pos_one_group_by_branch:ok",
-            "group-by-branch ok I_PRICE_VAT",
-            {
-                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
-                "branches": len(rows or []),
-                "invoices": sum(int(r.get("invoice_count") or 0) for r in (rows or [])),
-                "sales_total": _sales_tot,
-                "formula": "I_PRICE_VAT*QTY-DIS_AMT",
-                "vs_onix_11257114": round(_sales_tot - 11257114.36, 2)
-                if str(gcode) == "26" and str(brn) == "6"
-                else None,
-            },
-        )
-        # #endregion
         try:
             _tls.groups_source = "group_branch"
             _tls.groups_stale = False
@@ -4396,17 +4363,6 @@ def _fetch_pos_one_group_by_branch(
             pass
         return rows
     except Exception as exc:  # noqa: BLE001
-        # #region agent log
-        _agent_dbg(
-            "F",
-            "oracle_stock.py:_fetch_pos_one_group_by_branch:err",
-            "group-by-branch failed",
-            {
-                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
-                "error": str(exc)[:300],
-            },
-        )
-        # #endregion
         raise
 
 
@@ -4438,22 +4394,6 @@ def _fetch_pos_group_totals_light(
     except Exception:
         pass
 
-    # #region agent log
-    t0 = __import__("time").monotonic()
-    _agent_dbg(
-        "B",
-        "oracle_stock.py:_fetch_pos_group_totals_light:start",
-        "light sample start",
-        {
-            "date_from": str(date_from),
-            "date_to": str(date_to),
-            "span": span,
-            "max_bills": max_bills,
-            "sample_mod": sample_mod,
-            "branch": str(branch_code or ""),
-        },
-    )
-    # #endregion
     try:
         with oracle_session():
             item_rows = _fetch_pos_item_sales_agg(
@@ -4471,30 +4411,7 @@ def _fetch_pos_group_totals_light(
             group_code=group_code,
             with_bills=True,
         )
-        # #region agent log
-        _agent_dbg(
-            "B",
-            "oracle_stock.py:_fetch_pos_group_totals_light:ok",
-            "light sample ok",
-            {
-                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
-                "item_rows": len(item_rows or []),
-                "groups": len(rows or []),
-            },
-        )
-        # #endregion
     except Exception as exc:  # noqa: BLE001
-        # #region agent log
-        _agent_dbg(
-            "B",
-            "oracle_stock.py:_fetch_pos_group_totals_light:err",
-            "light sample failed",
-            {
-                "elapsed_ms": int((__import__("time").monotonic() - t0) * 1000),
-                "error": str(exc)[:300],
-            },
-        )
-        # #endregion
         raise
     try:
         _tls.groups_source = "sample"
@@ -5594,19 +5511,6 @@ def fetch_group_sales_totals(
                     _tls.groups_months_total = 1
                 except Exception:
                     pass
-                # #region agent log
-                _agent_dbg(
-                    "G",
-                    "oracle_stock.py:fetch_group_sales_totals:group_branch_cache",
-                    "group-branch cache hit",
-                    {
-                        "sales_total": round(
-                            sum(float(r.get("sales_total") or 0) for r in hit), 2
-                        ),
-                        "ends_today": False,
-                    },
-                )
-                # #endregion
                 return hit
         rows = _fetch_pos_one_group_by_branch(
             date_from, date_to, group_code=gcode, branch_code=brn
@@ -5636,22 +5540,6 @@ def fetch_group_sales_totals(
                 cache.delete(f"{cache_key}:stale")
             except Exception:
                 pass
-        # #region agent log
-        _agent_dbg(
-            "G",
-            "oracle_stock.py:fetch_group_sales_totals:group_branch_fresh",
-            "group-branch fresh fetch",
-            {
-                "sales_total": round(
-                    sum(float(r.get("sales_total") or 0) for r in (rows or [])), 2
-                ),
-                "ends_today": ends_today,
-                "cached": not ends_today,
-                "branch": brn,
-                "group": gcode,
-            },
-        )
-        # #endregion
         return rows
 
     def _monthly_merge():
@@ -5723,31 +5611,8 @@ def fetch_group_sales_totals(
 
     # فترات طويلة: كاش كامل أولاً — وإلا عيّنة خفيفة دفعة واحدة (لا مسح DTL عبر WAN)
     if long_range:
-        # #region agent log
-        _agent_dbg(
-            "D",
-            "oracle_stock.py:fetch_group_sales_totals:long_range",
-            "long_range branch",
-            {
-                "months": len(months),
-                "sql_mode": _groups_sql_mode(),
-                "fast": fast,
-                "brn": brn,
-                "gcode": gcode,
-                "split_by_branch": split_by_branch,
-            },
-        )
-        # #endregion
         merged_chk, missing_chk = _monthly_merge()
         if merged_chk is not None and not missing_chk:
-            # #region agent log
-            _agent_dbg(
-                "D",
-                "oracle_stock.py:fetch_group_sales_totals:monthly_complete",
-                "monthly merge complete",
-                {"rows": len(merged_chk)},
-            )
-            # #endregion
             return _return_complete(merged_chk)
 
         period_hit = _period_cached(allow_stale=True)
@@ -5760,17 +5625,6 @@ def fetch_group_sales_totals(
             and _groups_sql_mode() == "light"
             and not split_by_branch
         ):
-            # #region agent log
-            _agent_dbg(
-                "A",
-                "oracle_stock.py:fetch_group_sales_totals:light_path",
-                "entering light oneshot path",
-                {
-                    "has_display": display is not None,
-                    "missing_months": len(missing_chk or []),
-                },
-            )
-            # #endregion
             if display is not None and not missing_chk:
                 return _return_complete(
                     merged_chk if merged_chk is not None else display
@@ -5785,24 +5639,8 @@ def fetch_group_sales_totals(
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("light groups oneshot failed: %s", exc)
-                # #region agent log
-                _agent_dbg(
-                    "B",
-                    "oracle_stock.py:fetch_group_sales_totals:light_err",
-                    "light oneshot exception",
-                    {"error": str(exc)[:300]},
-                )
-                # #endregion
                 rows_light = []
             if rows_light:
-                # #region agent log
-                _agent_dbg(
-                    "A",
-                    "oracle_stock.py:fetch_group_sales_totals:light_ok",
-                    "light oneshot returned rows",
-                    {"rows": len(rows_light)},
-                )
-                # #endregion
                 return _return_complete(rows_light)
             if display is not None:
                 return _return_partial(
@@ -5855,18 +5693,6 @@ def fetch_group_sales_totals(
 
         # لا كاش كامل: لا نعلّق على oneshot سنة كاملة عبر WAN (504/سقوط).
         # أعد جزئي + دفّئ الشهور في الخلفية / عبر واجهة sql_months.
-        # #region agent log
-        _agent_dbg(
-            "D",
-            "oracle_stock.py:fetch_group_sales_totals:skip_full_oneshot",
-            "skip blocking full oneshot; return partial",
-            {
-                "sql_mode": _groups_sql_mode(),
-                "has_display": display is not None,
-                "months": len(months),
-            },
-        )
-        # #endregion
         newest = months[-1] if months else None
         if newest and display is None:
             try:

@@ -1834,23 +1834,6 @@ def browse_sales(request):
 @never_cache
 def browse_sales_groups_api(request):
     """تحميل لاحق لمبيعات المجموعات (تفاصيل الأصناف)."""
-    # #region agent log
-    import time as _dbg_time
-    from .oracle_stock import _agent_dbg
-
-    _dbg_t0 = _dbg_time.monotonic()
-    _agent_dbg(
-        "A",
-        "views.py:browse_sales_groups_api:entry",
-        "groups api entry",
-        {
-            "date_from": str(request.GET.get("date_from") or ""),
-            "date_to": str(request.GET.get("date_to") or ""),
-            "branch": str(request.GET.get("branch") or ""),
-            "group": str(request.GET.get("group") or ""),
-        },
-    )
-    # #endregion
     try:
         date_from, date_to = _parse_sales_dates(
             request.GET.get('date_from'),
@@ -1879,40 +1862,8 @@ def browse_sales_groups_api(request):
             group_code=group_code,
             reconcile=True,
         )
-        # #region agent log
-        _agent_dbg(
-            "A",
-            "views.py:browse_sales_groups_api:ok",
-            "groups api ok",
-            {
-                "elapsed_ms": int((_dbg_time.monotonic() - _dbg_t0) * 1000),
-                "rows": len((payload or {}).get("rows") or []),
-                "incomplete": bool((payload or {}).get("incomplete")),
-                "sql_months": len((payload or {}).get("sql_months") or []),
-                "long_range": bool((payload or {}).get("long_range")),
-                "warning": str((payload or {}).get("warning") or "")[:180],
-                "cache_source": str(
-                    ((payload or {}).get("cache") or {}).get("source") or ""
-                ),
-            },
-        )
-        # #endregion
         return JsonResponse({'ok': True, 'groups': payload})
     except Exception as exc:  # noqa: BLE001
-        # #region agent log
-        try:
-            _agent_dbg(
-                "B",
-                "views.py:browse_sales_groups_api:err",
-                "groups api exception",
-                {
-                    "elapsed_ms": int((_dbg_time.monotonic() - _dbg_t0) * 1000),
-                    "error": str(exc)[:300],
-                },
-            )
-        except Exception:
-            pass
-        # #endregion
         logger.warning('browse_sales_groups_api failed: %s', exc)
         # 200 بدل 5xx حتى لا يحجب البروكسي الرسالة كـ HTTP 502
         return JsonResponse(
@@ -2804,22 +2755,6 @@ def browse_vendor_turnover(request):
             peek_vendor_turnover,
         )
 
-        # #region agent log
-        from .oracle_stock import _agent_dbg
-
-        _agent_dbg(
-            'VT1',
-            'views.py:browse_vendor_turnover:start',
-            'vendor turnover request',
-            {
-                'view_mode': view_mode,
-                'date_from': date_from.isoformat(),
-                'date_to': date_to.isoformat(),
-                'branch': selected_branch or '',
-                'vendor': selected_vendor or '',
-            },
-        )
-        # #endregion
 
         if not oracle_enabled():
             error = 'أوراكل غير مفعّل — لا يمكن حساب دوران الموردين.'
@@ -2841,18 +2776,6 @@ def browse_vendor_turnover(request):
                         vendor_code=selected_vendor,
                         branch_code=selected_branch,
                     )
-                    # #region agent log
-                    _agent_dbg(
-                        'VT2',
-                        'views.py:browse_vendor_turnover:items_fail',
-                        'item detail failed',
-                        {
-                            'exc_type': type(item_exc).__name__,
-                            'is_timeout': _is_connect_timeout(item_exc),
-                            'has_cache': cached_items is not None,
-                        },
-                    )
-                    # #endregion
                     if cached_items is not None and (
                         _is_connect_timeout(item_exc)
                         or _is_disconnect_error(item_exc)
@@ -2892,20 +2815,6 @@ def browse_vendor_turnover(request):
                     branch_code=selected_branch,
                     vendor_code=selected_vendor,
                 )
-                # #region agent log
-                _agent_dbg(
-                    'VT3',
-                    'views.py:browse_vendor_turnover:fail',
-                    'turnover build failed',
-                    {
-                        'exc_type': type(turn_exc).__name__,
-                        'is_timeout': _is_connect_timeout(turn_exc),
-                        'is_disconnect': _is_disconnect_error(turn_exc),
-                        'has_cache': cached is not None,
-                        'friendly': _friendly_connect_error(turn_exc)[:120],
-                    },
-                )
-                # #endregion
                 if cached is not None and (
                     _is_connect_timeout(turn_exc)
                     or _is_disconnect_error(turn_exc)
@@ -2925,17 +2834,6 @@ def browse_vendor_turnover(request):
 
                     _reset_pool()
                     time.sleep(1.5)
-                    # #region agent log
-                    _agent_dbg(
-                        'VT5',
-                        'views.py:browse_vendor_turnover:retry',
-                        'retrying turnover after timeout',
-                        {
-                            'date_from': date_from.isoformat(),
-                            'date_to': date_to.isoformat(),
-                        },
-                    )
-                    # #endregion
                     try:
                         report = build_vendor_turnover(
                             date_from,
@@ -2943,28 +2841,7 @@ def browse_vendor_turnover(request):
                             branch_code=selected_branch,
                             vendor_code=selected_vendor,
                         )
-                        # #region agent log
-                        _agent_dbg(
-                            'VT6',
-                            'views.py:browse_vendor_turnover:retry_ok',
-                            'retry succeeded',
-                            {
-                                'rows': len((report or {}).get('rows') or []),
-                            },
-                        )
-                        # #endregion
                     except Exception as retry_exc:  # noqa: BLE001
-                        # #region agent log
-                        _agent_dbg(
-                            'VT7',
-                            'views.py:browse_vendor_turnover:retry_fail',
-                            'retry failed',
-                            {
-                                'exc_type': type(retry_exc).__name__,
-                                'is_timeout': _is_connect_timeout(retry_exc),
-                            },
-                        )
-                        # #endregion
                         raise retry_exc from turn_exc
                 else:
                     raise
@@ -2988,23 +2865,6 @@ def browse_vendor_turnover(request):
                 )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_vendor_turnover failed: %s', exc)
-        # #region agent log
-        try:
-            from .oracle_stock import _agent_dbg, _is_connect_timeout
-
-            _agent_dbg(
-                'VT4',
-                'views.py:browse_vendor_turnover:outer',
-                'outer failure',
-                {
-                    'exc_type': type(exc).__name__,
-                    'is_timeout': _is_connect_timeout(exc),
-                    'msg': str(exc)[:160],
-                },
-            )
-        except Exception:
-            pass
-        # #endregion
         error = f'تعذّر حساب دوران الموردين: {exc}'
 
     back_qs = {
@@ -4504,151 +4364,6 @@ def browse_purchases(request):
 @login_required
 @require_GET
 @never_cache
-def browse_purchase_returns(request):
-    """مردود يومي لبضاعة راكدة على موردي الآجل."""
-    from datetime import date
-
-    today = date.today()
-    selected_branch = str(request.GET.get('branch') or '').strip()
-    selected_group = str(request.GET.get('group') or '').strip()
-    selected_vendor = str(request.GET.get('vendor') or '').strip()[:40]
-    q = str(request.GET.get('q') or '').strip()[:80]
-    want_excel = str(request.GET.get('export') or '').strip().lower() in (
-        'excel',
-        'xls',
-        '1',
-    )
-    report = None
-    error = ''
-    branches: list[dict] = []
-    groups: list[dict] = []
-    vendors: list[dict] = []
-    branch_rows: list[dict] = []
-
-    try:
-        # افتراضي: اليوم — مردود راكد يومي على موردي الآجل
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from') or today.isoformat(),
-            request.GET.get('date_to') or today.isoformat(),
-        )
-    except ValidationError as exc:
-        return render(
-            request,
-            'search/browse_purchase_returns.html',
-            {
-                'date_from': (request.GET.get('date_from') or '')[:10],
-                'date_to': (request.GET.get('date_to') or '')[:10],
-                'default_from': today.isoformat(),
-                'default_to': today.isoformat(),
-                'selected_branch': selected_branch,
-                'selected_group': selected_group,
-                'selected_vendor': selected_vendor,
-                'q': q,
-                'branches': [],
-                'groups': [],
-                'vendors': [],
-                'branch_rows': [],
-                'report': None,
-                'error': str(exc),
-            },
-        )
-
-    try:
-        from .oracle_income import fetch_income_branches
-        from .oracle_purchases import (
-            build_purchase_returns_excel,
-            build_purchase_returns_report,
-            excluded_fresh_return_group_codes,
-            fetch_purchase_returns_branches,
-            fetch_purchase_returns_vendors,
-        )
-        from .oracle_stock import (
-            fetch_sales_group_options,
-            oracle_enabled,
-            oracle_session,
-        )
-
-        if not oracle_enabled():
-            error = 'أوراكل غير مفعّل — لا يمكن عرض مردود المشتريات.'
-        else:
-            with oracle_session():
-                branches = fetch_income_branches()
-                skip_groups = excluded_fresh_return_group_codes()
-                groups = [
-                    row
-                    for row in fetch_sales_group_options()
-                    if str(row.get('code') or '').strip() not in skip_groups
-                ]
-                if selected_branch not in {row['code'] for row in branches}:
-                    selected_branch = ''
-                if selected_group not in {row['code'] for row in groups}:
-                    selected_group = ''
-                vendors = fetch_purchase_returns_vendors(
-                    date_from,
-                    date_to,
-                    branch_code=selected_branch,
-                    group_code=selected_group,
-                    q=q,
-                )
-                if selected_vendor and selected_vendor not in {
-                    row['vendor_code'] for row in vendors
-                }:
-                    selected_vendor = ''
-                branch_rows = fetch_purchase_returns_branches(
-                    date_from,
-                    date_to,
-                    branch_code=selected_branch,
-                    group_code=selected_group,
-                    q=q,
-                    vendor_code=selected_vendor,
-                )
-                report = build_purchase_returns_report(
-                    date_from,
-                    date_to,
-                    branch_code=selected_branch,
-                    group_code=selected_group,
-                    q=q,
-                    vendor_code=selected_vendor,
-                )
-                if want_excel and report:
-                    return build_purchase_returns_excel(
-                        date_from,
-                        date_to,
-                        branch_code=selected_branch,
-                        group_code=selected_group,
-                        q=q,
-                        vendor_code=selected_vendor,
-                    )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_purchase_returns failed: %s', exc)
-        error = f'تعذّر تحميل مردود المشتريات: {exc}'
-        report = None
-
-    return render(
-        request,
-        'search/browse_purchase_returns.html',
-        {
-            'date_from': date_from.isoformat(),
-            'date_to': date_to.isoformat(),
-            'default_from': today.isoformat(),
-            'default_to': today.isoformat(),
-            'selected_branch': selected_branch,
-            'selected_group': selected_group,
-            'selected_vendor': selected_vendor,
-            'q': q,
-            'branches': branches,
-            'groups': groups,
-            'vendors': vendors,
-            'branch_rows': branch_rows,
-            'report': report,
-            'error': error,
-        },
-    )
-
-
-@login_required
-@require_GET
-@never_cache
 def browse_unsold(request):
     """رصيد في مخازن محددة بلا حركة مبيعات — فلترة بالفرع والمجموعة والبحث."""
     from datetime import date
@@ -4784,54 +4499,6 @@ def browse_unsold_api(request):
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_unsold_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
-
-    return JsonResponse({'ok': True, 'rows': rows, 'offset': offset, 'limit': limit})
-
-
-@login_required
-@require_GET
-def browse_purchase_returns_api(request):
-    """صفحة إضافية من أسطر مردود المشتريات للتمرير اللانهائي."""
-    from datetime import date
-
-    today = date.today()
-    month_start = today.replace(day=1)
-    try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from') or month_start.isoformat(),
-            request.GET.get('date_to') or today.isoformat(),
-        )
-    except ValidationError as exc:
-        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
-
-    try:
-        offset = max(0, int(request.GET.get('offset') or 0))
-        limit = min(max(1, int(request.GET.get('limit') or 50)), 200)
-    except (TypeError, ValueError):
-        offset, limit = 0, 50
-
-    try:
-        from .oracle_purchases import fetch_purchase_returns_rows
-        from .oracle_stock import oracle_enabled, oracle_session
-
-        if not oracle_enabled():
-            return JsonResponse(
-                {'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400
-            )
-        with oracle_session():
-            rows = fetch_purchase_returns_rows(
-                date_from,
-                date_to,
-                branch_code=str(request.GET.get('branch') or '').strip(),
-                group_code=str(request.GET.get('group') or '').strip(),
-                q=str(request.GET.get('q') or '').strip()[:80],
-                vendor_code=str(request.GET.get('vendor') or '').strip()[:40],
-                offset=offset,
-                limit=limit,
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_purchase_returns_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
     return JsonResponse({'ok': True, 'rows': rows, 'offset': offset, 'limit': limit})
@@ -5682,38 +5349,6 @@ def browse_trial_balance(request):
                 branch_codes = {b['code'] for b in branches}
                 if selected_branch and selected_branch not in branch_codes:
                     selected_branch = ''
-                # #region agent log
-                try:
-                    import json as _json
-                    import time as _time
-                    from pathlib import Path as _Path
-
-                    _Path('debug-e1de1c.log').open('a', encoding='utf-8').write(
-                        _json.dumps(
-                            {
-                                'sessionId': 'e1de1c',
-                                'runId': 'tb-detail',
-                                'hypothesisId': 'H1',
-                                'location': 'views.browse_trial_balance:entry',
-                                'message': 'trial balance request',
-                                'data': {
-                                    'view_mode': view_mode,
-                                    'branch': selected_branch,
-                                    'date_from': date_from.isoformat(),
-                                    'date_to': date_to.isoformat(),
-                                    'hide_zero': hide_zero,
-                                    'posted_only': posted_only,
-                                    'excel': want_excel,
-                                },
-                                'timestamp': int(_time.time() * 1000),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + '\n'
-                    )
-                except Exception:
-                    pass
-                # #endregion
                 try:
                     report = build_trial_balance(
                         date_from,
@@ -5744,81 +5379,10 @@ def browse_trial_balance(request):
                         )
                     else:
                         raise
-                # #region agent log
-                try:
-                    import json as _json
-                    import time as _time
-                    from pathlib import Path as _Path
-
-                    _tot = (report or {}).get('totals') or {}
-                    _rows = (report or {}).get('rows') or []
-                    _sample = _rows[0] if _rows else {}
-                    _Path('debug-e1de1c.log').open('a', encoding='utf-8').write(
-                        _json.dumps(
-                            {
-                                'sessionId': 'e1de1c',
-                                'runId': 'post-fix',
-                                'hypothesisId': 'H-match',
-                                'location': 'views.browse_trial_balance:result',
-                                'message': 'trial balance built',
-                                'data': {
-                                    'mode': (report or {}).get('mode'),
-                                    'row_count': _tot.get('row_count'),
-                                    'debit': _tot.get('debit_display'),
-                                    'credit': _tot.get('credit_display'),
-                                    'balanced': _tot.get('balanced'),
-                                    'balance': _tot.get('balance_display'),
-                                    'onix_target': '3892413.34',
-                                    'gap_vs_onix': round(
-                                        3892413.34 - float(_tot.get('debit') or 0),
-                                        2,
-                                    ),
-                                    'sample_dtl': {
-                                        'account_code': _sample.get('account_code'),
-                                        'dtl_code': _sample.get('dtl_code'),
-                                        'dtl_name': (_sample.get('dtl_name') or '')[:40],
-                                        'dtl_typ': _sample.get('dtl_typ'),
-                                    }
-                                    if view_mode == 'detail'
-                                    else None,
-                                },
-                                'timestamp': int(_time.time() * 1000),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + '\n'
-                    )
-                except Exception:
-                    pass
-                # #endregion
             if want_excel and report is not None:
                 return build_trial_balance_excel(report)
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_trial_balance failed: %s', exc)
-        # #region agent log
-        try:
-            import json as _json
-            import time as _time
-            from pathlib import Path as _Path
-
-            _Path('debug-e1de1c.log').open('a', encoding='utf-8').write(
-                _json.dumps(
-                    {
-                        'sessionId': 'e1de1c',
-                        'runId': 'tb-detail',
-                        'hypothesisId': 'H3',
-                        'location': 'views.browse_trial_balance:error',
-                        'message': 'trial balance failed',
-                        'data': {'error': str(exc)[:300], 'view_mode': view_mode},
-                        'timestamp': int(_time.time() * 1000),
-                    },
-                    ensure_ascii=False,
-                )
-                + '\n'
-            )
-        except Exception:
-            pass
-        # #endregion
         try:
             from .oracle_stock import _friendly_connect_error
 

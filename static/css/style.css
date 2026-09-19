@@ -19800,8 +19800,7 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 }
 
 /* تسوية التكاليف — تجميع حسب المستند */
-.cost-adj-dash .unpriced-filter,
-.cost-adjustments-dash .unpriced-filter {
+.cost-adj-dash .unpriced-filter {
   grid-template-columns:
     minmax(7rem, 0.9fr)
     minmax(7rem, 0.9fr)
@@ -19814,14 +19813,12 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 }
 
 .cost-adj-dash .cadj-table,
-.cost-adjustments-dash .ca-table,
-.cost-adjustments-dash .cadj-table {
+.cost-adjustments-dash .ca-table {
   min-width: 72rem;
 }
 
 .cost-adj-dash .cadj-table td.num,
-.cost-adjustments-dash .ca-table td.num,
-.cost-adjustments-dash .cadj-table td.num {
+.cost-adjustments-dash .ca-table td.num {
   text-align: end;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -19870,8 +19867,7 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
 }
 
 @media (max-width: 1100px) {
-  .cost-adj-dash .unpriced-filter .up-field-actions,
-  .cost-adjustments-dash .unpriced-filter .up-field-actions {
+  .cost-adj-dash .unpriced-filter .up-field-actions {
     grid-column: 1 / -1;
   }
 }

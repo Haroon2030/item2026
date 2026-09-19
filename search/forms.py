@@ -10,7 +10,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.db.models import Q
 
-from .debug_auth import auth_log, fingerprint
 from .models import UserProfile
 from .nav_permissions import (
     ROLE_CHOICES,
@@ -216,22 +215,4 @@ class AppUserForm(forms.Form):
                 if hasattr(user, '_nav_permission_cache'):
                     delattr(user, '_nav_permission_cache')
 
-        # region agent log
-        auth_log(
-            'EDIT',
-            'search/forms.py:AppUserForm.save',
-            'user_saved',
-            {
-                'action': action,
-                'runId': 'post-fix',
-                'preservedBootstrapUsername': preserved_username,
-                'passwordChanged': bool(password),
-                'nameLength': len(name),
-                'phoneLength': len(phone),
-                'usernameFingerprint': fingerprint(user.username),
-                'phoneFingerprint': fingerprint(profile.phone),
-                'nameFingerprint': fingerprint(name),
-            },
-        )
-        # endregion
         return user

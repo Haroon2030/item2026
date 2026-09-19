@@ -41,16 +41,6 @@ urlpatterns = [
     ),
     path('purchases/', views.browse_purchases, name='browse_purchases'),
     path(
-        'purchases/returns/',
-        views.browse_purchase_returns,
-        name='browse_purchase_returns',
-    ),
-    path(
-        'purchases/returns/api/rows/',
-        views.browse_purchase_returns_api,
-        name='browse_purchase_returns_api',
-    ),
-    path(
         'purchases/turnover/',
         views.browse_vendor_turnover,
         name='browse_vendor_turnover',
