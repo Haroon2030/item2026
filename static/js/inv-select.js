@@ -57,6 +57,25 @@
         label: text,
       };
     }
+    // Oracle أحياناً يدمج الرقم بالاسم: 64(مرتجعات اسكاي)
+    if (code) {
+      var wrapped = code + "(";
+      if (text.indexOf(wrapped) === 0 && text.charAt(text.length - 1) === ")") {
+        return {
+          name: text.slice(wrapped.length, -1).trim() || code,
+          code: code,
+          label: text,
+        };
+      }
+      var suffix = "(" + code + ")";
+      if (text.length > suffix.length && text.slice(-suffix.length) === suffix) {
+        return {
+          name: text.slice(0, -suffix.length).trim() || code,
+          code: code,
+          label: text,
+        };
+      }
+    }
     return { name: text || code || "—", code: code, label: text || code || "—" };
   }
 
@@ -98,6 +117,7 @@
 
     var searchable = select.dataset.invSearch === "1";
     var keepOpen = select.dataset.invKeepOpen === "1";
+    var unitLabel = String(select.dataset.invUnit || "خيار").trim() || "خيار";
     var optionsCache = cacheOptions(select);
     var activeIndex = -1;
 
@@ -236,6 +256,8 @@
           item.setAttribute("aria-selected", "false");
         }
 
+        // الاسم/الرقم منفصلان عندما يحمل النص رقماً مضمّناً (مثل "مرتجعات اسكاي · 64")
+        var splitCode = !row.blank && row.code && row.name && row.name !== row.label;
         if (searchable && !row.blank) {
           item.innerHTML =
             '<span class="inv-select-opt-main">' +
@@ -246,6 +268,17 @@
               ? '<span class="inv-select-opt-code mono">' + escapeHtml(row.code) + "</span>"
               : "") +
             "</span>";
+        } else if (splitCode) {
+          // القوائم غير القابلة للبحث: نفس بنية الاسم + الرقم بلا صف بحث
+          item.innerHTML =
+            '<span class="inv-select-opt-main">' +
+            '<span class="inv-select-opt-name">' +
+            escapeHtml(row.name) +
+            "</span>" +
+            '<span class="inv-select-opt-code mono">' +
+            escapeHtml(row.code) +
+            "</span>" +
+            "</span>";
         } else {
           item.textContent = row.label;
         }
@@ -255,7 +288,12 @@
       if (metaEl) {
         if (!q) {
           metaEl.textContent =
-            "اكتب للبحث · " + optionsCache.length.toLocaleString("en-US") + " مورد";
+            "اكتب للبحث · " +
+            optionsCache.filter(function (row) {
+              return !row.disabled;
+            }).length.toLocaleString("en-US") +
+            " " +
+            unitLabel;
         } else if (q.length < 2) {
           metaEl.textContent = "أكمل حرفين على الأقل لعرض المقترحات";
         } else if (totalMatched > matched.length) {
@@ -275,7 +313,17 @@
     }
 
     function syncValue() {
-      valueEl.textContent = selectedLabel(select) || "—";
+      var opt = select.options[select.selectedIndex];
+      if (!opt || !String(opt.value || "").trim()) {
+        valueEl.textContent = selectedLabel(select) || "—";
+        return;
+      }
+      var parsed = parseLabel(opt.textContent, opt.value);
+      if (searchable && parsed.code && parsed.name && parsed.name !== parsed.code) {
+        valueEl.textContent = parsed.name + " · " + parsed.code;
+      } else {
+        valueEl.textContent = selectedLabel(select) || "—";
+      }
     }
 
     function sync() {

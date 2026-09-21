@@ -181,12 +181,13 @@
           <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
           {% if show_cc %}<input type="hidden" name="show_cc" value="1">{% endif %}
           <label class="sr-only" for="wh-exp-src-one-branch">مخزن المصدر</label>
-          <select id="wh-exp-src-one-branch" name="src_one" onchange="this.form.submit()">
+          <select id="wh-exp-src-one-branch" name="src_one">
             <option value="">كل مخازن المصدر</option>
             {% for w in report.source_options %}
               <option value="{{ w.code }}" {% if src_one == w.code %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
             {% endfor %}
           </select>
+          <button type="submit" class="btn-primary">تطبيق</button>
         </form>
         <span class="result-pill">{{ report.by_branch|length }} فرع</span>
         <button type="button" class="btn-ghost wh-exp-print-btn js-fit-print" data-print-scope="wh-exp-branches" title="طباعة PDF">PDF</button>

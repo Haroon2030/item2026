@@ -112,7 +112,7 @@
   </section>
 {% endif %}
 
-<form method="get" action="{% url 'browse_inventory' %}" class="perf-filter dash-panel-glass inv-filter" role="search">
+<form method="get" action="{% url 'browse_inventory' %}" class="perf-filter dash-panel-glass inv-filter" role="search" id="inv-filter-form">
   <div class="perf-filter-grid">
     <div class="field">
       <label for="inv-branch">الفرع</label>
@@ -125,10 +125,21 @@
     </div>
     <div class="field">
       <label for="inv-warehouse">المخزن</label>
-      <select id="inv-warehouse" name="warehouse">
-        <option value="">كل المخازن</option>
+      <select
+        id="inv-warehouse"
+        name="warehouse"
+        data-inv-unit="مخزن"
+        data-inv-blank-all="كل المخازن"
+        data-inv-blank-branch="كل مخازن الفرع"
+      >
+        <option value="">{% if selected_branch %}كل مخازن الفرع{% else %}كل المخازن{% endif %}</option>
         {% for w in warehouses %}
-          <option value="{{ w.code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
+          <option
+            value="{{ w.code }}"
+            data-branch="{{ w.branch_code }}"
+            {% if w.code == selected_warehouse %}selected{% endif %}
+            {% if selected_branch and w.branch_code != selected_branch %}hidden disabled{% endif %}
+          >{{ w.name }} · {{ w.code }}</option>
         {% endfor %}
       </select>
     </div>
@@ -143,8 +154,7 @@
     </div>
   </div>
   <div class="perf-filter-actions">
-    <button type="submit" class="btn-primary">تحليل المخزون</button>
-    <a class="btn-secondary" href="{% url 'browse_inventory_pack_errors' %}">اختلاف شد الشراء/التحويل</a>
+    <button type="submit" class="btn-primary">تطبيق</button>
   </div>
 </form>
 
@@ -160,7 +170,7 @@
           <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="المخزون حسب المخزن">
             <thead>
               <tr>
-                <th class="inv-col-sticky">المخزن</th>
+                <th>المخزن</th>
                 <th>الفرع</th>
                 <th>أصناف</th>
                 <th class="inv-col-qty" title="الكمية بعد خصم غير المرحّل">الكمية</th>
@@ -171,7 +181,7 @@
             <tbody>
               {% for row in insights.by_warehouse %}
                 <tr>
-                  <td class="inv-col-sticky inv-cell-clip" title="{{ row.name }} #{{ row.code }}">{{ row.name }}</td>
+                  <td class="inv-cell-clip" title="{{ row.name }} #{{ row.code }}">{{ row.name }}</td>
                   <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
                   <td class="mono">{{ row.item_count_display }}</td>
                   <td class="mono inv-col-qty">{{ row.qty_display }}</td>
@@ -188,7 +198,7 @@
           <table class="data-table sales-table perf-compare-table inv-table-compact inv-table-foot" aria-label="إجمالي المخازن">
             <tbody>
               <tr class="sales-grand-row">
-                <td class="inv-col-sticky" colspan="2">الإجمالي</td>
+                <td colspan="2">الإجمالي</td>
                 <td class="mono">{{ insights.warehouse_totals.item_count_display }}</td>
                 <td class="mono inv-col-qty">{{ insights.warehouse_totals.qty_display }}</td>
                 <td class="mono inv-col-cost">{{ insights.warehouse_totals.stock_value_display }}</td>
@@ -516,4 +526,65 @@
 {% block extra_js %}
 <script src="/static/js/inv-select.js?v={{ app_client_version }}" defer></script>
 <script src="/static/js/inv-stagnant-donut.js?v={{ app_client_version }}" defer></script>
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn);
+    } else {
+      fn();
+    }
+  }
+
+  ready(function () {
+    var branch = document.getElementById("inv-branch");
+    var warehouse = document.getElementById("inv-warehouse");
+    if (!branch || !warehouse) return;
+
+    var blankAll = warehouse.getAttribute("data-inv-blank-all") || "كل المخازن";
+    var blankBranch = warehouse.getAttribute("data-inv-blank-branch") || "كل مخازن الفرع";
+
+    function normCode(value) {
+      var s = String(value || "").trim();
+      if (!s) return "";
+      if (/^\d+$/.test(s)) {
+        try {
+          return String(parseInt(s, 10));
+        } catch (err) {
+          return s;
+        }
+      }
+      return s;
+    }
+
+    function syncWarehouses() {
+      var brn = String(branch.value || "").trim();
+      var brnNorm = normCode(brn);
+      var keep = String(warehouse.value || "").trim();
+      var keepOk = !keep;
+      Array.prototype.forEach.call(warehouse.options, function (opt) {
+        var value = String(opt.value || "").trim();
+        if (!value) {
+          opt.hidden = false;
+          opt.disabled = false;
+          opt.textContent = brn ? blankBranch : blankAll;
+          return;
+        }
+        var optBrn = String(opt.getAttribute("data-branch") || "").trim();
+        var show = !brn || optBrn === brn || normCode(optBrn) === brnNorm;
+        opt.hidden = !show;
+        opt.disabled = !show;
+        if (show && value === keep) keepOk = true;
+      });
+      if (!keepOk) warehouse.value = "";
+      if (typeof window.invSelectRefresh === "function") {
+        window.invSelectRefresh(warehouse);
+      }
+    }
+
+    branch.addEventListener("change", syncWarehouses);
+    syncWarehouses();
+  });
+})();
+</script>
 {% endblock %}

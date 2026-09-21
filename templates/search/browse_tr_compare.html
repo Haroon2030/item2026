@@ -35,7 +35,7 @@
     <div class="field">
       <label for="tr-branch">الفرع</label>
       <div class="pr-compare-select-wrap">
-        <select id="tr-branch" name="branch" required onchange="this.form.warehouse && (this.form.warehouse.value=''); this.form.submit()">
+        <select id="tr-branch" name="branch" required>
           <option value="">اختر الفرع</option>
           {% for b in branches %}
             <option value="{{ b.code }}" title="{{ b.name }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
@@ -46,7 +46,7 @@
     <div class="field">
       <label for="tr-warehouse">مخزن الطلب</label>
       <div class="pr-compare-select-wrap">
-        <select id="tr-warehouse" name="warehouse" {% if not selected_branch %}disabled{% endif %} onchange="this.form.submit()">
+        <select id="tr-warehouse" name="warehouse" {% if not selected_branch %}disabled{% endif %}>
           {% if not selected_branch %}
             <option value="">اختر الفرع أولاً</option>
           {% else %}
@@ -207,8 +207,23 @@
   {% endif %}
 </section>
 {{ request_users|json_script:"tr-request-users" }}
+{{ all_warehouses|json_script:"tr-wh-data" }}
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/req-user-suggest.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/branch-wh-cascade.js?v={{ app_client_version }}" defer></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (!window.BranchWhCascade) return;
+  window.BranchWhCascade.bind({
+    branch: "#tr-branch",
+    warehouse: "#tr-warehouse",
+    data: "#tr-wh-data",
+    requireBranch: true,
+    blankNeedBranch: "اختر الفرع أولاً",
+    blankAll: "كل مخازن الطلب",
+  });
+});
+</script>
 {% endblock %}

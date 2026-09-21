@@ -322,6 +322,21 @@ def _warehouses_for_branch(warehouses: list[dict], branch_code: str) -> list[dic
     ]
 
 
+def _clean_warehouse_name(code: str, raw_name: str) -> str:
+    """يفصل اسم المخزن عن رقمه إن كان ملتصقاً في W_NAME مثل 64(مرتجعات اسكاي)."""
+    code = str(code or '').strip()
+    name = str(raw_name or '').strip() or code
+    if not code or name == code:
+        return name
+    suffix = f'({code})'
+    if name.endswith(suffix):
+        name = name[: -len(suffix)].strip()
+    wrapped = f'{code}('
+    if name.startswith(wrapped) and name.endswith(')'):
+        name = name[len(wrapped) : -1].strip()
+    return name or code
+
+
 def _low_margin_branches(warehouses: list[dict]) -> list[dict]:
     """فروع S_BRN التي لها مخازن نشطة — أسماء رسمية بدون تكرار."""
     from .oracle_income import fetch_income_branches
@@ -2129,9 +2144,9 @@ def browse_inventory(request):
             error = 'أوراكل غير مفعّل — لا يمكن تحليل المخزون.'
         else:
             with oracle_session():
-                warehouses = fetch_warehouse_options(active_only=True)
+                raw_warehouses = fetch_warehouse_options(active_only=True)
                 groups = fetch_sales_group_options()
-                wh_codes = {w['code'] for w in warehouses}
+                wh_codes = {w['code'] for w in raw_warehouses}
                 group_codes = {g['code'] for g in groups}
                 if selected_warehouse and selected_warehouse not in wh_codes:
                     selected_warehouse = ''
@@ -2139,10 +2154,23 @@ def browse_inventory(request):
                     selected_group = ''
 
                 branch_map: dict[str, str] = {}
-                for w in warehouses:
+                warehouses = []
+                for w in raw_warehouses:
+                    code = str(w.get('code') or '').strip()
+                    if not code:
+                        continue
                     brn = str(w.get('branch_code') or '').strip()
                     if brn:
                         branch_map[brn] = str(w.get('branch_name') or brn)
+                    clean = _clean_warehouse_name(code, str(w.get('name') or ''))
+                    warehouses.append(
+                        {
+                            'code': code,
+                            'name': clean,
+                            'branch_code': brn,
+                            'branch_name': str(w.get('branch_name') or brn or '—'),
+                        }
+                    )
                 branches = [
                     {'code': code, 'name': name}
                     for code, name in sorted(
@@ -2152,21 +2180,15 @@ def browse_inventory(request):
                 if selected_branch and selected_branch not in branch_map:
                     selected_branch = ''
 
-                # عند اختيار فرع: اعرض مخازنه فقط في القائمة
-                warehouse_choices = warehouses
-                if selected_branch:
-                    warehouse_choices = [
-                        w
+                # إن وُجد فرع محدد ومخزن خارج نطاقه — ألغِ المخزن
+                if selected_branch and selected_warehouse:
+                    allowed = {
+                        w['code']
                         for w in warehouses
                         if str(w.get('branch_code') or '') == selected_branch
-                    ]
-                    if (
-                        selected_warehouse
-                        and selected_warehouse
-                        not in {w['code'] for w in warehouse_choices}
-                    ):
+                    }
+                    if selected_warehouse not in allowed:
                         selected_warehouse = ''
-                warehouses = warehouse_choices
 
             # خارج الجلسة: الاستعلامات الثقيلة تعمل بالتوازي بجلسات مستقلة
             insights = build_inventory_insights(
@@ -4526,6 +4548,7 @@ def browse_pr_compare(request):
     request_users: list[dict] = []
     branches: list[dict] = []
     warehouses: list[dict] = []
+    all_warehouses: list[dict] = []
     selected_warehouse_name = ''
     error = ''
 
@@ -4664,6 +4687,7 @@ def browse_pr_compare(request):
             'request_users': request_users,
             'branches': branches,
             'warehouses': warehouses,
+            'all_warehouses': all_warehouses,
             'requests_today': requests_today,
             'error': error,
         },
@@ -4949,6 +4973,7 @@ def _load_branch_warehouses(selected_branch: str, selected_warehouse: str):
         selected_warehouse_name,
         branches,
         warehouses,
+        all_warehouses,
     )
 
 
@@ -4965,6 +4990,7 @@ def browse_tr_compare(request):
     request_users: list[dict] = []
     branches: list[dict] = []
     warehouses: list[dict] = []
+    all_warehouses: list[dict] = []
     selected_warehouse_name = ''
     error = ''
 
@@ -4982,6 +5008,7 @@ def browse_tr_compare(request):
                     selected_warehouse_name,
                     branches,
                     warehouses,
+                    all_warehouses,
                 ) = _load_branch_warehouses(selected_branch, selected_warehouse)
                 if selected_branch:
                     requests_today = fetch_today_transfer_requests(
@@ -5022,6 +5049,7 @@ def browse_tr_compare(request):
             'request_users': request_users,
             'branches': branches,
             'warehouses': warehouses,
+            'all_warehouses': all_warehouses,
             'requests_today': requests_today,
             'error': error,
         },
@@ -5672,6 +5700,7 @@ def browse_wh_outgoing(request):
                     _dst_wh_name,
                     branches,
                     warehouses_to,
+                    _all_wh_dst,
                 ) = _load_branch_warehouses(
                     selected_branch_to, selected_warehouse_to
                 )
@@ -5681,6 +5710,7 @@ def browse_wh_outgoing(request):
                     _src_wh_name,
                     branches_src,
                     warehouses_from,
+                    _all_wh_src,
                 ) = _load_branch_warehouses(
                     selected_branch_from, selected_warehouse_from
                 )

@@ -88,7 +88,6 @@
           <select
             id="wh-out-branch-from"
             name="branch_from"
-            onchange="this.form.warehouse_from && (this.form.warehouse_from.value=''); this.form.submit()"
           >
             <option value="">كل الفروع</option>
             {% for b in branches %}
@@ -102,7 +101,6 @@
           <select
             id="wh-out-branch-to"
             name="branch_to"
-            onchange="this.form.warehouse_to && (this.form.warehouse_to.value=''); this.form.submit()"
           >
             <option value="">كل الفروع</option>
             {% for b in branches %}
@@ -120,7 +118,6 @@
           <select
             id="wh-out-warehouse-from"
             name="warehouse_from"
-            onchange="this.form.submit()"
           >
             {% if selected_branch_from %}
               <option value="">كل مخازن فرع المصدر</option>
@@ -140,7 +137,6 @@
           <select
             id="wh-out-warehouse-to"
             name="warehouse_to"
-            onchange="this.form.submit()"
           >
             {% if selected_branch_to %}
               <option value="">كل مخازن فرع الوصول</option>
@@ -237,6 +233,24 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ all_warehouses|json_script:"wh-out-wh-data" }}
+<script src="/static/js/branch-wh-cascade.js?v={{ app_client_version }}" defer></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (!window.BranchWhCascade) return;
+  window.BranchWhCascade.bindPair({
+    data: "#wh-out-wh-data",
+    branchFrom: "#wh-out-branch-from",
+    warehouseFrom: "#wh-out-warehouse-from",
+    branchTo: "#wh-out-branch-to",
+    warehouseTo: "#wh-out-warehouse-to",
+    blankFromBranch: "كل مخازن فرع المصدر",
+    blankFromAll: "كل مخازن الفروع",
+    blankToBranch: "كل مخازن فرع الوصول",
+    blankToAll: "كل مخازن الفروع",
+  });
+});
+</script>
 {% if report %}
 <script src="/static/js/wh-out-scroll.js?v={{ app_client_version }}" defer></script>
 {% endif %}
