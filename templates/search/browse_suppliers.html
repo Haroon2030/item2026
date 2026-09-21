@@ -11,6 +11,14 @@
     <h2>الموردون</h2>
     <p>عدد فواتير الشراء، رصيد مخزون أصناف المورد، إجمالي السداد وآخر سداد في الفترة</p>
   </div>
+  {% if report %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
 </section>
 
 {% if error %}
@@ -23,27 +31,52 @@
 {% if report %}
   <section class="suppliers-kpis" aria-label="ملخص الموردين">
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-sellers">
-      <span class="dash-kpi-label">الموردون</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-sellers" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </span>
+        الموردون
+      </span>
       <strong class="dash-kpi-value mono">{{ report.totals.supplier_count_display }}</strong>
       <span class="dash-kpi-hint">{{ report.period_label }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
-      <span class="dash-kpi-label">فواتير الشراء</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
+        </span>
+        فواتير الشراء
+      </span>
       <strong class="dash-kpi-value mono">{{ report.totals.invoice_count_display }}</strong>
       <span class="dash-kpi-hint">في الفترة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-branches">
-      <span class="dash-kpi-label">إجمالي التوريد</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-branches" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 6h2l2.4 10.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.5L20.5 9H7"/><circle cx="10" cy="20" r="1.1"/><circle cx="17" cy="20" r="1.1"/></svg>
+        </span>
+        إجمالي التوريد
+      </span>
       <strong class="dash-kpi-value mono">{% money report.totals.purchase_total_display %}</strong>
       <span class="dash-kpi-hint">فواتير الشراء بالضريبة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-amt">
-      <span class="dash-kpi-label">إجمالي السداد</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-item-amt" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M8 15h4"/></svg>
+        </span>
+        إجمالي السداد
+      </span>
       <strong class="dash-kpi-value mono">{% money report.totals.pay_total_display %}</strong>
       <span class="dash-kpi-hint">سندات صرف للموردين</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-qty">
-      <span class="dash-kpi-label">قيمة مخزون الموردين</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-item-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        قيمة مخزون الموردين
+      </span>
       <strong class="dash-kpi-value mono">{% money report.totals.stock_value_display %}</strong>
       <span class="dash-kpi-hint">مورد بطاقة الصنف · بعد الترحيل</span>
     </article>

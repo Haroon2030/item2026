@@ -27,6 +27,16 @@ def _qty(v: float) -> str:
     return f"{num:,.2f}"
 
 
+def _attach_inv_rank_bars(rows: list[dict], *, value_key: str = "stock_value") -> None:
+    """شريط الترتيب: الأفضل = 100% والباقي نسبي منه."""
+    if not rows:
+        return
+    peak = float(rows[0].get(value_key) or 0)
+    for row in rows:
+        val = float(row.get(value_key) or 0)
+        row["bar_pct"] = round((val / peak * 100.0) if peak else 0.0, 1)
+
+
 def _table_totals(rows: list[dict]) -> dict[str, Any]:
     """إجماليات صف التذييل من صفوف البعد (قيمة وكمية بدون تكرار محاسبي)."""
     value = round(sum(float(r.get("stock_value") or 0) for r in rows), 2)
@@ -136,7 +146,7 @@ def _rank_group_sales(
     for row in ranked:
         bar = (float(row["sales_total"]) / peak * 100.0) if peak else 0.0
         row["bar_pct"] = round(bar, 1)
-    return ranked[:10], period_label, {
+    return ranked[:9], period_label, {
         code: float(v.get("sales_total") or 0) for code, v in sales_by_code.items()
     }
 
@@ -147,16 +157,21 @@ def _build_stagnant_items(
     total_stock_qty: float,
     total_stock_value: float,
 ) -> dict[str, Any]:
-    """أصناف بأعلى كمية وأقل حركة — للرسم الدائري."""
+    """أصناف بأعلى كمية بلا مبيعات — لقائمة الترتيب."""
     stagnant = list(rows or [])
     stagnant_qty = round(sum(float(r.get("qty_total") or 0) for r in stagnant), 2)
     stagnant_value = round(sum(float(r.get("stock_value") or 0) for r in stagnant), 2)
     for row in stagnant:
-        # تأكد من حقول الدونات
         if "qty_display" not in row:
             row["qty_display"] = _qty(row.get("qty_total") or 0)
         if "stock_value_display" not in row:
             row["stock_value_display"] = _money(row.get("stock_value") or 0)
+        qty = float(row.get("qty_total") or 0)
+        share = (qty / stagnant_qty * 100.0) if stagnant_qty > 0 else 0.0
+        row["share_pct"] = round(share, 1)
+        row["share_display"] = f"{share:.1f}%"
+    top = stagnant[:15]
+    _attach_inv_rank_bars(top, value_key="qty_total")
     of_all = (
         (stagnant_qty / total_stock_qty * 100.0) if total_stock_qty > 0 else 0.0
     )
@@ -164,7 +179,7 @@ def _build_stagnant_items(
         (stagnant_value / total_stock_value * 100.0) if total_stock_value > 0 else 0.0
     )
     return {
-        "rows": stagnant[:15],
+        "rows": top,
         "count": len(stagnant),
         "qty_total": stagnant_qty,
         "qty_display": _qty(stagnant_qty),
@@ -262,6 +277,7 @@ def build_inventory_insights(
 
     # تسلسلي فقط: تجنّب ThreadPoolExecutor (يتعطّل بعد إعادة تحميل runserver على Windows)
     by_warehouse = _by_wh()
+    _attach_inv_rank_bars(by_warehouse)
     by_group = _by_group()
     by_branch = _by_brn()
     sales_rows = _sales_raw()

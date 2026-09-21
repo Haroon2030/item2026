@@ -98,9 +98,12 @@
       var meta = typeof opts.metaText === "function"
         ? opts.metaText(row)
         : String(row[displayKey] || "");
+      var tip = typeof opts.itemTitle === "function"
+        ? opts.itemTitle(row)
+        : (row.name || "") + " — " + (row[displayKey] || "");
       legend +=
         '<li class="branch-donut-legend-item" style="--i: ' + i + '"' +
-        ' title="' + esc(row.name) + " — " + esc(row[displayKey] || "") + '">' +
+        ' title="' + esc(tip) + '">' +
         '<span class="branch-donut-swatch" style="background:' + color + '" aria-hidden="true"></span>' +
         '<span class="branch-donut-legend-body">' +
         '<span class="branch-donut-legend-name">' + esc(row.name) + "</span>" +
@@ -129,6 +132,20 @@
     }
   }
 
+  function shortAmt(s) {
+    var n = parseFloat(String(s == null ? "" : s).replace(/,/g, ""));
+    if (!isFinite(n)) return "—";
+    var abs = Math.abs(n);
+    var sign = n < 0 ? "-" : "";
+    if (abs >= 1e6) {
+      return sign + (abs / 1e6).toFixed(1).replace(/\.0$/, "") + "م";
+    }
+    if (abs >= 1e3) {
+      return sign + (abs / 1e3).toFixed(1).replace(/\.0$/, "") + "أ";
+    }
+    return sign + String(Math.round(abs));
+  }
+
   function init() {
     var stagnant = parseSeed("inv-stagnant-data");
     if (stagnant !== null) {
@@ -146,34 +163,9 @@
         },
         metaText: function (row) {
           return (
-            "كمية " + (row.qty_display || "0") +
-            " · قيمة " + (row.stock_value_display || "0") +
+            "ك " + shortAmt(row.qty_display) +
+            " · ق " + shortAmt(row.stock_value_display) +
             (row.code ? " · #" + row.code : "")
-          );
-        }
-      });
-    }
-
-    var sales = parseSeed("inv-group-sales-data");
-    if (sales !== null) {
-      renderInvDonut({
-        boardId: "inv-group-sales-board",
-        emptyId: "inv-group-sales-empty",
-        pillId: "inv-group-sales-pill",
-        rows: (sales || []).slice(0, 10),
-        valueKey: "sales_total",
-        displayKey: "sales_display",
-        colors: SALES_COLORS,
-        ariaLabel: "المجموعات الأكثر مبيعات",
-        pillText: function (n) {
-          return n ? "أعلى " + n : "0 مجموعة";
-        },
-        metaText: function (row) {
-          return (
-            "مبيعات " + (row.sales_display || "0") +
-            " · كمية " + (row.qty_display || "0") +
-            " · " + (row.turnover_display || "—") +
-            " · مخزون " + (row.stock_value_display || "—")
           );
         }
       });

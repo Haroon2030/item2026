@@ -10,6 +10,14 @@
     <h2>تعديل أسعار اليوم</h2>
     <p>أصناف تغيّر سعر بيعها في المستوى 1 خلال اليوم المحدد — من سجل التسعير</p>
   </div>
+  {% if report %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
 </section>
 
 {% if error %}
@@ -26,17 +34,32 @@
 {% if report %}
   <section class="up-kpi-grid pc-kpi-grid" aria-label="ملخص تعديلات الأسعار">
     <article class="up-kpi is-match">
-      <span class="up-kpi-label">إجمالي الحركات</span>
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 14l3-4 3 2 4-6"/><path d="M15 6h3v3"/></svg>
+        </span>
+        إجمالي الحركات
+      </span>
       <strong class="up-kpi-value mono">{{ report.kpis.total_display }}</strong>
       <small class="up-kpi-hint">مستوى 1 · {{ day }}</small>
     </article>
     <article class="up-kpi is-shown pc-kpi-up">
-      <span class="up-kpi-label">رفع سعر</span>
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6.5 10.5 12 5l5.5 5.5"/></svg>
+        </span>
+        رفع سعر
+      </span>
       <strong class="up-kpi-value mono">{{ report.kpis.up_display }}</strong>
       <small class="up-kpi-hint">سعر جديد أعلى من السابق</small>
     </article>
     <article class="up-kpi is-wh pc-kpi-down">
-      <span class="up-kpi-label">تخفيض سعر</span>
+      <span class="up-kpi-label">
+        <span class="up-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M6.5 13.5 12 19l5.5-5.5"/></svg>
+        </span>
+        تخفيض سعر
+      </span>
       <strong class="up-kpi-value mono">{{ report.kpis.down_display }}</strong>
       <small class="up-kpi-hint">سعر جديد أقل من السابق</small>
     </article>

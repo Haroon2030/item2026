@@ -10,6 +10,12 @@
     <h2>تحليل الأداء</h2>
     <p>فلترة حقيقية ومقارنة فترتين — اقرأ ثم قرر</p>
   </div>
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
 </section>
 
 <form method="get" action="{% url 'browse_performance' %}" class="perf-filter dash-panel-glass" role="search">
@@ -139,34 +145,64 @@
 
     <section class="dash-kpi perf-kpi perf-kpi-top" aria-label="مؤشرات سريعة">
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-sales">
-        <span class="dash-kpi-label">مبيعات أ</span>
+        <span class="dash-kpi-label">
+          <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
+          </span>
+          مبيعات أ
+        </span>
         <strong class="dash-kpi-value mono">{{ insights.kpis.sales }}</strong>
         <span class="dash-kpi-hint mono {% if insights.kpis.sales_delta is not None and insights.kpis.sales_delta < 0 %}is-down{% elif insights.kpis.sales_delta is not None and insights.kpis.sales_delta > 0 %}is-up{% endif %}">
           {{ insights.kpis.sales_delta_display }} vs ب
         </span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-invoices">
-        <span class="dash-kpi-label">فواتير أ</span>
+        <span class="dash-kpi-label">
+          <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
+          </span>
+          فواتير أ
+        </span>
         <strong class="dash-kpi-value mono">{{ insights.kpis.invoices }}</strong>
         <span class="dash-kpi-hint mono">{{ insights.kpis.invoices_delta_display }} vs ب</span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-returns">
-        <span class="dash-kpi-label">مرتجع أ</span>
+        <span class="dash-kpi-label">
+          <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/></svg>
+          </span>
+          مرتجع أ
+        </span>
         <strong class="dash-kpi-value mono">{{ insights.kpis.returns }}</strong>
         <span class="dash-kpi-hint mono">{{ insights.kpis.returns_delta_display }} vs ب</span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-rate">
-        <span class="dash-kpi-label">نسبة المرتجع</span>
+        <span class="dash-kpi-label">
+          <span class="dash-kpi-ico dash-kpi-ico-branches" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+          نسبة المرتجع
+        </span>
         <strong class="dash-kpi-value mono">{{ insights.kpis.return_rate_display }}</strong>
         <span class="dash-kpi-hint mono">ب: {{ insights.kpis.prior_return_rate_display }}</span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-basket">
-        <span class="dash-kpi-label">متوسط السلة</span>
+        <span class="dash-kpi-label">
+          <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 6h2l2.4 10.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.5L20.5 9H7"/><circle cx="10" cy="20" r="1.1"/><circle cx="17" cy="20" r="1.1"/></svg>
+          </span>
+          متوسط السلة
+        </span>
         <strong class="dash-kpi-value mono">{{ insights.kpis.avg_basket }}</strong>
         <span class="dash-kpi-hint mono">{{ insights.kpis.avg_basket_delta_display }} vs ب</span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-rows">
-        <span class="dash-kpi-label">صفوف المقارنة</span>
+        <span class="dash-kpi-label">
+          <span class="dash-kpi-ico dash-kpi-ico-sellers" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 13h3M8 16h5"/></svg>
+          </span>
+          صفوف المقارنة
+        </span>
         <strong class="dash-kpi-value mono">{{ insights.compare_table|length }}</strong>
         <span class="dash-kpi-hint">{{ insights.scope_label }}</span>
       </article>

@@ -11,6 +11,14 @@
     <h2>تحليل المبيعات</h2>
     <p>أرقام صافية بعد المرتجع · مبيعات أونكس للفترة · نقاط البيع · الآجل · المجموعات</p>
   </div>
+  {% if dashboard %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
 </section>
 
 {% if error %}
@@ -27,18 +35,18 @@
   <section class="sales-ov-kpis" aria-label="ملخص نقاط البيع">
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-pos">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 17v2h10v-2"/><path d="M7 9h4M7 12h2"/></svg>
+        <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="12.5" rx="2.2"/><path d="M8 20h8M12 17v3"/><path d="M6.5 9h4M6.5 12.5h2.5"/><circle cx="16.2" cy="10.2" r="1.6"/></svg>
         </span>
         مبيعات نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_sales %}</strong>
-      <span class="dash-kpi-hint mono">صافي الفترة · {{ dashboard.kpis.pos_invoices }} فاتورة · {{ dashboard.kpis.pos_branches }} فرع</span>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/><path d="M9.5 12h5.5M12.5 9.5 15 12l-2.5 2.5"/></svg>
         </span>
         مرتجع نقاط البيع
       </span>
@@ -47,44 +55,64 @@
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+        <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M14 3.2H7.2A2.2 2.2 0 0 0 5 5.4v13.2A2.2 2.2 0 0 0 7.2 21h9.6a2.2 2.2 0 0 0 2.2-2.2V8.4z"/><path d="M14 3.2v5.2h5.2M8.2 12.5h7.6M8.2 16h5.2"/></svg>
         </span>
         مبيعات نظام المبيعات
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_sales %}</strong>
-        <span class="dash-kpi-hint mono">آجل + نقدي عملاء غير POS · بدون تكرار نقاط البيع · {{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total">
       <span class="dash-kpi-label">
-        <span class="dash-kpi-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
+        <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5V4.5M4 19.5h16"/><path d="M8 16V9.5M12.5 16V7M17 16v-4.5"/><path d="M7.2 9.2l5-2.6 4.8 2.2"/></svg>
         </span>
         مبيعات أونكس (الفترة)
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.onix_sales %}</strong>
-      <span class="dash-kpi-hint mono">تقرير الأصناف 1+5 · صافي بعد المرتجع · {{ dashboard.kpis.onix_invoices }} فاتورة</span>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.onix_invoices }} فاتورة</span>
     </article>
   </section>
 
   <section class="sales-ov-kpis sales-ov-rank-kpis" aria-label="أبرز الترتيبات">
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-visit dash-kpi-ranked">
-      <span class="dash-kpi-label">أكثر فرع زيارة</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-visit" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="2.4"/><circle cx="16" cy="9.2" r="2"/><path d="M4.5 18.5c.6-3 2.6-4.6 4.5-4.6s3.9 1.6 4.5 4.6"/><path d="M13.2 18.5c.35-1.7 1.35-2.85 2.8-2.85 1.55 0 2.7 1.2 3.1 2.85"/></svg>
+        </span>
+        أكثر فرع زيارة
+      </span>
       <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_visit_branch.code }}">{{ dashboard.ranks.top_visit_branch.name }}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.ranks.top_visit_branch.value_display }} فاتورة · {{ dashboard.ranks.top_visit_branch.hint }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-branches dash-kpi-ranked">
-      <span class="dash-kpi-label">أكثر فرع مبيعات</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-branches" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6.5 20V9.5L12 5.5l5.5 4V20"/><path d="M10 20v-5h4v5"/><path d="M9.2 12.2h1.6M13.2 12.2h1.6M9.2 15h1.6"/></svg>
+        </span>
+        أكثر فرع مبيعات
+      </span>
       <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_sales_branch.code }}">{{ dashboard.ranks.top_sales_branch.name }}</strong>
       <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_sales_branch.value_display != "—" %}{% money dashboard.ranks.top_sales_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_sales_branch.hint }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns dash-kpi-ranked">
-      <span class="dash-kpi-label">أكثر فرع إرجاع</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/><path d="M9 14.5h6.5v-3.2"/></svg>
+        </span>
+        أكثر فرع إرجاع
+      </span>
       <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_return_branch.code }}">{{ dashboard.ranks.top_return_branch.name }}</strong>
       <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_return_branch.value_display != "—" %}{% money dashboard.ranks.top_return_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_return_branch.hint }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret dash-kpi-ranked" id="sales-rank-item-card">
-      <span class="dash-kpi-label">أكثر صنف إرجاع</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-item-ret" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 8.2 12 4.2l8 4v8.2l-8 4-8-4z"/><path d="M12 12.2v8.2M4 8.2l8 4 8-4"/><path d="M15.2 9.6 18 7.8"/></svg>
+        </span>
+        أكثر صنف إرجاع
+      </span>
       <strong class="dash-kpi-value" id="sales-rank-item-name">{{ dashboard.ranks.top_return_item.name }}</strong>
       <span class="dash-kpi-hint mono" id="sales-rank-item-hint">{{ dashboard.ranks.top_return_item.hint }}</span>
     </article>

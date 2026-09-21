@@ -11,6 +11,14 @@
     <h2>تحليل المخزون</h2>
     <p>إجماليات بعد خصم مبيعات نقاط البيع غير المرحلة — قيمة بالتكلفة</p>
   </div>
+  {% if insights %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
 </section>
 
 {% if error %}
@@ -163,7 +171,13 @@
     <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب المخازن">
       <div class="dash-panel-head">
         <h3>حسب المخازن</h3>
-        <span class="result-pill">{{ insights.by_warehouse|length }}</span>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">{{ insights.by_warehouse|length }}</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
       </div>
       <div class="inv-table-frame">
         <div class="table-wrap inv-table-scroll">
@@ -213,7 +227,13 @@
     <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب المجموعات">
       <div class="dash-panel-head">
         <h3>حسب المجموعات</h3>
-        <span class="result-pill">{{ insights.by_group|length }}</span>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">{{ insights.by_group|length }}</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
       </div>
       <div class="inv-table-frame">
         <div class="table-wrap inv-table-scroll">
@@ -267,7 +287,13 @@
       <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب الفروع">
         <div class="dash-panel-head">
           <h3>حسب الفروع</h3>
-          <span class="result-pill">{{ insights.by_branch|length }}</span>
+          <div class="dash-panel-head-actions">
+            <span class="result-pill">{{ insights.by_branch|length }}</span>
+            <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+              PDF
+            </button>
+          </div>
         </div>
         <div class="inv-table-frame">
           <div class="table-wrap inv-table-scroll">
@@ -339,23 +365,57 @@
               </span>
             </p>
           </div>
-          <span class="result-pill" id="inv-stagnant-pill">أعلى 15</span>
+          <div class="dash-panel-head-actions">
+            <span class="result-pill" id="inv-stagnant-pill">أعلى {{ insights.stagnant.rows|length }}</span>
+            <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+              PDF
+            </button>
+          </div>
         </div>
         <p class="inv-rank-period">
           بلا مبيعات · كمية {{ insights.stagnant.qty_display }}
           ({{ insights.stagnant.of_total_display }})
         </p>
-        {{ insights.stagnant.rows|json_script:"inv-stagnant-data" }}
-        <div id="inv-stagnant-board" class="branch-chart branch-donut inv-stagnant-donut" hidden></div>
-        <p id="inv-stagnant-empty" class="sales-empty"{% if insights.stagnant.rows %} hidden{% endif %}>
-          لا أصناف راكدة ضمن الفلتر.
-        </p>
+        <div class="inv-rank-chart inv-rank-chart-stagnant" id="inv-stagnant-board" role="list">
+          {% for row in insights.stagnant.rows %}
+            <div
+              class="inv-rank-row"
+              role="listitem"
+              style="--i: {{ forloop.counter0 }}"
+              title="{{ row.name }} — كمية {{ row.qty_display }} · قيمة {{ row.stock_value_display }}{% if row.code %} · #{{ row.code }}{% endif %}"
+            >
+              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <div class="inv-rank-body">
+                <div class="inv-rank-head">
+                  <strong class="inv-rank-name" title="{{ row.name }}{% if row.code %} #{{ row.code }}{% endif %}">{{ row.name }}</strong>
+                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
+                </div>
+                <div class="inv-rank-track" aria-hidden="true">
+                  <div
+                    class="inv-rank-fill inv-rank-fill-stagnant"
+                    data-bar-pct="{{ row.bar_pct|default:row.share_pct|default:0 }}"
+                  ></div>
+                </div>
+                <span class="inv-rank-meta mono">{{ row.qty_display }}</span>
+              </div>
+            </div>
+          {% empty %}
+            <p class="sales-empty">لا أصناف راكدة ضمن الفلتر.</p>
+          {% endfor %}
+        </div>
       </section>
 
       <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact inv-wastage-panel" aria-label="التوالف حسب الفرع والمجموعة">
         <div class="dash-panel-head">
           <h3>التوالف · حسب الفرع والمجموعة</h3>
-          <span class="result-pill inv-wastage-total">{% money insights.wastage.waste_value_display %}</span>
+          <div class="dash-panel-head-actions">
+            <span class="result-pill inv-wastage-total">{% money insights.wastage.waste_value_display %}</span>
+            <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+              PDF
+            </button>
+          </div>
         </div>
         <p class="inv-rank-period">
           من حساب التوالف 41101006 · {{ insights.wastage.period_label }}
@@ -388,10 +448,10 @@
               <tr>
                 <th>الفرع</th>
                 <th>المجموعة</th>
-                <th>المستندات</th>
-                <th>الكمية</th>
-                <th class="inv-wastage-value">التكلفة</th>
-                <th class="inv-wastage-share">الحصة</th>
+                <th class="mono">المستندات</th>
+                <th class="mono">الكمية</th>
+                <th class="mono inv-wastage-value">التكلفة</th>
+                <th class="mono inv-wastage-share">الحصة</th>
               </tr>
             </thead>
             <tbody>
@@ -428,18 +488,29 @@
       <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="ترتيب المخازن">
         <div class="dash-panel-head">
           <h3>المخازن · الأفضل → الأسوأ</h3>
-          <span class="result-pill">أعلى 12</span>
+          <div class="dash-panel-head-actions">
+            <span class="result-pill">أعلى 12</span>
+            <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+              PDF
+            </button>
+          </div>
         </div>
         <div class="inv-rank-chart" role="list">
           {% for row in insights.by_warehouse|slice:":12" %}
-            <div class="inv-rank-row" role="listitem" style="--bar-pct: {{ row.share_pct }}%; --i: {{ forloop.counter0 }}">
+            <div class="inv-rank-row" role="listitem" style="--i: {{ forloop.counter0 }}">
               <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
               <div class="inv-rank-body">
                 <div class="inv-rank-head">
                   <strong class="inv-rank-name" title="{{ row.name }}">{{ row.name }}</strong>
                   <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
                 </div>
-                <div class="inv-rank-track" aria-hidden="true"><span class="inv-rank-fill inv-rank-fill-wh"></span></div>
+                <div class="inv-rank-track" aria-hidden="true">
+                  <div
+                    class="inv-rank-fill inv-rank-fill-wh"
+                    data-bar-pct="{{ row.bar_pct|default:row.share_pct|default:0 }}"
+                  ></div>
+                </div>
                 <span class="inv-rank-meta mono">{{ row.stock_value_display }}</span>
               </div>
             </div>
@@ -449,7 +520,7 @@
         </div>
       </section>
 
-      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact inv-stagnant-panel inv-group-sales-panel" aria-label="ترتيب المجموعات">
+      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact inv-group-sales-panel" aria-label="ترتيب المجموعات">
         <div class="dash-panel-head inv-scope-head">
           <div class="inv-scope-head-copy">
             <h3>المجموعات · الأكثر مبيعات</h3>
@@ -473,16 +544,40 @@
               </span>
             </p>
           </div>
-          <span class="result-pill" id="inv-group-sales-pill">أعلى 10</span>
+          <div class="dash-panel-head-actions">
+            <span class="result-pill" id="inv-group-sales-pill">أعلى {{ insights.group_sales_rank|length }}</span>
+            <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+              PDF
+            </button>
+          </div>
         </div>
         <p class="inv-rank-period">
-          مبلغ وكمية مبيعات · دوران ومبلغ مخزون · الأكبر → الأصغر
+          مبلغ المبيعات · الأكبر → الأصغر · العمود بنسبة الترتيب
         </p>
-        {{ insights.group_sales_rank|json_script:"inv-group-sales-data" }}
-        <div id="inv-group-sales-board" class="branch-chart branch-donut inv-stagnant-donut" hidden></div>
-        <p id="inv-group-sales-empty" class="sales-empty"{% if insights.group_sales_rank %} hidden{% endif %}>
-          لا مبيعات مجموعات لهذه الفترة.
-        </p>
+        <div class="inv-rank-vchart" id="inv-group-sales-board" role="list">
+          {% for row in insights.group_sales_rank|slice:":9" %}
+            <div
+              class="inv-rank-vcol"
+              role="listitem"
+              style="--i: {{ forloop.counter0 }}"
+              title="{{ row.name }} — مبيعات {{ row.sales_display }} · كمية {{ row.qty_display }} · {{ row.turnover_display }} · مخزون {{ row.stock_value_display }}"
+            >
+              <span class="inv-rank-vpct mono inv-share">{{ row.share_display }}</span>
+              <div class="inv-rank-vtrack" aria-hidden="true">
+                <div
+                  class="inv-rank-vfill inv-rank-fill-group"
+                  data-bar-pct="{{ row.bar_pct|default:row.share_pct|default:0 }}"
+                ></div>
+              </div>
+              <span class="inv-rank-vnum mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <strong class="inv-rank-vname" title="{{ row.name }}">{{ row.name }}</strong>
+              <span class="inv-rank-vmeta mono">{{ row.sales_display }}</span>
+            </div>
+          {% empty %}
+            <p class="sales-empty">لا مبيعات مجموعات لهذه الفترة.</p>
+          {% endfor %}
+        </div>
       </section>
     </div>
   </section>
@@ -525,7 +620,6 @@
 
 {% block extra_js %}
 <script src="/static/js/inv-select.js?v={{ app_client_version }}" defer></script>
-<script src="/static/js/inv-stagnant-donut.js?v={{ app_client_version }}" defer></script>
 <script>
 (function () {
   function ready(fn) {
@@ -537,6 +631,22 @@
   }
 
   ready(function () {
+    document.querySelectorAll(".inv-rank-fill[data-bar-pct]").forEach(function (el) {
+      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
+      var pct = parseFloat(raw);
+      if (!isFinite(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      el.style.setProperty("width", pct.toFixed(1) + "%", "important");
+    });
+
+    document.querySelectorAll(".inv-rank-vfill[data-bar-pct]").forEach(function (el) {
+      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
+      var pct = parseFloat(raw);
+      if (!isFinite(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      el.style.setProperty("height", pct.toFixed(1) + "%", "important");
+    });
+
     var branch = document.getElementById("inv-branch");
     var warehouse = document.getElementById("inv-warehouse");
     if (!branch || !warehouse) return;

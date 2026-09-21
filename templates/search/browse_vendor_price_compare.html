@@ -117,22 +117,42 @@
 {% if report %}
   <section class="vpc-kpi-grid" aria-label="ملخص المقارنة">
     <article class="vpc-kpi is-items">
-      <span>أصناف المقارنة</span>
+      <span class="vpc-kpi-label">
+        <span class="vpc-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        أصناف المقارنة
+      </span>
       <strong class="mono">{{ report.kpis.item_count }}</strong>
       <small>{{ report.vendor_name }}</small>
     </article>
     <article class="vpc-kpi is-flag">
-      <span>أصناف بفروقات</span>
+      <span class="vpc-kpi-label">
+        <span class="vpc-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 3v18"/><path d="M6 4h10l-2.5 3.5L16 11H6"/></svg>
+        </span>
+        أصناف بفروقات
+      </span>
       <strong class="mono">{{ report.kpis.flagged_count }}</strong>
       <small>اختلاف سعر بين المخازن</small>
     </article>
     <article class="vpc-kpi is-loc">
-      <span>صفوف المخازن</span>
+      <span class="vpc-kpi-label">
+        <span class="vpc-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 9h18l-1.2 10.2A2 2 0 0 1 17.8 21H6.2a2 2 0 0 1-2-1.8z"/><path d="M8 9V6.5A4 4 0 0 1 12 2.5 4 4 0 0 1 16 6.5V9"/></svg>
+        </span>
+        صفوف المخازن
+      </span>
       <strong class="mono">{{ report.kpis.location_count }}</strong>
       <small>{{ report.period_label }}</small>
     </article>
     <article class="vpc-kpi is-max">
-      <span>أكبر فرق</span>
+      <span class="vpc-kpi-label">
+        <span class="vpc-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M7 15V9M12 15V6M17 15v-3"/><path d="M12 6l3 2.5"/></svg>
+        </span>
+        أكبر فرق
+      </span>
       <strong class="mono">{{ report.kpis.max_spread_pct_display }}</strong>
       <small>بين أرخص وأغلى مخزن</small>
     </article>

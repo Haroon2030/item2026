@@ -11,6 +11,14 @@
     <h2>تحليل المشتريات</h2>
     <p>فواتير الشراء بعد خصم مرتجعات المشتريات — حسب المورد والفروع والمجموعات والأصناف</p>
   </div>
+  {% if dashboard %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
 </section>
 
 {% if error %}
@@ -194,26 +202,28 @@
         <span class="result-pill">أعلى {{ dashboard.top_items|length }}</span>
       </div>
       {% if dashboard.top_items %}
-        <div class="seller-board purchase-item-board" role="list">
+        <div class="inv-rank-chart purchase-items-board" role="list" aria-label="ترتيب الأصناف حسب مبلغ الشراء">
           {% for row in dashboard.top_items %}
             <div
-              class="seller-card rank-{{ forloop.counter }}"
+              class="inv-rank-row"
               role="listitem"
-              style="--bar-pct: {{ row.share_pct }}%; --i: {{ forloop.counter0 }}"
+              style="--i: {{ forloop.counter0 }}"
+              title="{{ row.name }} #{{ row.code }} — {{ row.amount_display }} ({{ row.share_display }}) · {{ row.qty_display }} كمية · {{ row.invoice_count }} فاتورة"
             >
-              <span class="seller-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
-              <span class="seller-body">
-                <span class="seller-name" title="{{ row.name }} — {{ row.code }}">{{ row.name }}</span>
-                <span class="seller-meta">
-                  <span class="seller-meta-inv mono">{{ row.qty_display }} كمية</span>
-                  <span class="seller-meta-code mono">#{{ row.code }} · {{ row.invoice_count }} فاتورة</span>
-                </span>
-                <span class="seller-track" aria-hidden="true"><span class="seller-fill"></span></span>
-              </span>
-              <span class="seller-side">
-                {% money row.amount_display "seller-amt mono money" %}
-                <span class="seller-pct mono">{{ row.share_display }}</span>
-              </span>
+              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <div class="inv-rank-body">
+                <div class="inv-rank-head">
+                  <strong class="inv-rank-name" title="{{ row.name }}">{{ row.name }}</strong>
+                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
+                </div>
+                <div class="inv-rank-track" aria-hidden="true">
+                  <div
+                    class="inv-rank-fill inv-rank-fill-purchase"
+                    data-bar-pct="{{ row.bar_pct }}"
+                  ></div>
+                </div>
+                <span class="inv-rank-meta mono">{{ row.amount_display }} · #{{ row.code }}</span>
+              </div>
             </div>
           {% endfor %}
         </div>
@@ -228,23 +238,28 @@
         <span class="result-pill">أعلى {{ dashboard.top_request_users|length }}</span>
       </div>
       {% if dashboard.top_request_users %}
-        <div class="purchase-hbar-chart" role="list" aria-label="رسم أعمدة أفقية لعدد الطلبات">
+        <div class="inv-rank-chart purchase-users-board" role="list" aria-label="ترتيب المستخدمين حسب عدد الطلبات">
           {% for row in dashboard.top_request_users %}
             <div
-              class="purchase-hbar-row rank-{{ forloop.counter }}"
+              class="inv-rank-row"
               role="listitem"
-              style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}"
+              style="--i: {{ forloop.counter0 }}"
               title="{{ row.name }} #{{ row.code }} — {{ row.request_count }} طلب ({{ row.share_display }}) · {{ row.item_count }} صنف · {{ row.qty_display }} كمية · {{ row.branch_count }} فروع"
             >
-              <span class="purchase-hbar-label" title="{{ row.name }}">{{ row.name }}</span>
-              <span class="purchase-hbar-track" aria-hidden="true">
-                <span class="purchase-hbar-fill"></span>
-              </span>
-              <span class="purchase-hbar-meta">
-                <span class="purchase-hbar-pct mono">{{ row.share_display }}</span>
-                <span class="purchase-hbar-code mono">#{{ row.code }}</span>
-                <span class="purchase-hbar-value mono">{{ row.request_count }}</span>
-              </span>
+              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
+              <div class="inv-rank-body">
+                <div class="inv-rank-head">
+                  <strong class="inv-rank-name" title="{{ row.name }}">{{ row.name }}</strong>
+                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
+                </div>
+                <div class="inv-rank-track" aria-hidden="true">
+                  <div
+                    class="inv-rank-fill inv-rank-fill-purchase"
+                    data-bar-pct="{{ row.bar_pct }}"
+                  ></div>
+                </div>
+                <span class="inv-rank-meta mono">{{ row.request_count }} طلب · #{{ row.code }}</span>
+              </div>
             </div>
           {% endfor %}
         </div>
@@ -284,4 +299,24 @@
 
 {% block extra_js %}
 <script src="/static/js/purchase-branch-donut.js?v={{ app_client_version }}" defer></script>
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn);
+    } else {
+      fn();
+    }
+  }
+  ready(function () {
+    document.querySelectorAll(".purchase-dash .inv-rank-fill[data-bar-pct]").forEach(function (el) {
+      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
+      var pct = parseFloat(raw);
+      if (!isFinite(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      el.style.setProperty("width", pct.toFixed(1) + "%", "important");
+    });
+  });
+})();
+</script>
 {% endblock %}

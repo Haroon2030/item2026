@@ -10,6 +10,14 @@
   <div class="dash-head-copy">
     <h2>رصيد بلا حركة مبيعات</h2>
   </div>
+  {% if report %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
 </section>
 
 {% if error %}
@@ -22,22 +30,42 @@
 {% if report %}
   <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات الرصيد بلا مبيعات">
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
-      <span class="dash-kpi-label">قيمة الرصيد الراكد</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-total" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
+        </span>
+        قيمة الرصيد الراكد
+      </span>
       <strong class="dash-kpi-value mono">{% money report.kpis.net_display %}</strong>
       <span class="dash-kpi-hint">كمية × متوسط التكلفة · {{ report.period_label }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
-      <span class="dash-kpi-label">الكمية الموجودة</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        الكمية الموجودة
+      </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.qty_display }}</strong>
       <span class="dash-kpi-hint">رصيد المخازن المحددة بلا بيع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
-      <span class="dash-kpi-label">الأصناف</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-inv" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
+        </span>
+        الأصناف
+      </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.item_count }}</strong>
       <span class="dash-kpi-hint">{{ report.kpis.line_count_display }} سطر صنف×مخزن</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vendors">
-      <span class="dash-kpi-label">الفروع المتأثرة</span>
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-vendors" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6.5 20V9.5L12 5.5l5.5 4V20"/><path d="M10 20v-5h4v5"/></svg>
+        </span>
+        الفروع المتأثرة
+      </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.branch_count }}</strong>
       <span class="dash-kpi-hint">فرع فيه رصيد بلا مبيعات</span>
     </article>

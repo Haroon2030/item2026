@@ -34,6 +34,28 @@ def _qty(value: Any) -> str:
     return f"{number:,.2f}"
 
 
+def _attach_rank_bars(
+    rows: list[dict],
+    *,
+    value_key: str = "amount",
+) -> list[dict]:
+    """نسبة الشريط بالنسبة لأعلى صف (مثل ترتيب المخازن)."""
+    peak = 0.0
+    for row in rows:
+        try:
+            peak = max(peak, float(row.get(value_key) or 0))
+        except (TypeError, ValueError):
+            continue
+    for row in rows:
+        try:
+            value = float(row.get(value_key) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        bar = (value / peak * 100.0) if peak else 0.0
+        row["bar_pct"] = round(bar, 1)
+    return rows
+
+
 def _request_user_chart_rows(rows: list[dict]) -> list[dict]:
     counts = [int(r.get("REQUEST_COUNT") or 0) for r in rows]
     max_requests = max(counts, default=0) or 1
@@ -233,7 +255,7 @@ def build_purchase_dashboard(
     group = str(group_code or "").strip()
     vendor = str(vendor_code or "").strip()
     cache_key = (
-        f"purchases:dashboard:v15:{d_from}:{d_to}:{branch}:{group}:{vendor}"
+        f"purchases:dashboard:v17:{d_from}:{d_to}:{branch}:{group}:{vendor}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
@@ -631,7 +653,7 @@ def build_purchase_dashboard(
         "by_branch": amount_rows(branch_rows, names=branch_names),
         "by_vendor": amount_rows(vendor_rows),
         "by_group": amount_rows(group_rows, names=group_names),
-        "top_items": amount_rows(item_rows),
+        "top_items": _attach_rank_bars(amount_rows(item_rows)),
         "top_request_users": _request_user_chart_rows(request_user_rows),
         "top_request_groups": [
             {
