@@ -167,10 +167,11 @@ body.login-body .app-backdrop { display: none; }
 
 .sidebar-brand .brand-copy { min-width: 0; flex: 1; }
 .sidebar-brand .brand {
-  font-size: 1.05rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 .sidebar-brand .tagline {
   font-size: 0.78rem;
@@ -396,11 +397,23 @@ body.login-body .app-backdrop { display: none; }
   font-size: 0.86rem;
   border-radius: 12px;
   color: #35567a;
+  align-items: flex-start;
+}
+
+.sidebar-sublink > span {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
 }
 
 .sidebar-sublink .sidebar-ico {
   width: 1.05rem;
   height: 1.05rem;
+  margin-top: 0.12rem;
+  flex-shrink: 0;
 }
 
 .sidebar-group.is-current > .sidebar-group-toggle {
