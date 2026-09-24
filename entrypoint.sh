@@ -41,6 +41,27 @@ python manage.py migrate --noinput
 python manage.py ensure_app_user
 python manage.py collectstatic --noinput
 
+# صور شرائح الترحيب في جذر static — تُنسخ صراحة بعد collectstatic لضمان ظهورها بعد كل رفع
+mkdir -p /app/staticfiles
+for f in slide-decision.jpg slide-sales.jpg slide-ops.jpg; do
+  if [ -f "/app/static/${f}" ]; then
+    cp -f "/app/static/${f}" "/app/staticfiles/${f}"
+    # نسخة WhiteNoise المضغوطة اختيارية؛ الملف الخام كافٍ للعرض
+    echo "welcome-slide: installed ${f}"
+  else
+    echo "WARN: missing welcome slide /app/static/${f}" >&2
+  fi
+done
+# إبقاء مسار img/welcome متوافقاً إن وُجدت نسخ قديمة في القوالب/الكاش
+mkdir -p /app/staticfiles/img/welcome
+for f in slide-decision.jpg slide-sales.jpg slide-ops.jpg login-hero.jpg; do
+  if [ -f "/app/static/img/welcome/${f}" ]; then
+    cp -f "/app/static/img/welcome/${f}" "/app/staticfiles/img/welcome/${f}"
+  elif [ -f "/app/static/${f}" ]; then
+    cp -f "/app/static/${f}" "/app/staticfiles/img/welcome/${f}"
+  fi
+done
+
 # فهرس العبوة/الباركود: إن كان فارغاً نزامنه قبل فتح الموقع
 python manage.py ensure_barcode_index || echo "WARN: auto sync skipped/failed"
 
