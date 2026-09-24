@@ -108,9 +108,10 @@
     if (!toggle) return;
     toggle.addEventListener("click", function () {
       if (isCollapsed()) {
-        var first = group.querySelector(".sidebar-sublink");
-        if (first && first.href) {
-          window.location.href = first.href;
+        var active = group.querySelector(".sidebar-sublink.is-active");
+        var target = active || group.querySelector("a.sidebar-sublink[href]");
+        if (target && target.href) {
+          window.location.href = target.href;
         }
         return;
       }

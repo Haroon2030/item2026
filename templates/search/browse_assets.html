@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load money_fmt %}
+{% load money_fmt l10n %}
 
 {% block title %}الأصول{% endblock %}
 {% block page_class %}sales-dash income-dash assets-dash{% endblock %}
@@ -8,8 +8,8 @@
 {% block content %}
 <section class="dash-head" aria-label="الأصول">
   <div class="dash-head-copy">
-    <h2>الأصول المسجّلة على الفروع</h2>
-    <p>سجل الأصول الثابتة حسب الفرع والمجموعة · التكلفة والإهلاك والقيمة الدفترية</p>
+    <h2>غرفة قرار الأصول الثابتة</h2>
+    <p>مؤشرات محاسبية · تنبيهات تركز · هيكل التكلفة مقابل الدفترية · مجموعات وأعلى أصول</p>
   </div>
   <div class="dash-head-actions">
     <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
@@ -27,7 +27,7 @@
 {% endif %}
 
 {% if report %}
-  <section class="income-kpi-grid assets-kpis" aria-label="مؤشرات الأصول">
+  <section class="income-kpi-grid income-kpi-grid-5 assets-kpis" aria-label="مؤشرات الأصول">
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
@@ -68,6 +68,16 @@
       <strong class="dash-kpi-value mono">{% money report.kpis.book_display %}</strong>
       <span class="dash-kpi-hint">{{ report.kpis.branch_count }} فرع</span>
     </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi assets-kpi-ratio">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico assets-kpi-ico-ratio" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l4-8 3 5 3-3 2 6"/></svg>
+        </span>
+        نسبة الإهلاك
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.depr_ratio_display }}</strong>
+      <span class="dash-kpi-hint">مجمع الإهلاك ÷ التكلفة</span>
+    </article>
   </section>
 {% endif %}
 
@@ -105,94 +115,351 @@
 </form>
 
 {% if report %}
-  <div class="income-duo assets-duo">
-    <section class="dash-panel dash-panel-glass assets-list-panel" aria-label="سجل الأصول">
+  <section class="income-duo income-charts-duo assets-exec-duo" aria-label="ما يتطلب قرارًا">
+    <section class="dash-panel dash-panel-glass perf-panel income-exec-panel assets-exec-panel" aria-label="ما يتطلب قرارًا">
       <div class="dash-panel-head">
-        <div>
-          <h3>سجل الأصول</h3>
-          <p class="sales-ov-sub">مرتبة حسب التكلفة من الأكبر إلى الأصغر · اسحب داخل الجدول للنزول</p>
+        <h3>ما يتطلب قرارًا</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill {% if report.executive_alerts.has_alerts %}is-bad{% else %}is-ok{% endif %}">
+            {{ report.executive_alerts.summary }}
+          </span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذه اللوحة PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
         </div>
-        <span class="result-pill">{{ report.kpis.asset_count_display }} أصل</span>
       </div>
-      <div class="table-wrap assets-list-wrap">
-        <table class="data-table sales-table assets-table" aria-label="الأصول المسجّلة على الفروع">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>الأصل</th>
-              <th>المجموعة</th>
-              <th>الفرع</th>
-              <th>تاريخ الشراء</th>
-              <th class="pr-col-amt assets-th-cost">التكلفة</th>
-              <th class="pr-col-amt assets-th-depr">الإهلاك</th>
-              <th class="pr-col-amt assets-th-book">القيمة الدفترية</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in report.rows %}
-              <tr>
-                <td class="mono">{{ forloop.counter }}</td>
-                <td class="pr-item" title="{{ row.asset_name }}">
-                  {{ row.asset_name }}
-                  <small class="mono">#{{ row.asset_code }}</small>
-                </td>
-                <td class="pr-group" title="{{ row.group_name }}">{{ row.group_name }}</td>
-                <td class="pr-branch" title="{{ row.branch_name }}">{{ row.branch_code }} — {{ row.branch_name }}</td>
-                <td class="mono">{{ row.purchase_date }}</td>
-                <td class="mono pr-col-amt assets-td-cost">{{ row.cost_display }}</td>
-                <td class="mono pr-col-amt assets-td-depr">{{ row.depr_display }}</td>
-                <td class="mono pr-col-amt assets-td-book">{{ row.book_display }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="8" class="sales-empty">لا أصول مسجّلة ضمن الفلتر المحدد</td></tr>
+      <p class="income-rank-period">استثناءات أصول ثابتة تستدعي متابعة الإدارة — بدون ضوضاء عند استقرار التوزيع</p>
+      {% if report.executive_alerts.has_alerts %}
+        <div class="income-exec-board" role="list" aria-label="تنبيهات أصول">
+          {% for a in report.executive_alerts.alerts %}
+            <article
+              class="income-exec-card is-{{ a.severity }} is-{{ a.key }}"
+              role="listitem"
+              style="--i: {{ forloop.counter0 }}"
+            >
+              <header class="income-exec-card-head">
+                <strong class="income-exec-title">{{ a.title }}</strong>
+                <span class="income-exec-metric mono">{{ a.metric }}</span>
+              </header>
+              <p class="income-exec-detail">{{ a.detail }}</p>
+              {% if a.hint %}
+                <p class="income-exec-hint">{{ a.hint }}</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="income-exec-ok" role="status">
+          <strong>الوضع مستقر</strong>
+          <span>{{ report.executive_alerts.ok_message }}</span>
+        </div>
+      {% endif %}
+    </section>
+  </section>
+
+  <section class="income-duo income-charts-duo assets-structure-branch-duo" aria-label="هيكل الأصل وتوزيع الفروع">
+    <section class="dash-panel dash-panel-glass perf-panel assets-structure-panel" aria-label="هيكل الأصل الثابت">
+      <div class="dash-panel-head">
+        <h3>هيكل الأصل الثابت</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">إهلاك × دفترية</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا المخطط PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <p class="income-rank-period">تكلفة مستهلكة (مجمع إهلاك) مقابل قيمة دفترية متبقية — المركز = التكلفة</p>
+      {% if report.structure.has_data %}
+        <div class="income-comp-board assets-structure-board" role="group" aria-label="هيكل الأصل الثابت">
+          <ul class="income-comp-callouts" role="list">
+            {% for s in report.structure.slices %}
+              <li class="income-comp-callout income-exp-callout assets-struct-callout is-{{ s.tone }}" style="--i: {{ forloop.counter0 }}; --c: {{ s.color }}">
+                <span class="income-comp-callout-bar" aria-hidden="true"></span>
+                <div class="income-comp-callout-body">
+                  <span class="income-exp-callout-kicker">اسم البند</span>
+                  <strong class="income-comp-callout-name income-exp-callout-name" title="{{ s.full_name }}">{{ s.full_name }}</strong>
+                  <span class="income-comp-callout-meta">{% money s.amount_compact %}</span>
+                  <span class="income-comp-callout-sub"><span class="mono">{{ s.share_display }}</span> من التكلفة</span>
+                </div>
+              </li>
             {% endfor %}
-          </tbody>
-          {% if report.rows %}
-            <tfoot>
-              <tr class="sales-grand-row">
-                <td colspan="5">الإجمالي (حسب الفلتر)</td>
-                <td class="mono pr-col-amt assets-td-cost">{{ report.kpis.cost_display }}</td>
-                <td class="mono pr-col-amt assets-td-depr">{{ report.kpis.depr_display }}</td>
-                <td class="mono pr-col-amt assets-td-book">{{ report.kpis.book_display }}</td>
-              </tr>
-            </tfoot>
-          {% endif %}
-        </table>
-      </div>
+          </ul>
+          <div class="income-comp-visual">
+            <svg class="income-comp-svg" viewBox="0 0 100 100" role="img" aria-label="هيكل الأصل الثابت">
+              {% localize off %}
+              <circle class="income-comp-ring income-comp-ring-out" cx="50" cy="50" r="48.6" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
+              <circle class="income-comp-ring income-comp-ring-in" cx="50" cy="50" r="26.2" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
+              {% for s in report.structure.slices %}
+                {% if s.path_d %}
+                  <path class="income-comp-wedge" d="{{ s.path_d }}" fill="{{ s.color }}">
+                    <title>{{ s.full_name }} — {{ s.share_display }} — {{ s.amount_display }}</title>
+                  </path>
+                {% endif %}
+              {% endfor %}
+              {% for s in report.structure.slices %}
+                {% if s.show_label %}
+                  <text
+                    class="income-comp-wedge-pct"
+                    x="{{ s.label_x }}"
+                    y="{{ s.label_y }}"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >{{ s.share_display }}</text>
+                {% endif %}
+              {% endfor %}
+              {% endlocalize %}
+            </svg>
+            <div class="income-comp-center" title="{{ report.structure.center.label }} {{ report.structure.center.value_full }}">
+              <span class="income-comp-center-lbl">{{ report.structure.center.label }}</span>
+              <span class="income-comp-center-val">{% money report.structure.center.value_display %}</span>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <p class="sales-empty">لا هيكل تكلفة ضمن الفلتر.</p>
+      {% endif %}
     </section>
 
-    <section class="dash-panel dash-panel-glass assets-branch-panel" aria-label="إحصائيات الفروع">
+    <section class="dash-panel dash-panel-glass perf-panel income-branch-panel assets-branch-panel" aria-label="توزيع القيمة الدفترية على الفروع">
       <div class="dash-panel-head">
-        <div>
-          <h3>إحصائيات الفروع</h3>
-          <p class="sales-ov-sub">من الأكبر إلى الأصغر حسب التكلفة</p>
+        <h3>توزيع القيمة الدفترية</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">{{ report.branch_rows|length }} فرع</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
         </div>
-        <span class="result-pill">{{ report.branch_rows|length }} فرع</span>
       </div>
-      <div class="assets-branch-list" role="list">
+      <p class="income-rank-period">كل الفروع حسب القيمة الدفترية · مبلغ مختصر مع رمز الريال</p>
+      <div class="income-vchart income-branch-vchart assets-branch-vchart" role="list" aria-label="توزيع القيمة الدفترية على الفروع">
         {% for row in report.branch_rows %}
-          <article class="assets-br-card" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
-            <span class="assets-br-num mono" aria-hidden="true">{{ forloop.counter }}</span>
-            <div class="assets-br-body">
-              <div class="assets-br-head">
-                <strong class="assets-br-name" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
-                <span class="assets-br-count mono">{{ row.count_display }}</span>
+          <div
+            class="income-vcol is-profit assets-br-vcol"
+            role="listitem"
+            style="--i: {{ forloop.counter0 }}"
+            title="{{ row.branch_name }} — دفترية {{ row.book_display }} · تكلفة {{ row.cost_display }}"
+          >
+            <span class="income-vpct mono" aria-hidden="true">{{ forloop.counter }}</span>
+            <div class="income-vbody">
+              <div class="income-vhead">
+                <strong class="income-vname" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
+                <span class="income-vmeta mono">{% money row.book_compact %}</span>
               </div>
-              <div class="assets-br-meta">
-                <span class="assets-chip assets-chip-cost" title="التكلفة">{{ row.cost_display }}</span>
-                <span class="assets-chip assets-chip-book" title="القيمة الدفترية">{% money row.book_display %}</span>
-                <span class="assets-chip assets-chip-depr" title="الإهلاك">{{ row.depr_display }}</span>
-              </div>
-              <div class="assets-br-track" aria-hidden="true">
-                <span class="assets-br-fill"></span>
+              <div class="income-vtrack" aria-hidden="true">
+                <div
+                  class="income-vfill assets-bv-fill"
+                  data-bar-pct="{{ row.bv_bar_pct }}"
+                  style="--bar-pct: {{ row.bv_bar_pct }}%; width: {{ row.bv_bar_pct }}%"
+                ></div>
               </div>
             </div>
-          </article>
+          </div>
         {% empty %}
           <p class="sales-empty">لا فروع ضمن الفلتر.</p>
         {% endfor %}
       </div>
     </section>
-  </div>
+  </section>
+
+  <section class="income-duo income-charts-duo assets-groups-top-duo" aria-label="مجموعات الأصول وأعلى الأصول">
+    <section class="dash-panel dash-panel-glass perf-panel income-expense-mix-panel assets-group-panel" aria-label="تحليل مجموعات الأصول">
+      <div class="dash-panel-head">
+        <h3>تحليل مجموعات الأصول</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">أعلى 3 = {{ report.group_mix.top3_share_display }}</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا المخطط PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <p class="income-rank-period">أعلى 5 مجموعات + أخرى · نسبة كل مجموعة من إجمالي التكلفة</p>
+      {% if report.group_mix.has_data %}
+        <div class="income-exp-decision is-{{ report.group_mix.decision_tone }}" role="note">
+          <strong>ملاحظة محاسبية</strong>
+          <span>{{ report.group_mix.decision }}</span>
+        </div>
+        <div class="income-comp-board income-expense-mix-board assets-group-board" role="group" aria-label="تحليل مجموعات الأصول">
+          <ul class="income-comp-callouts" role="list">
+            {% for s in report.group_mix.slices %}
+              <li class="income-comp-callout income-exp-callout" style="--i: {{ forloop.counter0 }}; --c: {{ s.color }}">
+                <span class="income-comp-callout-bar" aria-hidden="true"></span>
+                <div class="income-comp-callout-body">
+                  <span class="income-exp-callout-kicker">مجموعة الأصول</span>
+                  <strong class="income-comp-callout-name income-exp-callout-name" title="{{ s.full_name }}">{{ s.full_name }}</strong>
+                  <span class="income-comp-callout-meta">{% money s.amount_compact %}</span>
+                  <span class="income-comp-callout-sub"><span class="mono">{{ s.share_display }}</span> من التكلفة</span>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="income-comp-visual">
+            <svg class="income-comp-svg" viewBox="0 0 100 100" role="img" aria-label="تحليل مجموعات الأصول">
+              {% localize off %}
+              <circle class="income-comp-ring income-comp-ring-out" cx="50" cy="50" r="48.6" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
+              <circle class="income-comp-ring income-comp-ring-in" cx="50" cy="50" r="26.2" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
+              {% for s in report.group_mix.slices %}
+                {% if s.path_d %}
+                  <path class="income-comp-wedge" d="{{ s.path_d }}" fill="{{ s.color }}">
+                    <title>{{ s.full_name }} — {{ s.share_display }} — {{ s.amount_display }}</title>
+                  </path>
+                {% endif %}
+              {% endfor %}
+              {% for s in report.group_mix.slices %}
+                {% if s.show_label %}
+                  <text
+                    class="income-comp-wedge-pct"
+                    x="{{ s.label_x }}"
+                    y="{{ s.label_y }}"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >{{ s.share_display }}</text>
+                {% endif %}
+              {% endfor %}
+              {% endlocalize %}
+            </svg>
+            <div class="income-comp-center" title="{{ report.group_mix.center.label }} {{ report.group_mix.center.value_full }}">
+              <span class="income-comp-center-lbl">{{ report.group_mix.center.label }}</span>
+              <span class="income-comp-center-val">{% money report.group_mix.center.value_display %}</span>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <p class="sales-empty">لا مجموعات أصول ضمن الفلتر.</p>
+      {% endif %}
+    </section>
+
+    <section class="dash-panel dash-panel-glass perf-panel assets-top-panel" aria-label="أعلى الأصول تكلفة">
+      <div class="dash-panel-head">
+        <h3>أعلى الأصول تكلفة</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">Top {{ report.top_assets.count }}</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذه القائمة PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <p class="income-rank-period">أعلى 10 أصول حسب التكلفة — دعم قرار التركيز الرأسمالي</p>
+      {% if report.top_assets.has_data %}
+        <div class="assets-top-list" role="list" aria-label="أعلى الأصول تكلفة">
+          {% for row in report.top_assets.rows %}
+            <article
+              class="assets-top-row"
+              role="listitem"
+              style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}"
+              title="{{ row.asset_name }} — {{ row.cost_display }}"
+            >
+              <span class="assets-top-rank mono" aria-hidden="true">{{ row.rank }}</span>
+              <div class="assets-top-body">
+                <div class="assets-top-head">
+                  <strong class="assets-top-name" title="{{ row.asset_name }}">{{ row.asset_name }}</strong>
+                  <span class="assets-top-amt mono">{% money row.cost_compact %}</span>
+                </div>
+                <div class="assets-top-meta">
+                  <span class="assets-top-branch" title="{{ row.branch_name }}">{{ row.branch_name }}</span>
+                  <span class="assets-top-group" title="{{ row.group_name }}">{{ row.group_name }}</span>
+                  <span class="assets-top-book mono" title="القيمة الدفترية">{% money row.book_compact %}</span>
+                </div>
+                <div class="assets-top-track" aria-hidden="true">
+                  <span class="assets-top-fill"></span>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="sales-empty">لا أصول ضمن الفلتر.</p>
+      {% endif %}
+    </section>
+  </section>
+
+  <section class="dash-panel dash-panel-glass assets-list-panel assets-register-panel" aria-label="سجل الأصول التفصيلي">
+    <div class="dash-panel-head">
+      <div>
+        <h3>سجل الأصول التفصيلي</h3>
+        <p class="sales-ov-sub">مرتبة حسب التكلفة من الأكبر إلى الأصغر · عرض كامل أسفل اللوحة</p>
+      </div>
+      <div class="dash-panel-head-actions">
+        <span class="result-pill">{{ report.kpis.asset_count_display }} أصل</span>
+        <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ السجل PDF">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+          PDF
+        </button>
+      </div>
+    </div>
+    <div class="table-wrap assets-list-wrap">
+      <table class="data-table sales-table assets-table" aria-label="الأصول المسجّلة على الفروع">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الأصل</th>
+            <th>المجموعة</th>
+            <th>الفرع</th>
+            <th>تاريخ الشراء</th>
+            <th class="pr-col-amt assets-th-cost">التكلفة</th>
+            <th class="pr-col-amt assets-th-depr">مجمع الإهلاك</th>
+            <th class="pr-col-amt assets-th-book">القيمة الدفترية</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td class="pr-item" title="{{ row.asset_name }}">
+                {{ row.asset_name }}
+                <small class="mono">#{{ row.asset_code }}</small>
+              </td>
+              <td class="pr-group" title="{{ row.group_name }}">{{ row.group_name }}</td>
+              <td class="pr-branch" title="{{ row.branch_name }}">{{ row.branch_code }} — {{ row.branch_name }}</td>
+              <td class="mono">{{ row.purchase_date }}</td>
+              <td class="mono pr-col-amt assets-td-cost">{% money row.cost_display %}</td>
+              <td class="mono pr-col-amt assets-td-depr">{% money row.depr_display %}</td>
+              <td class="mono pr-col-amt assets-td-book">{% money row.book_display %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="sales-empty">لا أصول مسجّلة ضمن الفلتر المحدد</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="5">الإجمالي (حسب الفلتر)</td>
+              <td class="mono pr-col-amt assets-td-cost">{% money report.kpis.cost_display %}</td>
+              <td class="mono pr-col-amt assets-td-depr">{% money report.kpis.depr_display %}</td>
+              <td class="mono pr-col-amt assets-td-book">{% money report.kpis.book_display %}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState !== "loading") fn();
+    else document.addEventListener("DOMContentLoaded", fn);
+  }
+  ready(function () {
+    document.querySelectorAll(".assets-dash .assets-branch-vchart .income-vfill[data-bar-pct]").forEach(function (el) {
+      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
+      var pct = parseFloat(raw);
+      if (!isFinite(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      var w = pct.toFixed(1) + "%";
+      el.style.setProperty("--bar-pct", w);
+      el.style.setProperty("width", w, "important");
+      el.style.setProperty("height", "100%", "important");
+    });
+  });
+})();
+</script>
 {% endblock %}

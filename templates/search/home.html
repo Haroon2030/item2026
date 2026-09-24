@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}مرحباً — منصة التحليل{% endblock %}
+{% block title %}مرحباً — غرفة القرار{% endblock %}
 {% block page_class %}sales-dash welcome-dash{% endblock %}
 {% block body_class %}sales-dash-body welcome-body{% endblock %}
 
@@ -8,9 +9,9 @@
 <section class="welcome-hero" aria-label="شاشة الترحيب">
   <div class="welcome-hero-copy">
     <p class="welcome-kicker">{{ welcome_kicker|default:"حسب صلاحياتك" }}</p>
-    <h1 class="welcome-title">منصة التحليل</h1>
+    <h1 class="welcome-title">غرفة القرار</h1>
     <p class="welcome-greeting">
-      أهلاً بك{% if display_name %}، <span class="welcome-name">{{ display_name }}</span>{% endif %}
+      أهلاً بك{% if role_name %}، <span class="welcome-name">{{ role_name }}</span>{% endif %}
     </p>
     <p class="welcome-role-line">
       <span class="welcome-role-label">الصلاحية</span>
@@ -35,4 +36,50 @@
     <p class="welcome-empty" role="status">لا توجد شاشات متاحة لدورك حالياً. راجع مدير النظام.</p>
   {% endif %}
 </section>
+
+<section class="welcome-slider" aria-roledescription="carousel" aria-label="مشاهد غرفة القرار" data-welcome-slider>
+  <div class="welcome-slider-viewport">
+    <div class="welcome-slider-track" data-welcome-track>
+      <figure class="welcome-slide is-active" data-welcome-slide aria-hidden="false">
+        <img src="{% static 'img/welcome/slide-decision.png' %}?v={{ app_client_version }}" alt="" width="1600" height="900" decoding="async">
+        <figcaption>
+          <strong>نظرة تنفيذية واحدة</strong>
+          <span>قائمة الدخل والمؤشرات في صورة قرار واضحة</span>
+        </figcaption>
+      </figure>
+      <figure class="welcome-slide" data-welcome-slide aria-hidden="true">
+        <img src="{% static 'img/welcome/slide-sales.png' %}?v={{ app_client_version }}" alt="" width="1600" height="900" decoding="async">
+        <figcaption>
+          <strong>المبيعات والأداء</strong>
+          <span>صافي الفروع والقنوات ومقارنة الفترات</span>
+        </figcaption>
+      </figure>
+      <figure class="welcome-slide" data-welcome-slide aria-hidden="true">
+        <img src="{% static 'img/welcome/slide-ops.png' %}?v={{ app_client_version }}" alt="" width="1600" height="900" decoding="async">
+        <figcaption>
+          <strong>المخزون والتوريد والأصول</strong>
+          <span>حركة التشغيل من الرصيد حتى دورة المورد</span>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="welcome-slider-bar">
+    <button type="button" class="welcome-slider-btn" data-welcome-prev aria-label="الشريحة السابقة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <div class="welcome-slider-dots" role="tablist" aria-label="شرائح العرض" data-welcome-dots>
+      <button type="button" role="tab" aria-selected="true" class="is-active" aria-label="الشريحة 1" data-welcome-dot="0"></button>
+      <button type="button" role="tab" aria-selected="false" aria-label="الشريحة 2" data-welcome-dot="1"></button>
+      <button type="button" role="tab" aria-selected="false" aria-label="الشريحة 3" data-welcome-dot="2"></button>
+    </div>
+    <button type="button" class="welcome-slider-btn" data-welcome-next aria-label="الشريحة التالية">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="/static/js/welcome-slider.js?v={{ app_client_version }}" defer></script>
 {% endblock %}

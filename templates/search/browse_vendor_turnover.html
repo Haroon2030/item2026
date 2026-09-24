@@ -132,7 +132,7 @@
               <td class="vt-sheet-name" title="{{ row.item_name }}">{{ row.item_name }}</td>
               <td class="mono">{{ row.pack_size_display }}</td>
               <td>{{ row.pack_unit }}</td>
-              <td class="mono">{{ row.recv_qty_display }}</td>
+              <td class="mono vt-sheet-recv">{{ row.recv_qty_display }}</td>
               <td class="vt-cost-adj-cell"{% if row.cost_adj %} title="{% if row.cost_adj_hint %}{{ row.cost_adj_hint }}{% endif %}{% if row.cost_adj_count > 1 %} · {{ row.cost_adj_count }} تسوية{% endif %}"{% endif %}>
                 {% if row.cost_adj %}
                   <span class="vt-cost-adj-yes">{{ row.cost_adj_label }}</span>
@@ -140,9 +140,9 @@
                 {% else %}—{% endif %}
               </td>
               <td class="mono vt-share-cell">{{ row.share_display }}</td>
-              <td class="mono">{{ row.sold_qty_display }}</td>
-              <td class="mono">{{ row.remain_qty_display }}</td>
-              <td class="mono">{{ row.turnover_display }}</td>
+              <td class="mono vt-sheet-sold">{{ row.sold_qty_display }}</td>
+              <td class="mono vt-sheet-remain">{{ row.remain_qty_display }}</td>
+              <td class="mono vt-sheet-turn">{{ row.turnover_display }}</td>
             </tr>
           {% empty %}
             <tr>
@@ -317,6 +317,7 @@
         <colgroup>
           <col class="vt-col-idx">
           <col class="vt-col-name">
+          <col class="vt-col-code">
           <col class="vt-col-qty">
           <col class="vt-col-qty">
           <col class="vt-col-qty">
@@ -329,6 +330,7 @@
           <tr>
             <th rowspan="2" class="vt-col-idx">#</th>
             <th rowspan="2" class="vt-col-name">المورد</th>
+            <th rowspan="2" class="vt-col-code">رقم المورد</th>
             <th colspan="3" class="vt-g-qty vt-sep">حركة الكرتون</th>
             <th rowspan="2" class="vt-col-turn vt-sep">الدوران</th>
             <th colspan="2" class="vt-g-pay vt-sep">السداد</th>
@@ -346,10 +348,10 @@
           {% for row in report.rows %}
             <tr class="vt-row-{{ row.decision_key }}" data-vt-name="{{ row.vendor_name }}" data-vt-code="{{ row.vendor_code }}">
               <td class="mono vt-num">{{ forloop.counter }}</td>
-              <td class="vt-name-cell" title="{{ row.vendor_name }} · {{ row.vendor_code }}">
+              <td class="vt-name-cell" title="{{ row.vendor_name }}">
                 <strong>{{ row.vendor_name }}</strong>
-                <span class="vt-vendor-code mono">{{ row.vendor_code }}</span>
               </td>
+              <td class="mono vt-vendor-code vt-num">{{ row.vendor_code }}</td>
               <td class="mono vt-num vt-sep">{{ row.recv_qty_display }}</td>
               <td class="mono vt-num">{{ row.sold_qty_display }}</td>
               <td class="mono vt-num">{{ row.remain_qty_display }}</td>
@@ -368,24 +370,22 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="9" class="sales-empty">لا توريدات مطابقة للفلاتر في الفترة.</td>
+              <td colspan="10" class="sales-empty">لا توريدات مطابقة للفلاتر في الفترة.</td>
             </tr>
           {% endfor %}
             <tr id="vt-empty-search" hidden>
-              <td colspan="9" class="sales-empty">لا مورد يطابق الاسم أو الرقم.</td>
+              <td colspan="10" class="sales-empty">لا مورد يطابق الاسم أو الرقم.</td>
             </tr>
         </tbody>
         {% if report.rows %}
           <tfoot id="vt-foot">
             <tr class="sales-grand-row">
-              <td colspan="2">الإجمالي</td>
+              <td colspan="3">الإجمالي</td>
               <td class="mono vt-num vt-sep">{{ report.kpis.recv_qty_display }}</td>
               <td class="mono vt-num">{{ report.kpis.sold_qty_display }}</td>
               <td class="mono vt-num">—</td>
               <td class="mono vt-num vt-sep">{{ report.kpis.turnover_display }}</td>
-              <td class="mono vt-num vt-sep">{{ report.kpis.due_amt_display }}</td>
-              <td>—</td>
-              <td class="mono vt-num vt-sep">—</td>
+              <td class="mono vt-num vt-sep" colspan="3">{{ report.kpis.due_amt_display }}</td>
             </tr>
           </tfoot>
         {% endif %}

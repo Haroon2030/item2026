@@ -115,7 +115,7 @@ class AuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'سارة')
         self.assertContains(response, 'مدير مبيعات')
-        self.assertContains(response, 'منصة التحليل')
+        self.assertContains(response, 'غرفة القرار')
 
     def test_home_shows_role_cards_for_sales_manager(self):
         user = get_user_model().objects.create_user(
@@ -915,3 +915,346 @@ class VendorQueryFilterTests(TestCase):
         by_code = apply_vendor_query(report, '88')
         self.assertEqual([r['vendor_code'] for r in by_code['rows']], ['88'])
         self.assertEqual(apply_vendor_query(report, 'لا يوجد')['rows'], [])
+
+
+class IncomeTrendCompareTests(TestCase):
+    def test_prior_period_bounds_same_length(self):
+        from datetime import date
+
+        from search.oracle_income import _prior_period_bounds
+
+        prior_from, prior_to = _prior_period_bounds(date(2026, 4, 1), date(2026, 6, 30))
+        self.assertEqual(prior_to, date(2026, 3, 31))
+        self.assertEqual(prior_from, date(2025, 12, 31))
+        self.assertEqual((prior_to - prior_from).days, (date(2026, 6, 30) - date(2026, 4, 1)).days)
+
+    def test_monthly_trend_fills_months_and_bars(self):
+        from datetime import date
+
+        from search.oracle_income import _build_monthly_trend
+
+        rows = [
+            {
+                'YM': date(2026, 1, 1),
+                'ROOT': '3',
+                'NORM_AMT': 1000,
+                'MV_DR': 0,
+                'MV_CR': 1000,
+            },
+            {
+                'YM': date(2026, 1, 1),
+                'ROOT': '5',
+                'NORM_AMT': 200,
+                'MV_DR': 200,
+                'MV_CR': 0,
+            },
+            {
+                'YM': date(2026, 2, 1),
+                'ROOT': '3',
+                'NORM_AMT': 500,
+                'MV_DR': 0,
+                'MV_CR': 500,
+            },
+        ]
+        trend = _build_monthly_trend(date(2026, 1, 1), date(2026, 3, 15), rows)
+        self.assertEqual(trend['month_count'], 3)
+        self.assertTrue(trend['has_data'])
+        by_ym = {m['ym']: m for m in trend['months']}
+        self.assertEqual(by_ym['2026-01-01']['revenue'], 1000.0)
+        self.assertEqual(by_ym['2026-01-01']['expense'], 200.0)
+        self.assertEqual(by_ym['2026-01-01']['net'], 800.0)
+        self.assertEqual(by_ym['2026-03-01']['revenue'], 0.0)
+        self.assertEqual(by_ym['2026-01-01']['net_pct'], '100.0')
+        self.assertGreater(float(by_ym['2026-01-01']['net_pct']), float(by_ym['2026-02-01']['net_pct']))
+        self.assertEqual(by_ym['2026-01-01']['net_compact'], '800')
+        self.assertNotIn(',', by_ym['2026-01-01']['net_pct'])
+        self.assertIn('م', _build_monthly_trend(
+            date(2026, 1, 1),
+            date(2026, 1, 31),
+            [{'YM': date(2026, 1, 1), 'ROOT': '3', 'NORM_AMT': 2_500_000, 'MV_DR': 0, 'MV_CR': 2_500_000}],
+        )['months'][0]['revenue_compact'])
+
+    def test_period_compare_delta_kinds(self):
+        from datetime import date
+
+        from search.oracle_income import _build_period_compare
+
+        current = {
+            'revenue': 1200,
+            'cogs': 400,
+            'expense': 250,
+            'net': 550,
+            'net_title': 'صافي الربح',
+        }
+        prior = {
+            'revenue': 1000,
+            'cogs': 300,
+            'expense': 300,
+            'net': 400,
+            'net_title': 'صافي الربح',
+        }
+        compare = _build_period_compare(
+            current,
+            prior,
+            date(2025, 1, 1),
+            date(2025, 9, 23),
+        )
+        by_key = {r['key']: r for r in compare['rows']}
+        self.assertEqual(by_key['revenue']['delta_kind'], 'up')
+        self.assertEqual(by_key['expense']['delta_kind'], 'up')  # مصروف أقل = تحسّن
+        self.assertEqual(by_key['cogs']['delta_kind'], 'down')  # تكلفة أعلى = تراجع
+        self.assertEqual(by_key['net']['delta_kind'], 'up')
+        self.assertEqual(by_key['revenue']['delta_pct_display'], '+20.0%')
+        self.assertTrue(compare['has_data'])
+
+
+class IncomeExecutiveAlertsTests(TestCase):
+    def test_losing_branches_and_concentration(self):
+        from search.oracle_income import _build_executive_alerts
+
+        alerts = _build_executive_alerts(
+            kpis={'expense': 1000},
+            by_branch_profit=[
+                {'branch_name': 'أ', 'net': 800, 'net_kind': 'profit'},
+                {'branch_name': 'ب', 'net': 200, 'net_kind': 'profit'},
+                {'branch_name': 'ج', 'net': -150, 'net_kind': 'loss'},
+            ],
+            top_accounts=[],
+            monthly_trend={'months': []},
+        )
+        keys = [a['key'] for a in alerts['alerts']]
+        self.assertIn('losing_branches', keys)
+        self.assertIn('concentration', keys)
+        self.assertTrue(alerts['has_alerts'])
+
+    def test_expense_spike_and_margin_pressure(self):
+        from search.oracle_income import _build_executive_alerts
+
+        alerts = _build_executive_alerts(
+            kpis={'expense': 1000},
+            by_branch_profit=[],
+            top_accounts=[
+                {'account_name': 'رواتب', 'impact': 400},
+            ],
+            monthly_trend={
+                'months': [
+                    {'label_short': 'يناير', 'revenue': 1000, 'net': 120},
+                    {'label_short': 'فبراير', 'revenue': 1000, 'net': 110},
+                    {'label_short': 'مارس', 'revenue': 1000, 'net': 40},
+                ],
+            },
+        )
+        keys = [a['key'] for a in alerts['alerts']]
+        self.assertIn('expense_spike', keys)
+        self.assertIn('margin_pressure', keys)
+
+    def test_stable_when_no_exceptions(self):
+        from search.oracle_income import _build_executive_alerts
+
+        alerts = _build_executive_alerts(
+            kpis={'expense': 1000},
+            by_branch_profit=[
+                {'branch_name': 'أ', 'net': 220, 'net_kind': 'profit'},
+                {'branch_name': 'ب', 'net': 210, 'net_kind': 'profit'},
+                {'branch_name': 'ج', 'net': 200, 'net_kind': 'profit'},
+                {'branch_name': 'د', 'net': 190, 'net_kind': 'profit'},
+                {'branch_name': 'هـ', 'net': 180, 'net_kind': 'profit'},
+            ],
+            top_accounts=[{'account_name': 'كهرباء', 'impact': 100}],
+            monthly_trend={
+                'months': [
+                    {'label_short': 'يناير', 'revenue': 1000, 'net': 100},
+                    {'label_short': 'فبراير', 'revenue': 1000, 'net': 105},
+                    {'label_short': 'مارس', 'revenue': 1000, 'net': 102},
+                ],
+            },
+        )
+        self.assertFalse(alerts['has_alerts'])
+        self.assertEqual(alerts['summary'], 'لا تنبيهات')
+
+
+class IncomeExpenseMixDonutTests(TestCase):
+    def test_expense_mix_builds_slices_and_high_decision(self):
+        from search.oracle_income import _build_expense_mix_donut
+
+        by_account = [
+            {'kind': 'expense', 'account_code': '1', 'account_name': 'رواتب', 'mv_dr': 700, 'mv_cr': 0},
+            {'kind': 'expense', 'account_code': '2', 'account_name': 'إيجار', 'mv_dr': 150, 'mv_cr': 0},
+            {'kind': 'expense', 'account_code': '3', 'account_name': 'كهرباء', 'mv_dr': 80, 'mv_cr': 0},
+            {'kind': 'expense', 'account_code': '4', 'account_name': 'أخرى1', 'mv_dr': 40, 'mv_cr': 0},
+            {'kind': 'expense', 'account_code': '5', 'account_name': 'أخرى2', 'mv_dr': 30, 'mv_cr': 0},
+        ]
+        mix = _build_expense_mix_donut(by_account, {'expense': 1000}, head=3)
+        self.assertTrue(mix['has_data'])
+        self.assertGreaterEqual(len(mix['slices']), 3)
+        self.assertTrue(any(s.get('path_d') for s in mix['slices']))
+        self.assertEqual(mix['decision_tone'], 'high')
+        self.assertIn('رواتب', mix['decision'])
+        self.assertEqual(mix['center']['label'], 'المصروفات')
+
+    def test_expense_mix_other_bucket(self):
+        from search.oracle_income import _build_expense_mix_donut
+
+        by_account = [
+            {'kind': 'expense', 'account_code': str(i), 'account_name': f'ب{i}', 'mv_dr': 100, 'mv_cr': 0}
+            for i in range(1, 8)
+        ]
+        mix = _build_expense_mix_donut(by_account, {'expense': 700}, head=5)
+        keys = [s['key'] for s in mix['slices']]
+        self.assertIn('other', keys)
+        other = next(s for s in mix['slices'] if s['key'] == 'other')
+        self.assertEqual(other['amount'], 200.0)
+
+
+class AssetsExecutiveReportTests(TestCase):
+    def test_depr_ratio_and_structure(self):
+        from search.oracle_assets import _build_asset_structure, _share_display
+
+        structure = _build_asset_structure(1000.0, 400.0, 600.0)
+        self.assertTrue(structure['has_data'])
+        self.assertEqual(structure['center']['label'], 'التكلفة')
+        keys = [s['key'] for s in structure['slices']]
+        self.assertEqual(keys, ['depr', 'book'])
+        by_key = {s['key']: s for s in structure['slices']}
+        self.assertEqual(by_key['depr']['share_pct'], 40.0)
+        self.assertEqual(by_key['book']['share_pct'], 60.0)
+        self.assertTrue(any(s.get('path_d') for s in structure['slices']))
+        self.assertEqual(_share_display(62.5), '62%')
+        self.assertNotIn(',', _share_display(86.3))
+        self.assertEqual(_share_display(8.3), '8.3%')
+
+    def test_group_mix_other_bucket_and_dominance(self):
+        from search.oracle_assets import _build_group_mix
+
+        rows = [
+            {'group_code': 'G1', 'group_name': 'مباني', 'cost': 500, 'depr': 100, 'book_value': 400},
+            {'group_code': 'G2', 'group_name': 'سيارات', 'cost': 120, 'depr': 40, 'book_value': 80},
+            {'group_code': 'G3', 'group_name': 'أثاث', 'cost': 80, 'depr': 20, 'book_value': 60},
+            {'group_code': 'G4', 'group_name': 'أجهزة', 'cost': 50, 'depr': 10, 'book_value': 40},
+            {'group_code': 'G5', 'group_name': 'أدوات', 'cost': 40, 'depr': 5, 'book_value': 35},
+            {'group_code': 'G6', 'group_name': 'أخرى1', 'cost': 30, 'depr': 5, 'book_value': 25},
+            {'group_code': 'G7', 'group_name': 'أخرى2', 'cost': 20, 'depr': 2, 'book_value': 18},
+        ]
+        mix = _build_group_mix(rows, head=5)
+        self.assertTrue(mix['has_data'])
+        keys = [s['key'] for s in mix['slices']]
+        self.assertIn('other', keys)
+        other = next(s for s in mix['slices'] if s['key'] == 'other')
+        self.assertEqual(other['amount'], 50.0)
+        self.assertEqual(mix['decision_tone'], 'high')
+        self.assertIn('مباني', mix['decision'])
+        self.assertTrue(any(s.get('path_d') for s in mix['slices']))
+
+    def test_executive_alerts_concentration_and_worn(self):
+        from search.oracle_assets import _build_executive_alerts, _build_group_mix
+
+        branch_rows = [
+            {'branch_name': 'فرع أ', 'cost_total': 700},
+            {'branch_name': 'فرع ب', 'cost_total': 200},
+            {'branch_name': 'فرع ج', 'cost_total': 100},
+        ]
+        rows = [
+            {
+                'group_code': 'G1',
+                'group_name': 'مباني',
+                'cost': 100,
+                'depr': 97,
+                'book_value': 3,
+            },
+            {
+                'group_code': 'G1',
+                'group_name': 'مباني',
+                'cost': 50,
+                'depr': 48,
+                'book_value': 2,
+            },
+            {
+                'group_code': 'G2',
+                'group_name': 'سيارات',
+                'cost': 850,
+                'depr': 100,
+                'book_value': 750,
+            },
+        ]
+        group_mix = _build_group_mix(rows, head=5)
+        alerts = _build_executive_alerts(
+            branch_rows=branch_rows,
+            group_mix=group_mix,
+            rows=rows,
+            cost_total=1000.0,
+        )
+        keys = [a['key'] for a in alerts['alerts']]
+        self.assertIn('branch_concentration', keys)
+        self.assertIn('fully_depreciated', keys)
+        self.assertIn('group_dominance', keys)
+        self.assertTrue(alerts['has_alerts'])
+        worn = next(a for a in alerts['alerts'] if a['key'] == 'fully_depreciated')
+        self.assertIn('2 أصل', worn['metric'])
+
+    def test_executive_alerts_stable_when_balanced(self):
+        from search.oracle_assets import _build_executive_alerts, _build_group_mix
+
+        branch_rows = [
+            {'branch_name': f'ف{i}', 'cost_total': 200}
+            for i in range(1, 6)
+        ]
+        rows = [
+            {
+                'group_code': f'G{i}',
+                'group_name': f'مجموعة {i}',
+                'cost': 200,
+                'depr': 40,
+                'book_value': 160,
+            }
+            for i in range(1, 6)
+        ]
+        group_mix = _build_group_mix(rows, head=5)
+        alerts = _build_executive_alerts(
+            branch_rows=branch_rows,
+            group_mix=group_mix,
+            rows=rows,
+            cost_total=1000.0,
+        )
+        self.assertFalse(alerts['has_alerts'])
+        self.assertEqual(alerts['summary'], 'لا تنبيهات')
+
+    @patch('search.oracle_assets.cache')
+    @patch('search.oracle_assets._branch_names', return_value={'1': 'فرع 1', '2': 'فرع 2'})
+    @patch('search.oracle_assets._fetch_all')
+    @patch('search.oracle_assets.oracle_enabled', return_value=True)
+    def test_build_assets_report_depr_ratio_kpi(self, _enabled, mock_fetch, _names, mock_cache):
+        from search.oracle_assets import build_assets_report
+
+        mock_cache.get.return_value = None
+        mock_fetch.return_value = [
+            {
+                'BRN_NO': 1,
+                'AS_CODE': 'A1',
+                'AS_NAME': 'أصل 1',
+                'GRP_CODE': 'G1',
+                'GRP_NAME': 'مباني',
+                'PRCH_DATE': None,
+                'COST': 800,
+                'DEPR': 200,
+                'BV': 600,
+            },
+            {
+                'BRN_NO': 2,
+                'AS_CODE': 'A2',
+                'AS_NAME': 'أصل 2',
+                'GRP_CODE': 'G2',
+                'GRP_NAME': 'سيارات',
+                'PRCH_DATE': None,
+                'COST': 200,
+                'DEPR': 50,
+                'BV': 150,
+            },
+        ]
+        report = build_assets_report()
+        self.assertEqual(report['kpis']['depr_ratio'], 25.0)
+        self.assertEqual(report['kpis']['depr_ratio_display'], '25%')
+        self.assertTrue(report['structure']['has_data'])
+        self.assertTrue(report['group_mix']['has_data'])
+        self.assertEqual(report['top_assets']['count'], 2)
+        self.assertIn('executive_alerts', report)
+        self.assertEqual(report['branch_rows'][0]['bv_bar_pct'], '100.0')

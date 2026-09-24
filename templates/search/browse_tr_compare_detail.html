@@ -27,7 +27,7 @@
   <section class="pr-compare-meta dash-panel-glass" aria-label="بيانات الطلب">
     <div>
       <span class="pr-compare-meta-label">الطلب</span>
-      <strong class="mono" title="{{ compare.header.tr_type }}/{{ compare.header.tr_ser }}">{{ compare.header.tr_no }}</strong>
+      <strong class="mono pr-compare-meta-tr-no" title="{{ compare.header.tr_type }}/{{ compare.header.tr_ser }}">{{ compare.header.tr_no }}</strong>
     </div>
     <div>
       <span class="pr-compare-meta-label">الفرع</span>
@@ -39,16 +39,16 @@
     </div>
     <div>
       <span class="pr-compare-meta-label">المخزن المطلوب</span>
-      <strong class="mono" title="#{{ compare.header.from_wh_code }}">{{ compare.header.from_wh_label }}</strong>
+      <strong class="mono pr-compare-meta-wh" title="{{ compare.header.from_wh_label }}">{{ compare.header.from_wh_code }}&nbsp;({{ compare.header.branch_name }})</strong>
     </div>
     <div>
       <span class="pr-compare-meta-label">المخزن الرئيسي</span>
-      <strong class="mono" title="#{{ compare.header.main_wh_code }}">{{ compare.header.main_wh_label }}</strong>
+      <strong class="mono pr-compare-meta-wh" title="{{ compare.header.main_wh_label }}">{{ compare.header.main_wh_code }}&nbsp;({{ compare.header.branch_name }})</strong>
     </div>
     {% if compare.header.dest_differs %}
     <div>
       <span class="pr-compare-meta-label">مخزن الطلب</span>
-      <strong class="mono" title="#{{ compare.header.to_wh_code }}">{{ compare.header.to_wh_label }}</strong>
+      <strong class="mono pr-compare-meta-wh" title="{{ compare.header.to_wh_label }}">{{ compare.header.to_wh_code }}&nbsp;({{ compare.header.branch_name }})</strong>
     </div>
     {% endif %}
     <div>
@@ -61,7 +61,11 @@
     </div>
     <div>
       <span class="pr-compare-meta-label">يغطي المطلوب</span>
-      <strong class="mono">{{ compare.source_ok_count }} / {{ compare.item_count }}</strong>
+      <strong class="mono pr-compare-meta-cover">
+        <span class="pr-compare-meta-cover-ok">{{ compare.source_ok_count }}</span>
+        <span class="pr-compare-meta-cover-sep"> / </span>
+        <span class="pr-compare-meta-cover-total">{{ compare.item_count }}</span>
+      </strong>
     </div>
   </section>
 
@@ -86,8 +90,16 @@
           <a
             class="btn-ghost pr-compare-excel-btn"
             href="?tr_type={{ tr_type|urlencode }}&amp;tr_no={{ tr_no|urlencode }}&amp;tr_ser={{ tr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}{% if short_only %}&amp;short_only=1{% endif %}{% if pr_match %}&amp;pr_match=1{% endif %}&amp;export=excel"
-            title="تصدير الأصناف غير المتوفرة التي بلا طلب شراء خلال 7 أيام"
-          >تصدير Excel</a>
+            title="Excel — الأصناف غير المتوفرة بلا طلب شراء خلال 7 أيام"
+            aria-label="Excel"
+          >
+            <svg class="pr-compare-excel-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+              <path d="M14 2v6h6"/>
+              <path d="M8 13h8M8 17h8M8 9h3"/>
+            </svg>
+            <span class="pr-compare-excel-label">Excel</span>
+          </a>
         {% endif %}
       </div>
     </div>
@@ -164,11 +176,11 @@
               <th class="pr-compare-sheet-sticky pr-compare-sheet-unit">الوحدة</th>
               <th class="pr-compare-sheet-req">مطلوب</th>
               <th class="pr-compare-sheet-wh" title="{{ compare.header.from_wh_label }}">
-                <span class="pr-compare-sheet-wh-name">{{ compare.header.from_wh_label }}</span>
+                <span class="pr-compare-sheet-wh-name mono">{{ compare.header.from_wh_code }}&nbsp;({{ compare.header.branch_name }})</span>
                 <span class="pr-compare-sheet-wh-branch">المخزن المطلوب</span>
               </th>
               <th class="pr-compare-sheet-wh" title="{{ compare.header.main_wh_label }}">
-                <span class="pr-compare-sheet-wh-name">{{ compare.header.main_wh_label }}</span>
+                <span class="pr-compare-sheet-wh-name mono">{{ compare.header.main_wh_code }}&nbsp;({{ compare.header.branch_name }})</span>
                 <span class="pr-compare-sheet-wh-branch">المخزن الرئيسي بعد الترحيل</span>
               </th>
               <th class="pr-compare-sheet-count">النقص</th>

@@ -2,7 +2,7 @@
   'use strict';
 
   var BTN =
-    '.js-fit-print, .dash-pdf-btn, .lm-pdf-btn, .up-pdf-btn, .wh-out-pdf-btn, .wh-exp-print-btn, .inv-pack-err-print-btn, .pos-unavl-print-btn, .vpc-print-btn, .wqc-pdf-btn';
+    '.js-fit-print, .dash-pdf-btn, .lm-pdf-btn, .up-pdf-btn, .wh-out-pdf-btn, .wh-exp-print-btn, .inv-pack-err-print-btn, .vpc-print-btn, .wqc-pdf-btn';
   var STYLE_ID = 'fit-print-page-style';
   var TABLE_SEL =
     'table.data-table, table.sales-table, table.lm-table, table.up-table, table.nbc-table, table.wh-out-table, table.wh-exp-table, table.inv-pack-err-table, table.wqc-table, table.vt-sheet, table.vt-table, table.perf-compare-table, table.purchase-table, table.income-table, table.suppliers-table';

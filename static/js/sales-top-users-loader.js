@@ -117,7 +117,7 @@
         ' <small class="mono">#' +
         esc(row.user_code) +
         "</small></td>" +
-        '<td class="mono">' +
+        '<td class="mono sales-col-inv">' +
         esc(row.invoice_count_display) +
         "</td>" +
         '<td class="mono sales-col-cost">' +

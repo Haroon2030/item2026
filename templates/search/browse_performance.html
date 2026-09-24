@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load money_fmt %}
 
 {% block title %}تحليل الأداء{% endblock %}
 {% block page_class %}sales-dash perf-dash{% endblock %}
@@ -128,7 +129,7 @@
         <article class="perf-meta-card perf-meta-best">
           <span class="perf-meta-label">أفضل ضمن الفلتر</span>
           <strong class="perf-meta-name" title="{{ insights.highlights.best_branch.name }}">{{ insights.highlights.best_branch.name }}</strong>
-          <span class="mono perf-meta-value">{{ insights.highlights.best_branch.value }}</span>
+          <span class="mono perf-meta-value">{% money insights.highlights.best_branch.value %}</span>
         </article>
         <article class="perf-meta-card perf-meta-drop">
           <span class="perf-meta-label">أكبر تراجع</span>
@@ -138,7 +139,7 @@
         <article class="perf-meta-card perf-meta-return">
           <span class="perf-meta-label">أعلى مرتجع</span>
           <strong class="perf-meta-name" title="{{ insights.highlights.top_return_branch.name }}">{{ insights.highlights.top_return_branch.name }}</strong>
-          <span class="mono perf-meta-value">{{ insights.highlights.top_return_branch.value }}</span>
+          <span class="mono perf-meta-value">{% money insights.highlights.top_return_branch.value %}</span>
         </article>
       </div>
     </section>
@@ -151,7 +152,7 @@
           </span>
           مبيعات أ
         </span>
-        <strong class="dash-kpi-value mono">{{ insights.kpis.sales }}</strong>
+        <strong class="dash-kpi-value mono">{% money insights.kpis.sales %}</strong>
         <span class="dash-kpi-hint mono {% if insights.kpis.sales_delta is not None and insights.kpis.sales_delta < 0 %}is-down{% elif insights.kpis.sales_delta is not None and insights.kpis.sales_delta > 0 %}is-up{% endif %}">
           {{ insights.kpis.sales_delta_display }} vs ب
         </span>
@@ -173,7 +174,7 @@
           </span>
           مرتجع أ
         </span>
-        <strong class="dash-kpi-value mono">{{ insights.kpis.returns }}</strong>
+        <strong class="dash-kpi-value mono">{% money insights.kpis.returns %}</strong>
         <span class="dash-kpi-hint mono">{{ insights.kpis.returns_delta_display }} vs ب</span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-rate">
@@ -193,7 +194,7 @@
           </span>
           متوسط السلة
         </span>
-        <strong class="dash-kpi-value mono">{{ insights.kpis.avg_basket }}</strong>
+        <strong class="dash-kpi-value mono">{% money insights.kpis.avg_basket %}</strong>
         <span class="dash-kpi-hint mono">{{ insights.kpis.avg_basket_delta_display }} vs ب</span>
       </article>
       <article class="dash-kpi-card dash-kpi-glass perf-kpi-rows">
@@ -291,11 +292,11 @@
                   </span>
                   <span class="perf-orb-line is-a">
                     <span class="perf-orb-lbl">أ</span>
-                    <span class="mono perf-orb-num">{{ row.a }}</span>
+                    <span class="mono perf-orb-num">{% if row.is_money %}{% money row.a %}{% else %}{{ row.a }}{% endif %}</span>
                   </span>
                   <span class="perf-orb-line is-b">
                     <span class="perf-orb-lbl">ب</span>
-                    <span class="mono perf-orb-num">{{ row.b }}</span>
+                    <span class="mono perf-orb-num">{% if row.is_money %}{% money row.b %}{% else %}{{ row.b }}{% endif %}</span>
                   </span>
                 </span>
               </button>
@@ -328,10 +329,10 @@
             {% for row in insights.daily_table %}
               <tr>
                 <td class="mono">{{ row.day_display }}</td>
-                <td class="mono perf-cell-a">{{ row.sales_display }}</td>
+                <td class="mono perf-cell-a">{% money row.sales_display %}</td>
                 <td class="mono perf-cell-inv">{{ row.inv_display }}</td>
                 <td class="mono perf-cell-ret">{{ row.ret_count_display }}</td>
-                <td class="mono">{{ row.avg_display }}</td>
+                <td class="mono">{% money row.avg_display %}</td>
               </tr>
             {% empty %}
               <tr><td colspan="5" class="sales-empty">لا يوجد تفصيل يومي لهذا الفلتر.</td></tr>
@@ -341,10 +342,10 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td>الإجمالي</td>
-                <td class="mono perf-cell-a">{{ insights.daily_totals.sales_display }}</td>
+                <td class="mono perf-cell-a">{% money insights.daily_totals.sales_display %}</td>
                 <td class="mono perf-cell-inv">{{ insights.daily_totals.inv_display }}</td>
                 <td class="mono perf-cell-ret">{{ insights.daily_totals.ret_count_display }}</td>
-                <td class="mono">{{ insights.daily_totals.avg_display }}</td>
+                <td class="mono">{% money insights.daily_totals.avg_display %}</td>
               </tr>
             </tfoot>
           {% endif %}
@@ -376,10 +377,10 @@
             {% for row in insights.compare_table %}
               <tr>
                 <td class="perf-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
-                <td class="mono perf-cell-a">{{ row.sales_a_display }}</td>
-                <td class="mono perf-cell-b">{{ row.sales_b_display }}</td>
+                <td class="mono perf-cell-a">{% money row.sales_a_display %}</td>
+                <td class="mono perf-cell-b">{% money row.sales_b_display %}</td>
                 <td class="mono perf-cell-delta {% if row.sales_delta is not None and row.sales_delta < 0 %}is-down{% elif row.sales_delta is not None and row.sales_delta > 0 %}is-up{% endif %}">{{ row.sales_delta_display }}</td>
-                <td class="mono perf-cell-ret">{{ row.ret_a_display }}</td>
+                <td class="mono perf-cell-ret">{% money row.ret_a_display %}</td>
                 <td class="mono perf-cell-ret">{{ row.return_rate_a_display }}</td>
               </tr>
             {% empty %}
@@ -390,10 +391,10 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td>الإجمالي</td>
-                <td class="mono perf-cell-a">{{ insights.compare_totals.sales_a_display }}</td>
-                <td class="mono perf-cell-b">{{ insights.compare_totals.sales_b_display }}</td>
+                <td class="mono perf-cell-a">{% money insights.compare_totals.sales_a_display %}</td>
+                <td class="mono perf-cell-b">{% money insights.compare_totals.sales_b_display %}</td>
                 <td class="mono perf-cell-delta {% if insights.compare_totals.sales_delta is not None and insights.compare_totals.sales_delta < 0 %}is-down{% elif insights.compare_totals.sales_delta is not None and insights.compare_totals.sales_delta > 0 %}is-up{% endif %}">{{ insights.compare_totals.sales_delta_display }}</td>
-                <td class="mono perf-cell-ret">{{ insights.compare_totals.ret_a_display }}</td>
+                <td class="mono perf-cell-ret">{% money insights.compare_totals.ret_a_display %}</td>
                 <td class="mono perf-cell-ret">{{ insights.compare_totals.return_rate_a_display }}</td>
               </tr>
             </tfoot>
@@ -423,10 +424,10 @@
             {% for row in insights.group_compare_table %}
               <tr>
                 <td class="perf-cell-clip" title="{{ row.group_name }}">{{ row.group_name }}</td>
-                <td class="mono perf-cell-a">{{ row.sales_a_display }}</td>
-                <td class="mono perf-cell-b">{{ row.sales_b_display }}</td>
+                <td class="mono perf-cell-a">{% money row.sales_a_display %}</td>
+                <td class="mono perf-cell-b">{% money row.sales_b_display %}</td>
                 <td class="mono perf-cell-delta {% if row.sales_delta is not None and row.sales_delta < 0 %}is-down{% elif row.sales_delta is not None and row.sales_delta > 0 %}is-up{% endif %}">{{ row.sales_delta_display }}</td>
-                <td class="mono perf-cell-ret">{{ row.ret_a_display }}</td>
+                <td class="mono perf-cell-ret">{% money row.ret_a_display %}</td>
                 <td class="mono perf-cell-ret">{{ row.return_rate_a_display }}</td>
               </tr>
             {% empty %}
@@ -437,10 +438,10 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td>الإجمالي</td>
-                <td class="mono perf-cell-a">{{ insights.group_totals.sales_a_display }}</td>
-                <td class="mono perf-cell-b">{{ insights.group_totals.sales_b_display }}</td>
+                <td class="mono perf-cell-a">{% money insights.group_totals.sales_a_display %}</td>
+                <td class="mono perf-cell-b">{% money insights.group_totals.sales_b_display %}</td>
                 <td class="mono perf-cell-delta {% if insights.group_totals.sales_delta is not None and insights.group_totals.sales_delta < 0 %}is-down{% elif insights.group_totals.sales_delta is not None and insights.group_totals.sales_delta > 0 %}is-up{% endif %}">{{ insights.group_totals.sales_delta_display }}</td>
-                <td class="mono perf-cell-ret">{{ insights.group_totals.ret_a_display }}</td>
+                <td class="mono perf-cell-ret">{% money insights.group_totals.ret_a_display %}</td>
                 <td class="mono perf-cell-ret">{{ insights.group_totals.return_rate_a_display }}</td>
               </tr>
             </tfoot>
@@ -555,8 +556,8 @@
             {% for row in insights.sales_items_table %}
               <tr>
                 <td class="perf-cell-clip" title="{{ row.item_code }} — {{ row.item_name }}">{{ row.item_name }}</td>
-                <td class="mono perf-cell-a">{{ row.sales_a_display }}</td>
-                <td class="mono perf-cell-b">{{ row.sales_b_display }}</td>
+                <td class="mono perf-cell-a">{% money row.sales_a_display %}</td>
+                <td class="mono perf-cell-b">{% money row.sales_b_display %}</td>
                 <td class="mono perf-cell-delta {% if row.sales_delta is not None and row.sales_delta < 0 %}is-down{% elif row.sales_delta is not None and row.sales_delta > 0 %}is-up{% endif %}">{{ row.sales_delta_display }}</td>
               </tr>
             {% empty %}
@@ -567,8 +568,8 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td>الإجمالي</td>
-                <td class="mono perf-cell-a">{{ insights.sales_items_totals.sales_a_display }}</td>
-                <td class="mono perf-cell-b">{{ insights.sales_items_totals.sales_b_display }}</td>
+                <td class="mono perf-cell-a">{% money insights.sales_items_totals.sales_a_display %}</td>
+                <td class="mono perf-cell-b">{% money insights.sales_items_totals.sales_b_display %}</td>
                 <td class="mono perf-cell-delta {% if insights.sales_items_totals.sales_delta is not None and insights.sales_items_totals.sales_delta < 0 %}is-down{% elif insights.sales_items_totals.sales_delta is not None and insights.sales_items_totals.sales_delta > 0 %}is-up{% endif %}">{{ insights.sales_items_totals.sales_delta_display }}</td>
               </tr>
             </tfoot>
@@ -595,8 +596,8 @@
             {% for row in insights.return_items_table %}
               <tr>
                 <td class="perf-cell-clip" title="{{ row.item_code }} — {{ row.item_name }}">{{ row.item_name }}</td>
-                <td class="mono perf-cell-ret">{{ row.ret_a_display }}</td>
-                <td class="mono perf-cell-b">{{ row.ret_b_display }}</td>
+                <td class="mono perf-cell-ret">{% money row.ret_a_display %}</td>
+                <td class="mono perf-cell-b">{% money row.ret_b_display %}</td>
                 <td class="mono perf-cell-delta {% if row.ret_delta is not None and row.ret_delta < 0 %}is-down{% elif row.ret_delta is not None and row.ret_delta > 0 %}is-up{% endif %}">{{ row.ret_delta_display }}</td>
               </tr>
             {% empty %}
@@ -607,8 +608,8 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td>الإجمالي</td>
-                <td class="mono perf-cell-ret">{{ insights.return_items_totals.ret_a_display }}</td>
-                <td class="mono perf-cell-b">{{ insights.return_items_totals.ret_b_display }}</td>
+                <td class="mono perf-cell-ret">{% money insights.return_items_totals.ret_a_display %}</td>
+                <td class="mono perf-cell-b">{% money insights.return_items_totals.ret_b_display %}</td>
                 <td class="mono perf-cell-delta {% if insights.return_items_totals.ret_delta is not None and insights.return_items_totals.ret_delta < 0 %}is-down{% elif insights.return_items_totals.ret_delta is not None and insights.return_items_totals.ret_delta > 0 %}is-up{% endif %}">{{ insights.return_items_totals.ret_delta_display }}</td>
               </tr>
             </tfoot>

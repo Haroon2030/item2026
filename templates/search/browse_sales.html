@@ -176,10 +176,10 @@
               <tr{% if row.no_sales %} class="sales-zero-row"{% endif %}>
                 <td class="mono">{{ forloop.counter }}</td>
                 <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
-                <td class="mono">{{ row.invoice_count_display }}</td>
+                <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
                 <td class="mono">{% money row.return_total_display %}</td>
                 <td class="mono sales-amt">{% money row.sales_total_display %}</td>
-                <td class="mono">{{ row.share_display }}</td>
+                <td class="mono sales-col-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
               <tr><td colspan="6" class="sales-empty">لا مبيعات نقاط بيع في الفترة.</td></tr>
@@ -189,10 +189,10 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td colspan="2">الإجمالي</td>
-                <td class="mono">{{ dashboard.pos.totals.invoice_count_display }}</td>
+                <td class="mono sales-col-inv">{{ dashboard.pos.totals.invoice_count_display }}</td>
                 <td class="mono">{% money dashboard.pos.totals.return_total_display %}</td>
                 <td class="mono sales-amt">{% money dashboard.pos.totals.sales_total_display %}</td>
-                <td class="mono">100%</td>
+                <td class="mono sales-col-share">100%</td>
               </tr>
             </tfoot>
           {% endif %}
@@ -225,10 +225,10 @@
               <tr>
                 <td class="mono">{{ forloop.counter }}</td>
                 <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
-                <td class="mono">{{ row.invoice_count_display }}</td>
+                <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
                 <td class="mono">{% money row.return_total_display %}</td>
                 <td class="mono sales-amt">{% money row.sales_total_display %}</td>
-                <td class="mono">{{ row.share_display }}</td>
+                <td class="mono sales-col-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
               <tr><td colspan="6" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
@@ -238,10 +238,10 @@
             <tfoot>
               <tr class="sales-grand-row">
                 <td colspan="2">الإجمالي</td>
-                <td class="mono">{{ dashboard.wholesale.totals.invoice_count_display }}</td>
+                <td class="mono sales-col-inv">{{ dashboard.wholesale.totals.invoice_count_display }}</td>
                 <td class="mono">{% money dashboard.wholesale.totals.return_total_display %}</td>
                 <td class="mono sales-amt">{% money dashboard.wholesale.totals.sales_total_display %}</td>
-                <td class="mono">100%</td>
+                <td class="mono sales-col-share">100%</td>
               </tr>
             </tfoot>
           {% endif %}
@@ -300,7 +300,7 @@
                   <tr>
                     <td class="mono">{{ forloop.counter }}</td>
                     <td title="{{ row.code|default:row.group_code }}">{{ row.name|default:row.group_name }}</td>
-                    <td class="mono">{{ row.invoice_count_display }}</td>
+                    <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
                     <td class="mono">{{ row.qty_display }}</td>
                     <td class="mono sales-amt sales-col-amt">{% money row.sales_total_display %}</td>
                     <td class="mono sales-col-share">{% if selected_group %}{% money row.avg_basket_display %}{% else %}{{ row.share_display }}{% endif %}</td>
@@ -313,7 +313,7 @@
             <tfoot id="sales-groups-foot"{% if dashboard.groups_pending or not dashboard.groups.rows %} hidden{% endif %}>
               <tr class="sales-grand-row">
                 <td colspan="2">الإجمالي</td>
-                <td class="mono" id="sales-groups-tot-inv">{{ dashboard.groups.totals.invoice_count_display }}</td>
+                <td class="mono sales-col-inv" id="sales-groups-tot-inv">{{ dashboard.groups.totals.invoice_count_display }}</td>
                 <td class="mono" id="sales-groups-tot-qty">{{ dashboard.groups.totals.qty_display }}</td>
                 <td class="mono sales-amt sales-col-amt" id="sales-groups-tot-sales">{% money dashboard.groups.totals.sales_total_display %}</td>
                 <td class="mono sales-col-share" id="sales-groups-tot-extra">{% if selected_group %}{% money dashboard.groups.totals.avg_basket_display %}{% else %}100%{% endif %}</td>
@@ -374,7 +374,7 @@
             <tfoot id="sales-items-foot" hidden>
               <tr class="sales-grand-row">
                 <td colspan="2">الإجمالي</td>
-                <td class="mono" id="sales-items-tot-inv">0</td>
+                <td class="mono sales-col-inv" id="sales-items-tot-inv">0</td>
                 <td class="mono" id="sales-items-tot-qty">0</td>
                 <td class="mono sales-amt sales-col-cost" id="sales-items-tot-sales">0.00</td>
                 <td class="mono sales-col-share">100%</td>
@@ -423,7 +423,7 @@
             <tfoot id="sales-users-foot" hidden>
               <tr class="sales-grand-row">
                 <td colspan="2">الإجمالي</td>
-                <td class="mono" id="sales-users-tot-inv">0</td>
+                <td class="mono sales-col-inv" id="sales-users-tot-inv">0</td>
                 <td class="mono sales-col-cost">—</td>
                 <td class="mono sales-amt sales-col-amt" id="sales-users-tot-sales">0.00</td>
                 <td class="mono sales-col-share">100%</td>

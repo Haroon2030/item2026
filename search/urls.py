@@ -30,11 +30,6 @@ urlpatterns = [
         name='browse_inventory_pack_errors_detail',
     ),
     path(
-        'inventory/pos-unavailable/',
-        views.browse_pos_unavailable,
-        name='browse_pos_unavailable',
-    ),
-    path(
         'inventory/transfers/request/',
         views.browse_tr_compare_detail,
         name='browse_tr_compare_detail',

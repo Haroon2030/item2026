@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n money_fmt %}
 
 {% block title %}قائمة الدخل{% endblock %}
 {% block page_class %}sales-dash income-dash{% endblock %}
@@ -8,7 +9,7 @@
 <section class="dash-head" aria-label="قائمة الدخل">
   <div class="dash-head-copy">
     <h2>قائمة الدخل</h2>
-    <p>أرصدة كلية من دفتر الترحيل — مرحّل وغير مرحّل</p>
+    <p>لوحة إدارية — هيكل الربحية والهوامش والفروع من دفتر الترحيل</p>
   </div>
   {% if statement %}
   <div class="dash-head-actions">
@@ -28,7 +29,7 @@
 {% endif %}
 
 {% if statement %}
-  <section class="income-kpi-grid" aria-label="ملخص الفترة">
+  <section class="income-kpi-grid income-kpi-grid-5" aria-label="ملخص الفترة">
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
@@ -47,7 +48,7 @@
         التكلفة
       </span>
       <strong class="dash-kpi-value mono">{{ statement.kpis.cogs_display }}</strong>
-      <span class="dash-kpi-hint">حسابات 4</span>
+      <span class="dash-kpi-hint">{{ statement.kpis.cogs_pct_display }} من الإيراد</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-exp">
       <span class="dash-kpi-label">
@@ -57,7 +58,17 @@
         المصروفات
       </span>
       <strong class="dash-kpi-value mono">{{ statement.kpis.expense_display }}</strong>
-      <span class="dash-kpi-hint">حسابات 5</span>
+      <span class="dash-kpi-hint">{{ statement.kpis.expense_pct_display }} من الإيراد</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-margin {% if statement.kpis.gross_profit < 0 %}is-down{% else %}is-up{% endif %}">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-margin" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg>
+        </span>
+        هامش إجمالي
+      </span>
+      <strong class="dash-kpi-value mono">{{ statement.kpis.gross_margin_pct_display }}</strong>
+      <span class="dash-kpi-hint mono">{{ statement.kpis.gross_profit_display }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-net {% if statement.kpis.net_kind == 'loss' %}is-down{% elif statement.kpis.net_kind == 'profit' %}is-up{% endif %}">
       <span class="dash-kpi-label">
@@ -69,13 +80,12 @@
       <strong class="dash-kpi-value mono">{{ statement.kpis.net_abs_display }}</strong>
       <span class="dash-kpi-hint income-kpi-net-meta">
         <span class="income-kpi-pct {% if statement.kpis.net_kind == 'loss' %}is-down{% elif statement.kpis.net_kind == 'profit' %}is-up{% endif %}">{{ statement.kpis.net_pct_display }} من الإيراد</span>
-        <span class="income-kpi-formula">دائن الحركة − مدين الحركة</span>
       </span>
     </article>
   </section>
 {% endif %}
 
-<form method="get" action="{% url 'browse_income' %}" class="income-filter-bar" role="search" aria-label="فترة قائمة الدخل">
+<form method="get" action="{% url 'browse_income' %}" class="income-filter-bar" role="search" aria-label="فلاتر قائمة الدخل">
   <div class="income-filter-bar-main">
     <div class="income-filter-period" role="group" aria-label="الفترة">
       <span class="income-filter-period-label">الفترة</span>
@@ -84,7 +94,6 @@
           <label for="income-from">من</label>
           <input id="income-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
         </div>
-        <span class="income-filter-sep" aria-hidden="true">—</span>
         <div class="income-filter-field">
           <label for="income-to">إلى</label>
           <input id="income-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
@@ -98,118 +107,221 @@
         <option value="1" {% if posted_only %}selected{% endif %}>مرحّل فقط</option>
       </select>
     </div>
+    <div class="income-filter-field">
+      <label for="income-branch">الفرع</label>
+      <select id="income-branch" name="branch">
+        <option value="">كل الفروع</option>
+        {% for b in branches %}
+          <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="income-filter-field">
+      <label for="income-cc">المركز</label>
+      <select id="income-cc" name="cc">
+        <option value="">كل المراكز</option>
+        {% for c in cost_centers %}
+          <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
-  <input type="hidden" name="branch" value="{{ selected_branch }}">
-  <input type="hidden" name="cc" value="{{ selected_cc }}">
   <button type="submit" class="btn-primary income-filter-submit">عرض</button>
 </form>
 
 {% if statement %}
-  <section class="income-duo" aria-label="الحسابات والفروع">
-    <section class="dash-panel dash-panel-glass perf-panel income-accounts-panel" aria-label="رصيد الحركة">
-      <div class="dash-panel-head income-accounts-head">
-        <h3>رصيد الحركة — حسب الحساب</h3>
-        <form method="get" action="{% url 'browse_income' %}" class="income-scope-filter" aria-label="فلتر الفرع والمركز">
-          <input type="hidden" name="date_from" value="{{ date_from }}">
-          <input type="hidden" name="date_to" value="{{ date_to }}">
-          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
-          <label class="income-scope-field" for="income-branch">
-            <span>الفرع</span>
-            <select id="income-branch" name="branch">
-              <option value="">كل الفروع</option>
-              {% for b in branches %}
-                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label class="income-scope-field" for="income-cc">
-            <span>المركز</span>
-            <select id="income-cc" name="cc">
-              <option value="">كل المراكز</option>
-              {% for c in cost_centers %}
-                <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <button type="submit" class="btn-primary income-scope-submit">عرض</button>
-        </form>
-        <span class="result-pill">{{ statement.by_account_total_count }} حساب</span>
-      </div>
-      <div class="income-account-shell">
-        <div class="income-account-scroll">
-          <table class="data-table sales-table income-account-table" aria-label="أرصدة قائمة الدخل">
-            <colgroup>
-              <col class="income-col-code">
-              <col class="income-col-name">
-              <col class="income-col-num">
-              <col class="income-col-num">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>الرقم</th>
-                <th>الاسم</th>
-                <th>مدين</th>
-                <th>دائن</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in statement.by_account %}
-                <tr class="income-kind-{{ row.kind }}">
-                  <td class="mono">{{ row.account_code }}</td>
-                  <td class="income-name-cell" title="{{ row.account_name }}">{{ row.account_name }}</td>
-                  <td class="mono">{{ row.mv_dr_display }}</td>
-                  <td class="mono">{{ row.mv_cr_display }}</td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="4">لا أرصدة ضمن الفلتر</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+  <section class="dash-panel dash-panel-glass perf-panel income-trend-panel income-trend-full" aria-label="الاتجاه الشهري">
+      <div class="dash-panel-head">
+        <h3>الاتجاه الشهري</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">{{ statement.monthly_trend.month_count }} شهر</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا المخطط PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
         </div>
-        {% if statement.by_account %}
-          <div class="income-account-foot" aria-label="إجماليات قائمة الدخل">
-            <table class="data-table sales-table income-account-table income-account-foot-table">
-              <colgroup>
-                <col class="income-col-code">
-                <col class="income-col-name">
-                <col class="income-col-num">
-                <col class="income-col-num">
-              </colgroup>
-              <tbody>
-                <tr class="income-tfoot-total">
-                  <td colspan="2">الإجمالي</td>
-                  <td class="mono income-foot-num">{{ statement.account_totals.mv_dr_display }}</td>
-                  <td class="mono income-foot-num">{{ statement.account_totals.mv_cr_display }}</td>
-                </tr>
-                <tr class="income-tfoot-net {% if statement.kpis.net_kind == 'loss' %}is-down{% elif statement.kpis.net_kind == 'profit' %}is-up{% endif %}">
-                  <td colspan="2">رصيد الفترة — {{ statement.kpis.net_title }}</td>
-                  <td class="mono income-foot-num">{{ statement.kpis.period_dr_display }}{{ statement.kpis.final_dr_display }}</td>
-                  <td class="mono income-foot-num">{{ statement.kpis.period_cr_display }}{{ statement.kpis.final_cr_display }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        {% endif %}
       </div>
+      <p class="income-rank-period">شريط الصافي لكل شهر · الملخص: إيراد / تكلفة / مصروف (مليون)</p>
+      {% if statement.monthly_trend.has_data %}
+        <div class="income-trend-hchart" role="list" aria-label="الاتجاه الشهري">
+          {% for row in statement.monthly_trend.months %}
+            <article
+              class="income-trend-row is-{{ row.net_kind }}"
+              role="listitem"
+              style="--i: {{ forloop.counter0 }}; --net-pct: {{ row.net_pct }}%"
+              title="{{ row.label }} — صافي {{ row.net_display }} · إيراد {{ row.revenue_display }} · تكلفة {{ row.cogs_display }} · مصروف {{ row.expense_display }}"
+            >
+              <strong class="income-trend-month">{{ row.label_short }}</strong>
+              <div class="income-trend-body">
+                <div class="income-trend-netline">
+                  <div class="income-trend-track" aria-hidden="true">
+                    <span class="income-trend-fill is-{{ row.net_kind }}" style="width: {{ row.net_pct }}%"></span>
+                  </div>
+                  <span class="income-trend-net mono">{{ row.net_compact }}</span>
+                </div>
+                <ul class="income-trend-metrics">
+                  <li class="is-rev"><span>إيراد</span> <strong class="mono">{{ row.revenue_compact }}</strong></li>
+                  <li class="is-cogs"><span>تكلفة</span> <strong class="mono">{{ row.cogs_compact }}</strong></li>
+                  <li class="is-exp"><span>مصروف</span> <strong class="mono">{{ row.expense_compact }}</strong></li>
+                </ul>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="sales-empty">لا حركة شهرية ضمن الفلتر.</p>
+      {% endif %}
+  </section>
+
+  <section class="income-duo income-charts-duo" aria-label="انتباه تنفيذي ومكوّنات قائمة الدخل">
+    <section class="dash-panel dash-panel-glass perf-panel income-exec-panel" aria-label="ما يتطلب قرارًا">
+      <div class="dash-panel-head">
+        <h3>ما يتطلب قرارًا</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill {% if statement.executive_alerts.has_alerts %}is-bad{% else %}is-ok{% endif %}">
+            {{ statement.executive_alerts.summary }}
+          </span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذه اللوحة PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <p class="income-rank-period">استثناءات تستدعي متابعة الإدارة — بدون ضوضاء عند استقرار الربحية</p>
+      {% if statement.executive_alerts.has_alerts %}
+        <div class="income-exec-board" role="list" aria-label="تنبيهات تنفيذية">
+          {% for a in statement.executive_alerts.alerts %}
+            <article
+              class="income-exec-card is-{{ a.severity }} is-{{ a.key }}"
+              role="listitem"
+              style="--i: {{ forloop.counter0 }}"
+            >
+              <header class="income-exec-card-head">
+                <strong class="income-exec-title">{{ a.title }}</strong>
+                <span class="income-exec-metric mono">{{ a.metric }}</span>
+              </header>
+              <p class="income-exec-detail">{{ a.detail }}</p>
+              {% if a.hint %}
+                <p class="income-exec-hint">{{ a.hint }}</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="income-exec-ok" role="status">
+          <strong>الوضع مستقر</strong>
+          <span>{{ statement.executive_alerts.ok_message }}</span>
+        </div>
+      {% endif %}
     </section>
 
-    <section class="dash-panel dash-panel-glass perf-panel income-branch-panel" aria-label="الفروع الأكثر ربحاً">
+    <section class="dash-panel dash-panel-glass perf-panel income-waterfall-panel" aria-label="مكوّنات قائمة الدخل">
       <div class="dash-panel-head">
-        <h3>الفروع · الأكثر ربحاً</h3>
-        <span class="result-pill">{{ statement.by_branch_profit|length }} فرع</span>
+        <h3>مكوّنات قائمة الدخل</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">إيراد → صافي</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
       </div>
-      <p class="income-rank-period">{{ statement.period_label }} · صافي = دائن − مدين</p>
-      <div class="income-rank-chart" role="list">
-        {% for row in statement.by_branch_profit %}
-          <div class="income-rank-row is-{{ row.net_kind }}" role="listitem" style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}">
-            <span class="income-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
-            <div class="income-rank-body">
-              <div class="income-rank-head">
-                <strong class="income-rank-name" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
-                <span class="income-rank-amt mono">{{ row.net_display }}</span>
+      {% if statement.waterfall %}
+      <div
+        class="income-hbar-chart income-waterfall-hbar income-axis-hbar"
+        role="list"
+        aria-label="مكوّنات قائمة الدخل"
+      >
+        <div class="income-axis-plot">
+          <div class="income-axis-grid" aria-hidden="true">
+            {% for tick in statement.waterfall_axis.ticks %}
+              <span class="income-axis-grid-line" style="inset-inline-start: {{ tick.pct }}%"></span>
+            {% empty %}
+              <span class="income-axis-grid-line" style="inset-inline-start: 25%"></span>
+              <span class="income-axis-grid-line" style="inset-inline-start: 50%"></span>
+              <span class="income-axis-grid-line" style="inset-inline-start: 75%"></span>
+              <span class="income-axis-grid-line" style="inset-inline-start: 100%"></span>
+            {% endfor %}
+            <span
+              class="income-axis-ref"
+              style="inset-inline-start: {{ statement.waterfall_axis.ref_pct|default:50 }}%"
+              title="متوسط المكوّنات"
+            ></span>
+          </div>
+          <div class="income-axis-rows">
+            {% for row in statement.waterfall %}
+              <div
+                class="income-hbar-row income-axis-row is-{{ row.tone }}"
+                role="listitem"
+                style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}"
+                title="{{ row.label }} — {{ row.display }} ({{ row.share_display }})"
+              >
+                <span class="income-hbar-label">{{ row.label }}</span>
+                <div class="income-hbar-track" aria-hidden="true">
+                  <span
+                    class="income-hbar-fill"
+                    data-bar-pct="{{ row.bar_pct }}"
+                    style="width: {{ row.bar_pct }}%"
+                  ></span>
+                </div>
+                <span class="income-hbar-val mono">{{ row.display }}</span>
               </div>
-              <div class="income-rank-track" aria-hidden="true">
-                <span class="income-rank-fill"></span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="income-axis-scale" aria-hidden="true">
+          <span class="income-axis-scale-spacer"></span>
+          <div class="income-axis-scale-track">
+            {% for tick in statement.waterfall_axis.ticks %}
+              <span class="income-axis-tick" style="inset-inline-start: {{ tick.pct }}%">{{ tick.label }}</span>
+            {% empty %}
+              <span class="income-axis-tick" style="inset-inline-start: 0%">0</span>
+              <span class="income-axis-tick" style="inset-inline-start: 50%">50%</span>
+              <span class="income-axis-tick" style="inset-inline-start: 100%">100%</span>
+            {% endfor %}
+          </div>
+          <span class="income-axis-scale-spacer is-end"></span>
+        </div>
+      </div>
+      {% else %}
+        <p class="sales-empty">لا بيانات مكوّنات لهذه الفترة.</p>
+      {% endif %}
+    </section>
+  </section>
+
+  <section class="income-duo income-charts-duo income-branch-expense-duo" aria-label="الفروع وتحليل بنود المصروفات">
+    <section class="dash-panel dash-panel-glass perf-panel income-branch-panel" aria-label="تحليل ربحية الفروع">
+      <div class="dash-panel-head">
+        <h3>تحليل ربحية الفروع</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">{{ statement.by_branch_profit|length }} فرع</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <p class="income-rank-period">{{ statement.period_label }} · صافي الحركة حسب الفرع · ربح أخضر / خسارة أحمر</p>
+      <div class="income-vchart income-branch-vchart" role="list" aria-label="تحليل ربحية الفروع">
+        {% for row in statement.by_branch_profit %}
+          <div
+            class="income-vcol is-{{ row.net_kind }}"
+            role="listitem"
+            style="--i: {{ forloop.counter0 }}"
+            title="{{ row.branch_name }} — {{ row.net_display }} ({{ row.net_title }})"
+          >
+            <span class="income-vpct mono" aria-hidden="true">{{ forloop.counter }}</span>
+            <div class="income-vbody">
+              <div class="income-vhead">
+                <strong class="income-vname" title="{{ row.branch_name }}">{{ row.branch_name }}</strong>
+                <span class="income-vmeta mono">{% money row.net_display %}</span>
+              </div>
+              <div class="income-vtrack" aria-hidden="true">
+                <div
+                  class="income-vfill"
+                  data-bar-pct="{{ row.bar_pct }}"
+                  style="width: {{ row.bar_pct }}%"
+                ></div>
               </div>
             </div>
           </div>
@@ -218,191 +330,149 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="dash-panel dash-panel-glass perf-panel income-top-panel income-expense-mix-panel" aria-label="تحليل بنود المصروفات">
+      <div class="dash-panel-head">
+        <h3>تحليل بنود المصروفات</h3>
+        <div class="dash-panel-head-actions">
+          <span class="result-pill">أعلى 3 = {{ statement.expense_mix.top3_share_display }}</span>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا المخطط PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <p class="income-rank-period">توزيع المصروف حسب الحساب · نسبة كل بند من إجمالي المصروفات</p>
+      {% if statement.expense_mix.has_data %}
+        <div class="income-exp-decision is-{{ statement.expense_mix.decision_tone }}" role="note">
+          <strong>ملاحظة محاسبية</strong>
+          <span>{{ statement.expense_mix.decision }}</span>
+        </div>
+        <div class="income-comp-board income-expense-mix-board" role="group" aria-label="تحليل بنود المصروفات">
+          <ul class="income-comp-callouts" role="list">
+            {% for s in statement.expense_mix.slices %}
+              <li class="income-comp-callout income-exp-callout" style="--i: {{ forloop.counter0 }}; --c: {{ s.color }}">
+                <span class="income-comp-callout-bar" aria-hidden="true"></span>
+                <div class="income-comp-callout-body">
+                  <span class="income-exp-callout-kicker">اسم الحساب</span>
+                  <strong class="income-comp-callout-name income-exp-callout-name" title="{{ s.full_name }}">{{ s.full_name }}</strong>
+                  <span class="income-comp-callout-meta">{% money s.amount_compact %}</span>
+                  <span class="income-comp-callout-sub"><span class="mono">{{ s.share_display }}</span> من المصروف</span>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="income-comp-visual">
+            <svg class="income-comp-svg" viewBox="0 0 100 100" role="img" aria-label="تحليل بنود المصروفات">
+              {% localize off %}
+              <circle class="income-comp-ring income-comp-ring-out" cx="50" cy="50" r="48.6" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
+              <circle class="income-comp-ring income-comp-ring-in" cx="50" cy="50" r="26.2" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
+              {% for s in statement.expense_mix.slices %}
+                {% if s.path_d %}
+                  <path class="income-comp-wedge" d="{{ s.path_d }}" fill="{{ s.color }}">
+                    <title>{{ s.full_name }} — {{ s.share_display }} — {{ s.amount_display }}</title>
+                  </path>
+                {% endif %}
+              {% endfor %}
+              {% for s in statement.expense_mix.slices %}
+                {% if s.show_label %}
+                  <text
+                    class="income-comp-wedge-pct"
+                    x="{{ s.label_x }}"
+                    y="{{ s.label_y }}"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                  >{{ s.share_display }}</text>
+                {% endif %}
+              {% endfor %}
+              {% endlocalize %}
+            </svg>
+            <div class="income-comp-center" title="{{ statement.expense_mix.center.label }} {{ statement.expense_mix.center.value_full }}">
+              <span class="income-comp-center-lbl">{{ statement.expense_mix.center.label }}</span>
+              <span class="income-comp-center-val">{% money statement.expense_mix.center.value_display %}</span>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <p class="sales-empty">لا مصروفات ضمن الفلتر.</p>
+      {% endif %}
+    </section>
   </section>
 
-  <section class="income-duo income-analyst-duo" aria-label="كشف الصناديق وأعلى المصروفات">
-    <section class="dash-panel dash-panel-glass perf-panel income-reconcile-panel" aria-label="كشف حساب الصناديق">
-      <div class="dash-panel-head income-accounts-head">
-        <h3>كشف حساب الصناديق</h3>
-        <form method="get" action="{% url 'browse_income' %}" class="income-scope-filter" aria-label="فلتر الصناديق حسب الفرع والمركز">
-          <input type="hidden" name="date_from" value="{{ date_from }}">
-          <input type="hidden" name="date_to" value="{{ date_to }}">
-          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
-          <label class="income-scope-field" for="income-cash-branch">
-            <span>الفرع</span>
-            <select id="income-cash-branch" name="branch">
-              <option value="">كل الفروع</option>
-              {% for b in branches %}
-                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label class="income-scope-field" for="income-cash-cc">
-            <span>المركز</span>
-            <select id="income-cash-cc" name="cc">
-              <option value="">كل المراكز</option>
-              {% for c in cost_centers %}
-                <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <button type="submit" class="btn-primary income-scope-submit">عرض</button>
-        </form>
+  <section class="dash-panel dash-panel-glass perf-panel income-reconcile-panel income-reconcile-full" aria-label="كشف حساب الصناديق">
+    <div class="dash-panel-head">
+      <h3>كشف حساب الصناديق</h3>
+      <div class="dash-panel-head-actions">
         <span class="result-pill {% if statement.reconciliation.all_ok %}is-ok{% else %}is-bad{% endif %}">
           {{ statement.reconciliation.summary }}
         </span>
+        <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+          PDF
+        </button>
       </div>
-      <div class="income-cash-shell">
-        <div class="table-wrap income-analyst-scroll income-cash-scroll">
-          <table class="data-table sales-table income-analyst-table income-reconcile-table income-cash-stmt-table" aria-label="كشف حساب الصناديق">
-            <colgroup>
-              <col class="income-cash-col-name">
-              <col class="income-cash-col-num">
-              <col class="income-cash-col-num">
-              <col class="income-cash-col-num">
-              <col class="income-cash-col-num">
-              <col class="income-cash-col-status">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>الصندوق</th>
-                <th>افتتاحي</th>
-                <th>مدين</th>
-                <th>دائن</th>
-                <th>ختامي</th>
-                <th>الحالة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in statement.reconciliation.rows %}
-                <tr class="{% if row.ok %}is-ok{% else %}is-bad{% endif %}">
-                  <td>
-                    <strong>{{ row.cash_no }}</strong>
-                    <span class="income-check-note">{{ row.cash_name }}</span>
-                  </td>
-                  <td class="mono">{{ row.open_display }}</td>
-                  <td class="mono">{{ row.mv_dr_display }}</td>
-                  <td class="mono">{{ row.mv_cr_display }}</td>
-                  <td class="mono income-box-val">{{ row.close_display }}</td>
-                  <td>
-                    <span class="income-check-badge {% if row.ok %}is-ok{% else %}is-bad{% endif %}">{{ row.status }}</span>
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="6">لا بيانات صناديق ضمن الفلتر</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% if statement.reconciliation.rows %}
-          <div class="income-cash-foot" aria-label="إجماليات الصناديق">
-            <table class="data-table sales-table income-analyst-table income-cash-stmt-table income-cash-foot-table">
-              <colgroup>
-                <col class="income-cash-col-name">
-                <col class="income-cash-col-num">
-                <col class="income-cash-col-num">
-                <col class="income-cash-col-num">
-                <col class="income-cash-col-num">
-                <col class="income-cash-col-status">
-              </colgroup>
-              <tbody>
-                <tr class="income-cash-tfoot-total {% if statement.reconciliation.totals.diff %}is-mismatch{% else %}is-match{% endif %}">
-                  <td>الإجمالي ({{ statement.reconciliation.totals.count }})</td>
-                  <td class="mono">{{ statement.reconciliation.totals.open_display }}</td>
-                  <td class="mono">{{ statement.reconciliation.totals.mv_dr_display }}</td>
-                  <td class="mono">{{ statement.reconciliation.totals.mv_cr_display }}</td>
-                  <td class="mono income-box-val">{{ statement.reconciliation.totals.close_display }}</td>
-                  <td class="mono income-cash-foot-diff">{{ statement.reconciliation.totals.diff_display }}</td>
-                </tr>
-              </tbody>
-            </table>
+    </div>
+    <p class="income-rank-period">أعمدة أعلى صناديق حسب |الرصيد الختامي| · أخضر موجب / أحمر سالب</p>
+    {% if statement.reconciliation.chart %}
+      <div class="income-vchart income-cash-vchart" role="list" aria-label="صناديق — مخطط عمودي">
+        {% for row in statement.reconciliation.chart %}
+          <div
+            class="income-vcol is-{{ row.tone }}"
+            role="listitem"
+            style="--i: {{ forloop.counter0 }}"
+            title="#{{ row.cash_no }} {{ row.cash_name }} — {{ row.close_display }} ({{ row.status }})"
+          >
+            <span class="income-vpct mono" title="رقم الصندوق">{{ row.cash_no }}</span>
+            <div class="income-vtrack" aria-hidden="true">
+              <div
+                class="income-vfill"
+                data-bar-pct="{{ row.bar_pct }}"
+                style="height: {{ row.bar_pct }}%"
+              ></div>
+            </div>
+            <strong class="income-vname" title="{{ row.cash_name }}">{{ row.cash_name }}</strong>
+            <span class="income-vmeta mono">{{ row.close_display }}</span>
           </div>
-        {% endif %}
+        {% endfor %}
       </div>
-    </section>
-
-    <section class="dash-panel dash-panel-glass perf-panel income-top-panel" aria-label="أعلى المصروفات">
-      <div class="dash-panel-head income-accounts-head">
-        <h3>أعلى المصروفات · الأعلى → الأدنى</h3>
-        <form method="get" action="{% url 'browse_income' %}" class="income-scope-filter" aria-label="فلتر المصروفات حسب الفرع والمركز">
-          <input type="hidden" name="date_from" value="{{ date_from }}">
-          <input type="hidden" name="date_to" value="{{ date_to }}">
-          <input type="hidden" name="posted" value="{% if posted_only %}1{% else %}0{% endif %}">
-          <label class="income-scope-field" for="income-top-branch">
-            <span>الفرع</span>
-            <select id="income-top-branch" name="branch">
-              <option value="">كل الفروع</option>
-              {% for b in branches %}
-                <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label class="income-scope-field" for="income-top-cc">
-            <span>المركز</span>
-            <select id="income-top-cc" name="cc">
-              <option value="">كل المراكز</option>
-              {% for c in cost_centers %}
-                <option value="{{ c.code }}" {% if c.code == selected_cc %}selected{% endif %}>{{ c.name }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <button type="submit" class="btn-primary income-scope-submit">عرض</button>
-        </form>
-        <span class="result-pill">{{ statement.top_accounts|length }}</span>
-      </div>
-      <div class="income-top-shell">
-        <div class="table-wrap income-analyst-scroll income-top-scroll">
-          <table class="data-table sales-table income-analyst-table income-top-table" aria-label="أعلى المصروفات">
-            <colgroup>
-              <col class="income-top-col-name">
-              <col class="income-top-col-num">
-              <col class="income-top-col-num">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>الحساب</th>
-                <th>الصافي</th>
-                <th>الأثر</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in statement.top_accounts %}
-                <tr class="is-{{ row.net_kind }}">
-                  <td class="income-top-name" title="{{ row.account_code }} — {{ row.account_name }}">{{ row.account_name }}</td>
-                  <td class="mono income-top-net">{{ row.net_display }}</td>
-                  <td class="income-top-impact-cell">
-                    <div class="income-top-impact">
-                      <span class="mono">{{ row.impact_display }}</span>
-                      <span class="income-top-bar" style="--bar-pct: {{ row.bar_pct }}%" aria-hidden="true"></span>
-                    </div>
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="3">لا مصروفات ضمن الفلتر</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% if statement.top_accounts %}
-          <div class="income-top-foot" aria-label="إجمالي أعلى المصروفات">
-            <table class="data-table sales-table income-analyst-table income-top-table income-top-foot-table">
-              <colgroup>
-                <col class="income-top-col-name">
-                <col class="income-top-col-num">
-                <col class="income-top-col-num">
-              </colgroup>
-              <tbody>
-                <tr class="income-top-total">
-                  <td>الإجمالي ({{ statement.top_accounts_totals.count }})</td>
-                  <td class="mono income-top-net">{{ statement.top_accounts_totals.net_display }}</td>
-                  <td class="mono">{{ statement.top_accounts_totals.impact_display }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        {% endif %}
-      </div>
-    </section>
+    {% else %}
+      <p class="sales-empty">لا بيانات صناديق ضمن الفلتر.</p>
+    {% endif %}
   </section>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn);
+    } else {
+      fn();
+    }
+  }
+  ready(function () {
+    document.querySelectorAll(".income-dash .income-hbar-fill[data-bar-pct]").forEach(function (el) {
+      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
+      var pct = parseFloat(raw);
+      if (!isFinite(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      el.style.setProperty("width", pct.toFixed(1) + "%", "important");
+    });
+    document.querySelectorAll(".income-dash .income-vfill[data-bar-pct]").forEach(function (el) {
+      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
+      var pct = parseFloat(raw);
+      if (!isFinite(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      if (el.closest(".income-branch-vchart")) {
+        el.style.setProperty("width", pct.toFixed(1) + "%", "important");
+        el.style.setProperty("height", "100%", "important");
+      } else {
+        el.style.setProperty("height", pct.toFixed(1) + "%", "important");
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

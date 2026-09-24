@@ -172,7 +172,7 @@
               <tr>
                 <td class="mono">{{ forloop.counter }}</td>
                 <td class="purchase-name" title="{{ row.name }}">{{ row.name }}</td>
-                <td class="mono">{{ row.item_count }}</td>
+                <td class="mono purchase-item-count">{{ row.item_count }}</td>
                 <td class="mono purchase-qty">{{ row.qty_display }}</td>
                 <td class="mono purchase-amount purchase-amount-red">{% money row.amount_display %}</td>
               </tr>
@@ -282,7 +282,7 @@
                 <td class="mono">{{ forloop.counter }}</td>
                 <td class="purchase-name" title="{{ row.name }}">{{ row.name }} <small>#{{ row.code }}</small></td>
                 <td class="mono purchase-request-count">{{ row.request_count }}</td>
-                <td class="mono">{{ row.item_count }}</td>
+                <td class="mono purchase-item-count">{{ row.item_count }}</td>
                 <td class="mono purchase-qty">{{ row.qty_display }}</td>
                 <td class="mono">{{ row.branch_count }}</td>
               </tr>

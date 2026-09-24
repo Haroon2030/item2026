@@ -64,8 +64,16 @@
           <a
             class="btn-ghost pr-compare-excel-btn"
             href="?pr_type={{ pr_type|urlencode }}&amp;pr_no={{ pr_no|urlencode }}&amp;pr_ser={{ pr_ser|urlencode }}&amp;branch={{ selected_branch|urlencode }}{% if selected_date %}&amp;date={{ selected_date|urlencode }}{% endif %}{% if selected_warehouse %}&amp;warehouse={{ selected_warehouse|urlencode }}{% endif %}&amp;export=excel"
-            title="تصدير ورقة المقارنة إلى Excel"
-          >تصدير Excel</a>
+            title="Excel — ورقة المقارنة"
+            aria-label="Excel"
+          >
+            <svg class="pr-compare-excel-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+              <path d="M14 2v6h6"/>
+              <path d="M8 13h8M8 17h8M8 9h3"/>
+            </svg>
+            <span class="pr-compare-excel-label">Excel</span>
+          </a>
         {% endif %}
       </div>
     </div>

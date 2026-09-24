@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import math
 from datetime import date, datetime
 from html import escape
 from typing import Any
@@ -20,7 +21,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 1800
-_CACHE_VER = "v4"
+_CACHE_VER = "v5"
 
 # مصنع المنهل، ركن التغليف، البلاستيك
 _EXCLUDED_BRN = (17, 16, 13)
@@ -30,8 +31,40 @@ def excluded_asset_branch_codes() -> set[str]:
     return {str(code) for code in _EXCLUDED_BRN}
 
 
+def _f(value: Any) -> float:
+    try:
+        return round(float(value or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _money(value: Any) -> str:
-    return f"{float(value or 0):,.2f}"
+    return f"{_f(value):,.2f}"
+
+
+def _fmt_compact(value: float) -> str:
+    n = _f(value)
+    sign = "-" if n < 0 else ""
+    v = abs(n)
+    if v >= 1_000_000:
+        return f"{sign}{v / 1_000_000:,.1f} م"
+    if v >= 1_000:
+        return f"{sign}{v / 1_000:,.1f} ألف"
+    return f"{sign}{v:,.0f}"
+
+
+def _share_display(share: float) -> str:
+    if share >= 10:
+        return f"{round(share):.0f}%".replace(",", ".")
+    if abs(share - round(share)) > 0.05:
+        return f"{share:.1f}%".replace(",", ".")
+    return f"{int(round(share))}%".replace(",", ".")
+
+
+def _pct_css(value: float, peak: float) -> str:
+    if not peak or abs(value) <= 0.005:
+        return "0"
+    return f"{min(100.0, abs(value) / peak * 100.0):.1f}"
 
 
 def _qty(value: Any) -> str:
@@ -57,6 +90,331 @@ def _date_label(value: Any) -> str:
     if isinstance(value, date):
         return value.isoformat()
     return str(value or "")[:10]
+
+
+def _annular_slices_from_parts(parts: list[dict]) -> tuple[list[dict], float]:
+    total = round(sum(float(p.get("amount") or 0) for p in parts), 2)
+    slices: list[dict] = []
+    for part in parts:
+        amt = float(part.get("amount") or 0)
+        if amt <= 0 and total > 0:
+            continue
+        share = (amt / total * 100.0) if total else 0.0
+        slices.append(
+            {
+                **part,
+                "amount": amt,
+                "amount_display": part.get("amount_display") or _money(amt),
+                "amount_compact": part.get("amount_compact") or _fmt_compact(amt),
+                "share_pct": round(share, 1),
+                "share_display": _share_display(share),
+            }
+        )
+
+    r_out, r_in = 48.0, 26.8
+    r_label = (r_out + r_in) / 2.0
+    cx = cy = 50.0
+    gap_deg = 1.8
+    frac_acc = 0.0
+
+    def _pt(angle_deg: float, radius: float) -> tuple[float, float]:
+        a = math.radians(angle_deg)
+        return (cx + radius * math.sin(a), cy - radius * math.cos(a))
+
+    def _annular_path(start_deg: float, end_deg: float) -> str:
+        sweep = end_deg - start_deg
+        if sweep <= 0.05:
+            return ""
+        large = 1 if sweep > 180 else 0
+        x0, y0 = _pt(start_deg, r_out)
+        x1, y1 = _pt(end_deg, r_out)
+        x2, y2 = _pt(end_deg, r_in)
+        x3, y3 = _pt(start_deg, r_in)
+        return (
+            f"M {x0:.3f} {y0:.3f} "
+            f"A {r_out:.3f} {r_out:.3f} 0 {large} 1 {x1:.3f} {y1:.3f} "
+            f"L {x2:.3f} {y2:.3f} "
+            f"A {r_in:.3f} {r_in:.3f} 0 {large} 0 {x3:.3f} {y3:.3f} Z"
+        )
+
+    for sl in slices:
+        amt = float(sl["amount"])
+        pct = (amt / total) if total else 0.0
+        span = pct * 360.0
+        pad = gap_deg if span > gap_deg * 2.5 else max(0.35, span * 0.07)
+        start = frac_acc * 360.0 + pad / 2.0
+        end = frac_acc * 360.0 + span - pad / 2.0
+        if end < start:
+            end = start
+        mid = (start + end) / 2.0
+        lx, ly = _pt(mid, r_label)
+        sl["path_d"] = _annular_path(start, end)
+        sl["label_x"] = f"{lx:.2f}"
+        sl["label_y"] = f"{ly:.2f}"
+        sl["show_label"] = pct >= 0.045
+        frac_acc += pct
+
+    return slices, total
+
+
+def _build_asset_structure(cost_total: float, depr_total: float, bv_total: float) -> dict:
+    """دونات: إهلاك متراكم مقابل قيمة دفترية متبقية — المركز = التكلفة."""
+    depr = abs(_f(depr_total))
+    book = abs(_f(bv_total))
+    cost = abs(_f(cost_total)) or round(depr + book, 2)
+    parts = [
+        {
+            "key": "depr",
+            "name": "مجمع الإهلاك",
+            "full_name": "مجمع الإهلاك",
+            "amount": depr,
+            "amount_display": _money(depr),
+            "amount_compact": _fmt_compact(depr),
+            "color": "#FBBF24",
+            "tone": "depr",
+        },
+        {
+            "key": "book",
+            "name": "القيمة الدفترية",
+            "full_name": "القيمة الدفترية المتبقية",
+            "amount": book,
+            "amount_display": _money(book),
+            "amount_compact": _fmt_compact(book),
+            "color": "#34D399",
+            "tone": "book",
+        },
+    ]
+    slices, total = _annular_slices_from_parts(parts)
+    return {
+        "slices": slices,
+        "center": {
+            "label": "التكلفة",
+            "value_display": _fmt_compact(cost),
+            "value_full": _money(cost),
+        },
+        "total": cost,
+        "total_display": _money(cost),
+        "has_data": bool(slices) and cost > 0,
+    }
+
+
+def _build_group_mix(rows: list[dict], *, head: int = 5) -> dict:
+    by_grp: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        code = str(row.get("group_code") or "").strip() or "—"
+        bucket = by_grp.setdefault(
+            code,
+            {
+                "group_code": code,
+                "group_name": str(row.get("group_name") or code),
+                "cost_total": 0.0,
+                "depr_total": 0.0,
+                "bv_total": 0.0,
+                "asset_count": 0,
+            },
+        )
+        bucket["cost_total"] = round(bucket["cost_total"] + _f(row.get("cost")), 2)
+        bucket["depr_total"] = round(bucket["depr_total"] + _f(row.get("depr")), 2)
+        bucket["bv_total"] = round(bucket["bv_total"] + _f(row.get("book_value")), 2)
+        bucket["asset_count"] += 1
+
+    ranked = sorted(by_grp.values(), key=lambda g: (-g["cost_total"], g["group_code"]))
+    colors = ("#22D3EE", "#A78BFA", "#FBBF24", "#FB7185", "#34D399", "#64748B")
+    head_n = max(1, min(int(head or 5), 8))
+    head_rows = ranked[:head_n]
+    rest_cost = round(sum(g["cost_total"] for g in ranked[head_n:]), 2)
+
+    parts: list[dict] = []
+    for i, g in enumerate(head_rows):
+        name = str(g["group_name"] or g["group_code"])
+        parts.append(
+            {
+                "key": f"grp-{g['group_code'] or i}",
+                "name": name,
+                "full_name": name,
+                "amount": g["cost_total"],
+                "amount_display": _money(g["cost_total"]),
+                "amount_compact": _fmt_compact(g["cost_total"]),
+                "color": colors[i % len(colors)],
+                "tone": "group",
+            }
+        )
+    if rest_cost > 0:
+        parts.append(
+            {
+                "key": "other",
+                "name": "أخرى",
+                "full_name": f"باقي المجموعات ({max(0, len(ranked) - head_n)})",
+                "amount": rest_cost,
+                "amount_display": _money(rest_cost),
+                "amount_compact": _fmt_compact(rest_cost),
+                "color": colors[-1],
+                "tone": "other",
+            }
+        )
+
+    slices, total = _annular_slices_from_parts(parts)
+    named = [s for s in slices if s.get("key") != "other"]
+    top1 = float(named[0]["share_pct"]) if named else 0.0
+    top3_share = round(sum(float(s.get("share_pct") or 0) for s in named[:3]), 1)
+
+    if not slices:
+        decision = "لا مجموعات أصول ضمن الفلتر."
+        decision_tone = "ok"
+    elif top1 >= 40.0:
+        decision = (
+            f"مجموعة مهيمنة: «{named[0].get('full_name')}» = {_share_display(top1)} "
+            "من تكلفة الأصول — راجع تركز الاستثمار الرأسمالي."
+        )
+        decision_tone = "high"
+    elif top3_share >= 60.0:
+        names = " · ".join(str(s.get("name") or "") for s in named[:3])
+        decision = (
+            f"أعلى 3 مجموعات = {_share_display(top3_share)} من التكلفة "
+            f"({names}) — أولوية المتابعة المحاسبية."
+        )
+        decision_tone = "medium"
+    else:
+        decision = "توزيع المجموعات متوازن نسبيًا — راقب الانحراف عند الإضافات الجديدة."
+        decision_tone = "ok"
+
+    group_rows = []
+    peak = max((g["cost_total"] for g in ranked), default=0.01)
+    for g in ranked:
+        group_rows.append(
+            {
+                "group_code": g["group_code"],
+                "group_name": g["group_name"],
+                "asset_count": g["asset_count"],
+                "count_display": _qty(g["asset_count"]),
+                "cost_total": g["cost_total"],
+                "cost_display": _money(g["cost_total"]),
+                "cost_compact": _fmt_compact(g["cost_total"]),
+                "depr_display": _money(g["depr_total"]),
+                "book_display": _money(g["bv_total"]),
+                "bar_pct": _pct_css(g["cost_total"], peak),
+            }
+        )
+
+    return {
+        "slices": slices,
+        "center": {
+            "label": "التكلفة",
+            "value_display": _fmt_compact(total),
+            "value_full": _money(total),
+        },
+        "total": total,
+        "total_display": _money(total),
+        "top3_share": top3_share,
+        "top3_share_display": _share_display(top3_share),
+        "decision": decision,
+        "decision_tone": decision_tone,
+        "has_data": bool(slices),
+        "group_rows": group_rows,
+        "item_count": len(ranked),
+    }
+
+
+def _build_executive_alerts(
+    *,
+    branch_rows: list[dict],
+    group_mix: dict,
+    rows: list[dict],
+    cost_total: float,
+) -> dict:
+    alerts: list[dict] = []
+    cost_pool = abs(_f(cost_total))
+
+    winners = [b for b in branch_rows if _f(b.get("cost_total")) > 0]
+    if cost_pool > 0 and len(winners) >= 2:
+        top2 = sorted(winners, key=lambda b: -_f(b.get("cost_total")))[:2]
+        share = round(sum(_f(b.get("cost_total")) for b in top2) / cost_pool * 100.0, 1)
+        if share >= 60.0:
+            alerts.append(
+                {
+                    "key": "branch_concentration",
+                    "severity": "medium",
+                    "title": "تركّز التكلفة",
+                    "metric": f"{share:.0f}%".replace(",", "."),
+                    "detail": "أعلى فرعين من إجمالي تكلفة الأصول",
+                    "hint": " · ".join(
+                        f"{b.get('branch_name')} {_fmt_compact(_f(b.get('cost_total')))}"
+                        for b in top2
+                    ),
+                }
+            )
+
+    worn = []
+    worn_cost = 0.0
+    for row in rows:
+        cost = abs(_f(row.get("cost")))
+        book = abs(_f(row.get("book_value")))
+        if cost <= 0.005:
+            continue
+        if book / cost <= 0.05:
+            worn.append(row)
+            worn_cost = round(worn_cost + cost, 2)
+    if worn:
+        alerts.append(
+            {
+                "key": "fully_depreciated",
+                "severity": "high",
+                "title": "أصول مستهلكة تقريبًا",
+                "metric": f"{len(worn)} أصل",
+                "detail": f"قيمة دفترية ≤ 5% من التكلفة · تكلفة {_fmt_compact(worn_cost)}",
+                "hint": "راجع قرار الاستبدال أو الاستبعاد الدفتري",
+            }
+        )
+
+    named = [s for s in (group_mix.get("slices") or []) if s.get("key") != "other"]
+    if named:
+        top1 = float(named[0].get("share_pct") or 0)
+        if top1 >= 40.0:
+            alerts.append(
+                {
+                    "key": "group_dominance",
+                    "severity": "high" if top1 >= 55.0 else "medium",
+                    "title": "مجموعة مهيمنة",
+                    "metric": _share_display(top1),
+                    "detail": f"«{named[0].get('full_name') or named[0].get('name')}» من تكلفة الأصول",
+                    "hint": "تركز رأس المال في مجموعة واحدة",
+                }
+            )
+
+    severity_rank = {"high": 0, "medium": 1, "info": 2}
+    alerts.sort(key=lambda a: (severity_rank.get(str(a.get("severity")), 9), a.get("key") or ""))
+    count = len(alerts)
+    return {
+        "alerts": alerts,
+        "count": count,
+        "has_alerts": count > 0,
+        "summary": f"{count} تنبيه" if count else "لا تنبيهات",
+        "ok_message": "لا تنبيهات ضمن الفلتر — توزيع الأصول دون استثناءات حادة",
+    }
+
+
+def _build_top_assets(rows: list[dict], *, limit: int = 10) -> dict:
+    top = rows[: max(0, min(int(limit or 10), 25))]
+    peak = max((_f(r.get("cost")) for r in top), default=0.01)
+    out = []
+    for i, row in enumerate(top):
+        cost = _f(row.get("cost"))
+        out.append(
+            {
+                "rank": i + 1,
+                "asset_code": row.get("asset_code"),
+                "asset_name": row.get("asset_name"),
+                "branch_name": row.get("branch_name"),
+                "group_name": row.get("group_name"),
+                "cost": cost,
+                "cost_display": row.get("cost_display") or _money(cost),
+                "cost_compact": _fmt_compact(cost),
+                "book_display": row.get("book_display") or _money(row.get("book_value")),
+                "book_compact": _fmt_compact(_f(row.get("book_value"))),
+                "bar_pct": _pct_css(cost, peak),
+            }
+        )
+    return {"rows": out, "count": len(out), "has_data": bool(out)}
 
 
 def fetch_asset_groups() -> list[dict]:
@@ -200,10 +558,11 @@ def build_assets_report(
     depr_total = round(depr_total, 2)
     bv_total = round(bv_total, 2)
     max_cost = max((b["cost_total"] for b in by_brn.values()), default=0.0)
+    max_bv = max((b["bv_total"] for b in by_brn.values()), default=0.0)
     branch_rows = []
     for bucket in sorted(
         by_brn.values(),
-        key=lambda b: (-b["cost_total"], -b["bv_total"], b["branch_code"]),
+        key=lambda b: (-b["bv_total"], -b["cost_total"], b["branch_code"]),
     ):
         count = bucket["asset_count"]
         branch_rows.append(
@@ -214,17 +573,27 @@ def build_assets_report(
                 "count_display": _qty(count),
                 "cost_total": bucket["cost_total"],
                 "cost_display": _money(bucket["cost_total"]),
+                "cost_compact": _fmt_compact(bucket["cost_total"]),
                 "depr_total": bucket["depr_total"],
                 "depr_display": _money(bucket["depr_total"]),
                 "bv_total": bucket["bv_total"],
                 "book_display": _money(bucket["bv_total"]),
-                "bar_pct": (
-                    round(bucket["cost_total"] / max_cost * 100.0, 1)
-                    if max_cost > 0
-                    else 0.0
-                ),
+                "book_compact": _fmt_compact(bucket["bv_total"]),
+                "bar_pct": _pct_css(bucket["cost_total"], max_cost),
+                "bv_bar_pct": _pct_css(bucket["bv_total"], max_bv),
             }
         )
+
+    depr_ratio = round(depr_total / cost_total * 100.0, 1) if cost_total > 0 else 0.0
+    structure = _build_asset_structure(cost_total, depr_total, bv_total)
+    group_mix = _build_group_mix(rows)
+    executive_alerts = _build_executive_alerts(
+        branch_rows=branch_rows,
+        group_mix=group_mix,
+        rows=rows,
+        cost_total=cost_total,
+    )
+    top_assets = _build_top_assets(rows)
 
     line_count = len(rows)
     result = {
@@ -234,12 +603,22 @@ def build_assets_report(
             "branch_count": len(by_brn),
             "cost_total": cost_total,
             "cost_display": _money(cost_total),
+            "cost_compact": _fmt_compact(cost_total),
             "depr_total": depr_total,
             "depr_display": _money(depr_total),
+            "depr_compact": _fmt_compact(depr_total),
             "book_total": bv_total,
             "book_display": _money(bv_total),
+            "book_compact": _fmt_compact(bv_total),
+            "depr_ratio": depr_ratio,
+            "depr_ratio_display": _share_display(depr_ratio),
         },
         "branch_rows": branch_rows,
+        "structure": structure,
+        "group_mix": group_mix,
+        "group_rows": group_mix.get("group_rows") or [],
+        "executive_alerts": executive_alerts,
+        "top_assets": top_assets,
         "rows": rows,
         "filters": {"branch": branch, "group": group, "q": query},
     }

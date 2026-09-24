@@ -59,6 +59,7 @@ def _compare_metric(
     delta: float | None,
     *,
     invert: bool = False,
+    is_money: bool = False,
 ) -> dict[str, Any]:
     return {
         'metric': metric,
@@ -68,6 +69,7 @@ def _compare_metric(
         'delta_num': delta,
         'tone': _metric_tone(delta, invert=invert),
         'arc_pct': _metric_arc_pct(delta),
+        'is_money': is_money,
     }
 
 
@@ -895,6 +897,7 @@ def build_performance_insights(
                 _fmt_money(cur_sales),
                 _fmt_money(prior_sales),
                 sales_delta,
+                is_money=True,
             ),
             _compare_metric(
                 'الفواتير',
@@ -908,6 +911,7 @@ def build_performance_insights(
                 _fmt_money(prior_ret_amt),
                 ret_delta,
                 invert=True,
+                is_money=True,
             ),
             _compare_metric(
                 'نسبة المرتجع',
@@ -921,6 +925,7 @@ def build_performance_insights(
                 _fmt_money(avg_basket),
                 _fmt_money(prior['avg_basket']),
                 basket_delta,
+                is_money=True,
             ),
         ],
         'compare_table': compare_table[:25],

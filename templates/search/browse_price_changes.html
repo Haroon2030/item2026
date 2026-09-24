@@ -166,12 +166,12 @@
               <td>{{ r.item_name }}</td>
               <td>{{ r.unit }}</td>
               <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
-              <td class="mono num">{{ r.prev_price_display }}</td>
-              <td class="mono num">{{ r.price_display }}</td>
-              <td class="mono num">{{ r.avg_cost_display }}</td>
-              <td class="mono num">{{ r.last_buy_display }}</td>
+              <td class="mono num pc-num-prev">{{ r.prev_price_display }}</td>
+              <td class="mono num pc-num-new">{{ r.price_display }}</td>
+              <td class="mono num pc-num-avg">{{ r.avg_cost_display }}</td>
+              <td class="mono num pc-num-buy">{{ r.last_buy_display }}</td>
               <td title="{{ r.last_vendor_code }}">{{ r.last_vendor_name }}</td>
-              <td class="mono num">{{ r.diff_display }}</td>
+              <td class="mono num pc-num-diff">{{ r.diff_display }}</td>
               <td><span class="pc-dir pc-dir-{{ r.direction }}">{{ r.direction_label }}</span></td>
               <td>{{ r.user_name }}</td>
             </tr>

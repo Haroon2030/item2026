@@ -14,12 +14,15 @@
   <link rel="icon" href="/static/img/android-chrome-192.png?v={{ app_client_version }}" type="image/png" sizes="192x192">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Tajawal:wght@700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Tajawal:wght@500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css?v={{ app_client_version }}">
   <link rel="stylesheet" href="/static/css/theme-v2.css?v={{ app_client_version }}">
+  {% if request.user.is_authenticated %}
+  <link rel="stylesheet" href="/static/css/theme-navy.css?v={{ app_client_version }}">
+  {% endif %}
   <script src="/static/js/force-refresh.js?v={{ app_client_version }}"></script>
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_theme %}theme-navy{% endblock %} {% block body_class %}{% endblock %}">
   <script>
     try {
       if (
@@ -42,8 +45,10 @@
     </button>
     <button type="button" class="app-hard-refresh app-hard-refresh--float" id="app-hard-refresh-float" aria-label="تحديث إجباري" title="تحديث إجباري — مسح الكاش وإعادة تحميل الصفحة">
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M21 12a9 9 0 1 1-2.6-6.3"/>
-        <path d="M21 3v6h-6"/>
+        <path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/>
+        <path d="M21 3v5h-5"/>
+        <path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/>
+        <path d="M3 21v-5h5"/>
       </svg>
     </button>
     <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
@@ -56,8 +61,9 @@
               <svg viewBox="0 0 24 24" focusable="false">
                 <defs>
                   <linearGradient id="brandGrow" x1="19.1" y1="4.4" x2="19.1" y2="20.4" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stop-color="#3ee08a"/>
-                    <stop offset="30%" stop-color="#fff"/>
+                    <stop offset="0%" stop-color="#67E8F9"/>
+                    <stop offset="55%" stop-color="#A78BFA"/>
+                    <stop offset="100%" stop-color="#37D26F"/>
                   </linearGradient>
                 </defs>
                 <rect class="brand-bar" x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6"/>
@@ -74,8 +80,10 @@
           <div class="sidebar-brand-tools" role="group" aria-label="أدوات الشريط">
             <button type="button" class="app-hard-refresh app-hard-refresh--brand" id="app-hard-refresh" aria-label="تحديث إجباري" title="تحديث إجباري — مسح الكاش وإعادة تحميل الصفحة">
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M21 12a9 9 0 1 1-2.6-6.3"/>
-                <path d="M21 3v6h-6"/>
+                <path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/>
+                <path d="M3 21v-5h5"/>
               </svg>
             </button>
             <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-controls="app-sidebar" aria-expanded="true" aria-label="طي الشريط الجانبي" title="طي الشريط">
@@ -256,13 +264,13 @@
           <p class="sidebar-section-label">تشغيل</p>
           {% if nav_access.sections.inventory %}
           <div
-            class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' or request.resolver_match.url_name == 'browse_pos_unavailable' %} is-open is-current{% endif %}"
+            class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %} is-open is-current{% endif %}"
             data-sidebar-group
           >
             <button
               type="button"
               class="sidebar-link sidebar-group-toggle"
-              aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' or request.resolver_match.url_name == 'browse_pos_unavailable' %}true{% else %}false{% endif %}"
+              aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %}true{% else %}false{% endif %}"
               title="إدارة المخزون"
             >
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
@@ -286,12 +294,6 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_unsold' %}is-active{% endif %}" href="{% url 'browse_unsold' %}" title="رصيد بلا مبيعات">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h2l2 10h10l2-7H7"/><path d="M18 4l3 3-3 3"/><path d="M21 7h-6"/></svg>
                 <span>رصيد بلا مبيعات</span>
-              </a>
-              {% endif %}
-              {% if nav_access.screens.browse_pos_unavailable %}
-              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_pos_unavailable' %}is-active{% endif %}" href="{% url 'browse_pos_unavailable' %}" title="كميات نقاط البيع الغير متوفرة — غير مرحّل">
-                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4z"/><path d="M8 11h8M8 14h5"/><path d="M12 3v2M12 19v2"/></svg>
-                <span>كميات POS الغير متوفرة</span>
               </a>
               {% endif %}
             </div>
@@ -425,7 +427,12 @@
 
       <div class="sidebar-foot">
         <div class="sidebar-user" title="{{ request.user.get_full_name|default:request.user.username }}">
-          <span class="sidebar-user-avatar" aria-hidden="true">{{ request.user.get_username|slice:":1"|upper }}</span>
+          <span class="sidebar-user-avatar" aria-hidden="true">
+            <svg class="sidebar-user-avatar-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="3.4"/>
+              <path d="M5.2 19.2c1.5-3.1 3.8-4.7 6.8-4.7s5.3 1.6 6.8 4.7"/>
+            </svg>
+          </span>
           <div class="sidebar-user-meta">
             <strong class="sidebar-user-name">{{ request.user.get_full_name|default:request.user.username }}</strong>
             <span class="sidebar-user-role">{% if request.user.is_superuser %}مدير تنفيذي{% elif request.user.is_staff %}إدارة النظام{% else %}مستخدم منصة{% endif %}</span>

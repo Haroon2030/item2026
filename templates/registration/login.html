@@ -1,45 +1,67 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}تسجيل الدخول — منصة التحليل{% endblock %}
+{% block title %}تسجيل الدخول — غرفة القرار{% endblock %}
+{% block body_theme %}{% endblock %}
 {% block body_class %}login-body{% endblock %}
 {% block page_class %}login-page{% endblock %}
 
 {% block content %}
 <section class="login-shell" aria-labelledby="login-brand">
   <div class="login-welcome">
-    <div class="login-welcome-glow" aria-hidden="true"></div>
-    <div class="login-welcome-grid" aria-hidden="true"></div>
-
-    <p class="login-kicker">تحليل الأعمال · رؤية تنفيذية</p>
-
-    <div class="login-mark" aria-hidden="true" title="منصة التحليل">
-      <svg viewBox="0 0 24 24" focusable="false">
-        <defs>
-          <linearGradient id="loginGrow" x1="19.1" y1="4.4" x2="19.1" y2="20.4" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#3ee08a"/>
-            <stop offset="35%" stop-color="#ffffff"/>
-          </linearGradient>
-        </defs>
-        <rect class="brand-bar" x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6"/>
-        <rect class="brand-bar" x="8.1" y="10.2" width="3.2" height="10.2" rx="1.6"/>
-        <rect class="brand-bar" x="12.8" y="7.6" width="3.2" height="12.8" rx="1.6"/>
-        <rect x="17.5" y="4.4" width="3.2" height="16" rx="1.6" fill="url(#loginGrow)"/>
-      </svg>
+    <div class="login-welcome-media" aria-hidden="true">
+      <img
+        src="{% static 'img/welcome/login-hero.png' %}?v={{ app_client_version }}"
+        alt=""
+        width="1600"
+        height="900"
+        decoding="async"
+        fetchpriority="high"
+      >
+      <span class="login-welcome-scrim"></span>
+      <span class="login-welcome-glow"></span>
     </div>
 
-    <h1 id="login-brand" class="login-brand">منصة التحليل</h1>
-    <p class="login-hello">ذكاء القرار من البيانات</p>
-    <p class="login-lead">مؤشرات الأداء، ربحية الفروع، كفاءة المخزون، ودورة التوريد — صورة تنفيذية واحدة تمكّن الإدارة من القياس والمقارنة واتخاذ القرار بثقة.</p>
+    <div class="login-welcome-copy">
+      <p class="login-kicker">
+        <span class="login-kicker-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
+        </span>
+        تحليل الأعمال · قرار تنفيذي
+      </p>
 
-    <ul class="login-points" aria-label="محاور المنصة">
-      <li>مؤشرات أداء تنفيذية</li>
-      <li>تحليل ربحية وتشغيل</li>
-    </ul>
+      <div class="login-mark" aria-hidden="true" title="غرفة القرار">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <defs>
+            <linearGradient id="loginGrow" x1="19.1" y1="4.4" x2="19.1" y2="20.4" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#67E8F9"/>
+              <stop offset="55%" stop-color="#A78BFA"/>
+              <stop offset="100%" stop-color="#37D26F"/>
+            </linearGradient>
+          </defs>
+          <rect class="brand-bar" x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6"/>
+          <rect class="brand-bar" x="8.1" y="10.2" width="3.2" height="10.2" rx="1.6"/>
+          <rect class="brand-bar" x="12.8" y="7.6" width="3.2" height="12.8" rx="1.6"/>
+          <rect x="17.5" y="4.4" width="3.2" height="16" rx="1.6" fill="url(#loginGrow)"/>
+        </svg>
+      </div>
+
+      <h1 id="login-brand" class="login-brand">غرفة القرار</h1>
+      <p class="login-hello">من البيانات إلى قرار الإدارة</p>
+      <p class="login-lead">قائمة الدخل، المبيعات، مؤشرات الأداء، المخزون، المشتريات والأصول — صورة تنفيذية واحدة للقياس والمقارنة واتخاذ القرار بثقة.</p>
+
+      <ul class="login-points" aria-label="محاور المنصة">
+        <li>قراءة تنفيذية للدخل والأداء</li>
+        <li>ربحية الفروع والقنوات</li>
+        <li>كفاءة المخزون والتوريد</li>
+      </ul>
+    </div>
   </div>
 
   <div class="login-panel">
     <div class="login-card">
       <header class="login-brand-block">
+        <p class="login-panel-kicker">غرفة القرار</p>
         <h2 class="login-panel-title">تسجيل الدخول</h2>
         <p class="login-tagline">ادخل إلى لوحة المؤشرات التنفيذية</p>
       </header>
@@ -105,7 +127,7 @@
         </div>
 
         <button type="submit" class="login-submit">
-          <span>دخول إلى المنصة</span>
+          <span>دخول إلى غرفة القرار</span>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
           </svg>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load money_fmt %}
 
 {% block title %}توزيع مصاريف المستودع{% endblock %}
 {% block page_class %}sales-dash wh-exp-dash{% endblock %}
@@ -64,17 +65,32 @@
 {% if report %}
   <section class="wh-exp-kpi-grid" aria-label="ملخص التوزيع">
     <article class="wh-exp-kpi is-count">
-      <span>عدد التحويلات</span>
+      <span class="wh-exp-kpi-label">
+        <span class="wh-exp-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 7h11l-2.2-2.2M18 7l-2.2 2.2"/><path d="M17 17H6l2.2 2.2M6 17l2.2-2.2"/><rect x="4" y="10" width="6" height="4" rx="1"/><rect x="14" y="10" width="6" height="4" rx="1"/></svg>
+        </span>
+        عدد التحويلات
+      </span>
       <strong class="mono">{{ report.kpis.transfer_count }}</strong>
       <small>{{ report.period_label }}</small>
     </article>
     <article class="wh-exp-kpi is-amt">
-      <span>إجمالي مبلغ التحويل</span>
+      <span class="wh-exp-kpi-label">
+        <span class="wh-exp-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M16.5 7.5c-.6-1.2-1.9-2-3.5-2-2.2 0-4 1.3-4 3s1.8 3 4 3 4 1.3 4 3-1.8 3-4 3c-1.6 0-2.9-.8-3.5-2"/></svg>
+        </span>
+        إجمالي مبلغ التحويل
+      </span>
       <strong class="mono">{{ report.kpis.amount_display }}</strong>
       <small>أساس النسبة: {{ report.kpis.ratio_basis_label }}</small>
     </article>
     <article class="wh-exp-kpi is-qty">
-      <span>إجمالي الكمية</span>
+      <span class="wh-exp-kpi-label">
+        <span class="wh-exp-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        إجمالي الكمية
+      </span>
       <strong class="mono">{{ report.kpis.qty_display }}</strong>
       <small>{{ report.kpis.branch_count }} فرع</small>
     </article>
@@ -86,7 +102,12 @@
       aria-controls="wh-exp-accounts-panel"
       title="عرض إجمالي كل مصروف"
     >
-      <span>المصروف الموزع</span>
+      <span class="wh-exp-kpi-label">
+        <span class="wh-exp-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/></svg>
+        </span>
+        المصروف الموزع
+      </span>
       <strong class="mono">{{ report.kpis.allocated_total }}</strong>
       <small>
         {% if report.filters.expense_source == 'cost_center' %}
@@ -214,7 +235,7 @@
                 {{ row.branch_name }}
               </td>
               <td class="mono we-td-count">{{ row.transfer_count }}</td>
-              <td class="mono we-td-amt">{{ row.amount_display }}</td>
+              <td class="mono we-td-amt">{% money row.amount_display %}</td>
               <td class="mono we-td-qty">{{ row.qty_display }}</td>
               <td class="mono we-td-share">{{ row.share_display }}</td>
               <td class="mono we-td-alloc">{{ row.allocated_display }}</td>

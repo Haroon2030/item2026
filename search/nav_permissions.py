@@ -81,7 +81,6 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavScreen("browse_inventory", "تحليل المخزون"),
             NavScreen("browse_groups", "مخزون المجموعات"),
             NavScreen("browse_unsold", "رصيد بلا مبيعات"),
-            NavScreen("browse_pos_unavailable", "كميات POS الغير متوفرة"),
         ),
     ),
     NavSection(

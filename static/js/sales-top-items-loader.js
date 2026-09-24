@@ -129,7 +129,7 @@
         '">' +
         esc(row.item_name) +
         "</td>" +
-        '<td class="mono">' +
+        '<td class="mono sales-col-inv">' +
         esc(row.return_count_display || row.invoice_count_display) +
         "</td>" +
         '<td class="mono">' +
