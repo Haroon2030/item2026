@@ -404,7 +404,7 @@ def build_name_barcode_excel(
         "<style>"
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;width:100%;}"
         "th,td{border:1px solid #64748b;padding:2px 5px;white-space:nowrap;vertical-align:middle;mso-number-format:'\\@';}"
-        "th{background:#d9e2f3;color:#1e293b;font-weight:700;text-align:center;}"
+        "th{background:#d9e2f3;color:#1a2b33;font-weight:700;text-align:center;}"
         "th.h-grp{background:#ede9fe;color:#5b21b6;}"
         "th.h-type{background:#ffedd5;color:#9a3412;}"
         "th.h-code{background:#e0e7ff;color:#3730a3;}"

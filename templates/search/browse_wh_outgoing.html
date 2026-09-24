@@ -157,7 +157,7 @@
       <select id="wh-out-group" name="group">
         <option value="">كل المجموعات</option>
         {% for g in groups %}
-          <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+          <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
         {% endfor %}
       </select>
     </div>

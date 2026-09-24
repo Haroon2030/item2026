@@ -964,11 +964,11 @@ def build_trial_balance_excel(report: dict[str, Any]) -> HttpResponse:
         "<style>"
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;}"
-        "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "th{background:#d9e2f3;color:#1a2b33;font-weight:700;}"
         "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.link{color:#1d4f91;font-weight:700;}"
-        "tr.tot td{background:#dbeafe;font-weight:800;}"
+        "tr.tot td{background:#d9e2f3;color:#1a2b33;font-weight:800;}"
         "tr.bal td{background:#fef9c3;font-weight:800;}"
         "</style></head><body>"
     )

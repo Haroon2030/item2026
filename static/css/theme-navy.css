@@ -695,6 +695,9 @@ body.theme-navy .lm-sheet,
 body.theme-navy .lm-scroll,
 body.theme-navy .up-sheet,
 body.theme-navy .up-scroll,
+body.theme-navy .wh-out-scroll,
+body.theme-navy .wqc-scroll,
+body.theme-navy .vpc-scroll,
 body.theme-navy .page.low-margin-dash .lm-sheet,
 body.theme-navy .page.unpriced-dash .up-sheet,
 body.theme-navy .page.below-cost-dash .up-sheet,
@@ -703,6 +706,9 @@ body.theme-navy .page.cost-adj-dash .up-sheet,
 body.theme-navy .page.name-barcode-dash .up-sheet,
 body.theme-navy .page.pr-compare-dash .pr-compare-table-wrap,
 body.theme-navy .page.pr-compare-dash .pr-compare-sheet-wrap,
+body.theme-navy .page.wh-exp-dash .wh-exp-scroll,
+body.theme-navy .page.inv-pack-err-dash .inv-pack-err-scroll,
+body.theme-navy .page.inv-dash .inv-table-frame,
 body.theme-navy .ss-page .ss-sheet-wrap,
 body.theme-navy .ss-page .ss-sheet-panel {
   background: #0A1229 !important;
@@ -710,6 +716,7 @@ body.theme-navy .ss-page .ss-sheet-panel {
   background-image: none !important;
   color: #D7DDF5 !important;
   border-color: rgba(255, 255, 255, 0.06) !important;
+  overscroll-behavior: contain;
 }
 
 body.theme-navy .lm-sheet-head,
@@ -883,7 +890,8 @@ body.theme-navy table tbody tr.is-selected:hover > td {
   background-image: none !important;
   color: #EEF2FF !important;
   outline: none !important;
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.65) !important;
+  box-shadow: none !important;
+  border-bottom-color: rgba(96, 165, 250, 0.45) !important;
 }
 body.theme-navy table tbody tr.is-selected > td.mono,
 body.theme-navy table tbody tr.is-selected > td.sales-amt,
@@ -919,22 +927,21 @@ body.theme-navy .pr-compare-table-wrap:focus {
   outline-offset: -2px;
 }
 
-/* Compare action button — primary, not red+green clash */
 body.theme-navy .pr-compare-dash .pr-compare-sheet-link,
 body.theme-navy .page.pr-compare-dash .pr-compare-sheet-link,
 body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-sheet-link,
 body.theme-navy .page.pr-compare-dash table tbody tr.is-selected .pr-compare-sheet-link {
-  background: rgba(77, 141, 255, 0.2) !important;
-  border: 1px solid rgba(77, 141, 255, 0.45) !important;
-  color: #8BB4FF !important;
+  background: #dc2626 !important;
+  border: 1px solid #ef4444 !important;
+  color: #fff !important;
   box-shadow: none !important;
   font-weight: 800 !important;
 }
 body.theme-navy .pr-compare-dash .pr-compare-sheet-link:hover,
 body.theme-navy .pr-compare-dash .pr-compare-sheet-link:focus-visible {
-  background: rgba(77, 141, 255, 0.32) !important;
-  border-color: #4D8DFF !important;
-  color: #F2F5FF !important;
+  background: #b91c1c !important;
+  border-color: #f87171 !important;
+  color: #fff !important;
 }
 
 /* حالة التحويل */
@@ -958,11 +965,12 @@ body.theme-navy .page.tr-compare-dash .tr-status.is-open {
 }
 
 /* عدد الأصناف */
-body.theme-navy .page.pr-compare-dash .pr-compare-list-col-items,
-body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet td.pr-compare-list-col-items,
-body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-list-sheet tbody tr td.pr-compare-list-col-items,
-body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td.pr-compare-list-col-items {
-  color: #C4B5FD !important;
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody td.pr-compare-list-col-items,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td.pr-compare-list-col-items,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:hover td.pr-compare-list-col-items,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr.is-selected > td.pr-compare-list-col-items,
+body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-list-sheet tbody td.pr-compare-list-col-items.mono {
+  color: #fbbf24 !important;
   font-weight: 800 !important;
 }
 
@@ -980,20 +988,48 @@ body.theme-navy .page.pr-compare-dash .pr-compare-short-link:focus-visible {
   color: #FECDD3 !important;
 }
 
+/* المخزن المطلوب / المخزن الرئيسي */
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody td.pr-compare-list-col-from,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td.pr-compare-list-col-from,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:hover td.pr-compare-list-col-from,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr.is-selected > td.pr-compare-list-col-from {
+  color: #67e8f9 !important;
+  font-weight: 800 !important;
+}
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody td.pr-compare-list-col-main,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td.pr-compare-list-col-main,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:hover td.pr-compare-list-col-main,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr.is-selected > td.pr-compare-list-col-main {
+  color: #c4b5fd !important;
+  font-weight: 800 !important;
+}
+
 /* أرقام طلبات الشراء المرتبطة */
 body.theme-navy .page.pr-compare-dash .pr-compare-pr-nos,
 body.theme-navy .page.pr-compare-dash .pr-compare-list-col-pr.is-hit,
 body.theme-navy .page.pr-compare-dash .pr-compare-pr-hit,
-body.theme-navy .page.pr-compare-dash .pr-compare-pr-link,
 body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-pr-nos,
 body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-list-sheet tbody tr td.pr-compare-list-col-pr.is-hit,
-body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td.pr-compare-list-col-pr.is-hit .pr-compare-pr-nos {
+body.theme-navy .page.pr-compare-dash.tr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td.pr-compare-list-col-pr.is-hit .pr-compare-pr-nos,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:hover td.pr-compare-list-col-pr.is-hit .pr-compare-pr-link,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:hover td.pr-compare-list-col-pr.is-hit .pr-compare-pr-hit {
   color: #37D26F !important;
   font-weight: 700 !important;
 }
-body.theme-navy .page.pr-compare-dash .pr-compare-pr-link:hover,
-body.theme-navy .page.pr-compare-dash .pr-compare-pr-link:focus-visible {
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody td .pr-compare-pr-miss,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:nth-child(even) td .pr-compare-pr-miss,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr:hover td .pr-compare-pr-miss,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr.is-selected > td .pr-compare-pr-miss {
+  color: #fb7185 !important;
+  font-weight: 800 !important;
+}
+body.theme-navy .page.pr-compare-dash .pr-compare-list-col-pr.is-hit .pr-compare-pr-link:hover,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-col-pr.is-hit .pr-compare-pr-link:focus-visible {
   background: rgba(55, 210, 111, 0.12) !important;
+}
+body.theme-navy .page.pr-compare-dash .pr-compare-pr-link:hover .pr-compare-pr-miss,
+body.theme-navy .page.pr-compare-dash .pr-compare-pr-link:focus-visible .pr-compare-pr-miss {
+  color: #fecdd3 !important;
 }
 body.theme-navy .page.pr-compare-dash .pr-compare-pr-link:hover .pr-compare-pr-nos,
 body.theme-navy .page.pr-compare-dash .pr-compare-pr-link:focus-visible .pr-compare-pr-nos {
@@ -1815,6 +1851,58 @@ body.theme-navy .page.wqc-dash .dash-panel {
   color: #D7DDF5 !important;
   border-color: rgba(255, 255, 255, 0.06) !important;
 }
+
+body.theme-navy .page.wqc-dash .wqc-scroll,
+body.theme-navy .page.wqc-dash .wqc-scroll.table-wrap {
+  background: #0A1229 !important;
+  background-color: #0A1229 !important;
+  overscroll-behavior: contain;
+  scrollbar-color: #4D8DFF #101933 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-scroll::-webkit-scrollbar-track {
+  background: #101933 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-scroll::-webkit-scrollbar-thumb {
+  background: #4D8DFF !important;
+  border-color: #101933 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table,
+body.theme-navy .page.sales-dash.wqc-dash .wqc-table {
+  background: #0A1229 !important;
+  background-color: #0A1229 !important;
+  color: #D7DDF5 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table tbody,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr {
+  background: transparent !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:hover td,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even):hover td {
+  background: #1A2A4A !important;
+  background-color: #1A2A4A !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-sheet-head {
+  background: linear-gradient(90deg, #0c1a3a 0%, #122445 55%, #0f1c38 100%) !important;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.35) !important;
+  box-shadow: inset 3px 0 0 #22D3EE !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-sheet-head h3 {
+  color: #67E8F9 !important;
+  font-weight: 800 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-sheet-count {
+  color: #A5F3FC !important;
+  background: rgba(34, 211, 238, 0.14) !important;
+  border: 1px solid rgba(34, 211, 238, 0.4) !important;
+}
 body.theme-navy .page.wqc-dash .wqc-table thead th,
 body.theme-navy .page.wnt-dash .data-table thead th,
 body.theme-navy .page.wh-out-dash .data-table thead th,
@@ -2018,6 +2106,177 @@ body.theme-navy .page.perf-dash .perf-meta-label {
   color: #8F99B7 !important;
 }
 
+body.theme-navy .page.perf-dash .perf-hero.perf-hero-good {
+  background: linear-gradient(145deg, rgba(20, 83, 45, 0.45), rgba(10, 18, 41, 0.92)) !important;
+  border-color: rgba(74, 222, 128, 0.45) !important;
+  box-shadow: 0 0 28px rgba(74, 222, 128, 0.28), 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+body.theme-navy .page.perf-dash .perf-hero.perf-hero-ok {
+  background: linear-gradient(145deg, rgba(14, 116, 144, 0.4), rgba(10, 18, 41, 0.92)) !important;
+  border-color: rgba(34, 211, 238, 0.45) !important;
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.28), 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+body.theme-navy .page.perf-dash .perf-hero.perf-hero-warn {
+  background: linear-gradient(145deg, rgba(146, 64, 14, 0.42), rgba(10, 18, 41, 0.92)) !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
+  box-shadow: 0 0 28px rgba(251, 191, 36, 0.28), 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+body.theme-navy .page.perf-dash .perf-hero.perf-hero-bad {
+  background: linear-gradient(145deg, rgba(136, 19, 55, 0.42), rgba(10, 18, 41, 0.92)) !important;
+  border-color: rgba(251, 113, 133, 0.5) !important;
+  box-shadow: 0 0 28px rgba(251, 113, 133, 0.32), 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+
+body.theme-navy .page.perf-dash .perf-score-good .perf-score-ring {
+  background: rgba(20, 83, 45, 0.55) !important;
+  border-color: #4ade80 !important;
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.45);
+}
+body.theme-navy .page.perf-dash .perf-score-ok .perf-score-ring {
+  background: rgba(14, 116, 144, 0.45) !important;
+  border-color: #22d3ee !important;
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.4);
+}
+body.theme-navy .page.perf-dash .perf-score-warn .perf-score-ring {
+  background: rgba(146, 64, 14, 0.45) !important;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.4);
+}
+body.theme-navy .page.perf-dash .perf-score-bad .perf-score-ring {
+  background: rgba(136, 19, 55, 0.5) !important;
+  border-color: #fb7185 !important;
+  box-shadow: 0 0 18px rgba(251, 113, 133, 0.45);
+}
+body.theme-navy .page.perf-dash .perf-score-good .perf-score-ring strong,
+body.theme-navy .page.perf-dash .perf-score-good .perf-score-copy h3 {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.perf-dash .perf-score-ok .perf-score-ring strong,
+body.theme-navy .page.perf-dash .perf-score-ok .perf-score-copy h3 {
+  color: #67e8f9 !important;
+}
+body.theme-navy .page.perf-dash .perf-score-warn .perf-score-ring strong,
+body.theme-navy .page.perf-dash .perf-score-warn .perf-score-copy h3 {
+  color: #fbbf24 !important;
+}
+body.theme-navy .page.perf-dash .perf-score-bad .perf-score-ring strong,
+body.theme-navy .page.perf-dash .perf-score-bad .perf-score-copy h3 {
+  color: #fda4af !important;
+}
+
+body.theme-navy .page.perf-dash .perf-score-good .perf-tone-mark {
+  color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.16) !important;
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.7);
+}
+body.theme-navy .page.perf-dash .perf-score-ok .perf-tone-mark {
+  color: #67e8f9 !important;
+  background: rgba(34, 211, 238, 0.16) !important;
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.65);
+}
+body.theme-navy .page.perf-dash .perf-score-warn .perf-tone-mark {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.16) !important;
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.65);
+}
+body.theme-navy .page.perf-dash .perf-score-bad .perf-tone-mark {
+  color: #fb7185 !important;
+  background: rgba(251, 113, 133, 0.16) !important;
+  box-shadow: 0 0 18px rgba(251, 113, 133, 0.7);
+}
+
+body.theme-navy .page.perf-dash .perf-meta-card.perf-meta-best {
+  background: rgba(20, 83, 45, 0.35) !important;
+  border-color: rgba(74, 222, 128, 0.4) !important;
+  box-shadow: inset 0 0 18px rgba(74, 222, 128, 0.12);
+}
+body.theme-navy .page.perf-dash .perf-meta-card.perf-meta-drop {
+  background: rgba(136, 19, 55, 0.32) !important;
+  border-color: rgba(251, 113, 133, 0.42) !important;
+  box-shadow: inset 0 0 18px rgba(251, 113, 133, 0.12);
+}
+body.theme-navy .page.perf-dash .perf-meta-card.perf-meta-return {
+  background: rgba(146, 64, 14, 0.32) !important;
+  border-color: rgba(251, 191, 36, 0.42) !important;
+  box-shadow: inset 0 0 18px rgba(251, 191, 36, 0.12);
+}
+body.theme-navy .page.perf-dash .perf-meta-best .perf-meta-mark {
+  color: #4ade80 !important;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.7);
+}
+body.theme-navy .page.perf-dash .perf-meta-drop .perf-meta-mark {
+  color: #fb7185 !important;
+  box-shadow: 0 0 12px rgba(251, 113, 133, 0.7);
+}
+body.theme-navy .page.perf-dash .perf-meta-return .perf-meta-mark {
+  color: #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.7);
+}
+body.theme-navy .page.perf-dash .perf-meta-best .perf-meta-name,
+body.theme-navy .page.perf-dash .perf-meta-best .perf-meta-value {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.perf-dash .perf-meta-drop .perf-meta-name,
+body.theme-navy .page.perf-dash .perf-meta-drop .perf-meta-value {
+  color: #fda4af !important;
+}
+body.theme-navy .page.perf-dash .perf-meta-return .perf-meta-name,
+body.theme-navy .page.perf-dash .perf-meta-return .perf-meta-value {
+  color: #fbbf24 !important;
+}
+
+body.theme-navy .page.perf-dash .perf-kpi .dash-kpi-hint.is-down {
+  color: #fb7185 !important;
+  background: rgba(251, 113, 133, 0.18) !important;
+  border: 1px solid rgba(251, 113, 133, 0.55) !important;
+  box-shadow: 0 0 12px rgba(251, 113, 133, 0.35);
+  text-shadow: 0 0 12px rgba(251, 113, 133, 0.65);
+}
+body.theme-navy .page.perf-dash .perf-kpi .dash-kpi-hint.is-up {
+  color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.16) !important;
+  border: 1px solid rgba(74, 222, 128, 0.5) !important;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.3);
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.55);
+}
+
+body.theme-navy .page.perf-dash .dash-kpi-glass.perf-kpi-sales {
+  background: linear-gradient(145deg, rgba(20, 83, 45, 0.55), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(74, 222, 128, 0.45) !important;
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.16) !important;
+}
+body.theme-navy .page.perf-dash .dash-kpi-glass.perf-kpi-invoices {
+  background: linear-gradient(145deg, rgba(14, 116, 144, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(34, 211, 238, 0.45) !important;
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.16) !important;
+}
+body.theme-navy .page.perf-dash .dash-kpi-glass.perf-kpi-returns {
+  background: linear-gradient(145deg, rgba(136, 19, 55, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 113, 133, 0.45) !important;
+  box-shadow: 0 0 18px rgba(251, 113, 133, 0.16) !important;
+}
+body.theme-navy .page.perf-dash .dash-kpi-glass.perf-kpi-rate {
+  background: linear-gradient(145deg, rgba(146, 64, 14, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.16) !important;
+}
+body.theme-navy .page.perf-dash .dash-kpi-glass.perf-kpi-basket {
+  background: linear-gradient(145deg, rgba(67, 56, 202, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(165, 180, 252, 0.45) !important;
+  box-shadow: 0 0 18px rgba(165, 180, 252, 0.16) !important;
+}
+body.theme-navy .page.perf-dash .dash-kpi-glass.perf-kpi-rows {
+  background: linear-gradient(145deg, rgba(51, 65, 85, 0.55), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+  box-shadow: 0 0 18px rgba(148, 163, 184, 0.12) !important;
+}
+body.theme-navy .page.perf-dash .perf-kpi-sales .dash-kpi-value { color: #4ade80 !important; }
+body.theme-navy .page.perf-dash .perf-kpi-invoices .dash-kpi-value { color: #67e8f9 !important; }
+body.theme-navy .page.perf-dash .perf-kpi-returns .dash-kpi-value { color: #fda4af !important; }
+body.theme-navy .page.perf-dash .perf-kpi-rate .dash-kpi-value { color: #fbbf24 !important; }
+body.theme-navy .page.perf-dash .perf-kpi-basket .dash-kpi-value { color: #c4b5fd !important; }
+body.theme-navy .page.perf-dash .perf-kpi-rows .dash-kpi-value { color: #e2e8f0 !important; }
+
 /* Glass pseudo-elements quieter on navy */
 body.theme-navy .dash-panel-glass::before,
 body.theme-navy .dash-panel-glass::after {
@@ -2220,6 +2479,104 @@ body.theme-navy .page.wh-exp-dash .wh-exp-filter,
 body.theme-navy .page.inv-pack-err-dash .inv-pack-err-filter {
   background: rgba(22, 27, 46, 0.9) !important;
   border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-pair-label {
+  color: #67E8F9 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-pair-sep {
+  color: #22D3EE !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 0.75rem !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi,
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass {
+  background: #101933 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #D7DDF5 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.3rem !important;
+  min-width: 0 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi .dash-kpi-label {
+  color: #8F99B7 !important;
+  font-weight: 700 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi .dash-kpi-value,
+body.theme-navy .page.wqc-dash .wqc-kpi .dash-kpi-value.mono {
+  color: #F2F5FF !important;
+  font-weight: 800 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi .dash-kpi-hint {
+  color: #8F99B7 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-count .dash-kpi-hint {
+  color: #A5B4FC !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table .wqc-td-a {
+  color: #FBBF24 !important;
+  font-weight: 800 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table .wqc-td-b {
+  color: #37D26F !important;
+  font-weight: 800 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-count {
+  border-color: rgba(77, 141, 255, 0.35) !important;
+  box-shadow: inset 3px 0 0 #4D8DFF;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-gap {
+  border-color: rgba(251, 113, 133, 0.35) !important;
+  box-shadow: inset 3px 0 0 #FB7185;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-gap .dash-kpi-value {
+  color: #FDA4AF !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-a {
+  border-color: rgba(55, 210, 111, 0.35) !important;
+  box-shadow: inset 3px 0 0 #37D26F;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-a .dash-kpi-value {
+  color: #37D26F !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-b {
+  border-color: rgba(251, 191, 36, 0.4) !important;
+  box-shadow: inset 3px 0 0 #FBBF24;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.is-b .dash-kpi-value {
+  color: #FBBF24 !important;
+}
+
+@media (max-width: 1100px) {
+  body.theme-navy .page.wqc-dash .wqc-kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body.theme-navy .page.wqc-dash .wqc-kpi-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 body.theme-navy .page.wh-out-dash .wh-out-table thead th,
@@ -3492,6 +3849,31 @@ body.theme-navy .page.sales-dash.sales-overview-dash .dash-kpi-hint.mono {
   border-radius: 999px !important;
   padding: 0.12rem 0.5rem !important;
 }
+body.theme-navy .page.perf-dash .perf-kpi .dash-kpi-hint.is-down,
+body.theme-navy .page.perf-dash .perf-kpi .dash-kpi-hint.mono.is-down {
+  color: #fb7185 !important;
+  background: rgba(251, 113, 133, 0.18) !important;
+  border-color: rgba(251, 113, 133, 0.55) !important;
+  box-shadow: 0 0 12px rgba(251, 113, 133, 0.35);
+}
+body.theme-navy .page.perf-dash .perf-kpi .dash-kpi-hint.is-up,
+body.theme-navy .page.perf-dash .perf-kpi .dash-kpi-hint.mono.is-up {
+  color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.16) !important;
+  border-color: rgba(74, 222, 128, 0.5) !important;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.3);
+}
+body.theme-navy .page.perf-dash .perf-kpi-rate .dash-kpi-hint,
+body.theme-navy .page.perf-dash .perf-kpi-rate .dash-kpi-hint.mono {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.16) !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
+}
+body.theme-navy .page.perf-dash .perf-kpi-rows .dash-kpi-hint {
+  color: #e2e8f0 !important;
+  background: rgba(148, 163, 184, 0.16) !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
 body.theme-navy .page.sales-dash .dash-kpi-glass-pos .dash-kpi-hint,
 body.theme-navy .page.sales-dash .dash-kpi-glass-pos .dash-kpi-hint.mono {
   background: rgba(34, 211, 238, 0.16) !important;
@@ -3800,6 +4182,117 @@ body.theme-navy .page.income-dash .income-kpi-net .dash-kpi-hint {
 body.theme-navy .page.income-dash .income-kpi-net .income-kpi-formula {
   background: rgba(168, 93, 255, 0.14) !important;
   color: #D4B3FF !important;
+}
+
+/* ملخص قائمة الدخل: نفس توهج بطاقة صحة النطاق، لون مستقل لكل مؤشر */
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-rev {
+  background: linear-gradient(145deg, rgba(88, 28, 135, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(196, 181, 253, 0.5) !important;
+  box-shadow: 0 0 22px rgba(167, 139, 250, 0.2) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-cogs {
+  background: linear-gradient(145deg, rgba(146, 64, 14, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 191, 36, 0.48) !important;
+  box-shadow: 0 0 22px rgba(251, 191, 36, 0.18) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-exp {
+  background: linear-gradient(145deg, rgba(136, 19, 55, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 113, 133, 0.5) !important;
+  box-shadow: 0 0 22px rgba(251, 113, 133, 0.18) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-margin.is-up {
+  background: linear-gradient(145deg, rgba(14, 116, 144, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(34, 211, 238, 0.48) !important;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.18) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-margin.is-down,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-net.is-down {
+  background: linear-gradient(145deg, rgba(136, 19, 55, 0.52), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 113, 133, 0.55) !important;
+  box-shadow: 0 0 22px rgba(251, 113, 133, 0.22) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-net.is-up {
+  background: linear-gradient(145deg, rgba(20, 83, 45, 0.55), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(74, 222, 128, 0.5) !important;
+  box-shadow: 0 0 22px rgba(74, 222, 128, 0.2) !important;
+}
+
+body.theme-navy .page.income-dash .income-kpi-grid .dash-kpi-ico {
+  width: 1.7rem !important;
+  height: 1.7rem !important;
+  border-radius: 999px !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-ico-rev {
+  color: #c4b5fd !important;
+  background: rgba(167, 139, 250, 0.16) !important;
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.7) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-ico-cogs {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.16) !important;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.65) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-ico-exp {
+  color: #fb7185 !important;
+  background: rgba(251, 113, 133, 0.16) !important;
+  box-shadow: 0 0 14px rgba(251, 113, 133, 0.7) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-up .income-kpi-ico-margin {
+  color: #67e8f9 !important;
+  background: rgba(34, 211, 238, 0.16) !important;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.65) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-down .income-kpi-ico-margin,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-down .income-kpi-ico-net {
+  color: #fb7185 !important;
+  background: rgba(251, 113, 133, 0.16) !important;
+  box-shadow: 0 0 14px rgba(251, 113, 133, 0.7) !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-up .income-kpi-ico-net {
+  color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.16) !important;
+  box-shadow: 0 0 14px rgba(74, 222, 128, 0.7) !important;
+}
+
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-rev .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-rev .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-rev strong {
+  color: #c4b5fd !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-cogs .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-cogs .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-cogs strong {
+  color: #fbbf24 !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-exp .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-exp .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-exp strong {
+  color: #fda4af !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-up .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-up .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-up strong {
+  color: #67e8f9 !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-down .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-down .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-down strong,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-down .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-down .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-down strong {
+  color: #fda4af !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-up .dash-kpi-value,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-up .dash-kpi-value.mono,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-net.is-up strong {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-up .dash-kpi-hint,
+body.theme-navy .page.income-dash .income-kpi-grid .income-kpi-margin.is-up .dash-kpi-hint.mono {
+  background: rgba(34, 211, 238, 0.16) !important;
+  border-color: rgba(34, 211, 238, 0.4) !important;
+  color: #67e8f9 !important;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
 }
 
 /* Assets register — full specificity vs style.css light sticky headers */
@@ -4232,13 +4725,15 @@ body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr.i
   background: rgba(255, 178, 30, 0.14) !important;
   font-weight: 800 !important;
 }
-/* فترة أ → أحمر · فترة ب → أخضر */
+/* فترة أ → وردي · فترة ب → أخضر (يشمل رقم المبلغ داخل .money) */
 body.theme-navy .page.perf-dash .perf-compare-table .perf-cell-a,
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr td.perf-cell-a,
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr:nth-child(even) td.perf-cell-a,
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr:hover td.perf-cell-a,
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr.is-selected > td.perf-cell-a,
-body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tfoot tr td.perf-cell-a {
+body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tfoot tr td.perf-cell-a,
+body.theme-navy .page.perf-dash .perf-compare-table .perf-cell-a .money,
+body.theme-navy .page.perf-dash .perf-compare-table .perf-cell-a .money-value {
   color: #fb7185 !important;
   font-weight: 800 !important;
 }
@@ -4247,8 +4742,10 @@ body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr t
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr:nth-child(even) td.perf-cell-b,
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr:hover td.perf-cell-b,
 body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tbody tr.is-selected > td.perf-cell-b,
-body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tfoot tr td.perf-cell-b {
-  color: #37D26F !important;
+body.theme-navy .page.perf-dash .dash-panel-glass .perf-compare-table tfoot tr td.perf-cell-b,
+body.theme-navy .page.perf-dash .perf-compare-table .perf-cell-b .money,
+body.theme-navy .page.perf-dash .perf-compare-table .perf-cell-b .money-value {
+  color: #4ade80 !important;
   font-weight: 800 !important;
 }
 body.theme-navy .page.perf-dash .perf-inv-rank,
@@ -4445,47 +4942,355 @@ body.theme-navy .page.low-margin-dash .lm-table tbody tr:hover td.lm-td-onixprft
   background-color: rgba(77, 141, 255, 0.14) !important;
 }
 
-/* Print stays light — restore after navy locks */
+/* بطاقات الملخص في كل الموقع: توهج ولون مستقل مثل صحة النطاق */
+body.theme-navy .page .dash-kpi-card .dash-kpi-ico,
+body.theme-navy .page .lm-kpi .lm-kpi-ico,
+body.theme-navy .page .up-kpi .up-kpi-ico {
+  width: 1.7rem !important;
+  height: 1.7rem !important;
+  border-radius: 999px !important;
+}
+
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-pos,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-qty,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-sellers,
+body.theme-navy .page .purchase-kpi.purchase-kpi-qty,
+body.theme-navy .page .purchase-kpi.purchase-kpi-net,
+body.theme-navy .page .vt-kpi.vt-kpi-recv,
+body.theme-navy .page .inv-kpi-card.inv-kpi-qty,
+body.theme-navy .page .inv-kpi-card.inv-hl-wh,
+body.theme-navy .page .lm-kpi.is-match,
+body.theme-navy .page .up-kpi.is-shown:not(.pc-kpi-up) {
+  background: linear-gradient(145deg, rgba(14, 116, 144, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(34, 211, 238, 0.48) !important;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.18) !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-pos .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-pos .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-pos .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-pos .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-qty .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-qty .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-qty .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-qty .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-sellers .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-sellers .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-sellers .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-sellers .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-qty .dash-kpi-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-qty .money,
+body.theme-navy .page .purchase-kpi.purchase-kpi-qty .money-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-qty .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-net .dash-kpi-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-net .money,
+body.theme-navy .page .purchase-kpi.purchase-kpi-net .money-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-net .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-recv .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-recv .money,
+body.theme-navy .page .vt-kpi.vt-kpi-recv .money-value,
+body.theme-navy .page .vt-kpi.vt-kpi-recv .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-qty .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-kpi-qty .money,
+body.theme-navy .page .inv-kpi-card.inv-kpi-qty .money-value,
+body.theme-navy .page .inv-kpi-card.inv-kpi-qty .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-hl-wh .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-hl-wh .dash-kpi-ico,
+body.theme-navy .page .lm-kpi.is-match .lm-kpi-value,
+body.theme-navy .page .lm-kpi.is-match .lm-kpi-ico,
+body.theme-navy .page .up-kpi.is-shown:not(.pc-kpi-up) .up-kpi-value,
+body.theme-navy .page .up-kpi.is-shown:not(.pc-kpi-up) .up-kpi-ico {
+  color: #67e8f9 !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-pos .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-qty .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-sellers .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-qty .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-net .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-recv .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-qty .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-hl-wh .dash-kpi-ico,
+body.theme-navy .page .lm-kpi.is-match .lm-kpi-ico,
+body.theme-navy .page .up-kpi.is-shown:not(.pc-kpi-up) .up-kpi-ico {
+  background: rgba(34, 211, 238, 0.16) !important;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.65) !important;
+}
+
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-total,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-amt,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-devices,
+body.theme-navy .page .purchase-kpi.purchase-kpi-total,
+body.theme-navy .page .vt-kpi.vt-kpi-sold,
+body.theme-navy .page .vt-kpi.vt-kpi-settle,
+body.theme-navy .page .inv-kpi-card.inv-kpi-value,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down),
+body.theme-navy .page .wqc-kpi.is-a,
+body.theme-navy .page .lm-kpi.is-shown,
+body.theme-navy .page .up-kpi.pc-kpi-up {
+  background: linear-gradient(145deg, rgba(20, 83, 45, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(74, 222, 128, 0.48) !important;
+  box-shadow: 0 0 22px rgba(74, 222, 128, 0.18) !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-total .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-total .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-total .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-total .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-amt .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-amt .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-amt .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-amt .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-devices .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-devices .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-total .dash-kpi-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-total .money,
+body.theme-navy .page .purchase-kpi.purchase-kpi-total .money-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-total .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-sold .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-sold .money,
+body.theme-navy .page .vt-kpi.vt-kpi-sold .money-value,
+body.theme-navy .page .vt-kpi.vt-kpi-sold .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-settle .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-settle .money,
+body.theme-navy .page .vt-kpi.vt-kpi-settle .money-value,
+body.theme-navy .page .vt-kpi.vt-kpi-settle .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-value .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-kpi-value .money,
+body.theme-navy .page .inv-kpi-card.inv-kpi-value .money-value,
+body.theme-navy .page .inv-kpi-card.inv-kpi-value .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down) .dash-kpi-value,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down) .money,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down) .money-value,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down) strong,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down) .dash-kpi-ico,
+body.theme-navy .page .wqc-kpi.is-a .dash-kpi-value,
+body.theme-navy .page .lm-kpi.is-shown .lm-kpi-value,
+body.theme-navy .page .lm-kpi.is-shown .lm-kpi-ico,
+body.theme-navy .page .up-kpi.pc-kpi-up .up-kpi-value,
+body.theme-navy .page .up-kpi.pc-kpi-up .up-kpi-ico {
+  color: #4ade80 !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-total .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-amt .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-devices .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-total .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-sold .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-settle .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-value .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-net:not(.is-down) .dash-kpi-ico,
+body.theme-navy .page .lm-kpi.is-shown .lm-kpi-ico,
+body.theme-navy .page .up-kpi.pc-kpi-up .up-kpi-ico {
+  background: rgba(74, 222, 128, 0.16) !important;
+  box-shadow: 0 0 14px rgba(74, 222, 128, 0.7) !important;
+}
+
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-returns,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-ret,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-visit,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vat,
+body.theme-navy .page .income-kpi.income-kpi-exp,
+body.theme-navy .page .income-kpi.income-kpi-net.is-down,
+body.theme-navy .page .income-kpi.income-kpi-margin.is-down,
+body.theme-navy .page .vt-kpi.vt-kpi-hold,
+body.theme-navy .page .wqc-kpi.is-gap,
+body.theme-navy .page .up-kpi.pc-kpi-down,
+body.theme-navy .page.purchase-returns-dash .pr-return-kpis .purchase-kpi {
+  background: linear-gradient(145deg, rgba(136, 19, 55, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 113, 133, 0.5) !important;
+  box-shadow: 0 0 22px rgba(251, 113, 133, 0.18) !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-returns .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-returns .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-returns .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-returns .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-ret .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-ret .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-ret .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-ret .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-visit .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-visit .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vat .dash-kpi-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vat .money,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vat .money-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vat .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-exp .dash-kpi-value,
+body.theme-navy .page .income-kpi.income-kpi-exp .money,
+body.theme-navy .page .income-kpi.income-kpi-exp .money-value,
+body.theme-navy .page .income-kpi.income-kpi-exp strong,
+body.theme-navy .page .income-kpi.income-kpi-exp .dash-kpi-ico,
+body.theme-navy .page .income-kpi.is-down .dash-kpi-value,
+body.theme-navy .page .income-kpi.is-down .money,
+body.theme-navy .page .income-kpi.is-down .money-value,
+body.theme-navy .page .income-kpi.is-down strong,
+body.theme-navy .page .income-kpi.is-down .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-hold .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-hold .money,
+body.theme-navy .page .vt-kpi.vt-kpi-hold .money-value,
+body.theme-navy .page .vt-kpi.vt-kpi-hold .dash-kpi-ico,
+body.theme-navy .page .wqc-kpi.is-gap .dash-kpi-value,
+body.theme-navy .page .up-kpi.pc-kpi-down .up-kpi-value,
+body.theme-navy .page .up-kpi.pc-kpi-down .up-kpi-ico,
+body.theme-navy .page.purchase-returns-dash .pr-return-kpis .purchase-kpi .dash-kpi-value,
+body.theme-navy .page.purchase-returns-dash .pr-return-kpis .purchase-kpi .money,
+body.theme-navy .page.purchase-returns-dash .pr-return-kpis .purchase-kpi .money-value,
+body.theme-navy .page.purchase-returns-dash .pr-return-kpis .purchase-kpi .dash-kpi-ico {
+  color: #fda4af !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-returns .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-item-ret .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-visit .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vat .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-exp .dash-kpi-ico,
+body.theme-navy .page .income-kpi.is-down .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-hold .dash-kpi-ico,
+body.theme-navy .page .up-kpi.pc-kpi-down .up-kpi-ico,
+body.theme-navy .page.purchase-returns-dash .pr-return-kpis .purchase-kpi .dash-kpi-ico {
+  background: rgba(251, 113, 133, 0.16) !important;
+  box-shadow: 0 0 14px rgba(251, 113, 133, 0.7) !important;
+}
+
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-branches,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vendors,
+body.theme-navy .page .income-kpi.income-kpi-cogs,
+body.theme-navy .page .vt-kpi.vt-kpi-vendors,
+body.theme-navy .page .vt-kpi.vt-kpi-costadj,
+body.theme-navy .page .inv-kpi-card.inv-hl-branch,
+body.theme-navy .page .inv-kpi-card.inv-kpi-scope,
+body.theme-navy .page .wqc-kpi.is-b,
+body.theme-navy .page .lm-kpi.is-limit,
+body.theme-navy .page .up-kpi.is-match {
+  background: linear-gradient(145deg, rgba(146, 64, 14, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 191, 36, 0.48) !important;
+  box-shadow: 0 0 22px rgba(251, 191, 36, 0.18) !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-branches .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-branches .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-branches .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-branches .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vendors .dash-kpi-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vendors .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-cogs .dash-kpi-value,
+body.theme-navy .page .income-kpi.income-kpi-cogs .money,
+body.theme-navy .page .income-kpi.income-kpi-cogs .money-value,
+body.theme-navy .page .income-kpi.income-kpi-cogs strong,
+body.theme-navy .page .income-kpi.income-kpi-cogs .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-vendors .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-vendors .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-costadj .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-costadj .money,
+body.theme-navy .page .vt-kpi.vt-kpi-costadj .money-value,
+body.theme-navy .page .vt-kpi.vt-kpi-costadj .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-hl-branch .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-hl-branch .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-scope .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-kpi-scope .dash-kpi-ico,
+body.theme-navy .page .wqc-kpi.is-b .dash-kpi-value,
+body.theme-navy .page .lm-kpi.is-limit .lm-kpi-value,
+body.theme-navy .page .lm-kpi.is-limit .lm-kpi-ico,
+body.theme-navy .page .up-kpi.is-match .up-kpi-value,
+body.theme-navy .page .up-kpi.is-match .up-kpi-ico {
+  color: #fbbf24 !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-branches .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-vendors .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-cogs .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-vendors .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-costadj .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-hl-branch .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-scope .dash-kpi-ico,
+body.theme-navy .page .lm-kpi.is-limit .lm-kpi-ico,
+body.theme-navy .page .up-kpi.is-match .up-kpi-ico {
+  background: rgba(251, 191, 36, 0.16) !important;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.65) !important;
+}
+
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-wholesale,
+body.theme-navy .page .purchase-kpi.purchase-kpi-invoices,
+body.theme-navy .page .income-kpi.income-kpi-rev,
+body.theme-navy .page .income-kpi.assets-kpi-ratio,
+body.theme-navy .page .vt-kpi.vt-kpi-turn,
+body.theme-navy .page .vt-kpi.vt-kpi-due,
+body.theme-navy .page .inv-kpi-card.inv-hl-group,
+body.theme-navy .page .inv-kpi-card.inv-kpi-rows,
+body.theme-navy .page .dash-kpi-glass.inv-summary-scope,
+body.theme-navy .page .wqc-kpi.is-count,
+body.theme-navy .page .up-kpi.is-wh:not(.pc-kpi-down) {
+  background: linear-gradient(145deg, rgba(88, 28, 135, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(196, 181, 253, 0.5) !important;
+  box-shadow: 0 0 22px rgba(167, 139, 250, 0.18) !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-wholesale .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-wholesale .money,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-wholesale .money-value,
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-wholesale .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-invoices .dash-kpi-value,
+body.theme-navy .page .purchase-kpi.purchase-kpi-invoices .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-rev .dash-kpi-value,
+body.theme-navy .page .income-kpi.income-kpi-rev .money,
+body.theme-navy .page .income-kpi.income-kpi-rev .money-value,
+body.theme-navy .page .income-kpi.income-kpi-rev strong,
+body.theme-navy .page .income-kpi.income-kpi-rev .dash-kpi-ico,
+body.theme-navy .page .income-kpi.assets-kpi-ratio .dash-kpi-value,
+body.theme-navy .page .income-kpi.assets-kpi-ratio .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-turn .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-turn .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-due .dash-kpi-value,
+body.theme-navy .page .vt-kpi.vt-kpi-due .money,
+body.theme-navy .page .vt-kpi.vt-kpi-due .money-value,
+body.theme-navy .page .vt-kpi.vt-kpi-due .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-hl-group .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-hl-group .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-rows .dash-kpi-value,
+body.theme-navy .page .inv-kpi-card.inv-kpi-rows .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.inv-summary-scope .dash-kpi-value,
+body.theme-navy .page .dash-kpi-glass.inv-summary-scope .dash-kpi-ico,
+body.theme-navy .page .wqc-kpi.is-count .dash-kpi-value,
+body.theme-navy .page .up-kpi.is-wh:not(.pc-kpi-down) .up-kpi-value,
+body.theme-navy .page .up-kpi.is-wh:not(.pc-kpi-down) .up-kpi-ico {
+  color: #c4b5fd !important;
+}
+body.theme-navy .page .dash-kpi-glass.dash-kpi-glass-wholesale .dash-kpi-ico,
+body.theme-navy .page .purchase-kpi.purchase-kpi-invoices .dash-kpi-ico,
+body.theme-navy .page .income-kpi.income-kpi-rev .dash-kpi-ico,
+body.theme-navy .page .income-kpi.assets-kpi-ratio .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-turn .dash-kpi-ico,
+body.theme-navy .page .vt-kpi.vt-kpi-due .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-hl-group .dash-kpi-ico,
+body.theme-navy .page .inv-kpi-card.inv-kpi-rows .dash-kpi-ico,
+body.theme-navy .page .dash-kpi-glass.inv-summary-scope .dash-kpi-ico,
+body.theme-navy .page .up-kpi.is-wh:not(.pc-kpi-down) .up-kpi-ico {
+  background: rgba(167, 139, 250, 0.16) !important;
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.7) !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-count {
+  background: linear-gradient(145deg, rgba(88, 28, 135, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(196, 181, 253, 0.5) !important;
+  box-shadow: 0 0 22px rgba(167, 139, 250, 0.18) !important;
+}
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-gap {
+  background: linear-gradient(145deg, rgba(136, 19, 55, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 113, 133, 0.5) !important;
+  box-shadow: 0 0 22px rgba(251, 113, 133, 0.18) !important;
+}
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-a {
+  background: linear-gradient(145deg, rgba(20, 83, 45, 0.5), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(74, 222, 128, 0.48) !important;
+  box-shadow: 0 0 22px rgba(74, 222, 128, 0.18) !important;
+}
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-b {
+  background: linear-gradient(145deg, rgba(146, 64, 14, 0.48), rgba(16, 25, 51, 0.94)) !important;
+  border-color: rgba(251, 191, 36, 0.48) !important;
+  box-shadow: 0 0 22px rgba(251, 191, 36, 0.18) !important;
+}
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-count .dash-kpi-value { color: #c4b5fd !important; }
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-gap .dash-kpi-value { color: #fda4af !important; }
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-a .dash-kpi-value { color: #4ade80 !important; }
+body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-b .dash-kpi-value { color: #fbbf24 !important; }
+
+/* Print light preview while fit-printing class is on (before @media print) */
 body.theme-navy.fit-printing,
 body.fit-printing.theme-navy {
-  background: #f7fcfd !important;
-  color: #0f172a !important;
-}
-body.fit-printing.theme-navy .dash-head,
-body.fit-printing.theme-navy .dash-kpi-card,
-body.fit-printing.theme-navy .dash-kpi-glass,
-body.fit-printing.theme-navy .dash-panel,
-body.fit-printing.theme-navy .dash-panel-glass,
-body.fit-printing.theme-navy .table-wrap,
-body.fit-printing.theme-navy .search-box,
-body.fit-printing.theme-navy .results-card,
-body.fit-printing.theme-navy .card,
-body.fit-printing.theme-navy .panel,
-body.fit-printing.theme-navy .income-top-shell,
-body.fit-printing.theme-navy .seller-card,
-body.fit-printing.theme-navy .result-pill {
-  background: #ffffff !important;
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #dbe7ef !important;
-}
-body.fit-printing.theme-navy .dash-head-copy h2,
-body.fit-printing.theme-navy .dash-panel-head h3,
-body.fit-printing.theme-navy table thead th {
-  color: #0e7490 !important;
-  background: #ffffff !important;
-}
-body.fit-printing.theme-navy table tbody td {
   background: #ffffff !important;
   color: #0f172a !important;
-}
-body.fit-printing.theme-navy table tbody tr:nth-child(even) td {
-  background: #f7fcfd !important;
-  color: #0f172a !important;
-}
-body.fit-printing.theme-navy .result-pill {
-  background: #ecfeff !important;
-  color: #0e7490 !important;
 }
 
 /* ===== Screen locks: selected row final (opaque, after cell stripes) ===== */
@@ -4522,7 +5327,8 @@ body.theme-navy .page.purchase-dash .data-table tbody tr.is-selected > td {
   background-color: #1B3A6B !important;
   background-image: none !important;
   color: #EEF2FF !important;
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.65) !important;
+  box-shadow: none !important;
+  border-bottom-color: rgba(96, 165, 250, 0.45) !important;
 }
 body.theme-navy .page.low-margin-dash .lm-table tbody tr.is-selected > td.lm-td-cost,
 body.theme-navy .page.low-margin-dash .lm-table tbody tr.is-selected:nth-child(odd) > td.lm-td-cost,
@@ -4984,7 +5790,8 @@ body.theme-navy .page.vpc-dash .vpc-table tbody tr.is-selected > td {
   background-color: #1B3A6B !important;
   background-image: none !important;
   color: #EEF2FF !important;
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.65) !important;
+  box-shadow: none !important;
+  border-bottom-color: rgba(96, 165, 250, 0.45) !important;
 }
 
 /* أسعار VPC تبقى ملوّنة فوق قفل الصف النشط */
@@ -5021,4 +5828,569 @@ body.theme-navy .page.vpc-dash .vpc-pivot-panel .result-pill {
   background: rgba(34, 211, 238, 0.12) !important;
   border-color: rgba(34, 211, 238, 0.45) !important;
   color: #67E8F9 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Scroll canvases — منع الشاشة البيضاء أثناء السحب (كل الموقع)
+   ═══════════════════════════════════════════════════════════ */
+body.theme-navy .page .table-wrap,
+body.theme-navy .page [class*="-scroll"],
+body.theme-navy .page .vt-table-wrap,
+body.theme-navy .page .pr-compare-table-wrap,
+body.theme-navy .page .users-table-wrap,
+body.theme-navy .page .inv-table-frame,
+body.theme-navy .page .margin-scroll,
+body.theme-navy .lm-scroll,
+body.theme-navy .up-scroll,
+body.theme-navy .wh-out-scroll,
+body.theme-navy .wqc-scroll,
+body.theme-navy .vpc-scroll,
+body.theme-navy .page.vpc-dash .vpc-scroll,
+body.theme-navy .page.wh-exp-dash .wh-exp-scroll,
+body.theme-navy .page.inv-pack-err-dash .inv-pack-err-scroll,
+body.theme-navy .page.low-margin-dash .lm-scroll,
+body.theme-navy .page.unpriced-dash .up-scroll,
+body.theme-navy .page.below-cost-dash .up-scroll,
+body.theme-navy .page.price-changes-dash .up-scroll,
+body.theme-navy .page.cost-adj-dash .up-scroll,
+body.theme-navy .page.name-barcode-dash .up-scroll,
+body.theme-navy .page.vendor-turnover-dash .vt-table-wrap,
+body.theme-navy .page.purchase-returns-dash .pr-returns-scroll,
+body.theme-navy .page.trial-balance-dash .tb-main-scroll,
+body.theme-navy .page.suppliers-dash .suppliers-scroll,
+body.theme-navy .page.income-dash .income-top-scroll,
+body.theme-navy .page.income-dash .income-account-scroll,
+body.theme-navy .page.income-dash .income-analyst-scroll,
+body.theme-navy .page.income-dash .income-cash-scroll,
+body.theme-navy .page.income-dash .income-cash-detail-scroll,
+body.theme-navy .page.purchase-dash .purchase-table-scroll,
+body.theme-navy .page.inv-dash .inv-table-scroll,
+body.theme-navy .page.sales-overview-dash .sales-ov-scroll,
+body.theme-navy .page.perf-dash .perf-table-scroll {
+  background: #0A1229 !important;
+  background-color: #0A1229 !important;
+  background-image: none !important;
+  overscroll-behavior: contain;
+  scrollbar-color: #4D8DFF #101933;
+}
+
+body.theme-navy .page .table-wrap::-webkit-scrollbar-track,
+body.theme-navy .page [class*="-scroll"]::-webkit-scrollbar-track,
+body.theme-navy .lm-scroll::-webkit-scrollbar-track,
+body.theme-navy .up-scroll::-webkit-scrollbar-track,
+body.theme-navy .wh-out-scroll::-webkit-scrollbar-track,
+body.theme-navy .wqc-scroll::-webkit-scrollbar-track,
+body.theme-navy .vpc-scroll::-webkit-scrollbar-track {
+  background: #101933 !important;
+}
+
+body.theme-navy .page .table-wrap::-webkit-scrollbar-thumb,
+body.theme-navy .page [class*="-scroll"]::-webkit-scrollbar-thumb,
+body.theme-navy .lm-scroll::-webkit-scrollbar-thumb,
+body.theme-navy .up-scroll::-webkit-scrollbar-thumb,
+body.theme-navy .wh-out-scroll::-webkit-scrollbar-thumb,
+body.theme-navy .wqc-scroll::-webkit-scrollbar-thumb,
+body.theme-navy .vpc-scroll::-webkit-scrollbar-thumb {
+  background: #4D8DFF !important;
+  border-color: #101933 !important;
+}
+
+body.theme-navy .page table.data-table,
+body.theme-navy .page table.sales-table,
+body.theme-navy .page table.lm-table,
+body.theme-navy .page table.up-table,
+body.theme-navy .page table.wqc-table,
+body.theme-navy .page table.wh-out-table,
+body.theme-navy .page table.wh-exp-table,
+body.theme-navy .page table.wh-exp-accounts-table,
+body.theme-navy .page table.inv-pack-err-table,
+body.theme-navy .page table.vpc-table,
+body.theme-navy .page table.vt-table,
+body.theme-navy .page table.vt-sheet,
+body.theme-navy .page table.vt-table-compact,
+body.theme-navy .page table.assets-table,
+body.theme-navy .page table.perf-compare-table,
+body.theme-navy .page table.ss-sheet,
+body.theme-navy .page table.purchase-table,
+body.theme-navy .page table.income-table,
+body.theme-navy .page table.suppliers-table {
+  background: #0A1229 !important;
+  background-color: #0A1229 !important;
+}
+
+body.theme-navy .page.wh-out-dash .wh-out-table tbody tr:hover td,
+body.theme-navy .page.wh-out-dash .wh-out-table tbody tr:nth-child(even):hover td,
+body.theme-navy .page.wh-exp-dash .wh-exp-table tbody tr:hover td,
+body.theme-navy .page.wh-exp-dash .wh-exp-table tbody tr:nth-child(even):hover td,
+body.theme-navy .page.wh-exp-dash .wh-exp-accounts-table tbody tr:hover td,
+body.theme-navy .page.inv-pack-err-dash .inv-pack-err-table tbody tr:hover td,
+body.theme-navy .page.inv-pack-err-dash .inv-pack-err-table tbody tr:nth-child(even):hover td,
+body.theme-navy .page.wnt-dash .data-table tbody tr:hover td,
+body.theme-navy .page.wnt-dash .data-table tbody tr:nth-child(even):hover td,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:hover td,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even):hover td,
+body.theme-navy .page.vpc-dash .vpc-table tbody tr:hover td,
+body.theme-navy .page.vpc-dash .vpc-table tbody tr:nth-child(even):hover td,
+body.theme-navy .page.below-cost-dash .up-table tbody tr:hover td,
+body.theme-navy .page.price-changes-dash .up-table tbody tr:hover td,
+body.theme-navy .page.cost-adj-dash .up-table tbody tr:hover td,
+body.theme-navy .page.name-barcode-dash .up-table tbody tr:hover td,
+body.theme-navy .page.assets-dash .assets-table tbody tr:hover td,
+body.theme-navy .page.suppliers-dash table tbody tr:hover td,
+body.theme-navy .page.purchase-returns-dash table tbody tr:hover td,
+body.theme-navy .page.trial-balance-dash table tbody tr:hover td,
+body.theme-navy .page.unsold-dash table tbody tr:hover td,
+body.theme-navy .page.sns-dash table tbody tr:hover td,
+body.theme-navy .page.income-dash table tbody tr:hover td,
+body.theme-navy .page.sales-overview-dash table tbody tr:hover td {
+  background: #1A2A4A !important;
+  background-color: #1A2A4A !important;
+  background-image: none !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-zero_b,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-zero_b,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:hover td.wqc-td-status.is-zero_b,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even):hover td.wqc-td-status.is-zero_b {
+  color: #fbbf24 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-diff,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-diff,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:hover td.wqc-td-status.is-diff,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even):hover td.wqc-td-status.is-diff {
+  color: #fb7185 !important;
+}
+
+body.theme-navy .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-both,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-both,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:hover td.wqc-td-status.is-both,
+body.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even):hover td.wqc-td-status.is-both {
+  color: #4ade80 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PDF / Print — خلفية بيضاء رسمية (تتفوّق على أقفال Navy)
+   ═══════════════════════════════════════════════════════════ */
+@media print {
+  body.theme-navy.fit-printing,
+  body.fit-printing.theme-navy,
+  body.theme-navy.fit-printing html,
+  body.fit-printing.theme-navy html {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body.theme-navy.fit-printing .page,
+  body.fit-printing.theme-navy .page,
+  body.theme-navy.fit-printing main,
+  body.fit-printing.theme-navy main,
+  body.theme-navy.fit-printing .page.has-sidebar,
+  body.fit-printing.theme-navy .page.has-sidebar,
+  body.theme-navy.fit-printing .page.has-sidebar > main,
+  body.fit-printing.theme-navy .page.has-sidebar > main {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: #0f172a !important;
+  }
+
+  body.theme-navy.fit-printing .dash-head,
+  body.fit-printing.theme-navy .dash-head,
+  body.theme-navy.fit-printing .dash-kpi-card,
+  body.fit-printing.theme-navy .dash-kpi-card,
+  body.theme-navy.fit-printing .dash-kpi-glass,
+  body.fit-printing.theme-navy .dash-kpi-glass,
+  body.theme-navy.fit-printing .dash-panel,
+  body.fit-printing.theme-navy .dash-panel,
+  body.theme-navy.fit-printing .dash-panel-glass,
+  body.fit-printing.theme-navy .dash-panel-glass,
+  body.theme-navy.fit-printing .table-wrap,
+  body.fit-printing.theme-navy .table-wrap,
+  body.theme-navy.fit-printing .search-box,
+  body.fit-printing.theme-navy .search-box,
+  body.theme-navy.fit-printing .results-card,
+  body.fit-printing.theme-navy .results-card,
+  body.theme-navy.fit-printing .card,
+  body.fit-printing.theme-navy .card,
+  body.theme-navy.fit-printing .panel,
+  body.fit-printing.theme-navy .panel,
+  body.theme-navy.fit-printing .income-top-shell,
+  body.fit-printing.theme-navy .income-top-shell,
+  body.theme-navy.fit-printing .seller-card,
+  body.fit-printing.theme-navy .seller-card,
+  body.theme-navy.fit-printing .result-pill,
+  body.fit-printing.theme-navy .result-pill,
+  body.theme-navy.fit-printing .wqc-sheet,
+  body.fit-printing.theme-navy .wqc-sheet,
+  body.theme-navy.fit-printing .wqc-kpi,
+  body.fit-printing.theme-navy .wqc-kpi,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-sheet,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-sheet,
+  body.theme-navy.fit-printing .page.wqc-dash .table-wrap,
+  body.fit-printing.theme-navy .page.wqc-dash .table-wrap,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-kpi.dash-kpi-glass,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass,
+  body.theme-navy.fit-printing .page.wnt-dash .table-wrap,
+  body.fit-printing.theme-navy .page.wnt-dash .table-wrap,
+  body.theme-navy.fit-printing .page.wh-out-dash .table-wrap,
+  body.fit-printing.theme-navy .page.wh-out-dash .table-wrap,
+  body.theme-navy.fit-printing .page.wh-exp-dash .table-wrap,
+  body.fit-printing.theme-navy .page.wh-exp-dash .table-wrap {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: #0f172a !important;
+    border-color: #dbe7ef !important;
+    box-shadow: none !important;
+  }
+
+  body.theme-navy.fit-printing .dash-head-copy h2,
+  body.fit-printing.theme-navy .dash-head-copy h2,
+  body.theme-navy.fit-printing .dash-panel-head h3,
+  body.fit-printing.theme-navy .dash-panel-head h3,
+  body.theme-navy.fit-printing .wqc-sheet-title h3,
+  body.fit-printing.theme-navy .wqc-sheet-title h3 {
+    color: #0e7490 !important;
+  }
+
+  body.theme-navy.fit-printing .dash-kpi-label,
+  body.fit-printing.theme-navy .dash-kpi-label,
+  body.theme-navy.fit-printing .dash-kpi-hint,
+  body.fit-printing.theme-navy .dash-kpi-hint {
+    color: #475569 !important;
+  }
+
+  body.theme-navy.fit-printing .dash-kpi-value,
+  body.fit-printing.theme-navy .dash-kpi-value,
+  body.theme-navy.fit-printing .dash-kpi-value.mono,
+  body.fit-printing.theme-navy .dash-kpi-value.mono {
+    color: #0f172a !important;
+  }
+
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-kpi.is-count .dash-kpi-hint,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-kpi.is-count .dash-kpi-hint {
+    color: #4338ca !important;
+  }
+
+  body.theme-navy.fit-printing table thead th,
+  body.fit-printing.theme-navy table thead th,
+  body.theme-navy.fit-printing .page table thead th,
+  body.fit-printing.theme-navy .page table thead th,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table thead th,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table thead th,
+  body.theme-navy.fit-printing .page.wnt-dash .data-table thead th,
+  body.fit-printing.theme-navy .page.wnt-dash .data-table thead th,
+  body.theme-navy.fit-printing .page.wh-out-dash .data-table thead th,
+  body.fit-printing.theme-navy .page.wh-out-dash .data-table thead th,
+  body.theme-navy.fit-printing .page.wh-exp-dash .data-table thead th,
+  body.fit-printing.theme-navy .page.wh-exp-dash .data-table thead th,
+  body.theme-navy.fit-printing .page table.wqc-table thead th,
+  body.fit-printing.theme-navy .page table.wqc-table thead th {
+    background: #d9e2f3 !important;
+    background-color: #d9e2f3 !important;
+    color: #1a2b33 !important;
+    border-color: #b0b0b0 !important;
+  }
+
+  body.theme-navy.fit-printing table tbody td,
+  body.fit-printing.theme-navy table tbody td,
+  body.theme-navy.fit-printing .page table tbody td,
+  body.fit-printing.theme-navy .page table tbody td,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody td,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody td,
+  body.theme-navy.fit-printing .page.wnt-dash .data-table tbody td,
+  body.fit-printing.theme-navy .page.wnt-dash .data-table tbody td,
+  body.theme-navy.fit-printing .page.wh-out-dash .data-table tbody td,
+  body.fit-printing.theme-navy .page.wh-out-dash .data-table tbody td,
+  body.theme-navy.fit-printing .page.wh-exp-dash .data-table tbody td,
+  body.fit-printing.theme-navy .page.wh-exp-dash .data-table tbody td,
+  body.theme-navy.fit-printing .page table.wqc-table tbody td,
+  body.fit-printing.theme-navy .page table.wqc-table tbody td {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #e2eef2 !important;
+  }
+
+  body.theme-navy.fit-printing table tbody tr:nth-child(even) td,
+  body.fit-printing.theme-navy table tbody tr:nth-child(even) td,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr:nth-child(even) td,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td,
+  body.theme-navy.fit-printing .page table.wqc-table tbody tr:nth-child(even) td,
+  body.fit-printing.theme-navy .page table.wqc-table tbody tr:nth-child(even) td {
+    background: #f7f7f7 !important;
+    background-color: #f7f7f7 !important;
+    color: #111111 !important;
+  }
+
+  body.theme-navy.fit-printing table tfoot td,
+  body.fit-printing.theme-navy table tfoot td,
+  body.theme-navy.fit-printing .wqc-table tfoot .wqc-tfoot td,
+  body.fit-printing.theme-navy .wqc-table tfoot .wqc-tfoot td {
+    background: #d9e2f3 !important;
+    color: #1a2b33 !important;
+  }
+
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table .wqc-td-a,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table .wqc-td-a {
+    color: #ca8a04 !important;
+  }
+
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table .wqc-td-b,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table .wqc-td-b {
+    color: #15803d !important;
+  }
+
+  body.theme-navy.fit-printing .page .wqc-table tbody tr td.wqc-td-gap,
+  body.fit-printing.theme-navy .page .wqc-table tbody tr td.wqc-td-gap,
+  body.theme-navy.fit-printing .page .wqc-table tbody tr:nth-child(even) td.wqc-td-gap,
+  body.fit-printing.theme-navy .page .wqc-table tbody tr:nth-child(even) td.wqc-td-gap {
+    color: #7f1d1d !important;
+  }
+
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-zero_b,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-zero_b,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-zero_b,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-zero_b {
+    color: #7a4d00 !important;
+  }
+
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-diff,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-diff,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-diff,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-diff {
+    color: #7f1d1d !important;
+  }
+
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-both,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr td.wqc-td-status.is-both,
+  body.theme-navy.fit-printing .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-both,
+  body.fit-printing.theme-navy .page.wqc-dash .wqc-table tbody tr:nth-child(even) td.wqc-td-status.is-both {
+    color: #14532d !important;
+  }
+
+  body.theme-navy.fit-printing .page table tbody tr td.wh-out-td-status.is-pending,
+  body.fit-printing.theme-navy .page table tbody tr td.wh-out-td-status.is-pending,
+  body.theme-navy.fit-printing .page table tbody tr:nth-child(even) td.wh-out-td-status.is-pending,
+  body.fit-printing.theme-navy .page table tbody tr:nth-child(even) td.wh-out-td-status.is-pending {
+    color: #7a4d00 !important;
+    background: #ffeb9c !important;
+    background-color: #ffeb9c !important;
+  }
+
+  body.theme-navy.fit-printing .page table tbody tr td.wh-out-td-status.is-late,
+  body.fit-printing.theme-navy .page table tbody tr td.wh-out-td-status.is-late,
+  body.theme-navy.fit-printing .page table tbody tr:nth-child(even) td.wh-out-td-status.is-late,
+  body.fit-printing.theme-navy .page table tbody tr:nth-child(even) td.wh-out-td-status.is-late,
+  body.theme-navy.fit-printing .page table tbody tr td.wh-out-td-delay.is-late,
+  body.fit-printing.theme-navy .page table tbody tr:nth-child(even) td.wh-out-td-delay.is-late {
+    color: #7f1d1d !important;
+    background: #ffc7ce !important;
+    background-color: #ffc7ce !important;
+  }
+
+  body.theme-navy.fit-printing .page table tbody tr td.wh-out-td-status.is-ok,
+  body.fit-printing.theme-navy .page table tbody tr td.wh-out-td-status.is-ok,
+  body.theme-navy.fit-printing .page table tbody tr:nth-child(even) td.wh-out-td-status.is-ok,
+  body.fit-printing.theme-navy .page table tbody tr:nth-child(even) td.wh-out-td-status.is-ok,
+  body.theme-navy.fit-printing .page table tbody tr td.wh-out-td-delay.is-ok,
+  body.fit-printing.theme-navy .page table tbody tr:nth-child(even) td.wh-out-td-delay.is-ok,
+  body.theme-navy.fit-printing .page table tbody tr.is-ok td.lm-td-prft,
+  body.fit-printing.theme-navy .page table tbody tr.is-ok td.lm-td-prft {
+    color: #14532d !important;
+    background: #c6efce !important;
+    background-color: #c6efce !important;
+  }
+
+  body.theme-navy.fit-printing .page table tbody tr.is-mid td.lm-td-prft,
+  body.fit-printing.theme-navy .page table tbody tr.is-mid td.lm-td-prft {
+    color: #854d0e !important;
+    background: #ffeb9c !important;
+    background-color: #ffeb9c !important;
+  }
+
+  body.theme-navy.fit-printing .page table tbody tr.is-warn td.lm-td-prft,
+  body.fit-printing.theme-navy .page table tbody tr.is-warn td.lm-td-prft {
+    color: #991b1b !important;
+    background: #ffc7ce !important;
+    background-color: #ffc7ce !important;
+  }
+
+  body.theme-navy.fit-printing .page table tbody tr.is-loss td.lm-td-prft,
+  body.fit-printing.theme-navy .page table tbody tr.is-loss td.lm-td-prft {
+    color: #7f1d1d !important;
+    background: #f4cccc !important;
+    background-color: #f4cccc !important;
+  }
+
+  body.theme-navy.fit-printing table thead th.inv-col-qty,
+  body.fit-printing.theme-navy table thead th.inv-col-qty,
+  body.theme-navy.fit-printing table tbody tr td.inv-col-qty,
+  body.fit-printing.theme-navy table tbody tr td.inv-col-qty,
+  body.theme-navy.fit-printing table tbody tr:nth-child(even) td.inv-col-qty,
+  body.fit-printing.theme-navy table tbody tr:nth-child(even) td.inv-col-qty {
+    background: #ecfdf5 !important;
+    background-color: #ecfdf5 !important;
+    color: #047857 !important;
+  }
+
+  body.theme-navy.fit-printing table thead th.inv-col-cost,
+  body.fit-printing.theme-navy table thead th.inv-col-cost,
+  body.theme-navy.fit-printing table tbody tr td.inv-col-cost,
+  body.fit-printing.theme-navy table tbody tr td.inv-col-cost,
+  body.theme-navy.fit-printing table tbody tr:nth-child(even) td.inv-col-cost,
+  body.fit-printing.theme-navy table tbody tr:nth-child(even) td.inv-col-cost {
+    background: #fffbeb !important;
+    background-color: #fffbeb !important;
+    color: #b45309 !important;
+  }
+
+  body.theme-navy.fit-printing table thead th.inv-col-share,
+  body.fit-printing.theme-navy table thead th.inv-col-share,
+  body.theme-navy.fit-printing table tbody tr td.inv-col-share,
+  body.fit-printing.theme-navy table tbody tr td.inv-col-share,
+  body.theme-navy.fit-printing table tbody tr:nth-child(even) td.inv-col-share,
+  body.fit-printing.theme-navy table tbody tr:nth-child(even) td.inv-col-share {
+    background: #ecfeff !important;
+    background-color: #ecfeff !important;
+    color: #0891b2 !important;
+  }
+
+  body.theme-navy.fit-printing .result-pill,
+  body.fit-printing.theme-navy .result-pill {
+    background: #ecfeff !important;
+    color: #0e7490 !important;
+    border-color: #a5f3fc !important;
+  }
+
+  body.theme-navy.fit-printing .wqc-filter,
+  body.fit-printing.theme-navy .wqc-filter,
+  body.theme-navy.fit-printing .wqc-pdf-btn,
+  body.fit-printing.theme-navy .wqc-pdf-btn,
+  body.theme-navy.fit-printing .wqc-excel-btn,
+  body.fit-printing.theme-navy .wqc-excel-btn {
+    display: none !important;
+  }
+}
+
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-band-dead.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-band-dead.mono {
+  color: #fb7185 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-band-slow.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-band-slow.mono {
+  color: #fbbf24 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-band-ok.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-band-ok.mono {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-band-fast.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-band-fast.mono {
+  color: #67e8f9 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-band-out.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-band-out.mono {
+  color: #c4b5fd !important;
+}
+
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td,
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected:nth-child(even) > td,
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected:hover > td {
+  background: #1B3A6B !important;
+  background-color: #1B3A6B !important;
+  color: #EEF2FF !important;
+  box-shadow: none !important;
+  border-bottom-color: rgba(96, 165, 250, 0.45) !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td:first-child {
+  box-shadow: inset -3px 0 0 #60a5fa !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-band-dead.mono {
+  color: #fb7185 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-band-slow.mono {
+  color: #fbbf24 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-band-ok.mono {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-band-fast.mono {
+  color: #67e8f9 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-band-out.mono {
+  color: #c4b5fd !important;
+}
+
+body.theme-navy .page.turn-dash.sales-dash .dash-panel-glass .table-wrap {
+  overflow-x: auto !important;
+  overflow-y: clip !important;
+  overscroll-behavior: auto !important;
+}
+
+body.theme-navy table tbody tr.is-selected > td:first-child,
+body.theme-navy table tbody tr.is-selected:nth-child(even) > td:first-child,
+body.theme-navy table tbody tr.is-selected:hover > td:first-child,
+body.theme-navy .page table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.sales-dash .dash-panel-glass .data-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.sales-dash .dash-panel-glass table.data-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.sales-dash .data-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.sales-dash .sales-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.low-margin-dash .lm-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.low-margin-dash .lm-table tbody tr.is-selected:nth-child(odd) > td:first-child,
+body.theme-navy .page.low-margin-dash .lm-table tbody tr.is-selected:nth-child(even) > td:first-child,
+body.theme-navy .page.low-margin-dash .lm-table tbody tr.is-selected:hover > td:first-child,
+body.theme-navy .page.unpriced-dash .up-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.below-cost-dash .up-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.pr-compare-dash .pr-compare-list-sheet tbody tr.is-selected > td:first-child,
+body.theme-navy .page.pr-compare-dash .pr-compare-sheet tbody tr.is-selected > td:first-child,
+body.theme-navy .page.inv-dash .data-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.inv-dash .inv-table-compact tbody tr.is-selected > td:first-child,
+body.theme-navy .page.purchase-dash .data-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.vpc-dash .vpc-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page.vpc-dash .vpc-pivot-table tbody tr.is-selected > td:first-child,
+body.theme-navy .ss-page .ss-sheet tbody tr.is-selected > td:first-child,
+body.theme-navy .page.sales-dash.inv-dash .inv-table-scroll tbody tr.is-selected > td:first-child,
+body.theme-navy table tbody tr.is-selected > td.sticky-col:first-child,
+body.theme-navy table tbody tr.is-selected > td.inv-col-sticky:first-child {
+  box-shadow: inset -3px 0 0 #60a5fa !important;
+}
+
+body.theme-navy .page table tbody tr.is-selected > td,
+body.theme-navy .page table tbody tr.is-selected:nth-child(even) > td,
+body.theme-navy .page table tbody tr.is-selected:hover > td,
+body.theme-navy .page table.wqc-table tbody tr.is-selected > td,
+body.theme-navy .page table.wqc-table tbody tr.is-selected:nth-child(even) > td,
+body.theme-navy .page table.wqc-table tbody tr.is-selected:hover > td,
+body.theme-navy .page table.data-table tbody tr.is-selected > td,
+body.theme-navy .page table.data-table tbody tr.is-selected:nth-child(even) > td,
+body.theme-navy .page table.sales-table tbody tr.is-selected > td,
+body.theme-navy .page table.assets-table tbody tr.is-selected > td {
+  background: #1B3A6B !important;
+  background-color: #1B3A6B !important;
+  background-image: none !important;
+  color: #EEF2FF !important;
+  box-shadow: none !important;
+  border-bottom-color: rgba(96, 165, 250, 0.45) !important;
+}
+body.theme-navy .page table tbody tr.is-selected > td:first-child,
+body.theme-navy .page table tbody tr.is-selected:nth-child(even) > td:first-child,
+body.theme-navy .page table tbody tr.is-selected:hover > td:first-child,
+body.theme-navy .page table.wqc-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page table.wqc-table tbody tr.is-selected:nth-child(even) > td:first-child,
+body.theme-navy .page table.data-table tbody tr.is-selected > td:first-child,
+body.theme-navy .page table.sales-table tbody tr.is-selected > td:first-child {
+  box-shadow: inset -3px 0 0 #60a5fa !important;
+}
+
+body.theme-navy .page.turn-dash .turn-group-link,
+body.theme-navy .page.turn-dash table tbody tr.is-selected > td .turn-group-link {
+  color: #93c5fd !important;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }

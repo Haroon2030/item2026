@@ -5,11 +5,9 @@
     '.js-fit-print, .dash-pdf-btn, .lm-pdf-btn, .up-pdf-btn, .wh-out-pdf-btn, .wh-exp-print-btn, .inv-pack-err-print-btn, .vpc-print-btn, .wqc-pdf-btn';
   var STYLE_ID = 'fit-print-page-style';
   var TABLE_SEL =
-    'table.data-table, table.sales-table, table.lm-table, table.up-table, table.nbc-table, table.wh-out-table, table.wh-exp-table, table.inv-pack-err-table, table.wqc-table, table.vt-sheet, table.vt-table, table.perf-compare-table, table.purchase-table, table.income-table, table.suppliers-table';
-  /* A4 landscape usable width ≈ 297mm − 8mm margins */
-  var PAGE_WIDTH_PX = Math.round((297 - 8) * (96 / 25.4));
-  var MAX_FS = 10;
-  var MIN_FS = 5.5;
+    'table.data-table, table.sales-table, table.lm-table, table.up-table, table.nbc-table, table.wh-out-table, table.wh-exp-table, table.inv-pack-err-table, table.wqc-table, table.vt-sheet, table.vt-table, table.perf-compare-table, table.purchase-table, table.income-table, table.suppliers-table, table.assets-table';
+  /* A4 landscape usable width ≈ 297mm − 12mm margins */
+  var PAGE_WIDTH_PX = Math.round((297 - 12) * (96 / 25.4));
   var PDF_ICON =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>';
 
@@ -21,7 +19,7 @@
       document.head.appendChild(el);
     }
     el.textContent =
-      '@media print { @page { size: A4 landscape; margin: 4mm; } }';
+      '@media print { @page { size: A4 landscape; margin: 6mm; } }';
   }
 
   function clearPrintTargets() {
@@ -31,73 +29,115 @@
     });
   }
 
-  function markPanelOnly(panel) {
-    if (!panel) return;
-    panel.classList.add('is-print-target');
-    var el = panel.parentElement;
-    while (el && el !== document.body) {
-      el.classList.add('is-print-ancestor');
-      el = el.parentElement;
-    }
-  }
-
   function clearTableFit() {
-    document.querySelectorAll('table[data-fit-print-fs]').forEach(function (table) {
+    document.body.classList.remove('fit-measuring');
+    document.querySelectorAll('table[data-fit-print-fs], table[data-fit-scale]').forEach(function (table) {
       table.removeAttribute('data-fit-print-fs');
       table.removeAttribute('data-fit-measuring');
+      table.removeAttribute('data-fit-scale');
       table.style.removeProperty('--fit-print-fs');
+      table.style.removeProperty('--fit-print-scale');
       table.style.removeProperty('font-size');
       table.style.removeProperty('width');
       table.style.removeProperty('table-layout');
       table.style.removeProperty('max-width');
+      table.style.removeProperty('zoom');
     });
   }
 
-  function printRoot() {
-    return (
-      document.querySelector('.is-print-target') ||
-      document.querySelector('main') ||
-      document.body
-    );
+  function collectTables(root) {
+    var out = [];
+    if (!root) return out;
+    root.querySelectorAll('table').forEach(function (table) {
+      if (table.closest('[hidden], .is-collapsed')) return;
+      out.push(table);
+    });
+    return out;
+  }
+
+  function tablesForButton(btn) {
+    var panel = btn.closest('.dash-panel, .wqc-sheet, .vt-sheet');
+    if (panel) {
+      var inPanel = collectTables(panel);
+      if (inPanel.length) return inPanel;
+    }
+    var section = btn.closest('section, article');
+    if (section && !section.classList.contains('dash-head')) {
+      var inSection = collectTables(section);
+      if (inSection.length) return inSection;
+    }
+    return collectTables(document.querySelector('main') || document.body);
+  }
+
+  function markTables(tables) {
+    (tables || []).forEach(function (table) {
+      var host = table.closest('.table-wrap, [class*="-scroll"]') || table;
+      if (host.classList.contains('is-print-target')) return;
+      host.classList.add('is-print-target');
+      var el = host.parentElement;
+      while (el && el !== document.body) {
+        el.classList.add('is-print-ancestor');
+        el = el.parentElement;
+      }
+    });
+    document.body.classList.add('fit-table-only');
+    document.body.setAttribute('data-print-scope', 'table');
   }
 
   function fitVisibleTables() {
     clearTableFit();
-    var root = printRoot();
-    var tables = root.querySelectorAll(TABLE_SEL);
-    var avail = PAGE_WIDTH_PX;
+    var roots = document.querySelectorAll('.is-print-target');
+    var tables = [];
+    if (roots.length) {
+      roots.forEach(function (root) {
+        if (root.matches('table')) {
+          tables.push(root);
+          return;
+        }
+        root.querySelectorAll('table').forEach(function (table) {
+          tables.push(table);
+        });
+      });
+    } else {
+      (document.querySelector('main') || document.body)
+        .querySelectorAll(TABLE_SEL + ', .table-wrap > table, [class*="-scroll"] > table')
+        .forEach(function (table) {
+          tables.push(table);
+        });
+    }
+    var seen = [];
+    document.body.classList.add('fit-measuring');
+    void document.body.offsetHeight;
 
     tables.forEach(function (table) {
+      if (seen.indexOf(table) !== -1) return;
+      seen.push(table);
       if (table.closest('[hidden], .is-collapsed')) return;
 
       table.setAttribute('data-fit-print-fs', '1');
       table.setAttribute('data-fit-measuring', '1');
-      table.style.setProperty('--fit-print-fs', MAX_FS + 'px');
-
       var natural = table.scrollWidth || table.offsetWidth || 0;
-      var fs = MAX_FS;
-      if (natural > avail && natural > 0) {
-        fs = Math.max(MIN_FS, (MAX_FS * avail) / natural);
-      }
-      table.style.setProperty('--fit-print-fs', fs.toFixed(2) + 'px');
       table.removeAttribute('data-fit-measuring');
+      if (natural > PAGE_WIDTH_PX && natural > 0) {
+        var scale = PAGE_WIDTH_PX / natural;
+        table.setAttribute('data-fit-scale', '1');
+        table.style.setProperty('--fit-print-scale', String(scale));
+        table.style.zoom = String(scale);
+      }
     });
+    document.body.classList.remove('fit-measuring');
   }
 
-  function prepare(scope, panel) {
+  function prepare(tables) {
     ensureLandscapeStyle();
     clearPrintTargets();
     clearTableFit();
     document.body.classList.add('fit-printing');
     document.body.classList.add('print-landscape');
-    if (scope === 'panel' && panel) {
-      markPanelOnly(panel);
-      document.body.setAttribute('data-print-scope', 'panel');
-    } else if (scope) {
-      document.body.setAttribute('data-print-scope', scope);
-    } else {
-      document.body.removeAttribute('data-print-scope');
+    if (!tables || !tables.length) {
+      tables = collectTables(document.querySelector('main') || document.body);
     }
+    markTables(tables);
     document.querySelectorAll(
       '.table-wrap, [class*="-scroll"], #lm-wrap'
     ).forEach(function (el) {
@@ -112,6 +152,7 @@
   function cleanup() {
     document.body.classList.remove('fit-printing');
     document.body.classList.remove('print-landscape');
+    document.body.classList.remove('fit-table-only');
     document.body.removeAttribute('data-print-scope');
     clearPrintTargets();
     clearTableFit();
@@ -148,13 +189,7 @@
     var btn = ev.target.closest(BTN);
     if (!btn) return;
     ev.preventDefault();
-    var scope = btn.getAttribute('data-print-scope') || '';
-    var panel = null;
-    if (scope === 'panel') {
-      panel = btn.closest('.dash-panel');
-      if (!panel) return;
-    }
-    prepare(scope, panel);
+    prepare(tablesForButton(btn));
     window.setTimeout(function () {
       fitVisibleTables();
       window.print();
@@ -168,10 +203,9 @@
   document.addEventListener('click', onClick);
   window.addEventListener('beforeprint', function () {
     if (!document.body.classList.contains('fit-printing')) {
-      prepare('');
+      prepare(collectTables(document.querySelector('main') || document.body));
     } else {
       ensureLandscapeStyle();
-      fitVisibleTables();
     }
   });
   window.addEventListener('afterprint', cleanup);

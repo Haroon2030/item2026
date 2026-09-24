@@ -4561,7 +4561,13 @@ table tbody tr.is-selected > td,
 .page.sales-dash.inv-dash .inv-table-scroll tbody tr.is-selected:hover > td.inv-col-sticky{
   background: #cffafe;
   color: #0e7490;
-  box-shadow: inset 0 0 0 1px #67e8f9;
+  box-shadow: none;
+  border-bottom-color: #67e8f9;
+}
+table tbody tr.is-selected > td:first-child,
+.page.sales-dash .data-table tbody tr.is-selected > td:first-child,
+.inv-dash .inv-table-compact tbody tr.is-selected > td:first-child{
+  box-shadow: inset -3px 0 0 #0891b2;
 }
 
 table tbody tr.is-selected > td.mono,
@@ -4729,7 +4735,14 @@ table tbody tr.is-selected > td.sales-col-amt,
   }
 
   body.fit-printing {
-    background: #f7fcfd !important;
+    background: #ffffff !important;
+    color: #1a2b33 !important;
+  }
+
+  body.fit-printing .page,
+  body.fit-printing main {
+    background: #ffffff !important;
+    background-image: none !important;
     color: #1a2b33 !important;
   }
 
@@ -4790,9 +4803,14 @@ table tbody tr.is-selected > td.sales-col-amt,
   body.fit-printing table.lm-table thead th,
   body.fit-printing table.up-table thead th,
   body.fit-printing table.vt-sheet thead th,
-  body.fit-printing table.vt-table thead th {
-    background: #eef8fa !important;
-    color: #0e7490 !important;
+  body.fit-printing table.vt-table thead th,
+  body.fit-printing table.wqc-table thead th,
+  body.fit-printing table.wh-out-table thead th,
+  body.fit-printing table.wh-exp-table thead th,
+  body.fit-printing table.nbc-table thead th,
+  body.fit-printing table.inv-pack-err-table thead th {
+    background: #d9e2f3 !important;
+    color: #1a2b33 !important;
   }
 
   body.fit-printing table.data-table th,
@@ -4814,25 +4832,22 @@ table tbody tr.is-selected > td.sales-col-amt,
   body.fit-printing table.wqc-table,
   body.fit-printing table.vt-sheet,
   body.fit-printing table.vt-table,
-  body.fit-printing table.perf-compare-table {
+  body.fit-printing table.perf-compare-table,
+  body.fit-printing table.purchase-table,
+  body.fit-printing table.income-table,
+  body.fit-printing table.suppliers-table,
+  body.fit-printing table.assets-table {
     table-layout: auto !important;
     width: max-content !important;
     min-width: 0 !important;
-    max-width: 100% !important;
-    font-size: 8.5px !important;
+    max-width: none !important;
     border-collapse: collapse !important;
     font-variant-numeric: tabular-nums;
     color: #1a2b33 !important;
   }
 
-  body.fit-printing table[data-fit-print-fs] {
-    font-size: var(--fit-print-fs, 8.5px) !important;
-  }
-
-  body.fit-printing table[data-fit-print-fs][data-fit-measuring] {
-    width: max-content !important;
-    max-width: none !important;
-    table-layout: auto !important;
+  body.fit-printing table[data-fit-scale] {
+    zoom: var(--fit-print-scale, 1);
   }
 
   body.fit-printing table th,
@@ -4910,11 +4925,11 @@ table tbody tr.is-selected > td.sales-col-amt,
   body.fit-printing .inv-table-frame,
   body.fit-printing [class*="-scroll"] {
     width: max-content !important;
-    max-width: 100% !important;
+    max-width: none !important;
   }
 
   body.fit-printing table.data-table tbody tr:nth-child(even) td {
-    background: #f7fcfd !important;
+    background: #f7f7f7 !important;
   }
 
   /* تلوين الأعمدة بعد حتى الصفوف حتى لا تُمحى */
@@ -4996,7 +5011,7 @@ table tbody tr.is-selected > td.sales-col-amt,
   body.fit-printing[data-print-scope="panel"] .is-print-target {
     display: block !important;
     width: max-content !important;
-    max-width: 100% !important;
+    max-width: none !important;
     margin: 0 !important;
     box-shadow: none !important;
     break-inside: avoid;
@@ -5010,7 +5025,7 @@ table tbody tr.is-selected > td.sales-col-amt,
     max-height: none !important;
     height: auto !important;
     width: max-content !important;
-    max-width: 100% !important;
+    max-width: none !important;
   }
 
   body.fit-printing[data-print-scope="panel"] .dash-panel-head-actions,

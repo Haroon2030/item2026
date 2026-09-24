@@ -116,7 +116,7 @@
     <select id="purchase-group" name="group">
       <option value="">كل المجموعات</option>
       {% for row in groups %}
-        <option value="{{ row.code }}" {% if row.code == selected_group %}selected{% endif %}>{{ row.name }}</option>
+        <option value="{{ row.code }}" {% if row.code == selected_group %}selected{% endif %}>{{ row.code }}- {{ row.name }}</option>
       {% endfor %}
     </select>
   </div>

@@ -126,6 +126,12 @@
       blankNoBranch: opts.blankNoBranch || '',
     };
 
+    var keep =
+      opts.selected != null
+        ? String(opts.selected || '').trim()
+        : String(whEl.value || '').trim();
+    fillWarehouses(state, keep);
+
     branchEl.addEventListener('change', function () {
       fillWarehouses(state, '');
     });

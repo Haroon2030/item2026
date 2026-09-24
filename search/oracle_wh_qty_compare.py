@@ -25,7 +25,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v7"
+_CACHE_VER = "v8"
 _NAME_BATCH = 800
 _EPS = 0.0005
 _MAX_ROWS = 2500
@@ -71,14 +71,9 @@ def _norm_code(value: Any) -> str:
     return text
 
 
-def _bind_wh(value: Any):
-    text = _norm_code(value)
-    if text.isdigit():
-        try:
-            return int(text)
-        except ValueError:
-            return text
-    return text
+def _bind_wh(value: Any) -> str:
+    """اربط كود المخزن كنص — يطابق TO_CHAR(W_CODE) في بقية الشاشات."""
+    return _norm_code(value)
 
 
 def _norm_mode(raw: str | None) -> str:
@@ -135,7 +130,7 @@ def _fetch_wh_qty(
     params: dict[str, Any] = {"wh": _bind_wh(warehouse)}
     joins = ""
     filters = [
-        "w.W_CODE = :wh",
+        "TO_CHAR(w.W_CODE) = TO_CHAR(:wh)",
         "NVL(w.AVL_QTY, 0) > 0",
         "w.I_CODE IS NOT NULL",
     ]
@@ -184,7 +179,10 @@ def _fetch_wh_pending(warehouse: str) -> dict[str, float]:
     params: dict[str, Any] = {"wh": _bind_wh(warehouse), "days": days}
     qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
     hung = _hung_ok("m")
-    wh_ok = "(d.W_CODE = :wh OR (d.W_CODE IS NULL AND m.W_CODE = :wh))"
+    wh_ok = (
+        "(TO_CHAR(d.W_CODE) = TO_CHAR(:wh)"
+        " OR (d.W_CODE IS NULL AND TO_CHAR(m.W_CODE) = TO_CHAR(:wh)))"
+    )
 
     sales = _fetch_all(
         f"""
@@ -615,6 +613,15 @@ def _apply_mode(report: dict[str, Any], mode: str) -> dict[str, Any]:
         "mismatch_count",
     ):
         kpis[f"{key}_all"] = base_kpis.get(f"{key}_all", 0)
+    # إجماليات المستودعين دائماً من كل أصناف الأول (لا تتأثر بفلتر العرض)
+    kpis["qty_a"] = base_kpis.get("qty_a", kpis.get("qty_a"))
+    kpis["qty_b"] = base_kpis.get("qty_b", kpis.get("qty_b"))
+    kpis["qty_a_display"] = base_kpis.get("qty_a_display", kpis.get("qty_a_display"))
+    kpis["qty_b_display"] = base_kpis.get("qty_b_display", kpis.get("qty_b_display"))
+    kpis["qty_a_filtered"] = stats["kpis"].get("qty_a")
+    kpis["qty_b_filtered"] = stats["kpis"].get("qty_b")
+    kpis["qty_a_filtered_display"] = stats["kpis"].get("qty_a_display")
+    kpis["qty_b_filtered_display"] = stats["kpis"].get("qty_b_display")
     kpis["truncated"] = truncated
     kpis["max_rows"] = _MAX_ROWS
     matched_n = sum(
@@ -662,13 +669,18 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         "<style>"
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 6px;white-space:nowrap;}"
-        "th{background:#1e3a5f;color:#fff;font-weight:700;}"
-        "th.a{background:#166534;} th.b{background:#9a3412;}"
+        "th{background:#d9e2f3;color:#1a2b33;font-weight:700;}"
         "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.000';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
-        "tr.even td{background:#f8fafc;}"
-        "tr.foot td{background:#dbeafe;font-weight:800;}"
+        "td.qa{color:#ca8a04;font-weight:800;}"
+        "td.qb{color:#15803d;font-weight:800;}"
+        "td.gap{color:#7f1d1d;font-weight:800;}"
+        "td.st-zero{color:#7a4d00;font-weight:700;}"
+        "td.st-diff{color:#7f1d1d;font-weight:700;}"
+        "td.st-both{color:#14532d;font-weight:700;}"
+        "tr.even td{background:#f7f7f7;}"
+        "tr.foot td{background:#d9e2f3;color:#1a2b33;font-weight:800;}"
         "caption{font-family:Tahoma,Arial;font-size:13px;font-weight:700;"
         "text-align:right;margin:8px 0;}"
         ".sub{font-size:10px;color:#475569;font-weight:400;}"
@@ -683,23 +695,30 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         "<thead><tr>"
         "<th>#</th><th>رقم الصنف</th><th>اسم الصنف</th><th>المجموعة</th>"
         "<th>الوحدة</th><th>الحالة</th>"
-        f"<th class=\"a\">{escape(str(a_label))} — {escape(str(basis_label))}</th>"
-        f"<th class=\"b\">{escape(str(b_label))} — {escape(str(basis_label))}</th>"
+        f"<th>{escape(str(a_label))} — {escape(str(basis_label))}</th>"
+        f"<th>{escape(str(b_label))} — {escape(str(basis_label))}</th>"
         "<th>الفرق</th>"
         "</tr></thead><tbody>"
     )
+    _status_cls = {"zero_b": "st-zero", "diff": "st-diff", "both": "st-both"}
     for i, row in enumerate(rows, 1):
         even = ' class="even"' if i % 2 == 0 else ""
+        status_cls = _status_cls.get(str(row.get("kind") or ""))
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('g_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('unit') or ''))}</td>")
-        buf.write(f"<td>{escape(str(row.get('kind_label') or ''))}</td>")
-        buf.write(f'<td class="num">{_f(row.get("qty_a"))}</td>')
-        buf.write(f'<td class="num">{_f(row.get("qty_b"))}</td>')
-        buf.write(f'<td class="num">{_f(row.get("qty_gap"))}</td>')
+        if status_cls:
+            buf.write(
+                f'<td class="{status_cls}">{escape(str(row.get("kind_label") or ""))}</td>'
+            )
+        else:
+            buf.write(f"<td>{escape(str(row.get('kind_label') or ''))}</td>")
+        buf.write(f'<td class="num qa">{_f(row.get("qty_a"))}</td>')
+        buf.write(f'<td class="num qb">{_f(row.get("qty_b"))}</td>')
+        buf.write(f'<td class="num gap">{_f(row.get("qty_gap"))}</td>')
         buf.write("</tr>")
     buf.write(
         '<tr class="foot"><td></td><td></td><td>الإجمالي</td><td></td><td></td><td></td>'

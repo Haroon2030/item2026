@@ -111,6 +111,7 @@
     if (host) ensureFocusable(host);
 
     tbody.addEventListener('click', function (ev) {
+      if (ev.target.closest('a, button, input, select, textarea')) return;
       var row = ev.target.closest('tr');
       if (!isNavigableRow(row) || row.parentElement !== tbody) return;
       selectRow(tbody, row, { scroll: false });

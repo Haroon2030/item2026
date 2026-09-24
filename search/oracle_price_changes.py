@@ -370,7 +370,7 @@ def build_price_changes_excel(report: dict[str, Any]) -> HttpResponse:
         "<style>"
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:12px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 6px;}"
-        "th{background:#1e293b;color:#fff;}"
+        "th{background:#d9e2f3;color:#1a2b33;font-weight:700;}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.0000';}"
         "td.txt{mso-number-format:'\\@';}"
         "tr.up td{background:#ecfdf5;}"

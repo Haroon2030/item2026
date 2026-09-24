@@ -155,8 +155,8 @@
               <td class="pr-compare-sheet-num mono">{{ forloop.counter }}</td>
               <td class="pr-compare-list-col-req mono" title="{{ row.tr_type }}/{{ row.tr_no }}/{{ row.tr_ser }}">{{ row.tr_no }}</td>
               <td class="pr-compare-list-col-when mono">{{ row.date_label }}</td>
-              <td class="mono" title="#{{ row.from_wh_code }}">{{ row.from_wh_label }}</td>
-              <td class="mono" title="#{{ row.main_wh_code }}">{{ row.main_wh_label|default:row.to_wh_label }}</td>
+              <td class="mono pr-compare-list-col-from" title="{{ row.from_wh_name }}">{{ row.from_wh_label }}</td>
+              <td class="mono pr-compare-list-col-main" title="{{ row.main_wh_name }}">{{ row.main_wh_label|default:row.to_wh_label }}</td>
               <td class="pr-compare-list-col-user" title="{{ row.user_name }} #{{ row.user_code }}">{{ row.user_name|default:row.user_code }}</td>
               <td class="pr-compare-list-col-items mono">{{ row.item_count }}</td>
               <td>

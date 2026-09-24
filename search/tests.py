@@ -1258,3 +1258,190 @@ class AssetsExecutiveReportTests(TestCase):
         self.assertEqual(report['top_assets']['count'], 2)
         self.assertIn('executive_alerts', report)
         self.assertEqual(report['branch_rows'][0]['bv_bar_pct'], '100.0')
+
+
+class StockTurnoverMathTests(TestCase):
+    def test_cover_days_uses_current_stock_over_daily_sales(self):
+        from search.oracle_stock_turnover import cover_days, delay_days, turnover_times
+
+        self.assertEqual(cover_days(300, 100, 30), 90)
+        self.assertEqual(delay_days(90), 45)
+        self.assertEqual(delay_days(10), 0)
+        self.assertIsNone(delay_days(None))
+        self.assertIsNone(cover_days(300, 0, 30))
+        self.assertIsNone(cover_days(0, 100, 30))
+        self.assertEqual(turnover_times(100, 50), 2)
+
+    def test_dead_stock_is_on_hand_with_no_net_sales(self):
+        from search.oracle_stock_turnover import assemble_turnover_rows
+
+        report = assemble_turnover_rows(
+            [{'code': '10', 'name': 'ألبان', 'qty': 40, 'value': 800, 'item_count': 3}],
+            {},
+            period_days_count=30,
+        )
+        row = report['rows'][0]
+        self.assertEqual(row['band'], 'dead')
+        self.assertEqual(row['band_label'], 'راكد')
+        self.assertEqual(row['cover_display'], '—')
+        self.assertEqual(row['delay_display'], 'راكد')
+        self.assertIsNone(row['delay_days'])
+        self.assertEqual(row['turnover_display'], '0')
+        self.assertEqual(
+            assemble_turnover_rows(
+                [{'code': '9', 'name': 'نادر', 'qty': 100000, 'value': 1}],
+                {'9': 1},
+                period_days_count=30,
+            )['rows'][0]['turnover_display'],
+            '<0.01',
+        )
+
+    def test_stagnant_filter_keeps_stored_or_depleted_rows(self):
+        from search.oracle_stock_turnover import (
+            STATUS_OPTIONS,
+            assemble_turnover_rows,
+            rows_for_status,
+        )
+
+        self.assertEqual(
+            list(STATUS_OPTIONS),
+            [("", "الكل"), ("dead", "مخزن"), ("out", "نفذ")],
+        )
+        report = assemble_turnover_rows(
+            [
+                {'code': '1', 'name': 'سريع', 'qty': 10, 'value': 100},
+                {'code': '2', 'name': 'راكد', 'qty': 80, 'value': 900},
+            ],
+            {'1': 30, '3': 12},
+            period_days_count=30,
+            names={'3': 'نافد'},
+        )
+        self.assertEqual(
+            [row['code'] for row in rows_for_status(report['rows'], '')],
+            ['2', '1', '3'],
+        )
+        self.assertEqual(
+            [row['code'] for row in rows_for_status(report['rows'], 'dead')],
+            ['2'],
+        )
+        self.assertEqual(
+            [row['code'] for row in rows_for_status(report['rows'], 'out')],
+            ['3'],
+        )
+        self.assertEqual(rows_for_status(report['rows'], 'unknown'), report['rows'])
+
+    def test_stockout_and_fast_cover_sort_after_dead(self):
+        from search.oracle_stock_turnover import assemble_turnover_rows
+
+        report = assemble_turnover_rows(
+            [
+                {'code': '1', 'name': 'سريع', 'qty': 10, 'value': 100},
+                {'code': '2', 'name': 'راكد', 'qty': 80, 'value': 900},
+            ],
+            {'1': 30, '3': 12},
+            period_days_count=30,
+            names={'3': 'نافد'},
+        )
+        self.assertEqual([row['code'] for row in report['rows']], ['2', '1', '3'])
+        self.assertEqual(report['rows'][1]['band'], 'fast')
+        self.assertEqual(report['rows'][1]['cover_days'], 10)
+        self.assertEqual(report['rows'][1]['delay_days'], 0)
+        self.assertEqual(report['rows'][1]['delay_display'], '0')
+        self.assertEqual(report['rows'][2]['band'], 'out')
+        self.assertEqual(report['rows'][2]['turnover_display'], '—')
+
+    def test_kpis_use_full_set_when_table_is_capped(self):
+        from search.oracle_stock_turnover import (
+            _kpis_from_rows,
+            assemble_turnover_rows,
+        )
+
+        stock = [
+            {'code': str(i), 'name': f'صنف {i}', 'qty': 100, 'value': 10}
+            for i in range(5)
+        ]
+        sales = {str(i): 1 for i in range(5)}
+        shown = assemble_turnover_rows(
+            stock, sales, period_days_count=30, row_cap=2
+        )
+        full = assemble_turnover_rows(stock, sales, period_days_count=30)
+        kpis = _kpis_from_rows(full['rows'], period_days_count=30)
+        self.assertEqual(shown['shown_count'], 2)
+        self.assertEqual(shown['total_count'], 5)
+        self.assertTrue(shown['truncated'])
+        self.assertEqual(kpis['stock_qty'], 500)
+        self.assertEqual(kpis['sold_qty'], 5)
+        self.assertEqual(kpis['cover_days'], 3000)
+        self.assertEqual(kpis['delay_days'], 2955)
+
+    def test_barcode_prefers_stock_unit_longest_single_code(self):
+        from search.oracle_stock_turnover import _choose_barcode
+
+        self.assertEqual(
+            _choose_barcode(
+                [
+                    (1, 0, '12400'),
+                    (1, 0, '000000444225'),
+                    (12, 0, '999'),
+                ]
+            ),
+            '000000444225',
+        )
+        self.assertEqual(
+            _choose_barcode([(1, 0, '12400'), (1, 1, '555')]),
+            '555',
+        )
+
+    def test_purchase_qty_does_not_change_cover_or_create_balance(self):
+        from search.oracle_stock_turnover import assemble_turnover_rows
+
+        report = assemble_turnover_rows(
+            [{'code': '46', 'name': 'تغليف', 'qty': 100, 'value': 50}],
+            {'46': 20},
+            purchase_qty={'46': 8, '99': 500},
+            period_days_count=10,
+        )
+        row = report['rows'][0]
+        self.assertEqual(row['purchased_qty'], 8)
+        self.assertEqual(row['sold_qty'], 20)
+        self.assertEqual(row['stock_qty'], 100)
+        self.assertEqual(row['cover_days'], 50)
+        self.assertEqual(len(report['rows']), 1)
+
+    def test_item_branch_rows_keep_code_barcode_slot_and_branch(self):
+        from search.oracle_stock_turnover import assemble_turnover_rows
+
+        report = assemble_turnover_rows(
+            [
+                {
+                    'code': '100|2',
+                    'name': 'حليب',
+                    'qty': 10,
+                    'value': 40,
+                },
+                {
+                    'code': '100|6',
+                    'name': 'حليب',
+                    'qty': 4,
+                    'value': 16,
+                },
+            ],
+            {'100|2': 2},
+            period_days_count=30,
+            extras={
+                '100|2': {
+                    'item_code': '100',
+                    'branch_code': '2',
+                    'branch_name': 'فرع الربوة',
+                },
+                '100|6': {
+                    'item_code': '100',
+                    'branch_code': '6',
+                    'branch_name': 'فرع البلاستيك',
+                },
+            },
+        )
+        self.assertEqual(
+            [(row['item_code'], row['branch_name'], row['sold_qty']) for row in report['rows']],
+            [('100', 'فرع البلاستيك', 0), ('100', 'فرع الربوة', 2)],
+        )

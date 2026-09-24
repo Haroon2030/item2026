@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% load money_fmt %}
+
+{% block title %}دوران المخزون{% endblock %}
+{% block page_class %}sales-dash purchase-dash turn-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="دوران المخزون">
+  <div class="dash-head-copy">
+    <h2>دوران المخزون</h2>
+    <p class="sales-ov-sub">صافي بيع الفترة ÷ الرصيد الحالي. المقام رصيد اليوم بعد خصم غير المرحّل، وليس متوسط مخزون تاريخي.</p>
+  </div>
+  {% if report %}
+  <div class="dash-head-actions">
+    <button type="button" class="dash-pdf-btn js-fit-print" title="حفظ PDF بنفس ألوان الصفحة">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      PDF
+    </button>
+  </div>
+  {% endif %}
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_stock_turnover' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="turn-from">من</label>
+    <input id="turn-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="turn-to">إلى</label>
+    <input id="turn-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="turn-branch">الفرع</label>
+    <select id="turn-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="turn-group">المجموعة</label>
+    <select id="turn-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="turn-status">الراكد</label>
+    <select id="turn-status" name="status">
+      {% for code, label in status_options %}
+        <option value="{{ code }}" {% if code == selected_status %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <p class="sales-ov-sub turn-rule">{{ report.period_label }} · {{ report.period_days }} يوم · الكمية بوحدة المخزون. صافي الشراء = فواتير الشراء − مرتجع الشراء خلال التاريخ. صافي البيع = بيع نقطة البيع − المرتجع. الرصيد الحالي رصيد اليوم بعد خصم غير المرحّل، وليس ناتج الشراء − البيع، لأن الافتتاحي والتحويلات خارج هذه المقارنة. عدد الأيام = الرصيد ÷ البيع اليومي. التأخير = ما زاد عن {{ report.kpis.balanced_cover_days }} يوم.</p>
+
+  <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات دوران المخزون">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-inv" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9"/><path d="M3 12a9 9 0 0 1 9-9"/><path d="M18 8l3-3-3-3"/><path d="M6 16l-3 3 3 3"/></svg>
+        </span>
+        مرات الدوران
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.turnover_display }}</strong>
+      <span class="dash-kpi-hint">صافي البيع {{ report.kpis.sold_qty_display }} ÷ الرصيد {{ report.kpis.stock_qty_display }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-qty" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>
+        </span>
+        أيام التغطية
+      </span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.cover_display }}</strong>
+      <span class="dash-kpi-hint">تأخير {{ report.kpis.delay_display }} يوم عن حد {{ report.kpis.balanced_cover_days }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-total" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        قيمة الرصيد
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.stock_value_display %}</strong>
+      <span class="dash-kpi-hint">كمية حالية × متوسط التكلفة</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vat">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-pur-vat" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 4.5-3.2 7.4-8 9-4.8-1.6-8-4.5-8-9V7z"/><path d="M12 8v5M12 16h.01"/></svg>
+        </span>
+        قيمة الراكد
+      </span>
+      <strong class="dash-kpi-value mono">{% money report.kpis.dead_value_display %}</strong>
+      <span class="dash-kpi-hint">{{ report.kpis.dead_count }} {% if report.grain == 'item' %}صنف{% else %}مجموعة{% endif %} برصيد بلا صافي بيع</span>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass" aria-label="جدول دوران المخزون">
+    <div class="dash-panel-head">
+      <div>
+        <h3>{% if report.grain == 'item' %}أصناف المجموعة{% else %}المجموعات{% endif %}</h3>
+        <p class="sales-ov-sub">{% if report.grain == 'item' %}شراء الفترة مقابل بيعها مقابل الرصيد الحالي · <a class="turn-group-link" href="{% url 'browse_stock_turnover' %}?date_from={{ date_from|urlencode }}&amp;date_to={{ date_to|urlencode }}{% if selected_branch %}&amp;branch={{ selected_branch|urlencode }}{% endif %}{% if selected_status %}&amp;status={{ selected_status|urlencode }}{% endif %}">كل المجموعات</a>{% else %}اضغط المجموعة لفتح أصنافها{% endif %} · الأبطأ أولاً</p>
+      </div>
+      <span class="result-pill">{{ report.shown_count }} / {{ report.total_count }}</span>
+    </div>
+    {% if report.truncated %}
+      <p class="sales-ov-sub turn-rule">الجدول يعرض أبطأ {{ report.shown_count }} صنفاً. المؤشرات أعلاه تشمل كل الأصناف ضمن الفلتر.</p>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="data-table sales-table" aria-label="دوران المخزون">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>{% if report.grain == 'item' %}الصنف{% else %}المجموعة{% endif %}</th>
+            {% if report.grain == 'item' %}
+            <th>رقم الصنف</th>
+            <th>الباركود</th>
+            <th>الفرع</th>
+            {% endif %}
+            <th>الحالة</th>
+            <th>عدد الأيام</th>
+            <th>التأخير</th>
+            <th>الرصيد الحالي</th>
+            <th>صافي الشراء</th>
+            <th>صافي البيع</th>
+            <th>مرات الدوران</th>
+            <th>قيمة الرصيد</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr>
+              <td class="mono">{{ forloop.counter }}</td>
+              <td>
+                {% if report.grain == 'item' %}
+                  {{ row.name }}
+                {% else %}
+                  <a class="turn-group-link" href="{% url 'browse_stock_turnover' %}?date_from={{ date_from|urlencode }}&amp;date_to={{ date_to|urlencode }}{% if selected_branch %}&amp;branch={{ selected_branch|urlencode }}{% endif %}{% if selected_status %}&amp;status={{ selected_status|urlencode }}{% endif %}&amp;group={{ row.code|urlencode }}">{{ row.code }}- {{ row.name }}</a>
+                {% endif %}
+              </td>
+              {% if report.grain == 'item' %}
+              <td class="mono" dir="ltr">{{ row.item_code }}</td>
+              <td class="mono" dir="ltr">{{ row.barcode_display|default:"—" }}</td>
+              <td>{{ row.branch_name|default:"—" }}</td>
+              {% endif %}
+              <td class="mono turn-band turn-band-{{ row.band }}">{{ row.band_label }}</td>
+              <td class="mono">{{ row.cover_display }}</td>
+              <td class="mono turn-band {% if row.delay_days %}turn-band-slow{% elif row.band == 'dead' %}turn-band-dead{% elif row.band == 'out' %}turn-band-out{% else %}turn-band-ok{% endif %}">{{ row.delay_display }}</td>
+              <td class="mono">{{ row.stock_qty_display }}</td>
+              <td class="mono">{{ row.purchased_qty_display }}</td>
+              <td class="mono">{{ row.sold_qty_display }}</td>
+              <td class="mono">{{ row.turnover_display }}</td>
+              <td class="mono">{% money row.stock_value_display %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if report.grain == 'item' %}13{% else %}10{% endif %}" class="sales-empty">لا رصيد ولا بيع ضمن الفلتر المحدد</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="sales-grand-row">
+              <td colspan="{% if report.grain == 'item' %}6{% else %}3{% endif %}">الإجمالي ضمن الفلتر</td>
+              <td class="mono">{{ report.kpis.cover_display }}</td>
+              <td class="mono">{{ report.kpis.delay_display }}</td>
+              <td class="mono">{{ report.kpis.stock_qty_display }}</td>
+              <td class="mono">{{ report.kpis.purchased_qty_display }}</td>
+              <td class="mono">{{ report.kpis.sold_qty_display }}</td>
+              <td class="mono">{{ report.kpis.turnover_display }}</td>
+              <td class="mono">{% money report.kpis.stock_value_display %}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

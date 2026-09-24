@@ -103,7 +103,7 @@
     <select id="cadj-group" name="group">
       <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
       {% for g in groups %}
-        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
       {% endfor %}
     </select>
   </div>

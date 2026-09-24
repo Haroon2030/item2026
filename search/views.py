@@ -1583,9 +1583,9 @@ def browse_performance(request):
             error = str(exc)
 
     try:
+        from .oracle_income import fetch_income_branches
         from .oracle_stock import (
             SALES_SYSTEMS,
-            fetch_branch_sales_totals,
             fetch_sales_group_options,
             oracle_enabled,
             oracle_session,
@@ -1600,16 +1600,16 @@ def browse_performance(request):
             error = error or 'أوراكل غير مفعّل — لا يمكن قياس الأداء.'
         elif not error:
             with oracle_session():
-                branches = [
-                    {
-                        'code': str(r.get('branch_code') or ''),
-                        'name': str(r.get('branch_name') or r.get('branch_code') or ''),
-                    }
-                    for r in fetch_branch_sales_totals(
-                        date_from, date_to, system=active_system
-                    )
-                    if r.get('branch_code')
-                ]
+                branches = sorted(
+                    fetch_income_branches(),
+                    key=lambda row: (
+                        str(row.get('name') or ''),
+                        str(row.get('code') or ''),
+                    ),
+                )
+                branch_codes = {str(row.get('code') or '') for row in branches}
+                if selected_branch and selected_branch not in branch_codes:
+                    selected_branch = ''
                 groups = fetch_sales_group_options()
                 group_codes = {g['code'] for g in groups}
                 if selected_group and selected_group not in group_codes:
@@ -4297,6 +4297,103 @@ def browse_unsold(request):
 
 @login_required
 @require_GET
+@never_cache
+def browse_stock_turnover(request):
+    """دوران المخزون: صافي بيع الفترة على الرصيد الحالي، بفلتر تاريخ وفرع ومجموعة وراكد."""
+    from datetime import date
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    from .oracle_stock_turnover import STATUS_OPTIONS
+
+    selected_status = str(request.GET.get('status') or '').strip()
+    if selected_status not in {code for code, _label in STATUS_OPTIONS if code}:
+        selected_status = ''
+    report = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return render(
+            request,
+            'search/browse_stock_turnover.html',
+            {
+                'date_from': (request.GET.get('date_from') or '')[:10],
+                'date_to': (request.GET.get('date_to') or '')[:10],
+                'default_from': month_start.isoformat(),
+                'default_to': today.isoformat(),
+                'selected_branch': selected_branch,
+                'selected_group': selected_group,
+                'selected_status': selected_status,
+                'status_options': STATUS_OPTIONS,
+                'branches': [],
+                'groups': [],
+                'report': None,
+                'error': str(exc),
+            },
+        )
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_stock_turnover import build_stock_turnover_report
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض دوران المخزون.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                report = build_stock_turnover_report(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                    status=selected_status,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_stock_turnover failed: %s', exc)
+        error = f'تعذّر تحميل دوران المخزون: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_stock_turnover.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'selected_status': selected_status,
+            'status_options': STATUS_OPTIONS,
+            'branches': branches,
+            'groups': groups,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
 def browse_unsold_api(request):
     """صفحة إضافية من أصناف الرصيد بلا مبيعات للتمرير اللانهائي."""
     from datetime import date
@@ -5633,6 +5730,12 @@ def browse_wh_qty_compare(request):
     selected_wh_b = str(
         request.GET.get('wh_b') or request.GET.get('warehouse_b') or ''
     ).strip()
+    selected_branch_a = str(
+        request.GET.get('branch_a') or request.GET.get('brn_a') or ''
+    ).strip()
+    selected_branch_b = str(
+        request.GET.get('branch_b') or request.GET.get('brn_b') or ''
+    ).strip()
     selected_group = str(request.GET.get('group') or '').strip()
     item_q = str(request.GET.get('q') or request.GET.get('item') or '').strip()
     mode_raw = str(request.GET.get('mode') or 'all').strip().lower()
@@ -5698,9 +5801,11 @@ def browse_wh_qty_compare(request):
                 ]
                 branch_map: dict[str, str] = {}
                 wh_name_map: dict[str, str] = {}
+                wh_branch_map: dict[str, str] = {}
                 for w in all_warehouses:
                     wh_name_map[w['code']] = w['name']
                     brn = w['branch_code']
+                    wh_branch_map[w['code']] = brn
                     if brn:
                         branch_map[brn] = w['branch_name'] or brn
                 branches = [
@@ -5714,37 +5819,107 @@ def browse_wh_qty_compare(request):
                 if selected_group and selected_group not in group_codes:
                     selected_group = ''
 
-                allowed = set(wh_name_map)
-                if selected_wh_a and selected_wh_a not in allowed:
+                allowed_wh = set(wh_name_map)
+                allowed_br = set(branch_map)
+                if selected_wh_a and selected_wh_a not in allowed_wh:
                     selected_wh_a = ''
-                if selected_wh_b and selected_wh_b not in allowed:
+                if selected_wh_b and selected_wh_b not in allowed_wh:
+                    selected_wh_b = ''
+                if selected_branch_a and selected_branch_a not in allowed_br:
+                    selected_branch_a = ''
+                if selected_branch_b and selected_branch_b not in allowed_br:
+                    selected_branch_b = ''
+                # استنتج الفرع من المخزن إن لم يُرسل
+                if selected_wh_a and not selected_branch_a:
+                    selected_branch_a = wh_branch_map.get(selected_wh_a, '')
+                if selected_wh_b and not selected_branch_b:
+                    selected_branch_b = wh_branch_map.get(selected_wh_b, '')
+                # المخزن يجب أن يتبع فرعه
+                if (
+                    selected_wh_a
+                    and selected_branch_a
+                    and wh_branch_map.get(selected_wh_a) != selected_branch_a
+                ):
+                    selected_wh_a = ''
+                if (
+                    selected_wh_b
+                    and selected_branch_b
+                    and wh_branch_map.get(selected_wh_b) != selected_branch_b
+                ):
                     selected_wh_b = ''
                 wh_a_name = wh_name_map.get(selected_wh_a, selected_wh_a)
                 wh_b_name = wh_name_map.get(selected_wh_b, selected_wh_b)
 
-                if want_run:
-                    if not selected_wh_a or not selected_wh_b:
-                        raise ValidationError('حدد مستودع الأول والثاني ثم اضغط «بحث».')
-                    if selected_wh_a == selected_wh_b:
-                        raise ValidationError('اختر مستودعين مختلفين.')
+            # بناء التقرير خارج جلسة الخيارات — يتجنّب تداخل الاتصالات مع المسح المتوازي
+            if want_run:
+                if not selected_branch_a or not selected_branch_b:
+                    raise ValidationError('حدد الفرع الأول والثاني ثم المخزن لكل منهما.')
+                if not selected_wh_a or not selected_wh_b:
+                    raise ValidationError('حدد مستودع الأول والثاني ثم اضغط «بحث».')
+                if selected_wh_a == selected_wh_b:
+                    raise ValidationError('اختر مستودعين مختلفين.')
+                report = build_wh_qty_compare_report(
+                    warehouse_a=selected_wh_a,
+                    warehouse_b=selected_wh_b,
+                    group_code=selected_group,
+                    item_q=item_q,
+                    mode=mode_raw,
+                    qty_basis=qty_basis,
+                    wh_a_name=wh_a_name,
+                    wh_b_name=wh_b_name,
+                )
+                # مجموعة عالقة من بحث سابق بلا أصناف في المستودع الأول → أعد بدونها
+                if (
+                    report is not None
+                    and selected_group
+                    and not item_q
+                    and int(
+                        (report.get('kpis') or {}).get('item_count_all')
+                        or (report.get('kpis') or {}).get('item_count')
+                        or 0
+                    )
+                    == 0
+                ):
+                    stale_group = selected_group
+                    stale_label = next(
+                        (
+                            str(g.get('name') or '').strip()
+                            for g in groups
+                            if str(g.get('code') or '').strip() == stale_group
+                        ),
+                        stale_group,
+                    ) or stale_group
+                    selected_group = ''
                     report = build_wh_qty_compare_report(
                         warehouse_a=selected_wh_a,
                         warehouse_b=selected_wh_b,
-                        group_code=selected_group,
-                        item_q=item_q,
+                        group_code='',
+                        item_q='',
                         mode=mode_raw,
                         qty_basis=qty_basis,
                         wh_a_name=wh_a_name,
                         wh_b_name=wh_b_name,
                     )
-                    if want_excel and report is not None:
-                        return build_wh_qty_compare_excel(report)
-                else:
-                    hint = (
-                        'اختر المستودع الأول ثم الثاني — '
-                        'تُعرض أصناف الأول فقط مع كميتها في الثاني '
-                        '(المتوفّر = الرصيد بعد خصم مبيعات POS غير المرحّلة).'
+                    recovered = int(
+                        (report.get('kpis') or {}).get('item_count_all')
+                        or (report.get('kpis') or {}).get('item_count')
+                        or 0
                     )
+                    if recovered > 0:
+                        hint = (
+                            f'المجموعة «{stale_label}» لا تطابق أصناف المستودع الأول — '
+                            'عُرضت كل المجموعات.'
+                        )
+                    else:
+                        selected_group = stale_group
+                if want_excel and report is not None:
+                    return build_wh_qty_compare_excel(report)
+            else:
+                hint = (
+                    'اختر الفرع الأول ثم الثاني، ثم المخزن لكل فرع — '
+                    'تُعرض أصناف الأول فقط مع كميتها في الثاني '
+                    '(المتوفّر = الرصيد بعد خصم مبيعات POS غير المرحّلة).'
+                )
     except ValidationError as exc:
         error = str(exc)
         report = None
@@ -5760,6 +5935,8 @@ def browse_wh_qty_compare(request):
             'branches': branches,
             'groups': groups,
             'all_warehouses': all_warehouses,
+            'selected_branch_a': selected_branch_a,
+            'selected_branch_b': selected_branch_b,
             'selected_wh_a': selected_wh_a,
             'selected_wh_b': selected_wh_b,
             'wh_a_name': wh_a_name,

@@ -264,13 +264,13 @@
           <p class="sidebar-section-label">تشغيل</p>
           {% if nav_access.sections.inventory %}
           <div
-            class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %} is-open is-current{% endif %}"
+            class="sidebar-group{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_stock_turnover' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %} is-open is-current{% endif %}"
             data-sidebar-group
           >
             <button
               type="button"
               class="sidebar-link sidebar-group-toggle"
-              aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %}true{% else %}false{% endif %}"
+              aria-expanded="{% if request.resolver_match.url_name == 'browse_inventory' or request.resolver_match.url_name == 'browse_stock_turnover' or request.resolver_match.url_name == 'browse_groups' or request.resolver_match.url_name == 'browse_unsold' %}true{% else %}false{% endif %}"
               title="إدارة المخزون"
             >
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
@@ -282,6 +282,12 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_inventory' %}is-active{% endif %}" href="{% url 'browse_inventory' %}" title="تحليل المخزون">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M8 16V9M12 16V7M16 16v-5M20 16V8"/><path d="M3 19h18"/></svg>
                 <span>تحليل المخزون</span>
+              </a>
+              {% endif %}
+              {% if nav_access.screens.browse_stock_turnover %}
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_stock_turnover' %}is-active{% endif %}" href="{% url 'browse_stock_turnover' %}" title="دوران المخزون">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9"/><path d="M3 12a9 9 0 0 1 9-9"/><path d="M18 8l3-3-3-3"/><path d="M6 16l-3 3 3 3"/></svg>
+                <span>دوران المخزون</span>
               </a>
               {% endif %}
               {% if nav_access.screens.browse_groups %}
@@ -466,6 +472,7 @@
   <script src="/static/js/scroll-edge.js?v={{ app_client_version }}" defer></script>
   {% if request.user.is_authenticated %}
   <script src="/static/js/table-row-keys.js?v={{ app_client_version }}" defer></script>
+  <script src="/static/js/table-pan.js?v={{ app_client_version }}" defer></script>
   <script src="/static/js/fit-print.js?v={{ app_client_version }}" defer></script>
   {% endif %}
   {% block extra_js %}{% endblock %}

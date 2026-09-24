@@ -884,6 +884,7 @@ def build_performance_insights(
             'prior_return_rate_display': f'{prior_return_rate:.1f}%',
             'avg_basket': _fmt_money(avg_basket),
             'avg_basket_b': _fmt_money(prior['avg_basket']),
+            'avg_basket_delta': basket_delta,
             'avg_basket_delta_display': _fmt_pct(basket_delta),
             'prior_sales': _fmt_money(prior_sales),
             'prior_invoices': _fmt_int(prior_inv),

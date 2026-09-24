@@ -14,6 +14,11 @@ urlpatterns = [
     path('inventory/', views.browse_inventory, name='browse_inventory'),
     path('inventory/unsold/', views.browse_unsold, name='browse_unsold'),
     path(
+        'inventory/turnover/',
+        views.browse_stock_turnover,
+        name='browse_stock_turnover',
+    ),
+    path(
         'inventory/unsold/api/rows/',
         views.browse_unsold_api,
         name='browse_unsold_api',

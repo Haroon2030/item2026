@@ -44,7 +44,7 @@
           <option value="" {% if not group %}selected{% endif %} disabled>اختر المجموعة…</option>
           {% for g in groups %}
             <option value="{{ g.g_code }}" {% if g.g_code == group %}selected{% endif %}>
-              {{ g.g_name }}{% if g.g_name != g.g_code %} ({{ g.g_code }}){% endif %}
+              {{ g.g_code }}- {{ g.g_name }}
             </option>
           {% endfor %}
         </select>

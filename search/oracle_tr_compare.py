@@ -53,6 +53,15 @@ def _wh_display(code: Any, name: Any = "") -> str:
     return name or code or "—"
 
 
+def _wh_branch_label(code: Any, branch_name: Any) -> str:
+    """رقم المخزن ثم اسم الفرع: 60- سكاي مول."""
+    code = _norm_code(code)
+    branch = str(branch_name or "").strip()
+    if code and branch and branch != code:
+        return f"{code}- {branch}"
+    return code or branch or "—"
+
+
 def fetch_main_warehouse_for_branch(branch_code: str) -> dict:
     """المخزن الرئيسي للفرع: غالباً W_CODE = رقم الفرع × 10 (سكاي 6 → 60)."""
     brn_raw = str(branch_code or "").strip()
@@ -149,6 +158,7 @@ def fetch_today_transfer_requests(
                {_wh_name_sql("tw")} AS TO_W_NAME,
                m.F_W_CODE AS FROM_W_CODE,
                {_wh_name_sql("fw")} AS FROM_W_NAME,
+               fw.CONN_BRN_NO AS FROM_BRN,
                m.AD_U_ID AS USER_CODE,
                NVL(u.U_A_NAME, NVL(u.U_E_NAME, TO_CHAR(m.AD_U_ID))) AS USER_NAME,
                m.APPROVED AS APPROVED,
@@ -169,7 +179,7 @@ def fetch_today_transfer_requests(
         GROUP BY m.OUT_REQ_TYPE, m.OUT_REQ_NO, m.OUT_REQ_SER,
                  NVL(m.AD_DATE, m.OUT_REQ_DATE),
                  m.BRN_NO, m.W_CODE, tw.W_NAME, tw.W_CODE,
-                 m.F_W_CODE, fw.W_NAME, fw.W_CODE,
+                 m.F_W_CODE, fw.W_NAME, fw.W_CODE, fw.CONN_BRN_NO,
                  m.AD_U_ID, u.U_A_NAME, u.U_E_NAME,
                  m.APPROVED, m.PROCESSED
         ORDER BY NVL(m.AD_DATE, m.OUT_REQ_DATE) DESC, m.OUT_REQ_SER DESC
@@ -181,6 +191,17 @@ def fetch_today_transfer_requests(
     out: list[dict] = []
     for row in rows:
         branch = _norm_code(row.get("BRANCH_CODE"))
+        branch_name = (
+            names.get(branch)
+            or names.get(str(row.get("BRANCH_CODE") or "").strip())
+            or branch
+        )
+        from_brn = _norm_code(row.get("FROM_BRN"))
+        from_branch = (
+            names.get(from_brn)
+            or names.get(str(row.get("FROM_BRN") or "").strip())
+            or ""
+        )
         processed = int(row.get("PROCESSED") or 0) == 1
         approved = int(row.get("APPROVED") or 0) == 1
         if processed:
@@ -200,7 +221,7 @@ def fetch_today_transfer_requests(
                 "date_label": str(row.get("TR_WHEN_LABEL") or "").strip()
                 or _dt_label(row.get("TR_WHEN")),
                 "branch_code": branch,
-                "branch_name": names.get(branch) or names.get(str(row.get("BRANCH_CODE") or "").strip()) or branch,
+                "branch_name": branch_name,
                 "to_wh_code": _norm_code(row.get("TO_W_CODE")),
                 "to_wh_name": str(row.get("TO_W_NAME") or "").strip()
                 or _norm_code(row.get("TO_W_CODE"))
@@ -209,15 +230,11 @@ def fetch_today_transfer_requests(
                 "from_wh_name": str(row.get("FROM_W_NAME") or "").strip()
                 or _norm_code(row.get("FROM_W_CODE"))
                 or "—",
-                "from_wh_label": _wh_display(
-                    row.get("FROM_W_CODE"), row.get("FROM_W_NAME")
-                ),
+                "from_wh_label": _wh_branch_label(row.get("FROM_W_CODE"), from_branch),
                 "to_wh_label": _wh_display(row.get("TO_W_CODE"), row.get("TO_W_NAME")),
                 "main_wh_code": main_wh.get("code") or "",
                 "main_wh_name": main_wh.get("name") or "",
-                "main_wh_label": _wh_display(
-                    main_wh.get("code"), main_wh.get("name")
-                ),
+                "main_wh_label": _wh_branch_label(main_wh.get("code"), branch_name),
                 "user_code": str(row.get("USER_CODE") or "").strip(),
                 "user_name": str(row.get("USER_NAME") or "").strip(),
                 "item_count": int(row.get("ITEM_COUNT") or 0),
@@ -251,8 +268,10 @@ def _fetch_request_header(tr_type: str, tr_no: str, tr_ser: str) -> dict | None:
                m.BRN_NO AS BRANCH_CODE,
                m.W_CODE AS TO_W_CODE,
                {_wh_name_sql("tw")} AS TO_W_NAME,
+               tw.CONN_BRN_NO AS TO_BRN,
                m.F_W_CODE AS FROM_W_CODE,
                {_wh_name_sql("fw")} AS FROM_W_NAME,
+               fw.CONN_BRN_NO AS FROM_BRN,
                m.AD_U_ID AS USER_CODE,
                NVL(u.U_A_NAME, NVL(u.U_E_NAME, TO_CHAR(m.AD_U_ID))) AS USER_NAME,
                m.APPROVED AS APPROVED,
@@ -277,6 +296,11 @@ def _fetch_request_header(tr_type: str, tr_no: str, tr_ser: str) -> dict | None:
         return None
     row = rows[0]
     branch = _norm_code(row.get("BRANCH_CODE"))
+    branch_name = names.get(branch) or branch
+    from_brn = _norm_code(row.get("FROM_BRN"))
+    from_branch = names.get(from_brn) or names.get(str(row.get("FROM_BRN") or "").strip()) or ""
+    to_brn = _norm_code(row.get("TO_BRN"))
+    to_branch = names.get(to_brn) or names.get(str(row.get("TO_BRN") or "").strip()) or ""
     processed = int(row.get("PROCESSED") or 0) == 1
     approved = int(row.get("APPROVED") or 0) == 1
     to_wh_code = _norm_code(row.get("TO_W_CODE"))
@@ -293,16 +317,16 @@ def _fetch_request_header(tr_type: str, tr_no: str, tr_ser: str) -> dict | None:
         "date_label": str(row.get("TR_WHEN_LABEL") or "").strip()
         or _dt_label(row.get("TR_WHEN")),
         "branch_code": branch,
-        "branch_name": names.get(branch) or branch,
+        "branch_name": branch_name,
         "to_wh_code": to_wh_code,
         "to_wh_name": to_wh_name,
-        "to_wh_label": _wh_display(to_wh_code, to_wh_name),
+        "to_wh_label": _wh_branch_label(to_wh_code, to_branch),
         "from_wh_code": from_wh_code,
         "from_wh_name": from_wh_name,
-        "from_wh_label": _wh_display(from_wh_code, from_wh_name),
+        "from_wh_label": _wh_branch_label(from_wh_code, from_branch),
         "main_wh_code": main_wh_code,
         "main_wh_name": main_wh_name,
-        "main_wh_label": _wh_display(main_wh_code, main_wh_name),
+        "main_wh_label": _wh_branch_label(main_wh_code, branch_name),
         "dest_differs": bool(
             main_wh_code and to_wh_code and main_wh_code != to_wh_code
         ),
@@ -772,14 +796,14 @@ def build_transfer_short_no_pr_excel(compare: dict[str, Any]) -> Any:
         "<style>"
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 6px;white-space:nowrap;}"
-        "th{background:#1e3a5f;color:#fff;font-weight:700;}"
+        "th{background:#d9e2f3;color:#1a2b33;font-weight:700;}"
         "th.req{background:#9a3412;}"
         "th.gap{background:#b91c1c;}"
         "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'\\#\\,\\#\\#0\\.00';text-align:left;}"
         "td.int{mso-number-format:'\\#\\,\\#\\#0';text-align:left;}"
         "td.miss{color:#b91c1c;font-weight:700;}"
-        "tr.even td{background:#f8fafc;}"
+        "tr.even td{background:#f7f7f7;}"
         "caption{font-family:Tahoma,Arial;font-size:13px;font-weight:700;"
         "text-align:right;margin:8px 0;}"
         ".sub{font-size:10px;color:#475569;font-weight:400;}"

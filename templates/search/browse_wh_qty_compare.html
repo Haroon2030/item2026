@@ -17,7 +17,7 @@
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
     <span>{{ error }}</span>
   </div>
-{% elif hint and not report %}
+{% elif hint %}
   <div class="alert alert-info" role="status">
     <span>{{ hint }}</span>
   </div>
@@ -32,25 +32,74 @@
   id="wqc-filter-form"
 >
   <input type="hidden" name="run" value="1">
+  {{ all_warehouses|json_script:"wqc-wh-data" }}
 
-  <div class="field wqc-field-wh-a">
-    <label for="wqc-wh-a">المستودع الأول <span class="wqc-req" aria-hidden="true">*</span></label>
-    <select id="wqc-wh-a" name="wh_a" required aria-required="true">
-      <option value="">اختر مستودعاً</option>
-      {% for w in all_warehouses %}
-        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_a %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="wqc-pair wqc-pair-branches" role="group" aria-label="فرع مقابل فرع">
+    <span class="wqc-pair-label">الفرع</span>
+    <div class="wqc-pair-fields">
+      <div class="field wqc-field-br-a">
+        <label for="wqc-br-a">الأول <span class="wqc-req" aria-hidden="true">*</span></label>
+        <select id="wqc-br-a" name="branch_a" required aria-required="true">
+          <option value="">اختر فرعاً</option>
+          {% for b in branches %}
+            <option value="{{ b.code }}" {% if b.code == selected_branch_a %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <span class="wqc-pair-sep" aria-hidden="true">↔</span>
+      <div class="field wqc-field-br-b">
+        <label for="wqc-br-b">الثاني <span class="wqc-req" aria-hidden="true">*</span></label>
+        <select id="wqc-br-b" name="branch_b" required aria-required="true">
+          <option value="">اختر فرعاً</option>
+          {% for b in branches %}
+            <option value="{{ b.code }}" {% if b.code == selected_branch_b %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
   </div>
 
-  <div class="field wqc-field-wh-b">
-    <label for="wqc-wh-b">المستودع الثاني <span class="wqc-req" aria-hidden="true">*</span></label>
-    <select id="wqc-wh-b" name="wh_b" required aria-required="true">
-      <option value="">اختر مستودعاً</option>
-      {% for w in all_warehouses %}
-        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_b %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
-      {% endfor %}
-    </select>
+  <div class="wqc-pair wqc-pair-warehouses" role="group" aria-label="مخزن مقابل مخزن">
+    <span class="wqc-pair-label">المخزن</span>
+    <div class="wqc-pair-fields">
+      <div class="field wqc-field-wh-a">
+        <label for="wqc-wh-a">الأول <span class="wqc-req" aria-hidden="true">*</span></label>
+        <select
+          id="wqc-wh-a"
+          name="wh_a"
+          required
+          aria-required="true"
+          data-selected="{{ selected_wh_a }}"
+          {% if not selected_branch_a %}disabled{% endif %}
+        >
+          <option value="">{% if selected_branch_a %}اختر مستودعاً{% else %}اختر الفرع أولاً{% endif %}</option>
+          {% for w in all_warehouses %}
+            {% if selected_branch_a and w.branch_code == selected_branch_a %}
+              <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_a %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <span class="wqc-pair-sep" aria-hidden="true">↔</span>
+      <div class="field wqc-field-wh-b">
+        <label for="wqc-wh-b">الثاني <span class="wqc-req" aria-hidden="true">*</span></label>
+        <select
+          id="wqc-wh-b"
+          name="wh_b"
+          required
+          aria-required="true"
+          data-selected="{{ selected_wh_b }}"
+          {% if not selected_branch_b %}disabled{% endif %}
+        >
+          <option value="">{% if selected_branch_b %}اختر مستودعاً{% else %}اختر الفرع أولاً{% endif %}</option>
+          {% for w in all_warehouses %}
+            {% if selected_branch_b and w.branch_code == selected_branch_b %}
+              <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_b %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+    </div>
   </div>
 
   <div class="field wqc-field-group">
@@ -58,7 +107,7 @@
     <select id="wqc-group" name="group">
       <option value="" {% if not selected_group %}selected{% endif %}>كل المجموعات</option>
       {% for g in groups %}
-        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.name }}</option>
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
       {% endfor %}
     </select>
   </div>
@@ -92,28 +141,44 @@
 </form>
 
 {% if report %}
-  <section class="wqc-kpi-grid" aria-label="ملخص المقارنة">
-    <article class="wqc-kpi is-count">
-      <span>المعروض</span>
-      <strong class="mono">{{ report.kpis.item_count }}</strong>
-      <small>من أصل {{ report.kpis.item_count_all|default:report.kpis.item_count }} · {{ report.filters.qty_basis_label }} · {{ report.filters.mode_label }}</small>
+  {% with all_n=report.kpis.item_count_all|default:report.kpis.item_count %}
+  {% if all_n == 0 %}
+  <div class="alert alert-info wqc-empty-kpi" role="status">
+    <span>
+      {% if selected_group %}
+        لا توجد أصناف برصيد في «{{ wh_a_name|default:selected_wh_a }}» ضمن المجموعة المحددة.
+        <a class="wqc-clear-group" href="?run=1&amp;wh_a={{ selected_wh_a|urlencode }}&amp;wh_b={{ selected_wh_b|urlencode }}&amp;q={{ item_q|urlencode }}&amp;mode={{ mode|urlencode }}&amp;qty={{ qty_basis|urlencode }}">عرض كل المجموعات</a>
+      {% elif item_q %}
+        لا توجد أصناف مطابقة لبحث «{{ item_q }}» في المستودع الأول.
+      {% else %}
+        لا توجد أصناف برصيد موجب في المستودع الأول لهذه المقارنة.
+      {% endif %}
+    </span>
+  </div>
+  {% endif %}
+  <section class="income-kpi-grid wqc-kpi-grid" aria-label="ملخص المقارنة">
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count">
+      <span class="dash-kpi-label">المعروض</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.item_count }}</strong>
+      <span class="dash-kpi-hint">من أصل {{ all_n }} صنف · {{ report.filters.mode_label }}</span>
     </article>
-    <article class="wqc-kpi is-gap">
-      <span>لا يتوفر في الثاني / مختلف</span>
-      <strong class="mono">{{ report.kpis.zero_b_count_all|default:report.kpis.zero_b_count }} / {{ report.kpis.diff_count_all|default:report.kpis.diff_count }}</strong>
-      <small>أصناف الأول {{ report.kpis.item_count_all|default:report.kpis.item_count }} · متطابق {{ report.kpis.both_count_all|default:report.kpis.both_count }}</small>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-gap">
+      <span class="dash-kpi-label">لا يتوفر / مختلف</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.zero_b_count_all|default:report.kpis.zero_b_count }} / {{ report.kpis.diff_count_all|default:report.kpis.diff_count }}</strong>
+      <span class="dash-kpi-hint">متطابق {{ report.kpis.both_count_all|default:report.kpis.both_count }} · {{ report.filters.qty_basis_label }}</span>
     </article>
-    <article class="wqc-kpi is-a">
-      <span>{{ report.filters.qty_basis_label|default:"الكمية" }} — الأول</span>
-      <strong class="mono">{{ report.kpis.qty_a_display }}</strong>
-      <small>{{ wh_a_name|default:selected_wh_a }}</small>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-a">
+      <span class="dash-kpi-label">{{ report.filters.qty_basis_label|default:"الكمية" }} — الأول</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.qty_a_display }}</strong>
+      <span class="dash-kpi-hint" title="{{ wh_a_name|default:selected_wh_a }}">{{ wh_a_name|default:selected_wh_a }}</span>
     </article>
-    <article class="wqc-kpi is-b">
-      <span>{{ report.filters.qty_basis_label|default:"الكمية" }} — الثاني</span>
-      <strong class="mono">{{ report.kpis.qty_b_display }}</strong>
-      <small>{{ wh_b_name|default:selected_wh_b }}</small>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-b">
+      <span class="dash-kpi-label">{{ report.filters.qty_basis_label|default:"الكمية" }} — الثاني</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.qty_b_display }}</strong>
+      <span class="dash-kpi-hint" title="{{ wh_b_name|default:selected_wh_b }}">{{ wh_b_name|default:selected_wh_b }}</span>
     </article>
   </section>
+  {% endwith %}
 
   <section class="wqc-sheet" aria-label="جدول المقارنة" data-print-scope="wqc-table">
     <div class="wqc-sheet-head">
@@ -127,7 +192,7 @@
       <div class="wqc-sheet-actions">
         <a
           class="btn-ghost wqc-excel-btn"
-          href="?run=1&amp;wh_a={{ selected_wh_a|urlencode }}&amp;wh_b={{ selected_wh_b|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;q={{ item_q|urlencode }}&amp;mode={{ mode|urlencode }}&amp;qty={{ qty_basis|urlencode }}&amp;export=excel"
+          href="?run=1&amp;branch_a={{ selected_branch_a|urlencode }}&amp;branch_b={{ selected_branch_b|urlencode }}&amp;wh_a={{ selected_wh_a|urlencode }}&amp;wh_b={{ selected_wh_b|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;q={{ item_q|urlencode }}&amp;mode={{ mode|urlencode }}&amp;qty={{ qty_basis|urlencode }}&amp;export=excel"
           title="تصدير Excel"
         >Excel</a>
         <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
@@ -186,7 +251,6 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if report %}
+<script src="/static/js/branch-wh-cascade.js?v={{ app_client_version }}" defer></script>
 <script src="/static/js/wqc-scroll.js?v={{ app_client_version }}" defer></script>
-{% endif %}
 {% endblock %}
