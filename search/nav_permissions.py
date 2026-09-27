@@ -79,7 +79,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
         "إدارة المخزون",
         (
             NavScreen("browse_inventory", "تحليل المخزون"),
-            NavScreen("browse_stock_turnover", "دوران المخزون"),
+            NavScreen("browse_stock_turnover", "حركة فواتير الشراء"),
             NavScreen("browse_groups", "مخزون المجموعات"),
             NavScreen("browse_unsold", "رصيد بلا مبيعات"),
         ),

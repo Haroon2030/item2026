@@ -4299,95 +4299,164 @@ def browse_unsold(request):
 @require_GET
 @never_cache
 def browse_stock_turnover(request):
-    """دوران المخزون: صافي بيع الفترة على الرصيد الحالي، بفلتر تاريخ وفرع ومجموعة وراكد."""
-    from datetime import date
+    """حركة فواتير الشراء: المباع تراكمياً من كل فاتورة والمتبقي منها منذ تاريخ شرائها."""
+    from datetime import date, timedelta
+    from urllib.parse import urlencode
+
+    from .oracle_stock_turnover import (
+        DEFAULT_PERIOD_DAYS,
+        DEFAULT_VIEW,
+        SORT_CODES,
+        SORT_OPTIONS,
+        STATUS_CODES,
+        STATUS_OPTIONS,
+        VIEW_CODES,
+        VIEW_OPTIONS,
+        max_back_days,
+    )
 
     today = date.today()
-    month_start = today.replace(day=1)
+    default_from = today - timedelta(days=DEFAULT_PERIOD_DAYS - 1)
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_group = str(request.GET.get('group') or '').strip()
-    from .oracle_stock_turnover import STATUS_OPTIONS
-
+    selected_vendor = str(request.GET.get('vendor') or '').strip()
+    item_query = str(request.GET.get('q') or '').strip()[:80]
+    selected_bill = str(request.GET.get('bill') or '').strip()[:20]
+    if not selected_bill.isdigit():
+        selected_bill = ''
     selected_status = str(request.GET.get('status') or '').strip()
-    if selected_status not in {code for code, _label in STATUS_OPTIONS if code}:
+    if selected_status not in STATUS_CODES:
         selected_status = ''
+    selected_sort = str(request.GET.get('sort') or 'value').strip()
+    if selected_sort not in SORT_CODES:
+        selected_sort = 'value'
+    selected_view = str(request.GET.get('view') or DEFAULT_VIEW).strip()
+    if selected_view not in VIEW_CODES:
+        selected_view = DEFAULT_VIEW
+    try:
+        selected_page = max(1, int(request.GET.get('page') or 1))
+    except (TypeError, ValueError):
+        selected_page = 1
+    export_excel = str(request.GET.get('export') or '').strip() == 'excel'
     report = None
     error = ''
     branches: list[dict] = []
     groups: list[dict] = []
+    raw_from = (request.GET.get('date_from') or '')[:10]
+    raw_to = (request.GET.get('date_to') or '')[:10]
+    date_from_text = raw_from or default_from.isoformat()
+    date_to_text = raw_to or today.isoformat()
 
     try:
-        date_from, date_to = _parse_sales_dates(
-            request.GET.get('date_from') or month_start.isoformat(),
-            request.GET.get('date_to') or today.isoformat(),
-        )
+        date_from, date_to = _parse_sales_dates(date_from_text, date_to_text)
     except ValidationError as exc:
-        return render(
-            request,
-            'search/browse_stock_turnover.html',
-            {
-                'date_from': (request.GET.get('date_from') or '')[:10],
-                'date_to': (request.GET.get('date_to') or '')[:10],
-                'default_from': month_start.isoformat(),
-                'default_to': today.isoformat(),
-                'selected_branch': selected_branch,
-                'selected_group': selected_group,
-                'selected_status': selected_status,
-                'status_options': STATUS_OPTIONS,
-                'branches': [],
-                'groups': [],
-                'report': None,
-                'error': str(exc),
-            },
-        )
+        date_from = date_to = None
+        error = ' '.join(exc.messages)
 
-    try:
-        from .oracle_income import fetch_income_branches
-        from .oracle_stock import (
-            fetch_sales_group_options,
-            oracle_enabled,
-            oracle_session,
-        )
-        from .oracle_stock_turnover import build_stock_turnover_report
+    if date_from is not None:
+        try:
+            from .oracle_income import fetch_income_branches
+            from .oracle_stock import (
+                OracleStockError,
+                fetch_sales_group_options,
+                oracle_enabled,
+                oracle_session,
+            )
+            from .oracle_stock_turnover import build_stock_turnover_report, build_turnover_excel
 
-        if not oracle_enabled():
-            error = 'أوراكل غير مفعّل — لا يمكن عرض دوران المخزون.'
-        else:
-            with oracle_session():
-                branches = fetch_income_branches()
-                groups = fetch_sales_group_options()
-                if selected_branch not in {row['code'] for row in branches}:
-                    selected_branch = ''
-                if selected_group not in {row['code'] for row in groups}:
-                    selected_group = ''
-                report = build_stock_turnover_report(
-                    date_from,
-                    date_to,
-                    branch_code=selected_branch,
-                    group_code=selected_group,
-                    status=selected_status,
-                )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_stock_turnover failed: %s', exc)
-        error = f'تعذّر تحميل دوران المخزون: {exc}'
-        report = None
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن عرض حركة فواتير الشراء.'
+            else:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    groups = fetch_sales_group_options()
+                    if selected_branch not in {row['code'] for row in branches}:
+                        selected_branch = ''
+                    if selected_group not in {row['code'] for row in groups}:
+                        selected_group = ''
+                    try:
+                        report = build_stock_turnover_report(
+                            date_from,
+                            date_to,
+                            branch_code=selected_branch,
+                            group_code=selected_group,
+                            vendor_code=selected_vendor,
+                            item_query=item_query,
+                            bill_ser=selected_bill,
+                            status=selected_status,
+                            sort=selected_sort,
+                            view=selected_view,
+                            page=selected_page,
+                            for_export=export_excel,
+                            today=today,
+                        )
+                    except OracleStockError as exc:
+                        error = str(exc)
+                if report is not None:
+                    selected_vendor = report['vendor']
+                    date_to_text = report['date_to'].isoformat()
+                    if export_excel:
+                        return build_turnover_excel(report)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_stock_turnover failed: %s', exc)
+            error = f'تعذّر تحميل حركة فواتير الشراء: {exc}'
+            report = None
+
+    filter_pairs = [
+        (key, value)
+        for key, value in (
+            ('date_from', date_from_text),
+            ('date_to', date_to_text),
+            ('branch', selected_branch),
+            ('group', selected_group),
+            ('vendor', selected_vendor),
+            ('q', item_query),
+            ('bill', selected_bill),
+            ('sort', selected_sort),
+        )
+        if value
+    ]
+    base_query = urlencode(filter_pairs)
+    lines_query = urlencode(
+        [(key, value) for key, value in filter_pairs if key not in ('q', 'bill', 'sort')]
+        + [('view', 'line'), ('sort', 'item')]
+    )
+    clear_bill_query = urlencode(
+        [(key, value) for key, value in filter_pairs if key != 'bill'] + [('view', selected_view)]
+    )
+    status_query = urlencode(filter_pairs + [('view', selected_view)])
+    page_query = urlencode(
+        filter_pairs + [('view', selected_view)] + ([('status', selected_status)] if selected_status else [])
+    )
 
     return render(
         request,
         'search/browse_stock_turnover.html',
         {
-            'date_from': date_from.isoformat(),
-            'date_to': date_to.isoformat(),
-            'default_from': month_start.isoformat(),
-            'default_to': today.isoformat(),
+            'date_from': date_from_text,
+            'date_to': date_to_text,
             'selected_branch': selected_branch,
             'selected_group': selected_group,
+            'selected_vendor': selected_vendor,
+            'item_query': item_query,
             'selected_status': selected_status,
             'status_options': STATUS_OPTIONS,
+            'selected_sort': selected_sort,
+            'sort_options': SORT_OPTIONS,
+            'selected_view': selected_view,
+            'view_options': VIEW_OPTIONS,
+            'max_back_all': max_back_days(''),
+            'max_back_branch': max_back_days('x'),
             'branches': branches,
             'groups': groups,
             'report': report,
             'error': error,
+            'base_query': base_query,
+            'lines_query': lines_query,
+            'clear_bill_query': clear_bill_query,
+            'selected_bill': selected_bill,
+            'status_query': status_query,
+            'page_query': page_query,
         },
     )
 

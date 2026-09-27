@@ -6297,6 +6297,64 @@ body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn
 body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-band-out.mono {
   color: #c4b5fd !important;
 }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-age-fresh.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-age-fresh.mono {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-age-mid.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-age-mid.mono {
+  color: #facc15 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-age-warm.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-age-warm.mono {
+  color: #fb923c !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-age-hot.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-age-hot.mono {
+  color: #f87171 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-age-stale.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-age-stale.mono {
+  color: #fecdd3 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-age-out.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-age-out.mono {
+  color: #c4b5fd !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-motion-great.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-motion-great.mono {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-motion-good.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-motion-good.mono {
+  color: #60a5fa !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-motion-watch.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-motion-watch.mono {
+  color: #facc15 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-motion-risk.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-motion-risk.mono {
+  color: #fb923c !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-motion-danger.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-motion-danger.mono {
+  color: #f87171 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody td.turn-motion-stopped.mono,
+body.theme-navy .page.turn-dash .dash-panel-glass table.sales-table tbody td.turn-motion-stopped.mono {
+  color: #fecdd3 !important;
+}
+body.theme-navy .page.turn-dash .turn-alert-watch { background: rgba(250, 204, 21, 0.15) !important; color: #facc15 !important; }
+body.theme-navy .page.turn-dash .turn-alert-risk { background: rgba(251, 146, 60, 0.16) !important; color: #fb923c !important; }
+body.theme-navy .page.turn-dash .turn-alert-danger { background: rgba(248, 113, 113, 0.16) !important; color: #f87171 !important; }
+body.theme-navy .page.turn-dash .turn-alert-stopped { background: rgba(254, 205, 211, 0.12) !important; color: #fecdd3 !important; }
+body.theme-navy .page.turn-dash a.turn-alert.is-on { outline: 2px solid currentColor !important; }
+body.theme-navy .page.turn-dash .turn-alert-great { background: rgba(74, 222, 128, 0.14) !important; color: #4ade80 !important; }
+body.theme-navy .page.turn-dash .turn-alert-good { background: rgba(96, 165, 250, 0.15) !important; color: #60a5fa !important; }
+body.theme-navy .page.turn-dash .turn-alert-neutral { background: rgba(148, 163, 184, 0.14) !important; color: #cbd5e1 !important; }
+body.theme-navy .page.turn-dash .turn-bar { background: rgba(148, 163, 184, 0.2) !important; }
+body.theme-navy .page.turn-dash .turn-bar > span { background: #38bdf8 !important; }
 
 body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td,
 body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected:nth-child(even) > td,
@@ -6325,6 +6383,30 @@ body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-s
 body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-band-out.mono {
   color: #c4b5fd !important;
 }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-age-fresh.mono {
+  color: #4ade80 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-age-mid.mono {
+  color: #facc15 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-age-warm.mono {
+  color: #fb923c !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-age-hot.mono {
+  color: #f87171 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-age-stale.mono {
+  color: #fecdd3 !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-age-out.mono {
+  color: #c4b5fd !important;
+}
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-motion-great.mono { color: #4ade80 !important; }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-motion-good.mono { color: #60a5fa !important; }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-motion-watch.mono { color: #facc15 !important; }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-motion-risk.mono { color: #fb923c !important; }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-motion-danger.mono { color: #f87171 !important; }
+body.theme-navy .page.turn-dash .dash-panel-glass table.data-table tbody tr.is-selected > td.turn-motion-stopped.mono { color: #fecdd3 !important; }
 
 body.theme-navy .page.turn-dash.sales-dash .dash-panel-glass .table-wrap {
   overflow-x: auto !important;
@@ -6393,4 +6475,56 @@ body.theme-navy .page.turn-dash table tbody tr.is-selected > td .turn-group-link
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 0.15em;
+}
+
+body.theme-navy .page.turn-dash .turn-insight-pages button {
+  color: #93c5fd !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+body.theme-navy .is-pannable,
+body.theme-navy .is-pannable th,
+body.theme-navy .is-pannable td,
+body.theme-navy .page .is-pannable th,
+body.theme-navy .page .is-pannable td,
+body.theme-navy .page table.data-table tbody td,
+body.theme-navy .page table.sales-table tbody td,
+body.theme-navy .page table.wqc-table tbody td,
+body.theme-navy .page table.up-table tbody td,
+body.theme-navy .page table.vt-table tbody td,
+body.theme-navy .page table.wh-out-table tbody td,
+body.theme-navy .page table.lm-table tbody td,
+body.theme-navy .page table.assets-table tbody td,
+body.theme-navy .page table.pr-compare-sheet tbody td {
+  cursor: grab !important;
+}
+body.theme-navy .is-pannable a,
+body.theme-navy .is-pannable button,
+body.theme-navy .is-pannable input,
+body.theme-navy .is-pannable select,
+body.theme-navy .is-pannable textarea,
+body.theme-navy .is-pannable label {
+  cursor: pointer !important;
+}
+body.theme-navy .is-panning,
+body.theme-navy .is-panning th,
+body.theme-navy .is-panning td,
+body.theme-navy .is-panning a,
+body.theme-navy .page .is-panning td,
+body.theme-navy .page .is-panning th,
+body.theme-navy .page table.data-table.is-panning tbody td,
+body.theme-navy .page .is-panning table.data-table tbody td,
+body.theme-navy .page .is-panning table.sales-table tbody td,
+body.theme-navy .page .is-panning table.wqc-table tbody td,
+body.theme-navy .page .is-panning table.up-table tbody td,
+body.theme-navy .page .is-panning table.vt-table tbody td,
+body.theme-navy .page .is-panning table.wh-out-table tbody td,
+body.theme-navy .page .is-panning table.lm-table tbody td,
+body.theme-navy .page .is-panning table.assets-table tbody td,
+body.theme-navy .page .is-panning table.pr-compare-sheet tbody td,
+body.theme-navy .page .is-panning table thead th,
+body.theme-navy .page .is-panning table tbody td {
+  cursor: grabbing !important;
+  user-select: none !important;
 }

@@ -1260,188 +1260,286 @@ class AssetsExecutiveReportTests(TestCase):
         self.assertEqual(report['branch_rows'][0]['bv_bar_pct'], '100.0')
 
 
-class StockTurnoverMathTests(TestCase):
-    def test_cover_days_uses_current_stock_over_daily_sales(self):
-        from search.oracle_stock_turnover import cover_days, delay_days, turnover_times
+class PurchaseInvoiceMovementTests(TestCase):
+    """حركة فواتير الشراء: توزيع FIFO لصافي البيع على فواتير الصنف في فرعه."""
 
-        self.assertEqual(cover_days(300, 100, 30), 90)
-        self.assertEqual(delay_days(90), 45)
-        self.assertEqual(delay_days(10), 0)
-        self.assertIsNone(delay_days(None))
-        self.assertIsNone(cover_days(300, 0, 30))
-        self.assertIsNone(cover_days(0, 100, 30))
-        self.assertEqual(turnover_times(100, 50), 2)
+    @staticmethod
+    def _day(n):
+        from datetime import date, timedelta
 
-    def test_dead_stock_is_on_hand_with_no_net_sales(self):
-        from search.oracle_stock_turnover import assemble_turnover_rows
+        return date(2026, 9, 1) + timedelta(days=n - 1)
 
-        report = assemble_turnover_rows(
-            [{'code': '10', 'name': 'ألبان', 'qty': 40, 'value': 800, 'item_count': 3}],
+    def _purchase(self, ser, day, qty, cost, *, item='100', brn=6, vendor='V1', name='حليب'):
+        return {
+            'BILL_SER': ser,
+            'BILL_NO': ser + 1000,
+            'BILL_DATE': self._day(day),
+            'V_CODE': vendor,
+            'V_NAME': f'مورد {vendor}',
+            'BRN_NO': brn,
+            'I_CODE': item,
+            'I_NAME': name,
+            'G_CODE': 5,
+            'QTY': qty,
+            'COST': cost,
+        }
+
+    def test_older_invoice_is_consumed_first_and_cumulative_carries_over(self):
+        from search.oracle_stock_turnover import allocate_fifo
+
+        d = self._day
+        result = allocate_fifo(
+            [('A', d(1), 10), ('B', d(3), 5)],
+            {d(1): 4, d(2): 4, d(3): 5, d(4): 1},
+        )
+        a, b = result['lines']['A'], result['lines']['B']
+        self.assertEqual(a['sold'], 10)
+        self.assertEqual(a['sold_out'], d(3))
+        self.assertEqual(b['sold'], 4)
+        self.assertIsNone(b['sold_out'])
+        self.assertEqual((b['cum_qty'], b['cum_sold']), (15, 14))
+        self.assertEqual(result['prior'], 0)
+        self.assertEqual(result['last_sale'], d(4))
+
+    def test_sales_before_arrival_or_beyond_received_count_as_prior_stock(self):
+        from search.oracle_stock_turnover import allocate_fifo
+
+        d = self._day
+        early = allocate_fifo([('A', d(5), 10)], {d(3): 6, d(6): 3})
+        self.assertEqual(early['lines']['A']['sold'], 3)
+        self.assertEqual(early['prior'], 6)
+
+        overflow = allocate_fifo([('A', d(1), 5), ('B', d(2), 5)], {d(1): 8})
+        self.assertEqual(overflow['lines']['A']['sold'], 5)
+        self.assertEqual(overflow['lines']['B']['sold'], 0)
+        self.assertEqual(overflow['prior'], 3)
+
+    def test_pos_return_puts_quantity_back_and_reopens_invoice(self):
+        from search.oracle_stock_turnover import allocate_fifo
+
+        d = self._day
+        result = allocate_fifo([('A', d(1), 5)], {d(1): 5, d(2): -2})
+        self.assertEqual(result['lines']['A']['sold'], 3)
+        self.assertIsNone(result['lines']['A']['sold_out'])
+
+    def test_lines_carry_status_value_and_queue(self):
+        from search.oracle_stock_turnover import compute_invoice_lines
+
+        d = self._day
+        lines = compute_invoice_lines(
+            [
+                self._purchase(1, 1, 10, 50),
+                self._purchase(2, 2, 12, 48),
+                self._purchase(3, 1, 8, 40, item='200', name='أرز'),
+            ],
+            {'100|6': {d(1): 10, d(10): 1}},
+            today=d(40),
+            branch_names={'6': 'فرع 6'},
+        )
+        by_key = {line['key']: line for line in lines}
+        first, second, dead = by_key['1|100'], by_key['2|100'], by_key['3|200']
+        self.assertEqual(first['status'], 'fast_out')
+        self.assertEqual(first['sellout_days'], 0)
+        self.assertEqual(second['sold'], 1)
+        self.assertEqual(second['remaining'], 11)
+        self.assertEqual(second['remaining_value'], 44.0)
+        self.assertEqual(second['status'], 'stagnant')
+        self.assertEqual(second['branch_name'], 'فرع 6')
+        self.assertEqual(dead['sold'], 0)
+        self.assertEqual(dead['status'], 'stagnant')
+
+    def test_projection_includes_invoices_ahead_in_the_queue(self):
+        from search.oracle_stock_turnover import compute_invoice_lines
+
+        d = self._day
+        daily = {d(n): 2 for n in range(1, 11)}
+        lines = compute_invoice_lines(
+            [self._purchase(1, 1, 30, 30), self._purchase(2, 5, 30, 30)],
+            {'100|6': daily},
+            today=d(10),
+        )
+        first, second = sorted(lines, key=lambda line: line['bill_ser'])
+        self.assertEqual(first['sold'], 20)
+        self.assertEqual(first['clear_days'], 5.0)
+        self.assertTrue(second['queued'])
+        self.assertEqual(second['clear_days'], 20.0)
+        self.assertEqual(first['status'], 'fast')
+        self.assertEqual(second['status'], 'mid')
+
+    def test_vendor_filter_runs_after_allocation(self):
+        from search.oracle_stock_turnover import compute_invoice_lines, filter_lines
+
+        d = self._day
+        lines = compute_invoice_lines(
+            [self._purchase(1, 1, 5, 5, vendor='A'), self._purchase(2, 2, 5, 5, vendor='B')],
+            {'100|6': {d(3): 6}},
+            today=d(4),
+        )
+        only_b = filter_lines(lines, vendor_code='B')
+        self.assertEqual([line['sold'] for line in only_b], [1])
+
+    def test_invoice_rollup_takes_status_of_largest_open_value(self):
+        from search.oracle_stock_turnover import build_invoice_rows, compute_invoice_lines
+
+        d = self._day
+        lines = compute_invoice_lines(
+            [
+                self._purchase(1, 1, 4, 4, item='100'),
+                self._purchase(1, 1, 10, 100, item='200'),
+                self._purchase(2, 1, 3, 3, item='300'),
+            ],
+            {'100|6': {d(2): 4}, '300|6': {d(3): 3}},
+            today=d(40),
+        )
+        rows = {row['bill_ser']: row for row in build_invoice_rows(lines)}
+        self.assertEqual(rows['1']['status'], 'stagnant')
+        self.assertEqual((rows['1']['line_count'], rows['1']['open_count']), (2, 1))
+        self.assertEqual(rows['1']['remaining_value'], 100.0)
+        self.assertEqual(rows['2']['status'], 'fast_out')
+        self.assertEqual(rows['2']['sellout_days'], 2)
+
+    def test_period_window_depends_on_branch(self):
+        from search.oracle_stock import OracleStockError
+        from search.oracle_stock_turnover import validate_period
+
+        d = self._day
+        with self.assertRaises(OracleStockError):
+            validate_period(d(1), d(5), today=d(60), branch_code='')
+        self.assertEqual(validate_period(d(1), d(90), today=d(60), branch_code='6'), d(60))
+        with self.assertRaises(OracleStockError):
+            validate_period(d(1), d(5), today=d(200), branch_code='6')
+
+    def test_sql_leads_by_date_and_joins_pairs_without_exists(self):
+        from search.oracle_stock_turnover import _daily_sales_sql, _purchase_lines_sql
+
+        with patch('search.oracle_stock_turnover._schema', return_value='S'), patch(
+            'search.oracle_stock_turnover._pos_owner', return_value='P'
+        ):
+            purchase_sql, purchase_bind = _purchase_lines_sql(branch_code='6', group_code='')
+            sale_sql, sale_bind = _daily_sales_sql(kind='pos', branch_code='6', group_code='')
+            return_sql, _bind = _daily_sales_sql(kind='pos_return', branch_code='', group_code='')
+            bill_sql, _bind = _daily_sales_sql(kind='bill', branch_code='', group_code='5')
+            bill_rt_sql, _bind = _daily_sales_sql(kind='bill_return', branch_code='', group_code='')
+        self.assertIn('INDX_SER_PI_BILL_DTL', purchase_sql)
+        self.assertIn('FREE_QTY', purchase_sql)
+        self.assertIsInstance(purchase_bind['brn'], int)
+        self.assertIsInstance(sale_bind['brn'], int)
+        for sql in (sale_sql, return_sql, bill_sql, bill_rt_sql):
+            self.assertIn('p.BRN_NO = m.BRN_NO', sql)
+            self.assertIn('>= p.FIRST_DAY', sql)
+            self.assertNotIn('EXISTS', sql)
+            self.assertNotIn('TO_CHAR(d.I_CODE', sql)
+            self.assertNotIn('NVL(m.BILL_SER', sql)
+        self.assertIn('IAS_POS_RT_BILL_MST', return_sql)
+        self.assertIn('d.BILL_SER = m.BILL_SER', bill_sql)
+        self.assertIn('INDX_SER_BILL_DTL', bill_sql)
+        self.assertIn('CNCL_FLG', bill_sql)
+        self.assertIn('pi.G_CODE = :gcode', bill_sql)
+        self.assertIn('d.RT_BILL_SER = m.RT_BILL_SER', bill_rt_sql)
+
+    def test_day_slices_cover_window_without_overlap(self):
+        from search.oracle_stock_turnover import day_slices
+
+        d = self._day
+        slices = day_slices(d(1), d(31), 4)
+        self.assertEqual(len(slices), 4)
+        self.assertEqual(slices[0][0], d(1))
+        self.assertEqual(slices[-1][1], d(31))
+        for (_a, end), (start, _b) in zip(slices, slices[1:]):
+            self.assertEqual(end, start)
+        self.assertEqual(sum((b - a).days for a, b in slices), 30)
+        self.assertEqual(day_slices(d(1), d(3), 4), [(d(1), d(2)), (d(2), d(3))])
+        self.assertEqual(day_slices(d(1), d(2), 1), [(d(1), d(2))])
+
+    def test_selling_branch_check_reads_headers_only(self):
+        from search.oracle_stock_turnover import _selling_branches_sql
+
+        with patch('search.oracle_stock_turnover._schema', return_value='IAS'), patch(
+            'search.oracle_stock_turnover._pos_owner', return_value='YSPOS1'
+        ):
+            pos_sql = _selling_branches_sql('pos')
+            bill_sql = _selling_branches_sql('bill')
+        self.assertIn('INDEX(m POSBILLMST_BILLDATEUSRBRN)', pos_sql)
+        self.assertNotIn('DTL', pos_sql)
+        self.assertNotIn('HUNG', pos_sql)
+        self.assertIn('IAS.IAS_BILL_MST', bill_sql)
+        self.assertIn('CNCL_FLG', bill_sql)
+        self.assertNotIn('DTL', bill_sql)
+
+    def test_invoice_drilldown_matches_invoice_only_not_item_codes(self):
+        from search.oracle_stock_turnover import compute_invoice_lines, filter_lines
+
+        d = self._day
+        lines = compute_invoice_lines(
+            [
+                self._purchase(6506, 1, 10, 10, item='121301'),
+                self._purchase(37171, 2, 10, 10, item='10007025622445765061'),
+            ],
             {},
-            period_days_count=30,
+            today=d(5),
         )
-        row = report['rows'][0]
-        self.assertEqual(row['band'], 'dead')
-        self.assertEqual(row['band_label'], 'راكد')
-        self.assertEqual(row['cover_display'], '—')
-        self.assertEqual(row['delay_display'], 'راكد')
-        self.assertIsNone(row['delay_days'])
-        self.assertEqual(row['turnover_display'], '0')
-        self.assertEqual(
-            assemble_turnover_rows(
-                [{'code': '9', 'name': 'نادر', 'qty': 100000, 'value': 1}],
-                {'9': 1},
-                period_days_count=30,
-            )['rows'][0]['turnover_display'],
-            '<0.01',
-        )
+        by_query = filter_lines(lines, item_query='6506')
+        self.assertEqual([line['bill_ser'] for line in by_query], ['37171'])
+        by_bill = filter_lines(lines, bill_ser='6506')
+        self.assertEqual([line['item_code'] for line in by_bill], ['121301'])
 
-    def test_stagnant_filter_keeps_stored_or_depleted_rows(self):
-        from search.oracle_stock_turnover import (
-            STATUS_OPTIONS,
-            assemble_turnover_rows,
-            rows_for_status,
-        )
+    def test_branch_without_any_sales_is_not_called_slow_or_stagnant(self):
+        from search.oracle_stock_turnover import compute_invoice_lines
 
-        self.assertEqual(
-            list(STATUS_OPTIONS),
-            [("", "الكل"), ("dead", "مخزن"), ("out", "نفذ")],
+        d = self._day
+        lines = compute_invoice_lines(
+            [self._purchase(1, 1, 10, 10, brn=2), self._purchase(2, 1, 10, 10, brn=6)],
+            {},
+            today=d(40),
+            selling_branches={'6'},
         )
-        report = assemble_turnover_rows(
-            [
-                {'code': '1', 'name': 'سريع', 'qty': 10, 'value': 100},
-                {'code': '2', 'name': 'راكد', 'qty': 80, 'value': 900},
-            ],
-            {'1': 30, '3': 12},
-            period_days_count=30,
-            names={'3': 'نافد'},
-        )
-        self.assertEqual(
-            [row['code'] for row in rows_for_status(report['rows'], '')],
-            ['2', '1', '3'],
-        )
-        self.assertEqual(
-            [row['code'] for row in rows_for_status(report['rows'], 'dead')],
-            ['2'],
-        )
-        self.assertEqual(
-            [row['code'] for row in rows_for_status(report['rows'], 'out')],
-            ['3'],
-        )
-        self.assertEqual(rows_for_status(report['rows'], 'unknown'), report['rows'])
+        by_branch = {line['branch_code']: line['status'] for line in lines}
+        self.assertEqual(by_branch, {'2': 'no_branch_sales', '6': 'stagnant'})
 
-    def test_stockout_and_fast_cover_sort_after_dead(self):
-        from search.oracle_stock_turnover import assemble_turnover_rows
+    @patch('search.oracle_stock_turnover._attach_item_barcodes')
+    @patch('search.oracle_stock_turnover.oracle_enabled', return_value=True)
+    def test_report_pages_on_server_and_ignores_unknown_vendor(self, _enabled, _barcodes):
+        from search.oracle_stock_turnover import build_stock_turnover_report, compute_invoice_lines
 
-        report = assemble_turnover_rows(
-            [
-                {'code': '1', 'name': 'سريع', 'qty': 10, 'value': 100},
-                {'code': '2', 'name': 'راكد', 'qty': 80, 'value': 900},
-            ],
-            {'1': 30, '3': 12},
-            period_days_count=30,
-            names={'3': 'نافد'},
+        d = self._day
+        lines = compute_invoice_lines(
+            [self._purchase(n, 1, 5, 10, item=str(500 + n)) for n in range(1, 121)],
+            {},
+            today=d(10),
         )
-        self.assertEqual([row['code'] for row in report['rows']], ['2', '1', '3'])
-        self.assertEqual(report['rows'][1]['band'], 'fast')
-        self.assertEqual(report['rows'][1]['cover_days'], 10)
-        self.assertEqual(report['rows'][1]['delay_days'], 0)
-        self.assertEqual(report['rows'][1]['delay_display'], '0')
-        self.assertEqual(report['rows'][2]['band'], 'out')
-        self.assertEqual(report['rows'][2]['turnover_display'], '—')
+        with patch('search.oracle_stock_turnover.load_invoice_lines', return_value=lines):
+            report = build_stock_turnover_report(
+                d(1), d(10), view='line', page=3, vendor_code='nope', today=d(10)
+            )
+            waiting = build_stock_turnover_report(
+                d(1), d(10), view='invoice', status='stagnant', today=d(10)
+            )
+        self.assertEqual((report['total'], report['page_count']), (120, 3))
+        self.assertEqual((len(report['rows']), report['page_start']), (20, 100))
+        self.assertEqual(report['vendor'], '')
+        self.assertEqual(report['kpis']['invoice_count'], 120)
+        self.assertEqual(report['status_counts'][0]['code'], 'waiting')
+        self.assertEqual(waiting['total'], 0)
 
-    def test_kpis_use_full_set_when_table_is_capped(self):
-        from search.oracle_stock_turnover import (
-            _kpis_from_rows,
-            assemble_turnover_rows,
-        )
+    def test_anonymous_user_is_redirected(self):
+        response = self.client.get(reverse('browse_stock_turnover'))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse('login')))
 
-        stock = [
-            {'code': str(i), 'name': f'صنف {i}', 'qty': 100, 'value': 10}
-            for i in range(5)
-        ]
-        sales = {str(i): 1 for i in range(5)}
-        shown = assemble_turnover_rows(
-            stock, sales, period_days_count=30, row_cap=2
-        )
-        full = assemble_turnover_rows(stock, sales, period_days_count=30)
-        kpis = _kpis_from_rows(full['rows'], period_days_count=30)
-        self.assertEqual(shown['shown_count'], 2)
-        self.assertEqual(shown['total_count'], 5)
-        self.assertTrue(shown['truncated'])
-        self.assertEqual(kpis['stock_qty'], 500)
-        self.assertEqual(kpis['sold_qty'], 5)
-        self.assertEqual(kpis['cover_days'], 3000)
-        self.assertEqual(kpis['delay_days'], 2955)
+    @patch('search.oracle_stock.oracle_enabled', return_value=False)
+    def test_page_opens_when_oracle_off(self, _enabled):
+        user = get_user_model().objects.create_user(username='inv-user', password='StrongPassword123!')
+        UserProfile.objects.create(user=user, display_name='مخازن', phone='0507000011', role_name='مدير مخازن')
+        self.client.force_login(user)
+        response = self.client.get(reverse('browse_stock_turnover'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'حركة فواتير الشراء')
+        self.assertContains(response, 'أوراكل غير مفعّل')
 
-    def test_barcode_prefers_stock_unit_longest_single_code(self):
-        from search.oracle_stock_turnover import _choose_barcode
-
-        self.assertEqual(
-            _choose_barcode(
-                [
-                    (1, 0, '12400'),
-                    (1, 0, '000000444225'),
-                    (12, 0, '999'),
-                ]
-            ),
-            '000000444225',
-        )
-        self.assertEqual(
-            _choose_barcode([(1, 0, '12400'), (1, 1, '555')]),
-            '555',
-        )
-
-    def test_purchase_qty_does_not_change_cover_or_create_balance(self):
-        from search.oracle_stock_turnover import assemble_turnover_rows
-
-        report = assemble_turnover_rows(
-            [{'code': '46', 'name': 'تغليف', 'qty': 100, 'value': 50}],
-            {'46': 20},
-            purchase_qty={'46': 8, '99': 500},
-            period_days_count=10,
-        )
-        row = report['rows'][0]
-        self.assertEqual(row['purchased_qty'], 8)
-        self.assertEqual(row['sold_qty'], 20)
-        self.assertEqual(row['stock_qty'], 100)
-        self.assertEqual(row['cover_days'], 50)
-        self.assertEqual(len(report['rows']), 1)
-
-    def test_item_branch_rows_keep_code_barcode_slot_and_branch(self):
-        from search.oracle_stock_turnover import assemble_turnover_rows
-
-        report = assemble_turnover_rows(
-            [
-                {
-                    'code': '100|2',
-                    'name': 'حليب',
-                    'qty': 10,
-                    'value': 40,
-                },
-                {
-                    'code': '100|6',
-                    'name': 'حليب',
-                    'qty': 4,
-                    'value': 16,
-                },
-            ],
-            {'100|2': 2},
-            period_days_count=30,
-            extras={
-                '100|2': {
-                    'item_code': '100',
-                    'branch_code': '2',
-                    'branch_name': 'فرع الربوة',
-                },
-                '100|6': {
-                    'item_code': '100',
-                    'branch_code': '6',
-                    'branch_name': 'فرع البلاستيك',
-                },
-            },
-        )
-        self.assertEqual(
-            [(row['item_code'], row['branch_name'], row['sold_qty']) for row in report['rows']],
-            [('100', 'فرع البلاستيك', 0), ('100', 'فرع الربوة', 2)],
-        )
+    def test_denied_without_inventory_nav_access(self):
+        user = get_user_model().objects.create_user(username='pur-only', password='StrongPassword123!')
+        UserProfile.objects.create(user=user, display_name='مشتريات', phone='0507000012', role_name='مدير مشتريات')
+        UserNavPermission.objects.create(user=user, sections=['purchases'], blocked_screens=[])
+        self.client.force_login(user)
+        response = self.client.get(reverse('browse_stock_turnover'))
+        self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)

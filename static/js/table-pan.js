@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var HOST = '.page.turn-dash .table-wrap';
+  var HOST = '.table-wrap, .ss-sheet-wrap, [class*="-scroll"]';
   var SKIP = 'a, button, input, select, textarea, label';
   var SLOP = 4;
 
@@ -10,16 +10,24 @@
   }
 
   function bind(el) {
-    if (el.dataset.panInit === '1') return;
+    if (!el || el.dataset.panInit === '1') return;
+    if (!el.querySelector('table')) return;
     el.dataset.panInit = '1';
+    el.classList.add('is-pannable');
     var drag = null;
 
     function refresh() {
-      el.classList.toggle('is-pannable', canPan(el));
+      el.classList.toggle('is-pannable-live', canPan(el));
     }
 
     refresh();
     window.addEventListener('resize', refresh);
+    if (window.ResizeObserver) {
+      var observer = new ResizeObserver(refresh);
+      observer.observe(el);
+      var table = el.querySelector('table');
+      if (table) observer.observe(table);
+    }
 
     el.addEventListener('pointerdown', function (ev) {
       if (ev.button !== 0) return;
@@ -47,6 +55,7 @@
         }
       }
       el.scrollLeft = drag.left - dx;
+      if (ev.cancelable) ev.preventDefault();
     });
 
     function end(ev) {
@@ -64,17 +73,37 @@
 
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    el.addEventListener('pointerleave', function (ev) {
+      if (drag && !drag.moved) end(ev);
+    });
   }
 
   function scan(root) {
     var scope = root && root.querySelectorAll ? root : document;
-    if (scope instanceof Element && scope.matches(HOST)) bind(scope);
+    if (scope instanceof Element && scope.matches && scope.matches(HOST)) bind(scope);
     scope.querySelectorAll(HOST).forEach(bind);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { scan(document); });
-  } else {
+  function start() {
     scan(document);
+    window.addEventListener('load', function () { scan(document); });
+    if (window.MutationObserver) {
+      var queued = false;
+      var watcher = new MutationObserver(function () {
+        if (queued) return;
+        queued = true;
+        window.requestAnimationFrame(function () {
+          queued = false;
+          scan(document);
+        });
+      });
+      watcher.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
   }
 })();
