@@ -3013,10 +3013,6 @@ body.inv-dash-body .app-backdrop{
   border-radius: 999px;
   background: #f3e8ff;
 }
-.income-dash .income-kpi .mono[dir="ltr"]{
-  unicode-bidi: isolate;
-}
-
 .income-dash .income-kpi-rev .dash-kpi-value{ color: #874bee; }
 .income-dash .income-kpi-rev .dash-kpi-hint{
   color: #874bee;
