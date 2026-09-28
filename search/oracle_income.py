@@ -18,14 +18,7 @@ from .oracle_stock import (
     _as_date,
     _branch_names,
     _fetch_all,
-    _hung_ok,
-    _item_unit_cost_map,
-    _item_wh_unit_cost_map,
-    _norm_brn_code,
-    _pos_owner,
-    _run_parallel,
     _schema,
-    oracle_session,
 )
 
 logger = logging.getLogger(__name__)
@@ -1770,23 +1763,6 @@ def fetch_income_branch_profits(
     صافي ربح/خسارة لكل فرع (دائن − مدين) لحسابات قائمة الدخل.
     كل الفروع مرتّبة من الأعلى ربحاً — للرسم البياني بجانب الجدول.
     """
-    return _build_branch_profits(
-        _fetch_income_branch_rows(
-            date_from,
-            date_to,
-            cc_code=cc_code,
-            posted_only=posted_only,
-        )
-    )
-
-
-def _fetch_income_branch_rows(
-    date_from,
-    date_to,
-    *,
-    cc_code: str = "",
-    posted_only: bool = False,
-) -> list[dict]:
     d_from = _as_date(date_from)
     d_to = _as_date(date_to)
     if d_from > d_to:
@@ -1801,7 +1777,7 @@ def _fetch_income_branch_rows(
     params.update({"dfrom": d_from, "dto": d_to})
     sane = "ABS(NVL(p.AMT, 0)) < 1000000000"
 
-    return _fetch_all(
+    rows = _fetch_all(
         f"""
         SELECT TO_CHAR(p.BRN_NO) AS BRN_NO,
                ROUND(SUM(NVL(p.DR_AMT, 0)), 2) AS MV_DR,
@@ -1822,11 +1798,7 @@ def _fetch_income_branch_rows(
         """,
         params,
     )
-
-
-def _build_branch_profits(rows: list[dict]) -> list[dict]:
     names = _branch_names()
-    rows = sorted(rows, key=lambda r: -_f(r.get("NET")))
     nets = [_f(r.get("NET")) for r in rows]
     max_abs = max((abs(n) for n in nets), default=0.0)
     out: list[dict] = []
@@ -1865,409 +1837,6 @@ def _build_branch_profits(rows: list[dict]) -> list[dict]:
     return out
 
 
-# ─── مبيعات نقاط البيع التي لم تُنقل لفواتير المبيعات بعد (خارج الدفتر) ───
-# POSTED=1 على رأس POS يعني نُقلت لـ IAS_BILL ثم إلى IAS_POST_DTL؛ غير ذلك
-# لا يظهر في الدفتر إطلاقاً، فنضيفه لتصبح الأرقام نهائية دون انتظار الترحيل.
-# الشرائح الأقدم من نافذة الحداثة تُخزَّن طويلاً: ترحيل فواتير قديمة جداً نادر،
-# وأي ترحيل داخل النافذة يُقرأ طازجاً مع الدفتر فلا يُحتسب مرتين.
-_UNPOSTED_RECENT_DAYS = 45
-_UNPOSTED_RECENT_SLICE_DAYS = 15
-_UNPOSTED_OLD_TTL = 6 * 3600
-_UNPOSTED_WORKERS = 4
-_UNPOSTED_TIMEOUT_SEC = 110
-_UNPOSTED_STOCK_QTY = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
-_UNPOSTED_REVENUE_CODE = "3-POS"
-_UNPOSTED_COGS_CODE = "4-POS"
-
-
-def _unposted_slices(d_from: date, d_to: date, today: date) -> list[tuple[date, date, bool]]:
-    """(بداية، نهاية شاملة، قابلة للتخزين): أشهر كاملة قبل نافذة الحداثة، ثم شرائح قصيرة."""
-    recent_start = today - timedelta(days=_UNPOSTED_RECENT_DAYS)
-    out: list[tuple[date, date, bool]] = []
-    cur = d_from
-    while cur <= d_to:
-        if cur >= recent_start:
-            end = min(d_to, cur + timedelta(days=_UNPOSTED_RECENT_SLICE_DAYS - 1))
-            out.append((cur, end, False))
-        else:
-            if cur.month == 12:
-                month_end = date(cur.year, 12, 31)
-            else:
-                month_end = date(cur.year, cur.month + 1, 1) - timedelta(days=1)
-            end = min(month_end, d_to, recent_start - timedelta(days=1))
-            out.append((cur, end, True))
-        cur = end + timedelta(days=1)
-    return out
-
-
-def _unposted_pos_sql() -> str:
-    """رؤوس POS غير المنقولة (قيادة بفهرس التاريخ) ثم تفاصيلها بالمفتاح — مسح واحد عبر MATERIALIZE."""
-    pos = _pos_owner()
-    return f"""
-        WITH h AS (
-            SELECT /*+ MATERIALIZE INDEX(m POSBILLMST_BILLDATEUSRBRN) */
-                   m.BILL_NO, m.BRN_NO, m.W_CODE, m.BILL_DATE, m.BILL_AMT
-            FROM {pos}.IAS_POS_BILL_MST m
-            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-              AND {_hung_ok("m")}
-              AND (m.POSTED IS NULL OR m.POSTED = 0)
-        )
-        SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.BILL_DATE) AS D,
-               NULL AS ITEM_CODE, NULL AS W_CODE,
-               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT, 0 AS STOCK_QTY
-        FROM h
-        GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE)
-        UNION ALL
-        SELECT /*+ LEADING(h d) USE_NL(d) INDEX(d IAS_POS_INDX_BILL_DTL) */
-               'L', h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'),
-               TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, h.W_CODE)),
-               COUNT(*), 0, SUM({_UNPOSTED_STOCK_QTY})
-        FROM h
-        JOIN {pos}.IAS_POS_BILL_DTL d
-          ON d.BILL_NO = h.BILL_NO AND d.BRN_NO = h.BRN_NO
-        WHERE d.I_CODE IS NOT NULL
-        GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'), d.I_CODE, NVL(d.W_CODE, h.W_CODE)
-    """
-
-
-def _unposted_pos_return_sql() -> str:
-    """مرتجع POS غير المنقول — جدول صغير بلا فهرس تاريخ، مسح واحد للفترة كلها."""
-    pos = _pos_owner()
-    return f"""
-        WITH h AS (
-            SELECT /*+ MATERIALIZE */
-                   m.RT_BILL_NO, m.BRN_NO, m.W_CODE, m.RT_BILL_DATE, m.RT_BILL_AMT
-            FROM {pos}.IAS_POS_RT_BILL_MST m
-            WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
-              AND {_hung_ok("m")}
-              AND (m.POSTED IS NULL OR m.POSTED = 0)
-        )
-        SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.RT_BILL_DATE) AS D,
-               NULL AS ITEM_CODE, NULL AS W_CODE,
-               COUNT(*) AS N, SUM(NVL(h.RT_BILL_AMT, 0)) AS AMT, 0 AS STOCK_QTY
-        FROM h
-        GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE)
-        UNION ALL
-        SELECT /*+ LEADING(h d) USE_NL(d) INDEX(d IAS_POS_INDX_RTBILL_DTL) */
-               'L', h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'),
-               TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, h.W_CODE)),
-               COUNT(*), 0, SUM({_UNPOSTED_STOCK_QTY})
-        FROM h
-        JOIN {pos}.IAS_POS_RT_BILL_DTL d
-          ON d.RT_BILL_NO = h.RT_BILL_NO AND d.BRN_NO = h.BRN_NO
-        WHERE d.I_CODE IS NOT NULL
-        GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'), d.I_CODE, NVL(d.W_CODE, h.W_CODE)
-    """
-
-
-def _as_plain_date(value: Any) -> date | None:
-    if value is None:
-        return None
-    if hasattr(value, "date") and callable(value.date):
-        try:
-            return value.date()
-        except Exception:
-            return None
-    if isinstance(value, date):
-        return value
-    return None
-
-
-def _unposted_unit_cost_fn():
-    cmap = _item_unit_cost_map()
-    wh_cmap = _item_wh_unit_cost_map()
-
-    def unit_cost(item: str, wh: str) -> float:
-        by_wh = wh_cmap.get(item)
-        if by_wh:
-            if wh and wh in by_wh:
-                return float(by_wh[wh] or 0)
-            for val in by_wh.values():
-                if val:
-                    return float(val)
-        return float(cmap.get(item) or 0)
-
-    return unit_cost
-
-
-def _aggregate_unposted(
-    sales_rows: list[dict],
-    return_rows: list[dict],
-    unit_cost,
-) -> dict:
-    """صافي (بيع − مرتجع) لكل فرع ولكل (فرع، شهر). المبلغ بدون ضريبة كإيراد الدفتر؛ التكلفة بمتوسط التكلفة الحالي."""
-    by_branch: dict[str, dict] = {}
-    by_branch_month: dict[tuple[str, date], dict] = {}
-    missing_cost: set[str] = set()
-
-    def branch_bucket(brn: str) -> dict:
-        return by_branch.setdefault(
-            brn,
-            {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
-        )
-
-    def month_bucket(brn: str, ym: date) -> dict:
-        return by_branch_month.setdefault((brn, ym), {"amount": 0.0, "cost": 0.0})
-
-    for rows, sign in ((sales_rows, 1.0), (return_rows, -1.0)):
-        for row in rows:
-            brn = _norm_brn_code(row.get("BRN"))
-            day = _as_plain_date(row.get("D"))
-            if not brn or day is None:
-                continue
-            ym = date(day.year, day.month, 1)
-            if str(row.get("K") or "") == "H":
-                amt = _f(row.get("AMT")) * sign
-                b = branch_bucket(brn)
-                b["amount"] += amt
-                if sign > 0:
-                    b["bills"] += int(row.get("N") or 0)
-                else:
-                    b["returns"] += int(row.get("N") or 0)
-                if b["oldest"] is None or day < b["oldest"]:
-                    b["oldest"] = day
-                month_bucket(brn, ym)["amount"] += amt
-            else:
-                item = str(row.get("ITEM_CODE") or "").strip()
-                wh = str(row.get("W_CODE") or "").strip()
-                qty = float(row.get("STOCK_QTY") or 0)
-                uc = unit_cost(item, wh)
-                if not uc and qty:
-                    missing_cost.add(item)
-                cost = qty * uc * sign
-                branch_bucket(brn)["cost"] += cost
-                month_bucket(brn, ym)["cost"] += cost
-
-    for b in by_branch.values():
-        b["amount"] = round(b["amount"], 2)
-        b["cost"] = round(b["cost"], 2)
-    for m in by_branch_month.values():
-        m["amount"] = round(m["amount"], 2)
-        m["cost"] = round(m["cost"], 2)
-    return {
-        "by_branch": by_branch,
-        "by_branch_month": by_branch_month,
-        "missing_cost_items": len(missing_cost),
-    }
-
-
-def fetch_unposted_pos_sales(date_from, date_to, *, today: date | None = None) -> dict:
-    """مبيعات POS غير المنقولة لكل الفروع ضمن الفترة (تُصفّى بالفرع لاحقاً في بايثون)."""
-    d_from = _as_date(date_from)
-    d_to = _as_date(date_to)
-    today = today or date.today()
-    if d_from > today:
-        return _aggregate_unposted([], [], lambda _i, _w: 0.0)
-
-    sales_sql = _unposted_pos_sql()
-    slices = _unposted_slices(d_from, min(d_to, today), today)
-    parts: list[list[dict] | None] = []
-    jobs = []
-    job_slots: list[tuple[int, str | None]] = []
-    for start, end, cacheable in slices:
-        key = f"income:unposted:v1:{start}:{end}" if cacheable else None
-        hit = cache.get(key) if key else None
-        if isinstance(hit, list):
-            parts.append(hit)
-            continue
-        parts.append(None)
-        bind = {"d_from": start, "d_to_excl": end + timedelta(days=1)}
-
-        def job(b=bind):
-            with oracle_session():
-                return _fetch_all(sales_sql, b)
-
-        jobs.append(job)
-        job_slots.append((len(parts) - 1, key))
-
-    return_bind = {"d_from": d_from, "d_to_excl": min(d_to, today) + timedelta(days=1)}
-    return_sql = _unposted_pos_return_sql()
-
-    def return_job():
-        with oracle_session():
-            return _fetch_all(return_sql, return_bind)
-
-    results = _run_parallel(
-        [*jobs, return_job],
-        max_workers=_UNPOSTED_WORKERS,
-        timeout_sec=_UNPOSTED_TIMEOUT_SEC,
-    )
-    return_rows = results[-1] or []
-    for (slot, key), rows in zip(job_slots, results[:-1]):
-        parts[slot] = rows or []
-        if key:
-            try:
-                cache.set(key, parts[slot], _UNPOSTED_OLD_TTL)
-            except Exception:
-                pass
-    sales_rows = [row for part in parts for row in (part or [])]
-    return _aggregate_unposted(sales_rows, return_rows, _unposted_unit_cost_fn())
-
-
-def _unposted_summary(unposted: dict, branch_code: str) -> dict:
-    """ملخص العرض بعد تصفية الفرع."""
-    names = _branch_names()
-    brn = _norm_brn_code(branch_code)
-    amount = cost = 0.0
-    bills = returns = 0
-    oldest: date | None = None
-    rows: list[dict] = []
-    for code, b in (unposted.get("by_branch") or {}).items():
-        if brn and code != brn:
-            continue
-        if not (b["amount"] or b["cost"] or b["bills"] or b["returns"]):
-            continue
-        amount += b["amount"]
-        cost += b["cost"]
-        bills += b["bills"]
-        returns += b["returns"]
-        if b["oldest"] and (oldest is None or b["oldest"] < oldest):
-            oldest = b["oldest"]
-        rows.append(
-            {
-                "branch_code": code,
-                "branch_name": names.get(code, code),
-                "amount": b["amount"],
-                "cost": b["cost"],
-                "bills": b["bills"],
-                "oldest": b["oldest"].isoformat() if b["oldest"] else "",
-                "amount_display": _fmt_money(b["amount"]),
-                "cost_display": _fmt_money(b["cost"]),
-            }
-        )
-    rows.sort(key=lambda r: -r["amount"])
-    amount = round(amount, 2)
-    cost = round(cost, 2)
-    return {
-        "included": True,
-        "has_data": bool(rows),
-        "amount": amount,
-        "cost": cost,
-        "bills": bills,
-        "returns": returns,
-        "oldest": oldest.isoformat() if oldest else "",
-        "missing_cost_items": int(unposted.get("missing_cost_items") or 0),
-        "amount_display": _fmt_money(amount),
-        "cost_display": _fmt_money(cost),
-        "amount_compact": _fmt_compact(amount),
-        "cost_compact": _fmt_compact(cost),
-        "bills_display": f"{bills:,}",
-        "returns_display": f"{returns:,}",
-        "by_branch": rows,
-    }
-
-
-def _signed_dr_cr(amount: float, cost: float) -> tuple[float, float]:
-    """(مدين، دائن) لقيد إيراد بالمبلغ وتكلفة بالقيمة — السالب ينقلب للجهة الأخرى."""
-    dr = cr = 0.0
-    if amount >= 0:
-        cr += amount
-    else:
-        dr += -amount
-    if cost >= 0:
-        dr += cost
-    else:
-        cr += -cost
-    return round(dr, 2), round(cr, 2)
-
-
-def _unposted_base_rows(summary: dict) -> list[dict]:
-    """حسابا إيراد/تكلفة اصطناعيان بنفس شكل صفوف IAS_POST_DTL ليمرّا عبر نفس التجميع."""
-    out: list[dict] = []
-    amount = _f(summary.get("amount"))
-    cost = _f(summary.get("cost"))
-    if amount:
-        out.append(
-            {
-                "A_CODE": _UNPOSTED_REVENUE_CODE,
-                "A_NAME": "مبيعات نقاط بيع لم تُرحّل",
-                "DR": 0,
-                "OPEN_NET": 0,
-                "MV_DR": -amount if amount < 0 else 0,
-                "MV_CR": amount if amount > 0 else 0,
-                "NORM_AMT": amount,
-                "LINE_COUNT": int(summary.get("bills") or 0),
-            }
-        )
-    if cost:
-        out.append(
-            {
-                "A_CODE": _UNPOSTED_COGS_CODE,
-                "A_NAME": "تكلفة تقديرية لمبيعات لم تُرحّل",
-                "DR": 1,
-                "OPEN_NET": 0,
-                "MV_DR": cost if cost > 0 else 0,
-                "MV_CR": -cost if cost < 0 else 0,
-                "NORM_AMT": cost,
-                "LINE_COUNT": int(summary.get("bills") or 0),
-            }
-        )
-    return out
-
-
-def _unposted_kind_rows(unposted: dict, branch_code: str) -> list[dict]:
-    """صفوف شهرية (YM/ROOT) لدمجها في الاتجاه الشهري."""
-    brn = _norm_brn_code(branch_code)
-    months: dict[date, dict[str, float]] = {}
-    for (code, ym), m in (unposted.get("by_branch_month") or {}).items():
-        if brn and code != brn:
-            continue
-        bucket = months.setdefault(ym, {"amount": 0.0, "cost": 0.0})
-        bucket["amount"] += m["amount"]
-        bucket["cost"] += m["cost"]
-    out: list[dict] = []
-    for ym, m in sorted(months.items()):
-        amount = round(m["amount"], 2)
-        cost = round(m["cost"], 2)
-        if amount:
-            out.append(
-                {
-                    "YM": ym,
-                    "ROOT": "3",
-                    "NORM_AMT": amount,
-                    "MV_DR": -amount if amount < 0 else 0,
-                    "MV_CR": amount if amount > 0 else 0,
-                }
-            )
-        if cost:
-            out.append(
-                {
-                    "YM": ym,
-                    "ROOT": "4",
-                    "NORM_AMT": cost,
-                    "MV_DR": cost if cost > 0 else 0,
-                    "MV_CR": -cost if cost < 0 else 0,
-                }
-            )
-    return out
-
-
-def _merge_unposted_branch_rows(rows: list[dict], unposted: dict) -> list[dict]:
-    """يضيف صافي (مبيعات − تكلفة) غير المرحّل لصفوف ربحية الفروع (كل الفروع)."""
-    merged: dict[str, dict] = {}
-    for row in rows:
-        code = _norm_brn_code(row.get("BRN_NO"))
-        if not code:
-            continue
-        merged[code] = {
-            "BRN_NO": code,
-            "MV_DR": _f(row.get("MV_DR")),
-            "MV_CR": _f(row.get("MV_CR")),
-        }
-    for code, b in (unposted.get("by_branch") or {}).items():
-        if not (b["amount"] or b["cost"]):
-            continue
-        dr, cr = _signed_dr_cr(b["amount"], b["cost"])
-        slot = merged.setdefault(code, {"BRN_NO": code, "MV_DR": 0.0, "MV_CR": 0.0})
-        slot["MV_DR"] = round(slot["MV_DR"] + dr, 2)
-        slot["MV_CR"] = round(slot["MV_CR"] + cr, 2)
-    out = []
-    for slot in merged.values():
-        slot["NET"] = round(slot["MV_CR"] - slot["MV_DR"], 2)
-        out.append(slot)
-    return out
-
-
 def _cache_key(
     d_from: date,
     d_to: date,
@@ -2276,7 +1845,7 @@ def _cache_key(
     posted_only: bool,
 ) -> str:
     return (
-        f"income:stmt:v53:{d_from}:{d_to}:"
+        f"income:stmt:v51:{d_from}:{d_to}:"
         f"{branch_code or '-'}:"
         f"{cc_code or '-'}:"
         f"{int(bool(posted_only))}"
@@ -2310,44 +1879,14 @@ def build_income_statement(
         cc_code=cc,
         posted_only=use_posted,
     )
-    branch_rows = _fetch_income_branch_rows(
-        d_from,
-        d_to,
-        cc_code=cc,
-        posted_only=use_posted,
-    )
-    monthly_rows = _fetch_income_kind_rows(
-        d_from,
-        d_to,
-        branch_code=brn,
-        cc_code=cc,
-        posted_only=use_posted,
-        by_month=True,
-    )
-
-    # بعد الدفتر لا قبله: فاتورة تُرحَّل بين القراءتين تسقط من الاثنين بدل أن تُحتسب مرتين.
-    unposted_summary: dict = {"included": False, "has_data": False}
-    ttl = _INCOME_CACHE_TTL
-    if use_posted:
-        unposted_summary["reason"] = "مرحّل فقط"
-    elif cc:
-        unposted_summary["reason"] = "نقاط البيع بلا مركز تكلفة"
-    else:
-        try:
-            unposted = fetch_unposted_pos_sales(d_from, d_to)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Unposted POS sales unavailable: %s", exc)
-            unposted_summary["error"] = "تعذّرت قراءة مبيعات نقاط البيع غير المرحّلة — الأرقام من الدفتر فقط."
-            ttl = 120
-        else:
-            unposted_summary = _unposted_summary(unposted, brn)
-            base = [*base, *_unposted_base_rows(unposted_summary)]
-            branch_rows = _merge_unposted_branch_rows(branch_rows, unposted)
-            monthly_rows = [*monthly_rows, *_unposted_kind_rows(unposted, brn)]
-
     by_account, kpis = _aggregate_accounts(base)
     account_totals = _sum_account_totals(by_account)
-    by_branch_profit = _build_branch_profits(branch_rows)
+    by_branch_profit = fetch_income_branch_profits(
+        d_from,
+        d_to,
+        cc_code=cc,
+        posted_only=use_posted,
+    )
     reconciliation = fetch_cash_box_checks(
         d_from,
         d_to,
@@ -2361,6 +1900,14 @@ def build_income_statement(
     expense_mix = _build_expense_mix_donut(by_account, kpis, head=5)
     graphic = _pnl_graphic_panels(kpis)
 
+    monthly_rows = _fetch_income_kind_rows(
+        d_from,
+        d_to,
+        branch_code=brn,
+        cc_code=cc,
+        posted_only=use_posted,
+        by_month=True,
+    )
     monthly_trend = _build_monthly_trend(d_from, d_to, monthly_rows)
     executive_alerts = _build_executive_alerts(
         kpis=kpis,
@@ -2375,8 +1922,6 @@ def build_income_statement(
     if cc:
         scope_bits.append(f"مركز {cc}")
     scope_bits.append("مرحّل فقط" if use_posted else "مرحّل + غير مرحّل")
-    if unposted_summary.get("included") and unposted_summary.get("has_data"):
-        scope_bits.append("+ نقاط بيع لم تُرحّل")
 
     result = {
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
@@ -2401,9 +1946,10 @@ def build_income_statement(
         "top_accounts_totals": top_accounts_totals,
         "expense_axis": expense_axis,
         "expense_mix": expense_mix,
-        "unposted": unposted_summary,
     }
     try:
+        span = (d_to - d_from).days + 1
+        ttl = _INCOME_CACHE_TTL
         cache.set(key, result, ttl)
     except Exception:
         pass
