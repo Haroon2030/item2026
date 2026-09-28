@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from search.models import UserActivitySession, UserNavPermission, UserProfile
@@ -1543,3 +1543,161 @@ class PurchaseInvoiceMovementTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse('browse_stock_turnover'))
         self.assertRedirects(response, reverse('home'), fetch_redirect_response=False)
+
+
+_LOCMEM_CACHE = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'income-tests'}}
+
+
+@override_settings(CACHES=_LOCMEM_CACHE)
+class IncomeUnpostedCardTests(TestCase):
+    """بطاقة «مبيعات لم تُرحّل»: رؤوس POS بـ POSTED=0 — تُعرض مستقلة ولا تغيّر أرقام الدفتر."""
+
+    LEDGER_BASE = [
+        {'A_CODE': '31001', 'A_NAME': 'مبيعات', 'DR': 0, 'OPEN_NET': 0,
+         'MV_DR': 0, 'MV_CR': 1000, 'NORM_AMT': 1000, 'LINE_COUNT': 5},
+        {'A_CODE': '41001', 'A_NAME': 'تكلفة مبيعات', 'DR': 1, 'OPEN_NET': 0,
+         'MV_DR': 800, 'MV_CR': 0, 'NORM_AMT': 800, 'LINE_COUNT': 5},
+    ]
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+    @staticmethod
+    def _unposted():
+        from datetime import date
+
+        return {
+            'by_branch': {
+                '7': {'amount': 500.0, 'cost': 420.0, 'bills': 12, 'returns': 1, 'oldest': date(2026, 9, 26)},
+                '9': {'amount': 300.0, 'cost': 240.0, 'bills': 4, 'returns': 0, 'oldest': date(2026, 9, 27)},
+            },
+            'missing_cost_items': 0,
+        }
+
+    def _build(self, *, unposted=None, unposted_error=None, **kwargs):
+        from datetime import date
+
+        from search.oracle_income import build_income_statement
+
+        fetch_kwargs = {'side_effect': unposted_error} if unposted_error else {'return_value': unposted or self._unposted()}
+        with patch('search.oracle_income._fetch_income_base_rows', return_value=list(self.LEDGER_BASE)), \
+                patch('search.oracle_income.fetch_income_branch_profits', return_value=[]), \
+                patch('search.oracle_income._fetch_income_kind_rows', return_value=[]), \
+                patch('search.oracle_income.fetch_cash_box_checks', return_value={'all_ok': True, 'summary': 'ok', 'chart': []}), \
+                patch('search.oracle_income._branch_names', return_value={'7': 'فرع 7', '9': 'فرع 9'}), \
+                patch('search.oracle_income.fetch_unposted_pos_sales', **fetch_kwargs) as fetch:
+            statement = build_income_statement(date(2026, 9, 1), date(2026, 9, 28), **kwargs)
+        return statement, fetch
+
+    def test_unposted_sql_leads_by_date_index_and_filters_unposted_only(self):
+        from search.oracle_income import _unposted_pos_return_sql, _unposted_pos_sql
+
+        with patch('search.oracle_income._pos_owner', return_value='YSPOS1'):
+            sales = _unposted_pos_sql()
+            returns = _unposted_pos_return_sql()
+        self.assertIn('INDEX(m POSBILLMST_BILLDATEUSRBRN)', sales)
+        self.assertIn('m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl', sales)
+        self.assertIn('d.BILL_NO = h.BILL_NO AND d.BRN_NO = h.BRN_NO', sales)
+        self.assertIn('d.RT_BILL_NO = h.RT_BILL_NO AND d.BRN_NO = h.BRN_NO', returns)
+        for sql in (sales, returns):
+            self.assertIn('(m.POSTED IS NULL OR m.POSTED = 0)', sql)
+            self.assertIn('(m.HUNG IS NULL OR m.HUNG = 0)', sql)
+            self.assertNotIn('NVL(m.POSTED', sql)
+            self.assertNotIn('TO_CHAR(d.BILL_NO', sql)
+            self.assertIn('MATERIALIZE', sql)
+
+    def test_slices_cover_period_contiguously_and_only_old_months_are_cacheable(self):
+        from datetime import date, timedelta
+
+        from search.oracle_income import _unposted_slices
+
+        today = date(2026, 9, 28)
+        slices = _unposted_slices(date(2026, 1, 1), today, today)
+        self.assertEqual(slices[0][0], date(2026, 1, 1))
+        self.assertEqual(slices[-1][1], today)
+        for (_s, end, _c), (nxt, _e, _c2) in zip(slices, slices[1:]):
+            self.assertEqual(nxt, end + timedelta(days=1))
+        recent_start = today - timedelta(days=45)
+        for start, end, cacheable in slices:
+            self.assertEqual(cacheable, end < recent_start)
+            if cacheable:
+                self.assertEqual((start.year, start.month), (end.year, end.month))
+
+    def test_aggregate_nets_returns_and_costs_by_warehouse_item(self):
+        from datetime import datetime
+
+        from search.oracle_income import _aggregate_unposted
+
+        sales = [
+            {'K': 'H', 'BRN': 7, 'D': datetime(2026, 9, 27), 'N': 10, 'AMT': 1000.0},
+            {'K': 'H', 'BRN': 7, 'D': datetime(2026, 9, 25), 'N': 2, 'AMT': 200.0},
+            {'K': 'L', 'BRN': 7, 'D': datetime(2026, 9, 1), 'ITEM_CODE': '100', 'W_CODE': '1', 'STOCK_QTY': 10},
+            {'K': 'L', 'BRN': 7, 'D': datetime(2026, 9, 1), 'ITEM_CODE': '200', 'W_CODE': '1', 'STOCK_QTY': 5},
+            {'K': 'L', 'BRN': 7, 'D': datetime(2026, 9, 1), 'ITEM_CODE': '999', 'W_CODE': '1', 'STOCK_QTY': 3},
+        ]
+        returns = [
+            {'K': 'H', 'BRN': 7, 'D': datetime(2026, 9, 27), 'N': 1, 'AMT': 50.0},
+            {'K': 'L', 'BRN': 7, 'D': datetime(2026, 9, 1), 'ITEM_CODE': '100', 'W_CODE': '1', 'STOCK_QTY': 1},
+        ]
+        costs = {('100', '1'): 40.0, ('200', '1'): 60.0}
+        result = _aggregate_unposted(sales, returns, lambda i, w: costs.get((i, w), 0.0))
+        b = result['by_branch']['7']
+        self.assertEqual(b['amount'], 1150.0)
+        self.assertEqual(b['cost'], 10 * 40 + 5 * 60 - 1 * 40)
+        self.assertEqual((b['bills'], b['returns']), (12, 1))
+        self.assertEqual(b['oldest'].isoformat(), '2026-09-25')
+        self.assertEqual(result['missing_cost_items'], 1)
+
+    def test_card_is_separate_and_ledger_figures_stay_unchanged(self):
+        statement, fetch = self._build()
+        fetch.assert_called_once()
+        self.assertEqual(statement['kpis']['revenue'], 1000)
+        self.assertEqual(statement['kpis']['cogs'], 800)
+        u = statement['unposted']
+        self.assertTrue(u['has_data'])
+        self.assertEqual((u['amount'], u['cost'], u['gross']), (800, 660, 140))
+        self.assertEqual((u['bills'], u['returns'], u['branch_count']), (16, 1, 2))
+        self.assertEqual(u['oldest'], '2026-09-26')
+        self.assertEqual(u['top_branches'][0]['branch_code'], '7')
+
+    def test_branch_filter_limits_card_to_that_branch(self):
+        statement, _fetch = self._build(branch_code='9')
+        self.assertEqual(statement['unposted']['amount'], 300)
+        self.assertEqual(statement['unposted']['branch_count'], 1)
+
+    def test_cost_center_filter_skips_card(self):
+        statement, fetch = self._build(cc_code='12')
+        fetch.assert_not_called()
+        self.assertFalse(statement['unposted']['has_data'])
+
+    def test_unposted_failure_keeps_statement_with_error(self):
+        from search.oracle_stock import OracleStockError
+
+        statement, _fetch = self._build(unposted_error=OracleStockError('timeout'))
+        self.assertEqual(statement['kpis']['revenue'], 1000)
+        self.assertIn('تعذّرت', statement['unposted']['error'])
+
+    def test_anonymous_user_is_redirected(self):
+        response = self.client.get(reverse('browse_income'))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse('login')))
+
+    def test_page_renders_unposted_card(self):
+        from contextlib import nullcontext
+
+        statement, _fetch = self._build()
+        user = get_user_model().objects.create_user(username='fin-user', password='StrongPassword123!')
+        UserProfile.objects.create(user=user, display_name='مالية', phone='0507000021', role_name='مدير مالي')
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), \
+                patch('search.oracle_stock.oracle_session', return_value=nullcontext()), \
+                patch('search.oracle_income.fetch_income_branches', return_value=[]), \
+                patch('search.oracle_income.fetch_income_cost_centers', return_value=[]), \
+                patch('search.oracle_income.build_income_statement', return_value=statement):
+            response = self.client.get(reverse('browse_income'), {'date_from': '2026-09-01', 'date_to': '2026-09-28'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'مبيعات لم تُرحّل')
+        self.assertContains(response, '800.00')
+        self.assertContains(response, '1,000.00')

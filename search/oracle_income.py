@@ -18,7 +18,14 @@ from .oracle_stock import (
     _as_date,
     _branch_names,
     _fetch_all,
+    _hung_ok,
+    _item_unit_cost_map,
+    _item_wh_unit_cost_map,
+    _norm_brn_code,
+    _pos_owner,
+    _run_parallel,
     _schema,
+    oracle_session,
 )
 
 logger = logging.getLogger(__name__)
@@ -1837,6 +1844,274 @@ def fetch_income_branch_profits(
     return out
 
 
+# ─── مبيعات نقاط البيع التي لم تُنقل لفواتير المبيعات بعد (خارج الدفتر) ───
+# POSTED=1 على رأس POS يعني نُقلت لـ IAS_BILL ثم إلى IAS_POST_DTL؛ غير ذلك لا يظهر
+# في الدفتر. تُعرض في بطاقة مستقلة ولا تُضاف لأرقام القائمة.
+# الشرائح الأقدم من نافذة الحداثة تُخزَّن طويلاً لأن ترحيل فواتير قديمة جداً نادر.
+_UNPOSTED_RECENT_DAYS = 45
+_UNPOSTED_RECENT_SLICE_DAYS = 15
+_UNPOSTED_OLD_TTL = 6 * 3600
+_UNPOSTED_WORKERS = 4
+_UNPOSTED_TIMEOUT_SEC = 110
+_UNPOSTED_STOCK_QTY = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+
+
+def _unposted_slices(d_from: date, d_to: date, today: date) -> list[tuple[date, date, bool]]:
+    """(بداية، نهاية شاملة، قابلة للتخزين): أشهر كاملة قبل نافذة الحداثة، ثم شرائح قصيرة."""
+    recent_start = today - timedelta(days=_UNPOSTED_RECENT_DAYS)
+    out: list[tuple[date, date, bool]] = []
+    cur = d_from
+    while cur <= d_to:
+        if cur >= recent_start:
+            end = min(d_to, cur + timedelta(days=_UNPOSTED_RECENT_SLICE_DAYS - 1))
+            out.append((cur, end, False))
+        else:
+            if cur.month == 12:
+                month_end = date(cur.year, 12, 31)
+            else:
+                month_end = date(cur.year, cur.month + 1, 1) - timedelta(days=1)
+            end = min(month_end, d_to, recent_start - timedelta(days=1))
+            out.append((cur, end, True))
+        cur = end + timedelta(days=1)
+    return out
+
+
+def _unposted_pos_sql() -> str:
+    """رؤوس POS غير المنقولة (قيادة بفهرس التاريخ) ثم تفاصيلها بالمفتاح — مسح واحد عبر MATERIALIZE."""
+    pos = _pos_owner()
+    return f"""
+        WITH h AS (
+            SELECT /*+ MATERIALIZE INDEX(m POSBILLMST_BILLDATEUSRBRN) */
+                   m.BILL_NO, m.BRN_NO, m.W_CODE, m.BILL_DATE, m.BILL_AMT
+            FROM {pos}.IAS_POS_BILL_MST m
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+              AND {_hung_ok("m")}
+              AND (m.POSTED IS NULL OR m.POSTED = 0)
+        )
+        SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.BILL_DATE) AS D,
+               NULL AS ITEM_CODE, NULL AS W_CODE,
+               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT, 0 AS STOCK_QTY
+        FROM h
+        GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE)
+        UNION ALL
+        SELECT /*+ LEADING(h d) USE_NL(d) INDEX(d IAS_POS_INDX_BILL_DTL) */
+               'L', h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'),
+               TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, h.W_CODE)),
+               COUNT(*), 0, SUM({_UNPOSTED_STOCK_QTY})
+        FROM h
+        JOIN {pos}.IAS_POS_BILL_DTL d
+          ON d.BILL_NO = h.BILL_NO AND d.BRN_NO = h.BRN_NO
+        WHERE d.I_CODE IS NOT NULL
+        GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'), d.I_CODE, NVL(d.W_CODE, h.W_CODE)
+    """
+
+
+def _unposted_pos_return_sql() -> str:
+    """مرتجع POS غير المنقول — جدول صغير بلا فهرس تاريخ، مسح واحد للفترة كلها."""
+    pos = _pos_owner()
+    return f"""
+        WITH h AS (
+            SELECT /*+ MATERIALIZE */
+                   m.RT_BILL_NO, m.BRN_NO, m.W_CODE, m.RT_BILL_DATE, m.RT_BILL_AMT
+            FROM {pos}.IAS_POS_RT_BILL_MST m
+            WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+              AND {_hung_ok("m")}
+              AND (m.POSTED IS NULL OR m.POSTED = 0)
+        )
+        SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.RT_BILL_DATE) AS D,
+               NULL AS ITEM_CODE, NULL AS W_CODE,
+               COUNT(*) AS N, SUM(NVL(h.RT_BILL_AMT, 0)) AS AMT, 0 AS STOCK_QTY
+        FROM h
+        GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE)
+        UNION ALL
+        SELECT /*+ LEADING(h d) USE_NL(d) INDEX(d IAS_POS_INDX_RTBILL_DTL) */
+               'L', h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'),
+               TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, h.W_CODE)),
+               COUNT(*), 0, SUM({_UNPOSTED_STOCK_QTY})
+        FROM h
+        JOIN {pos}.IAS_POS_RT_BILL_DTL d
+          ON d.RT_BILL_NO = h.RT_BILL_NO AND d.BRN_NO = h.BRN_NO
+        WHERE d.I_CODE IS NOT NULL
+        GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'), d.I_CODE, NVL(d.W_CODE, h.W_CODE)
+    """
+
+
+def _as_plain_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if hasattr(value, "date") and callable(value.date):
+        try:
+            return value.date()
+        except Exception:
+            return None
+    if isinstance(value, date):
+        return value
+    return None
+
+
+def _unposted_unit_cost_fn():
+    cmap = _item_unit_cost_map()
+    wh_cmap = _item_wh_unit_cost_map()
+
+    def unit_cost(item: str, wh: str) -> float:
+        by_wh = wh_cmap.get(item)
+        if by_wh:
+            if wh and wh in by_wh:
+                return float(by_wh[wh] or 0)
+            for val in by_wh.values():
+                if val:
+                    return float(val)
+        return float(cmap.get(item) or 0)
+
+    return unit_cost
+
+
+def _aggregate_unposted(sales_rows: list[dict], return_rows: list[dict], unit_cost) -> dict:
+    """صافي (بيع − مرتجع) لكل فرع. المبلغ بدون ضريبة؛ التكلفة بمتوسط التكلفة الحالي."""
+    by_branch: dict[str, dict] = {}
+    missing_cost: set[str] = set()
+
+    def bucket(brn: str) -> dict:
+        return by_branch.setdefault(
+            brn,
+            {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
+        )
+
+    for rows, sign in ((sales_rows, 1.0), (return_rows, -1.0)):
+        for row in rows:
+            brn = _norm_brn_code(row.get("BRN"))
+            day = _as_plain_date(row.get("D"))
+            if not brn or day is None:
+                continue
+            b = bucket(brn)
+            if str(row.get("K") or "") == "H":
+                b["amount"] += _f(row.get("AMT")) * sign
+                if sign > 0:
+                    b["bills"] += int(row.get("N") or 0)
+                else:
+                    b["returns"] += int(row.get("N") or 0)
+                if b["oldest"] is None or day < b["oldest"]:
+                    b["oldest"] = day
+            else:
+                item = str(row.get("ITEM_CODE") or "").strip()
+                wh = str(row.get("W_CODE") or "").strip()
+                qty = float(row.get("STOCK_QTY") or 0)
+                uc = unit_cost(item, wh)
+                if not uc and qty:
+                    missing_cost.add(item)
+                b["cost"] += qty * uc * sign
+
+    for b in by_branch.values():
+        b["amount"] = round(b["amount"], 2)
+        b["cost"] = round(b["cost"], 2)
+    return {"by_branch": by_branch, "missing_cost_items": len(missing_cost)}
+
+
+def fetch_unposted_pos_sales(date_from, date_to, *, today: date | None = None) -> dict:
+    """مبيعات POS غير المنقولة لكل الفروع ضمن الفترة (تُصفّى بالفرع لاحقاً في بايثون)."""
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    today = today or date.today()
+    if d_from > today:
+        return _aggregate_unposted([], [], lambda _i, _w: 0.0)
+
+    last_day = min(d_to, today)
+    sales_sql = _unposted_pos_sql()
+    parts: list[list[dict] | None] = []
+    jobs = []
+    job_slots: list[tuple[int, str | None]] = []
+    for start, end, cacheable in _unposted_slices(d_from, last_day, today):
+        key = f"income:unposted:v2:{start}:{end}" if cacheable else None
+        hit = cache.get(key) if key else None
+        if isinstance(hit, list):
+            parts.append(hit)
+            continue
+        parts.append(None)
+        bind = {"d_from": start, "d_to_excl": end + timedelta(days=1)}
+
+        def job(b=bind):
+            with oracle_session():
+                return _fetch_all(sales_sql, b)
+
+        jobs.append(job)
+        job_slots.append((len(parts) - 1, key))
+
+    return_sql = _unposted_pos_return_sql()
+    return_bind = {"d_from": d_from, "d_to_excl": last_day + timedelta(days=1)}
+
+    def return_job():
+        with oracle_session():
+            return _fetch_all(return_sql, return_bind)
+
+    results = _run_parallel(
+        [*jobs, return_job],
+        max_workers=_UNPOSTED_WORKERS,
+        timeout_sec=_UNPOSTED_TIMEOUT_SEC,
+    )
+    for (slot, key), rows in zip(job_slots, results[:-1]):
+        parts[slot] = rows or []
+        if key:
+            try:
+                cache.set(key, parts[slot], _UNPOSTED_OLD_TTL)
+            except Exception:
+                pass
+    sales_rows = [row for part in parts for row in (part or [])]
+    return _aggregate_unposted(sales_rows, results[-1] or [], _unposted_unit_cost_fn())
+
+
+def _unposted_summary(unposted: dict, branch_code: str) -> dict:
+    """بيانات بطاقة «مبيعات لم تُرحّل» بعد تصفية الفرع."""
+    names = _branch_names()
+    brn = _norm_brn_code(branch_code)
+    amount = cost = 0.0
+    bills = returns = 0
+    oldest: date | None = None
+    rows: list[dict] = []
+    for code, b in (unposted.get("by_branch") or {}).items():
+        if brn and code != brn:
+            continue
+        if not (b["amount"] or b["cost"] or b["bills"] or b["returns"]):
+            continue
+        amount += b["amount"]
+        cost += b["cost"]
+        bills += b["bills"]
+        returns += b["returns"]
+        if b["oldest"] and (oldest is None or b["oldest"] < oldest):
+            oldest = b["oldest"]
+        rows.append(
+            {
+                "branch_code": code,
+                "branch_name": names.get(code, code),
+                "amount": b["amount"],
+                "amount_display": _fmt_money(b["amount"]),
+            }
+        )
+    rows.sort(key=lambda r: -r["amount"])
+    amount = round(amount, 2)
+    cost = round(cost, 2)
+    gross = round(amount - cost, 2)
+    margin_pct = round(gross / amount * 100.0, 2) if amount else 0.0
+    return {
+        "available": True,
+        "has_data": bool(rows),
+        "amount": amount,
+        "cost": cost,
+        "gross": gross,
+        "bills": bills,
+        "returns": returns,
+        "oldest": oldest.isoformat() if oldest else "",
+        "missing_cost_items": int(unposted.get("missing_cost_items") or 0),
+        "amount_display": _fmt_money(amount),
+        "cost_display": _fmt_money(cost),
+        "gross_display": _fmt_money(gross),
+        "margin_pct_display": f"{margin_pct:,.2f}%",
+        "bills_display": f"{bills:,}",
+        "returns_display": f"{returns:,}",
+        "branch_count": len(rows),
+        "top_branches": rows[:3],
+    }
+
+
 def _cache_key(
     d_from: date,
     d_to: date,
@@ -1845,7 +2120,7 @@ def _cache_key(
     posted_only: bool,
 ) -> str:
     return (
-        f"income:stmt:v51:{d_from}:{d_to}:"
+        f"income:stmt:v54:{d_from}:{d_to}:"
         f"{branch_code or '-'}:"
         f"{cc_code or '-'}:"
         f"{int(bool(posted_only))}"
@@ -1916,6 +2191,18 @@ def build_income_statement(
         monthly_trend=monthly_trend,
     )
 
+    ttl = _INCOME_CACHE_TTL
+    unposted: dict = {"available": False, "has_data": False}
+    if cc:
+        unposted["reason"] = "نقاط البيع بلا مركز تكلفة"
+    else:
+        try:
+            unposted = _unposted_summary(fetch_unposted_pos_sales(d_from, d_to), brn)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Unposted POS sales unavailable: %s", exc)
+            unposted["error"] = "تعذّرت قراءة مبيعات نقاط البيع غير المرحّلة."
+            ttl = 120
+
     scope_bits = [f"{d_from.isoformat()} → {d_to.isoformat()}"]
     if brn:
         scope_bits.append(_branch_names().get(brn, brn))
@@ -1946,10 +2233,9 @@ def build_income_statement(
         "top_accounts_totals": top_accounts_totals,
         "expense_axis": expense_axis,
         "expense_mix": expense_mix,
+        "unposted": unposted,
     }
     try:
-        span = (d_to - d_from).days + 1
-        ttl = _INCOME_CACHE_TTL
         cache.set(key, result, ttl)
     except Exception:
         pass

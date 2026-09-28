@@ -83,6 +83,63 @@
       </span>
     </article>
   </section>
+
+  {% with u=statement.unposted %}
+  {% if u.has_data %}
+  <section class="income-kpi-grid" aria-label="مبيعات لم تُرحّل — خارج أرقام القائمة">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev" title="مبيعات نقاط بيع لم تُنقل لفواتير المبيعات بعد — غير داخلة في الإيرادات أعلاه">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        مبيعات لم تُرحّل
+      </span>
+      <strong class="dash-kpi-value mono">{{ u.amount_display }}</strong>
+      <span class="dash-kpi-hint"><span class="mono">{{ u.bills_display }}</span> فاتورة{% if u.returns %} · <span class="mono">{{ u.returns_display }}</span> مرتجع{% endif %} · أقدم يوم {{ u.oldest }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs" title="الكمية × متوسط التكلفة الحالي للصنف في المخزن{% if u.missing_cost_items %} — {{ u.missing_cost_items }} صنف بلا تكلفة{% endif %}">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        </span>
+        تكلفتها التقديرية
+      </span>
+      <strong class="dash-kpi-value mono">{{ u.cost_display }}</strong>
+      <span class="dash-kpi-hint">بمتوسط التكلفة الحالي</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-margin {% if u.gross < 0 %}is-down{% else %}is-up{% endif %}">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-margin" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg>
+        </span>
+        هامشها التقديري
+      </span>
+      <strong class="dash-kpi-value mono">{{ u.margin_pct_display }}</strong>
+      <span class="dash-kpi-hint mono">{{ u.gross_display }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass income-kpi">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg>
+        </span>
+        فروع لم تُرحّل
+      </span>
+      <strong class="dash-kpi-value mono">{{ u.branch_count }}</strong>
+      <span class="dash-kpi-hint">{% for b in u.top_branches %}{{ b.branch_name }} <span class="mono">{{ b.amount_display }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</span>
+    </article>
+  </section>
+  {% elif u.error %}
+    <div class="income-exp-decision is-high" role="status">
+      <strong>مبيعات لم تُرحّل</strong>
+      <span>{{ u.error }}</span>
+    </div>
+  {% elif u.available %}
+    <div class="income-exp-decision is-ok" role="status">
+      <strong>مبيعات لم تُرحّل</strong>
+      <span>كل مبيعات نقاط البيع في الفترة مرحّلة.</span>
+    </div>
+  {% endif %}
+  {% endwith %}
 {% endif %}
 
 <form method="get" action="{% url 'browse_income' %}" class="income-filter-bar" role="search" aria-label="فلاتر قائمة الدخل">
