@@ -2999,6 +2999,56 @@ body.inv-dash-body .app-backdrop{
   max-width: 100% !important;
 }
 
+.income-dash .income-kpi .dash-kpi-hint.income-kpi-hint-wrap{
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.22rem !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+}
+.income-dash .income-kpi-hint-wrap > .income-kpi-seg{
+  white-space: nowrap;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  background: #f3e8ff;
+}
+.income-dash .income-kpi .mono[dir="ltr"]{
+  unicode-bidi: isolate;
+}
+
+.income-dash .income-kpi-branches{
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+.income-dash .income-kpi-branches li{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 0.5rem;
+  min-width: 0;
+  padding: 0.16rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(135, 75, 238, 0.07);
+  color: #3a3d63;
+}
+.income-dash .income-kpi-branch-name{
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.income-dash .income-kpi-branches .mono{
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .income-dash .income-kpi-rev .dash-kpi-value{ color: #874bee; }
 .income-dash .income-kpi-rev .dash-kpi-hint{
   color: #874bee;
