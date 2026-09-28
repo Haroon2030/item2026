@@ -4183,14 +4183,6 @@ body.theme-navy .page.income-dash .income-kpi-net .income-kpi-formula {
   background: rgba(168, 93, 255, 0.14) !important;
   color: #D4B3FF !important;
 }
-body.theme-navy .page.income-dash .income-kpi .dash-kpi-hint.income-kpi-hint-wrap {
-  background: none !important;
-  border: 0 !important;
-}
-body.theme-navy .page.income-dash .income-kpi-hint-wrap > .income-kpi-seg {
-  background: rgba(168, 93, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
 /* ملخص قائمة الدخل: نفس توهج بطاقة صحة النطاق، لون مستقل لكل مؤشر */
 body.theme-navy .page.income-dash .income-kpi-grid .income-kpi.income-kpi-rev {
   background: linear-gradient(145deg, rgba(88, 28, 135, 0.5), rgba(16, 25, 51, 0.94)) !important;

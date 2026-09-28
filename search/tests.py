@@ -1698,8 +1698,9 @@ class IncomeUnpostedCardTests(TestCase):
                 patch('search.oracle_income.build_income_statement', return_value=statement):
             response = self.client.get(reverse('browse_income'), {'date_from': '2026-09-01', 'date_to': '2026-09-28'})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'مبيعات لم تُرحّل')
-        self.assertContains(response, '800.00')
+        self.assertContains(response, 'تكلفتها التقديرية')
+        self.assertContains(response, 'هامشها التقديري')
+        self.assertContains(response, '660.00')
         self.assertContains(response, '1,000.00')
+        self.assertNotContains(response, 'income-kpi-hint-wrap')
         self.assertNotContains(response, 'فروع لم تُرحّل')
-        self.assertNotContains(response, 'أقدم يوم')

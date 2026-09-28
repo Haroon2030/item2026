@@ -2999,20 +2999,7 @@ body.inv-dash-body .app-backdrop{
   max-width: 100% !important;
 }
 
-.income-dash .income-kpi .dash-kpi-hint.income-kpi-hint-wrap{
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 0.22rem !important;
-  padding: 0 !important;
-  border: 0 !important;
-  background: none !important;
-}
-.income-dash .income-kpi-hint-wrap > .income-kpi-seg{
-  white-space: nowrap;
-  padding: 0.16rem 0.5rem;
-  border-radius: 999px;
-  background: #f3e8ff;
-}
+
 .income-dash .income-kpi-rev .dash-kpi-value{ color: #874bee; }
 .income-dash .income-kpi-rev .dash-kpi-hint{
   color: #874bee;

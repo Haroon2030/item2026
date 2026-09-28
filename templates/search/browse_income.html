@@ -87,18 +87,6 @@
   {% with u=statement.unposted %}
   {% if u.has_data %}
   <section class="income-kpi-grid" aria-label="مبيعات لم تُرحّل — خارج أرقام القائمة">
-    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev" title="مبيعات نقاط بيع لم تُنقل لفواتير المبيعات بعد — غير داخلة في الإيرادات أعلاه">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        </span>
-        مبيعات لم تُرحّل
-      </span>
-      <strong class="dash-kpi-value mono">{{ u.amount_display }}</strong>
-      <span class="dash-kpi-hint income-kpi-hint-wrap">
-        <span class="income-kpi-seg"><span class="mono">{{ u.bills_display }}</span> فاتورة</span>
-        {% if u.returns %}<span class="income-kpi-seg"><span class="mono">{{ u.returns_display }}</span> مرتجع</span>{% endif %}      </span>
-    </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs" title="الكمية × متوسط التكلفة الحالي للصنف في المخزن{% if u.missing_cost_items %} — {{ u.missing_cost_items }} صنف بلا تكلفة{% endif %}">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
