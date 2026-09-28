@@ -9,7 +9,7 @@
 <section class="dash-head" aria-label="قائمة الدخل">
   <div class="dash-head-copy">
     <h2>قائمة الدخل</h2>
-    <p>لوحة إدارية — هيكل الربحية والهوامش والفروع من دفتر الترحيل</p>
+    <p>لوحة إدارية — هيكل الربحية والهوامش والفروع من دفتر الترحيل مع مبيعات نقاط البيع التي لم تُرحّل بعد</p>
   </div>
   {% if statement %}
   <div class="dash-head-actions">
@@ -38,7 +38,11 @@
         الإيرادات
       </span>
       <strong class="dash-kpi-value mono">{{ statement.kpis.revenue_display }}</strong>
-      <span class="dash-kpi-hint">حسابات 3</span>
+      {% if statement.unposted.has_data %}
+        <span class="dash-kpi-hint" title="مبيعات نقاط بيع لم تُرحّل بعد: {{ statement.unposted.amount_display }}">منها غير مرحّل {{ statement.unposted.amount_compact }}</span>
+      {% else %}
+        <span class="dash-kpi-hint">حسابات 3</span>
+      {% endif %}
     </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs">
       <span class="dash-kpi-label">
@@ -48,7 +52,7 @@
         التكلفة
       </span>
       <strong class="dash-kpi-value mono">{{ statement.kpis.cogs_display }}</strong>
-      <span class="dash-kpi-hint">{{ statement.kpis.cogs_pct_display }} من الإيراد</span>
+      <span class="dash-kpi-hint"{% if statement.unposted.has_data %} title="منها تكلفة تقديرية لغير المرحّل: {{ statement.unposted.cost_display }}"{% endif %}>{{ statement.kpis.cogs_pct_display }} من الإيراد</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-exp">
       <span class="dash-kpi-label">
@@ -83,6 +87,28 @@
       </span>
     </article>
   </section>
+  {% if statement.unposted.error %}
+    <div class="income-exp-decision is-high" role="status">
+      <strong>مبيعات غير مرحّلة</strong>
+      <span>{{ statement.unposted.error }}</span>
+    </div>
+  {% elif statement.unposted.has_data %}
+    <div class="income-exp-decision is-medium" role="note">
+      <strong>أرقام نهائية — تشمل مبيعات نقاط بيع لم تُرحّل بعد</strong>
+      <span>
+        مبيعات <span class="mono">{{ statement.unposted.amount_display }}</span>
+        · تكلفة تقديرية <span class="mono">{{ statement.unposted.cost_display }}</span>
+        · <span class="mono">{{ statement.unposted.bills_display }}</span> فاتورة{% if statement.unposted.returns %} و<span class="mono">{{ statement.unposted.returns_display }}</span> مرتجع{% endif %}
+        · أقدم يوم {{ statement.unposted.oldest }}
+        · {% for b in statement.unposted.by_branch|slice:":6" %}{{ b.branch_name }} <span class="mono">{{ b.amount_display }}</span>{% if not forloop.last %}، {% endif %}{% endfor %}{% if statement.unposted.by_branch|length > 6 %}، …{% endif %}
+      </span>
+    </div>
+  {% elif statement.unposted.reason and not statement.posted_only %}
+    <div class="income-exp-decision" role="note">
+      <strong>من الدفتر فقط</strong>
+      <span>مبيعات نقاط البيع غير المرحّلة لا تُضاف مع فلتر المركز ({{ statement.unposted.reason }}).</span>
+    </div>
+  {% endif %}
 {% endif %}
 
 <form method="get" action="{% url 'browse_income' %}" class="income-filter-bar" role="search" aria-label="فلاتر قائمة الدخل">
