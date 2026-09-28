@@ -121,22 +121,6 @@
       <strong class="dash-kpi-value mono">{{ u.margin_pct_display }}</strong>
       <span class="dash-kpi-hint mono">{{ u.gross_display }}</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass income-kpi">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg>
-        </span>
-        فروع لم تُرحّل
-      </span>
-      <strong class="dash-kpi-value mono">{{ u.branch_count }}</strong>
-      {% if u.top_branches %}
-      <ol class="income-kpi-branches" aria-label="أعلى الفروع غير المرحّلة">
-        {% for b in u.top_branches %}
-        <li><span class="income-kpi-branch-name">{{ b.branch_name }}</span><span class="mono" dir="ltr">{{ b.amount_display }}</span></li>
-        {% endfor %}
-      </ol>
-      {% endif %}
-    </article>
   </section>
   {% elif u.error %}
     <div class="income-exp-decision is-high" role="status">

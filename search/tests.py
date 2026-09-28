@@ -1701,6 +1701,5 @@ class IncomeUnpostedCardTests(TestCase):
         self.assertContains(response, 'مبيعات لم تُرحّل')
         self.assertContains(response, '800.00')
         self.assertContains(response, '1,000.00')
-        self.assertContains(response, 'class="income-kpi-branches"')
-        self.assertContains(response, '<span class="income-kpi-branch-name">فرع 7</span>', html=False)
+        self.assertNotContains(response, 'فروع لم تُرحّل')
         self.assertContains(response, 'أقدم يوم <span class="mono" dir="ltr">2026-09-26</span>', html=False)
