@@ -20371,6 +20371,24 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   }
 }
 
+@media (min-width: 1101px) {
+  .below-cost-dash .unpriced-filter {
+    grid-template-columns:
+      minmax(0, 1.1fr)
+      minmax(0, 1.3fr)
+      minmax(0, 1.1fr)
+      minmax(0, 1fr)
+      minmax(0, 1fr)
+      auto;
+  }
+}
+
+@media (max-width: 1100px) {
+  .below-cost-dash .unpriced-filter .up-field-cost {
+    grid-column: 1 / -1;
+  }
+}
+
 /* تسعير أقل من التكلفة — تمييز الفرق */
 .below-cost-dash .up-table td.bc-unit-avg {
   color: #9a3412;

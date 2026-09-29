@@ -33,7 +33,7 @@
         أقل من التكلفة
       </span>
       <strong class="up-kpi-value mono">{{ report.kpis.total_matching|default:0 }}</strong>
-      <small class="up-kpi-hint">كمية &gt; 0 · سعر &lt; متوسط الوحدة · مستوى 1</small>
+      <small class="up-kpi-hint">كمية &gt; 0 · سعر &lt; {{ report.kpis.cost_basis_label }} · مستوى 1</small>
     </article>
     <article class="up-kpi is-shown">
       <span class="up-kpi-label">
@@ -93,6 +93,15 @@
     </select>
   </div>
 
+  <div class="field up-field-cost">
+    <label for="up-cost">المقارنة مع</label>
+    <select id="up-cost" name="cost">
+      {% for code, label in cost_basis_options %}
+        <option value="{{ code }}" {% if code == cost_basis %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
   <div class="field up-field-q">
     <label for="up-q">صنف <span class="up-opt">(اختياري)</span></label>
     <input id="up-q" type="text" name="q" value="{{ item_q }}" placeholder="كود أو باركود أو اسم" autocomplete="off">
@@ -107,7 +116,7 @@
   <section class="up-sheet" aria-label="نتائج التسعير الأقل من التكلفة">
     <div class="up-sheet-head">
       <div class="up-sheet-title">
-        <h3>سعر أقل من متوسط التكلفة — مستوى سعر البيع</h3>
+        <h3>سعر أقل من {{ report.kpis.cost_basis_label }} — مستوى سعر البيع</h3>
         <span class="up-sheet-count">{{ report.rows|length }} / {{ report.kpis.total_matching }} صنف</span>
       </div>
       <div class="up-sheet-actions">
@@ -126,7 +135,8 @@
             <th>الوحدة</th>
             <th>المجموعة</th>
             <th>المخزن</th>
-            <th>متوسط الوحدة</th>
+            <th>متوسط التكلفة العام</th>
+            <th>متوسط تكلفة المخزن</th>
             <th>سعر الوحدة</th>
             <th>الفرق</th>
             <th>نسبة الخسارة %</th>
@@ -142,7 +152,8 @@
               <td>{{ r.unit }}</td>
               <td title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
-              <td class="mono bc-unit-avg" title="متوسط تكلفة وحدة البيع" dir="ltr">{{ r.unit_cost_display }}</td>
+              <td class="mono{% if report.kpis.cost_basis == 'item' %} bc-unit-avg{% endif %}" title="متوسط التكلفة العام لوحدة البيع" dir="ltr">{{ r.item_cost_display }}</td>
+              <td class="mono{% if report.kpis.cost_basis == 'wh' %} bc-unit-avg{% endif %}" title="متوسط تكلفة المخزن لوحدة البيع" dir="ltr">{{ r.wh_cost_display }}</td>
               <td class="mono bc-price" title="سعر وحدة البيع" dir="ltr">{{ r.price_display }}</td>
               <td class="mono bc-gap" dir="ltr">{{ r.gap_display }}</td>
               <td class="mono bc-gap" dir="ltr">{{ r.gap_pct_display }}%</td>

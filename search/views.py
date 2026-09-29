@@ -3489,6 +3489,10 @@ def browse_below_cost_prices(request):
     }
     submitted = str(request.GET.get('run') or '').strip() in ('1', 'true', 'yes') or want_excel
 
+    from .oracle_below_cost_prices import COST_BASIS_LABELS, normalize_cost_basis
+
+    cost_basis = normalize_cost_basis(request.GET.get('cost'))
+
     branches: list[dict] = []
     warehouses: list[dict] = []
     groups: list[dict] = []
@@ -3549,6 +3553,7 @@ def browse_below_cost_prices(request):
                             group_code=selected_group,
                             item_q=item_q,
                             wh_name=wh_name_map.get(selected_warehouse) or '',
+                            cost_basis=cost_basis,
                         )
                 else:
                     from .oracle_below_cost_prices import fetch_below_cost_items
@@ -3558,6 +3563,7 @@ def browse_below_cost_prices(request):
                             warehouse_code=selected_warehouse,
                             group_code=selected_group,
                             item_q=item_q,
+                            cost_basis=cost_basis,
                             limit=50_000,
                             offset=0,
                             with_total=True,
@@ -3630,6 +3636,8 @@ def browse_below_cost_prices(request):
             'error': error,
             'hint': hint,
             'wh_name': wh_name_map.get(selected_warehouse) or '',
+            'cost_basis': cost_basis,
+            'cost_basis_options': list(COST_BASIS_LABELS.items()),
         },
     )
 

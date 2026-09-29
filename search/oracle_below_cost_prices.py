@@ -4,6 +4,11 @@
   السعر 0.24 · متوسط التكلفة 0.18 = I_CWTAVG(الوحدة الرئيسية) × P_SIZE
 المقارنة: I_PRICE < متوسط تكلفة نفس وحدة السعر
 المستوى: 1 (سعر بيع) · كل الوحدات المسعّرة
+
+أساس التكلفة:
+  item — متوسط التكلفة العام للصنف (IAS_ITM_MST.I_CWTAVG)، وإن كان صفراً فمتوسط المخزن
+  wh   — متوسط تكلفة المخزن نفسه (IAS_ITM_WCODE.I_CWTAVG)، وإن كان صفراً فالمتوسط العام
+مثال 741014550 · مخزن 60: سعر 10.75 · عام 11.59 (أقل) · مخزن 9.65 (ليس أقل)
 """
 
 from __future__ import annotations
@@ -24,10 +29,23 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v9"
+_CACHE_VER = "v10"
 _PAGE_SIZE = 500
 _EXCEL_LIMIT = 100000
 _FETCH_LIMIT = 100000
+
+COST_BASIS_ITEM = "item"
+COST_BASIS_WH = "wh"
+COST_BASIS_LABELS = {
+    COST_BASIS_ITEM: "متوسط التكلفة العام",
+    COST_BASIS_WH: "متوسط تكلفة المخزن",
+}
+DEFAULT_COST_BASIS = COST_BASIS_ITEM
+
+
+def normalize_cost_basis(raw: Any) -> str:
+    text = str(raw or "").strip().lower()
+    return text if text in COST_BASIS_LABELS else DEFAULT_COST_BASIS
 
 
 def _f(value: Any, nd: int = 2) -> float:
@@ -47,8 +65,8 @@ def _bind_wh(raw: str):
         return text
 
 
-def _filter_key(*, wh: str, group_code: str, q: str) -> str:
-    return f"purch:below_cost:{_CACHE_VER}:{wh}:{group_code}:{q}"
+def _filter_key(*, wh: str, group_code: str, q: str, basis: str) -> str:
+    return f"purch:below_cost:{_CACHE_VER}:{basis}:{wh}:{group_code}:{q}"
 
 
 def _rows_from_oracle(rows: list[dict], *, wh_code: str) -> list[dict[str, Any]]:
@@ -57,6 +75,8 @@ def _rows_from_oracle(rows: list[dict], *, wh_code: str) -> list[dict[str, Any]]
         price = _f(r.get("I_PRICE"), 2)
         avg = _f(r.get("AVG_COST"), 2)
         unit_cost = _f(r.get("UNIT_COST"), 2)
+        item_cost = _f(r.get("ITEM_COST"), 2)
+        wh_cost = _f(r.get("WH_COST"), 2)
         gap = _f(r.get("GAP"), 2)
         gap_pct = _f(r.get("GAP_PCT"), 2)
         qty = _f(r.get("AVL_QTY"), 3)
@@ -74,6 +94,10 @@ def _rows_from_oracle(rows: list[dict], *, wh_code: str) -> list[dict[str, Any]]
                 "avg_cost_display": f"{avg:.2f}",
                 "unit_cost": unit_cost,
                 "unit_cost_display": f"{unit_cost:.2f}",
+                "item_cost": item_cost,
+                "item_cost_display": f"{item_cost:.2f}",
+                "wh_cost": wh_cost,
+                "wh_cost_display": f"{wh_cost:.2f}",
                 "gap": gap,
                 "gap_display": f"{gap:.2f}",
                 "gap_pct": gap_pct,
@@ -85,14 +109,19 @@ def _rows_from_oracle(rows: list[dict], *, wh_code: str) -> list[dict[str, Any]]
     return out
 
 
-def _base_sql(schema: str, *, group_sql: str, item_sql: str) -> str:
-    """متوسط تكلفة وحدة السعر = I_CWTAVG للرئيسية × P_SIZE (كما في أونكس)."""
-    avg_sql = """
+def _avg_sql(basis: str) -> str:
+    primary, fallback = ("m", "w") if basis == COST_BASIS_ITEM else ("w", "m")
+    return f"""
         CASE
-          WHEN NVL(w.I_CWTAVG, 0) > 0 THEN w.I_CWTAVG
-          ELSE NVL(m.I_CWTAVG, 0)
+          WHEN NVL({primary}.I_CWTAVG, 0) > 0 THEN {primary}.I_CWTAVG
+          ELSE NVL({fallback}.I_CWTAVG, 0)
         END
     """
+
+
+def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
+    """متوسط تكلفة وحدة السعر = I_CWTAVG للرئيسية × P_SIZE (كما في أونكس)."""
+    avg_sql = _avg_sql(basis)
     unit_cost_sql = f"({avg_sql}) * NVL(p.P_SIZE, 1)"
     return f"""
         SELECT /*+ LEADING(p) USE_NL(m d w g) INDEX(p INV_PRC_LEV_NO_INDX) */
@@ -105,6 +134,8 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str) -> str:
           ROUND(p.I_PRICE, 4) AS I_PRICE,
           ROUND(({unit_cost_sql}), 4) AS AVG_COST,
           ROUND(({unit_cost_sql}), 4) AS UNIT_COST,
+          ROUND(NVL(m.I_CWTAVG, 0) * NVL(p.P_SIZE, 1), 4) AS ITEM_COST,
+          ROUND(NVL(w.I_CWTAVG, 0) * NVL(p.P_SIZE, 1), 4) AS WH_COST,
           ROUND(p.I_PRICE - ({unit_cost_sql}), 4) AS GAP,
           ROUND(
             (p.I_PRICE - ({unit_cost_sql}))
@@ -143,6 +174,7 @@ def fetch_below_cost_items(
     warehouse_code: str,
     group_code: str = "",
     item_q: str = "",
+    cost_basis: str = DEFAULT_COST_BASIS,
     limit: int = _PAGE_SIZE,
     offset: int = 0,
     with_total: bool = True,
@@ -155,12 +187,13 @@ def fetch_below_cost_items(
     if not wh:
         raise OracleStockError("اختر مخزناً محدداً قبل العرض.")
 
+    basis = normalize_cost_basis(cost_basis)
     gcode = str(group_code or "").strip()
     q = str(item_q or "").strip()
     lim = max(1, min(int(limit or _PAGE_SIZE), _FETCH_LIMIT))
     off = max(0, int(offset or 0))
 
-    ck = _filter_key(wh=wh, group_code=gcode, q=q)
+    ck = _filter_key(wh=wh, group_code=gcode, q=q, basis=basis)
     page_ck = f"{ck}:p:{off}:{lim}"
     cached = cache.get(page_ck)
     if cached is not None:
@@ -191,7 +224,7 @@ def fetch_below_cost_items(
             )
         """
 
-    inner = _base_sql(schema, group_sql=group_sql, item_sql=item_sql)
+    inner = _base_sql(schema, group_sql=group_sql, item_sql=item_sql, basis=basis)
 
     total_exact = 0
     if with_total:
@@ -231,6 +264,8 @@ def fetch_below_cost_items(
             "has_more": has_more,
             "wh_code": wh,
             "group_code": gcode,
+            "cost_basis": basis,
+            "cost_basis_label": COST_BASIS_LABELS[basis],
         },
         "rows": rows,
         "meta": {"offset": off, "limit": lim},
@@ -245,11 +280,13 @@ def build_below_cost_excel(
     group_code: str = "",
     item_q: str = "",
     wh_name: str = "",
+    cost_basis: str = DEFAULT_COST_BASIS,
 ) -> HttpResponse:
     report = fetch_below_cost_items(
         warehouse_code=warehouse_code,
         group_code=group_code,
         item_q=item_q,
+        cost_basis=cost_basis,
         limit=_EXCEL_LIMIT,
         offset=0,
         with_total=True,
@@ -280,10 +317,12 @@ def build_below_cost_excel(
         "</style></head><body dir=\"rtl\">"
         f"<table><caption>تسعير أقل من التكلفة — مخزن {wh_label}"
         f" · مستوى 1 سعر بيع · كل الوحدات"
+        f" · المقارنة مع {escape(str(kpis.get('cost_basis_label') or ''))}"
         f" · {int(kpis.get('total_matching') or 0)} صف"
         f"</caption><thead><tr>"
         "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
-        "<th>المجموعة</th><th>المخزن</th><th>متوسط الوحدة</th>"
+        "<th>المجموعة</th><th>المخزن</th><th>متوسط التكلفة العام</th>"
+        "<th>متوسط تكلفة المخزن</th>"
         "<th>سعر الوحدة</th><th>الفرق</th><th>نسبة الخسارة %</th><th>الكمية</th>"
         "</tr></thead><tbody>"
     )
@@ -298,7 +337,8 @@ def build_below_cost_excel(
             g_label = f'{r.get("g_code")} — {g_label}'
         buf.write(f'<td class="txt">{escape(g_label)}</td>')
         buf.write(f'<td class="txt">{escape(str(r.get("wh_code") or ""))}</td>')
-        buf.write(f'<td class="num">{float(r.get("unit_cost") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("item_cost") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("wh_cost") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("price") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("gap") or 0):.2f}</td>')
         buf.write(f'<td class="pct">{float(r.get("gap_pct") or 0):.2f}</td>')

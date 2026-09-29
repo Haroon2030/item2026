@@ -664,6 +664,93 @@ class CostAdjustmentsViewTests(TestCase):
         )
 
 
+class BelowCostPricesTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def _oracle_row(self):
+        return {
+            'I_CODE': '741014550',
+            'I_NAME': 'صنف اختبار L',
+            'ITM_UNT': 'حبة',
+            'G_CODE': '29',
+            'G_NAME': 'مجموعة',
+            'W_CODE': 60,
+            'I_PRICE': 10.75,
+            'AVG_COST': 11.5881,
+            'UNIT_COST': 11.5881,
+            'ITEM_COST': 11.5881,
+            'WH_COST': 9.65,
+            'GAP': -0.8381,
+            'GAP_PCT': -7.23,
+            'AVL_QTY': 84,
+        }
+
+    def test_normalize_cost_basis_defaults_to_item_average(self):
+        from search.oracle_below_cost_prices import normalize_cost_basis
+
+        self.assertEqual(normalize_cost_basis(None), 'item')
+        self.assertEqual(normalize_cost_basis(''), 'item')
+        self.assertEqual(normalize_cost_basis('WH'), 'wh')
+        self.assertEqual(normalize_cost_basis("wh' OR 1=1"), 'item')
+
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_item_basis_compares_price_with_item_average_cost(self, fetch_all, _enabled, _schema):
+        from search.oracle_below_cost_prices import fetch_below_cost_items
+
+        fetch_all.side_effect = [[{'CNT': 1}], [self._oracle_row()]]
+        report = fetch_below_cost_items(warehouse_code='60')
+
+        page_sql = fetch_all.call_args_list[1].args[0]
+        self.assertIn('WHEN NVL(m.I_CWTAVG, 0) > 0 THEN m.I_CWTAVG', page_sql)
+        self.assertEqual(report['kpis']['cost_basis'], 'item')
+        self.assertEqual(report['kpis']['total_matching'], 1)
+        row = report['rows'][0]
+        self.assertEqual(row['item_code'], '741014550')
+        self.assertEqual(row['item_cost_display'], '11.59')
+        self.assertEqual(row['wh_cost_display'], '9.65')
+        self.assertEqual(row['price_display'], '10.75')
+
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_wh_basis_keeps_warehouse_cost_first_and_separate_cache(self, fetch_all, _enabled, _schema):
+        from search.oracle_below_cost_prices import fetch_below_cost_items
+
+        fetch_all.side_effect = [[{'CNT': 1}], [self._oracle_row()], [{'CNT': 0}], []]
+        fetch_below_cost_items(warehouse_code='60', cost_basis='item')
+        report = fetch_below_cost_items(warehouse_code='60', cost_basis='wh')
+
+        self.assertEqual(fetch_all.call_count, 4)
+        wh_sql = fetch_all.call_args_list[3].args[0]
+        self.assertIn('WHEN NVL(w.I_CWTAVG, 0) > 0 THEN w.I_CWTAVG', wh_sql)
+        self.assertEqual(report['kpis']['cost_basis'], 'wh')
+        self.assertEqual(report['rows'], [])
+
+    @patch('search.oracle_stock.oracle_enabled', return_value=False)
+    def test_page_shows_cost_basis_selector(self, _enabled):
+        user = get_user_model().objects.create_user(
+            username='below-cost-user',
+            password='StrongPassword123!',
+        )
+        UserProfile.objects.create(
+            user=user,
+            display_name='تسعيرة',
+            phone='0507000011',
+            role_name='مدير تسعيرة',
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse('browse_below_cost_prices'), {'cost': 'wh'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="cost"')
+        self.assertContains(response, '<option value="wh" selected>')
+        self.assertContains(response, 'متوسط التكلفة العام')
+
+
 class TransferRequestCompareTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
