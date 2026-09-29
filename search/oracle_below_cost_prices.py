@@ -316,6 +316,9 @@ def build_below_cost_excel(
     kpis = report.get("kpis") or {}
     wh = str(warehouse_code or "").strip()
     wh_label = escape(str(wh_name or "").strip() or wh)
+    basis = normalize_cost_basis(kpis.get("cost_basis") or cost_basis)
+    basis_label = COST_BASIS_LABELS[basis]
+    other_label = COST_BASIS_LABELS[COST_BASIS_ITEM if basis == COST_BASIS_WH else COST_BASIS_WH]
     buf = io.StringIO()
     buf.write("\ufeff")
     buf.write(
@@ -331,6 +334,7 @@ def build_below_cost_excel(
         "table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
         "th,td{border:1px solid #94a3b8;padding:4px 7px;white-space:nowrap;}"
         "th{background:#d9e2f3;color:#1a2b33;font-weight:700;}"
+        "th.key{background:#fde68a;color:#7c2d12;}"
         "td.txt{mso-number-format:'\\@';}"
         "td.num{mso-number-format:'0\\.00';}"
         "td.pct{mso-number-format:'0\\.00';}"
@@ -342,31 +346,34 @@ def build_below_cost_excel(
         f" · المقارنة مع {escape(str(kpis.get('cost_basis_label') or ''))}"
         f" · {int(kpis.get('total_matching') or 0)} صف"
         f"</caption><thead><tr>"
-        "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
-        "<th>المجموعة</th><th>المخزن</th><th>متوسط تكلفة المخزن</th>"
-        "<th>متوسط التكلفة العام</th>"
-        "<th>السعر شامل الضريبة</th><th>الضريبة %</th><th>السعر قبل الضريبة</th>"
-        "<th>الفرق</th><th>نسبة الخسارة %</th><th>الكمية</th>"
+        "<th>#</th><th>رقم الصنف</th><th>اسم الصنف</th><th>الوحدة</th><th>المخزن</th>"
+        f'<th class="key">{escape(basis_label)}</th>'
+        '<th class="key">سعر البيع قبل الضريبة</th>'
+        '<th class="key">الفرق</th><th class="key">الخسارة %</th>'
+        "<th>السعر شامل الضريبة</th><th>الضريبة %</th>"
+        f"<th>{escape(other_label)}</th>"
+        "<th>المجموعة</th><th>الكمية</th>"
         "</tr></thead><tbody>"
     )
+    other_key = "item_cost" if basis == COST_BASIS_WH else "wh_cost"
     for i, r in enumerate(report.get("rows") or [], start=1):
         buf.write("<tr>")
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f'<td class="txt">{escape(str(r.get("item_code") or ""))}</td>')
         buf.write(f'<td class="txt">{escape(str(r.get("item_name") or ""))}</td>')
         buf.write(f'<td class="txt">{escape(str(r.get("unit") or ""))}</td>')
+        buf.write(f'<td class="txt">{escape(str(r.get("wh_code") or ""))}</td>')
+        buf.write(f'<td class="num">{float(r.get("unit_cost") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("net_price") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("gap") or 0):.2f}</td>')
+        buf.write(f'<td class="pct">{float(r.get("gap_pct") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("price") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("vat_pct") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get(other_key) or 0):.2f}</td>')
         g_label = str(r.get("g_name") or "").strip()
         if r.get("g_code"):
             g_label = f'{r.get("g_code")} — {g_label}'
         buf.write(f'<td class="txt">{escape(g_label)}</td>')
-        buf.write(f'<td class="txt">{escape(str(r.get("wh_code") or ""))}</td>')
-        buf.write(f'<td class="num">{float(r.get("wh_cost") or 0):.2f}</td>')
-        buf.write(f'<td class="num">{float(r.get("item_cost") or 0):.2f}</td>')
-        buf.write(f'<td class="num">{float(r.get("price") or 0):.2f}</td>')
-        buf.write(f'<td class="num">{float(r.get("vat_pct") or 0):.2f}</td>')
-        buf.write(f'<td class="num">{float(r.get("net_price") or 0):.2f}</td>')
-        buf.write(f'<td class="num">{float(r.get("gap") or 0):.2f}</td>')
-        buf.write(f'<td class="pct">{float(r.get("gap_pct") or 0):.2f}</td>')
         buf.write(f'<td class="qty">{float(r.get("qty") or 0):.3f}</td>')
         buf.write("</tr>")
     buf.write("</tbody></table></body></html>")

@@ -20416,6 +20416,57 @@ table tbody tr.is-selected .wh-out-td-status.is-late {
   text-align: left;
 }
 
+.below-cost-dash .bc-table td.bc-unit-avg,
+.below-cost-dash .bc-table td.bc-price,
+.below-cost-dash .bc-table td.bc-gap {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.below-cost-dash .bc-table th.bc-th-key {
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 800;
+}
+
+/* Physical sides: the number cells are direction:ltr inside an RTL table. */
+.below-cost-dash .bc-table .bc-key-start {
+  border-right: 2px solid #f59e0b;
+}
+
+.below-cost-dash .bc-table .bc-key-end {
+  border-left: 2px solid #f59e0b;
+}
+
+.below-cost-dash .bc-table td.bc-code {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.below-cost-dash .bc-table td.bc-unit {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.below-cost-dash .bc-table td.bc-wh {
+  white-space: nowrap;
+}
+
+.below-cost-dash .bc-table .bc-wh-code {
+  font-weight: 800;
+}
+
+.below-cost-dash .bc-table .bc-wh-name {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.below-cost-dash .bc-table td.bc-muted {
+  opacity: 0.7;
+  font-weight: 600;
+}
+
 /* —— اسم مشابه · باركود مختلف —— */
 .name-barcode-dash .up-table.nbc-table {
   width: max-content;

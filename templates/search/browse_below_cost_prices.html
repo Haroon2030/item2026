@@ -126,21 +126,23 @@
     </div>
 
     <div class="table-wrap up-scroll" tabindex="0" aria-label="جدول التسعير الأقل من التكلفة">
-      <table class="up-table" aria-label="أصناف مسعّرة بأقل من التكلفة">
+      <table class="up-table bc-table" aria-label="أصناف مسعّرة بأقل من التكلفة">
         <thead>
           <tr>
             <th>#</th>
-            <th>الرقم</th>
+            <th class="bc-th-id">رقم الصنف</th>
             <th>اسم الصنف</th>
-            <th>الوحدة</th>
-            <th>المجموعة</th>
-            <th>المخزن</th>
-            <th>متوسط تكلفة المخزن</th>
-            <th>متوسط التكلفة العام</th>
+            <th class="bc-th-id">الوحدة</th>
+            <th class="bc-th-id">المخزن</th>
+            <th class="bc-th-key bc-key-start" title="التكلفة الفعلية لوحدة البيع — أساس المقارنة">
+              {% if report.kpis.cost_basis == 'wh' %}متوسط التكلفة الفعلي (المخزن){% else %}{{ report.kpis.cost_basis_label }}{% endif %}
+            </th>
+            <th class="bc-th-key" title="سعر البيع بعد خصم الضريبة">سعر البيع قبل الضريبة</th>
+            <th class="bc-th-key" title="سعر البيع قبل الضريبة − متوسط التكلفة">الفرق</th>
+            <th class="bc-th-key bc-key-end">الخسارة %</th>
             <th>السعر شامل الضريبة</th>
-            <th>السعر قبل الضريبة</th>
-            <th>الفرق</th>
-            <th>نسبة الخسارة %</th>
+            <th>{% if report.kpis.cost_basis == 'wh' %}متوسط التكلفة العام{% else %}متوسط تكلفة المخزن{% endif %}</th>
+            <th>المجموعة</th>
             <th>الكمية</th>
           </tr>
         </thead>
@@ -148,17 +150,17 @@
           {% for r in report.rows %}
             <tr>
               <td class="mono">{{ forloop.counter }}</td>
-              <td class="mono">{{ r.item_code }}</td>
+              <td class="mono bc-code">{{ r.item_code }}</td>
               <td title="{{ r.item_name }}">{{ r.item_name }}</td>
-              <td>{{ r.unit }}</td>
-              <td title="{{ r.g_code }}">{{ r.g_name }}</td>
-              <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
-              <td class="mono{% if report.kpis.cost_basis == 'wh' %} bc-unit-avg{% endif %}" title="متوسط تكلفة المخزن لوحدة البيع" dir="ltr">{{ r.wh_cost_display }}</td>
-              <td class="mono{% if report.kpis.cost_basis == 'item' %} bc-unit-avg{% endif %}" title="متوسط التكلفة العام لوحدة البيع" dir="ltr">{{ r.item_cost_display }}</td>
-              <td class="mono" title="سعر وحدة البيع شامل الضريبة" dir="ltr">{{ r.price_display }}</td>
-              <td class="mono bc-price" title="بعد خصم ضريبة {{ r.vat_pct_display }}%" dir="ltr">{{ r.net_price_display }}</td>
+              <td class="bc-unit">{{ r.unit }}</td>
+              <td class="bc-wh" title="{{ r.wh_name }}"><span class="mono bc-wh-code">{{ r.wh_code }}</span>{% if r.wh_name and r.wh_name != '—' %}<small class="bc-wh-name">{{ r.wh_name }}</small>{% endif %}</td>
+              <td class="mono bc-unit-avg bc-key-start" title="متوسط التكلفة لوحدة البيع" dir="ltr">{{ r.unit_cost_display }}</td>
+              <td class="mono bc-price" title="{{ r.price_display }} شامل ضريبة {{ r.vat_pct_display }}%" dir="ltr">{{ r.net_price_display }}</td>
               <td class="mono bc-gap" dir="ltr">{{ r.gap_display }}</td>
-              <td class="mono bc-gap" dir="ltr">{{ r.gap_pct_display }}%</td>
+              <td class="mono bc-gap bc-key-end" dir="ltr">{{ r.gap_pct_display }}%</td>
+              <td class="mono bc-muted" title="ضريبة {{ r.vat_pct_display }}%" dir="ltr">{{ r.price_display }}</td>
+              <td class="mono bc-muted" dir="ltr">{% if report.kpis.cost_basis == 'wh' %}{{ r.item_cost_display }}{% else %}{{ r.wh_cost_display }}{% endif %}</td>
+              <td title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono" dir="ltr">{{ r.qty_display }}</td>
             </tr>
           {% endfor %}

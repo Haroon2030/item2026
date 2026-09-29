@@ -786,6 +786,30 @@ class BelowCostPricesTests(TestCase):
         self.assertContains(response, '<option value="wh" selected>')
         self.assertContains(response, 'متوسط التكلفة العام')
 
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_table_groups_warehouse_cost_net_price_and_gap(self, fetch_all, _enabled, _schema):
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+
+        from search.oracle_below_cost_prices import fetch_below_cost_items
+
+        fetch_all.side_effect = [[{'CNT': 1}], [self._oracle_row()]]
+        report = fetch_below_cost_items(warehouse_code='60')
+        report['rows'][0]['wh_name'] = 'مستودع الرئيسي'
+        request = RequestFactory().get('/below-cost/', {'warehouse': '60', 'run': '1'})
+        request.user = get_user_model().objects.create_user(username='bc-render', password='StrongPassword123!')
+        html = render_to_string('search/browse_below_cost_prices.html', {'report': report}, request=request)
+
+        headers = ['رقم الصنف', 'الوحدة', 'المخزن', 'متوسط التكلفة الفعلي (المخزن)',
+                   'سعر البيع قبل الضريبة', 'الفرق', 'الخسارة %']
+        positions = [html.index(h, html.index('bc-table')) for h in headers]
+        self.assertEqual(positions, sorted(positions))
+        cells = ['741014550', 'مستودع الرئيسي', '>9.65<', '>9.35<', '>-0.30<', '>-3.13%<']
+        positions = [html.index(c, html.index('<tbody>')) for c in cells]
+        self.assertEqual(positions, sorted(positions))
+
 
 class TransferRequestCompareTests(TestCase):
     def setUp(self):

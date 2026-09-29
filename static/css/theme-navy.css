@@ -5480,6 +5480,43 @@ body.theme-navy .page.below-cost-dash .up-table tbody tr.is-selected > td.bc-gap
   background-color: #1B3A6B !important;
 }
 
+body.theme-navy .page.below-cost-dash .bc-table thead th.bc-th-key {
+  background: #1E2A12 !important;
+  background-color: #1E2A12 !important;
+  color: #FFD37A !important;
+  font-size: 0.82rem !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table thead th.bc-th-id {
+  color: #CFE0FF !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table .bc-key-start {
+  border-right: 2px solid #FFB21E !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table .bc-key-end {
+  border-left: 2px solid #FFB21E !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table td.bc-unit-avg,
+body.theme-navy .page.below-cost-dash .bc-table td.bc-price,
+body.theme-navy .page.below-cost-dash .bc-table td.bc-gap {
+  font-size: 1.02rem !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table td.bc-code,
+body.theme-navy .page.below-cost-dash .bc-table .bc-wh-code {
+  color: #FFFFFF !important;
+  font-weight: 800 !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table td.bc-unit {
+  color: #CFE0FF !important;
+  font-weight: 700 !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table .bc-wh-name {
+  color: #8BA3CC !important;
+}
+body.theme-navy .page.below-cost-dash .bc-table td.bc-muted {
+  color: #7F93B8 !important;
+  font-weight: 600 !important;
+}
+
 /* ===== Screen locks: below-cost KPI card match siblings ===== */
 /* بطاقة is-match مثل باقي up-kpi على navy (لا خلفية كهرمانية فاتحة) */
 body.theme-navy .page.below-cost-dash .up-kpi.is-match,
