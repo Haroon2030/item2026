@@ -679,22 +679,58 @@ class BelowCostPricesTests(TestCase):
             'G_NAME': 'مجموعة',
             'W_CODE': 60,
             'I_PRICE': 10.75,
-            'AVG_COST': 11.5881,
-            'UNIT_COST': 11.5881,
+            'VAT_PCT': 15,
+            'NET_PRICE': 9.3478,
+            'AVG_COST': 9.65,
+            'UNIT_COST': 9.65,
             'ITEM_COST': 11.5881,
             'WH_COST': 9.65,
-            'GAP': -0.8381,
-            'GAP_PCT': -7.23,
+            'GAP': -0.3022,
+            'GAP_PCT': -3.13,
             'AVL_QTY': 84,
         }
 
-    def test_normalize_cost_basis_defaults_to_item_average(self):
+    def test_normalize_cost_basis_defaults_to_warehouse_average(self):
         from search.oracle_below_cost_prices import normalize_cost_basis
 
-        self.assertEqual(normalize_cost_basis(None), 'item')
-        self.assertEqual(normalize_cost_basis(''), 'item')
-        self.assertEqual(normalize_cost_basis('WH'), 'wh')
-        self.assertEqual(normalize_cost_basis("wh' OR 1=1"), 'item')
+        self.assertEqual(normalize_cost_basis(None), 'wh')
+        self.assertEqual(normalize_cost_basis(''), 'wh')
+        self.assertEqual(normalize_cost_basis('ITEM'), 'item')
+        self.assertEqual(normalize_cost_basis("item' OR 1=1"), 'wh')
+
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_default_compares_price_with_warehouse_average_cost(self, fetch_all, _enabled, _schema):
+        from search.oracle_below_cost_prices import fetch_below_cost_items
+
+        fetch_all.side_effect = [[{'CNT': 1}], [self._oracle_row()]]
+        report = fetch_below_cost_items(warehouse_code='60')
+
+        page_sql, page_params = fetch_all.call_args_list[1].args
+        self.assertIn('WHEN NVL(w.I_CWTAVG, 0) > 0 THEN w.I_CWTAVG', page_sql)
+        self.assertEqual(report['kpis']['cost_basis'], 'wh')
+        self.assertEqual(report['kpis']['cost_basis_label'], 'متوسط تكلفة المخزن')
+        row = report['rows'][0]
+        self.assertEqual(row['price_display'], '10.75')
+        self.assertEqual(row['net_price_display'], '9.35')
+        self.assertEqual(row['wh_cost_display'], '9.65')
+        self.assertEqual(row['gap_display'], '-0.30')
+
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_compares_price_net_of_vat_with_cost(self, fetch_all, _enabled, _schema):
+        from search.oracle_below_cost_prices import fetch_below_cost_items
+
+        fetch_all.side_effect = [[{'CNT': 0}], []]
+        fetch_below_cost_items(warehouse_code='60')
+
+        page_sql, page_params = fetch_all.call_args_list[1].args
+        self.assertIn('(p.I_PRICE / (1 + (', page_sql)
+        self.assertIn('WHEN NVL(m.VAT_TYPE, 0) = 1 THEN :dflt_vat', page_sql)
+        self.assertNotIn('AND p.I_PRICE < (', page_sql)
+        self.assertEqual(page_params['dflt_vat'], 15.0)
 
     @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
     @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
@@ -703,7 +739,7 @@ class BelowCostPricesTests(TestCase):
         from search.oracle_below_cost_prices import fetch_below_cost_items
 
         fetch_all.side_effect = [[{'CNT': 1}], [self._oracle_row()]]
-        report = fetch_below_cost_items(warehouse_code='60')
+        report = fetch_below_cost_items(warehouse_code='60', cost_basis='item')
 
         page_sql = fetch_all.call_args_list[1].args[0]
         self.assertIn('WHEN NVL(m.I_CWTAVG, 0) > 0 THEN m.I_CWTAVG', page_sql)
@@ -744,7 +780,7 @@ class BelowCostPricesTests(TestCase):
             role_name='مدير تسعيرة',
         )
         self.client.force_login(user)
-        response = self.client.get(reverse('browse_below_cost_prices'), {'cost': 'wh'})
+        response = self.client.get(reverse('browse_below_cost_prices'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="cost"')
         self.assertContains(response, '<option value="wh" selected>')

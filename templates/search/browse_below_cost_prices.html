@@ -8,7 +8,7 @@
 <section class="dash-head" aria-label="تسعير أقل من التكلفة">
   <div class="dash-head-copy">
     <h2>تسعير أقل من التكلفة</h2>
-    <p>أصناف برصيد كمية وسعرها أقل من متوسط تكلفتها لنفس الوحدة — كأونكس · مستوى 1 سعر بيع</p>
+    <p>أصناف برصيد كمية وسعرها قبل الضريبة أقل من متوسط تكلفتها لنفس الوحدة — مستوى 1 سعر بيع</p>
   </div>
 </section>
 
@@ -33,7 +33,7 @@
         أقل من التكلفة
       </span>
       <strong class="up-kpi-value mono">{{ report.kpis.total_matching|default:0 }}</strong>
-      <small class="up-kpi-hint">كمية &gt; 0 · سعر &lt; {{ report.kpis.cost_basis_label }} · مستوى 1</small>
+      <small class="up-kpi-hint">كمية &gt; 0 · السعر قبل الضريبة &lt; {{ report.kpis.cost_basis_label }} · مستوى 1</small>
     </article>
     <article class="up-kpi is-shown">
       <span class="up-kpi-label">
@@ -116,7 +116,7 @@
   <section class="up-sheet" aria-label="نتائج التسعير الأقل من التكلفة">
     <div class="up-sheet-head">
       <div class="up-sheet-title">
-        <h3>سعر أقل من {{ report.kpis.cost_basis_label }} — مستوى سعر البيع</h3>
+        <h3>السعر قبل الضريبة أقل من {{ report.kpis.cost_basis_label }} — مستوى سعر البيع</h3>
         <span class="up-sheet-count">{{ report.rows|length }} / {{ report.kpis.total_matching }} صنف</span>
       </div>
       <div class="up-sheet-actions">
@@ -135,9 +135,10 @@
             <th>الوحدة</th>
             <th>المجموعة</th>
             <th>المخزن</th>
-            <th>متوسط التكلفة العام</th>
             <th>متوسط تكلفة المخزن</th>
-            <th>سعر الوحدة</th>
+            <th>متوسط التكلفة العام</th>
+            <th>السعر شامل الضريبة</th>
+            <th>السعر قبل الضريبة</th>
             <th>الفرق</th>
             <th>نسبة الخسارة %</th>
             <th>الكمية</th>
@@ -152,9 +153,10 @@
               <td>{{ r.unit }}</td>
               <td title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono" title="{{ r.wh_name }}">{{ r.wh_code }}</td>
-              <td class="mono{% if report.kpis.cost_basis == 'item' %} bc-unit-avg{% endif %}" title="متوسط التكلفة العام لوحدة البيع" dir="ltr">{{ r.item_cost_display }}</td>
               <td class="mono{% if report.kpis.cost_basis == 'wh' %} bc-unit-avg{% endif %}" title="متوسط تكلفة المخزن لوحدة البيع" dir="ltr">{{ r.wh_cost_display }}</td>
-              <td class="mono bc-price" title="سعر وحدة البيع" dir="ltr">{{ r.price_display }}</td>
+              <td class="mono{% if report.kpis.cost_basis == 'item' %} bc-unit-avg{% endif %}" title="متوسط التكلفة العام لوحدة البيع" dir="ltr">{{ r.item_cost_display }}</td>
+              <td class="mono" title="سعر وحدة البيع شامل الضريبة" dir="ltr">{{ r.price_display }}</td>
+              <td class="mono bc-price" title="بعد خصم ضريبة {{ r.vat_pct_display }}%" dir="ltr">{{ r.net_price_display }}</td>
               <td class="mono bc-gap" dir="ltr">{{ r.gap_display }}</td>
               <td class="mono bc-gap" dir="ltr">{{ r.gap_pct_display }}%</td>
               <td class="mono" dir="ltr">{{ r.qty_display }}</td>

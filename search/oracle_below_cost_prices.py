@@ -5,10 +5,13 @@
 المقارنة: I_PRICE < متوسط تكلفة نفس وحدة السعر
 المستوى: 1 (سعر بيع) · كل الوحدات المسعّرة
 
-أساس التكلفة:
-  item — متوسط التكلفة العام للصنف (IAS_ITM_MST.I_CWTAVG)، وإن كان صفراً فمتوسط المخزن
+سعر البيع شامل الضريبة والتكلفة بدونها، فالمقارنة على صافي السعر:
+  صافي السعر = I_PRICE / (1 + VAT/100) — نفس قاعدة الضريبة في حد ربح التسعير
+
+أساس التكلفة (الافتراضي wh):
   wh   — متوسط تكلفة المخزن نفسه (IAS_ITM_WCODE.I_CWTAVG)، وإن كان صفراً فالمتوسط العام
-مثال 741014550 · مخزن 60: سعر 10.75 · عام 11.59 (أقل) · مخزن 9.65 (ليس أقل)
+  item — متوسط التكلفة العام للصنف (IAS_ITM_MST.I_CWTAVG)، وإن كان صفراً فمتوسط المخزن
+مثال 741014550 · مخزن 60: سعر 10.75 شامل 15% → صافي 9.35 < متوسط المخزن 9.65
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from django.core.cache import cache
 from django.http import HttpResponse
 from django.utils.html import escape
 
+from .oracle_low_margin_prices import _DEFAULT_VAT_PCT
 from .oracle_stock import (
     OracleStockError,
     _bind_gcode,
@@ -29,7 +33,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v10"
+_CACHE_VER = "v11"
 _PAGE_SIZE = 500
 _EXCEL_LIMIT = 100000
 _FETCH_LIMIT = 100000
@@ -37,10 +41,10 @@ _FETCH_LIMIT = 100000
 COST_BASIS_ITEM = "item"
 COST_BASIS_WH = "wh"
 COST_BASIS_LABELS = {
-    COST_BASIS_ITEM: "متوسط التكلفة العام",
     COST_BASIS_WH: "متوسط تكلفة المخزن",
+    COST_BASIS_ITEM: "متوسط التكلفة العام",
 }
-DEFAULT_COST_BASIS = COST_BASIS_ITEM
+DEFAULT_COST_BASIS = COST_BASIS_WH
 
 
 def normalize_cost_basis(raw: Any) -> str:
@@ -73,6 +77,8 @@ def _rows_from_oracle(rows: list[dict], *, wh_code: str) -> list[dict[str, Any]]
     out: list[dict[str, Any]] = []
     for r in rows:
         price = _f(r.get("I_PRICE"), 2)
+        net_price = _f(r.get("NET_PRICE"), 2)
+        vat_pct = _f(r.get("VAT_PCT"), 2)
         avg = _f(r.get("AVG_COST"), 2)
         unit_cost = _f(r.get("UNIT_COST"), 2)
         item_cost = _f(r.get("ITEM_COST"), 2)
@@ -90,6 +96,10 @@ def _rows_from_oracle(rows: list[dict], *, wh_code: str) -> list[dict[str, Any]]
                 "wh_code": str(r.get("W_CODE") or wh_code).strip(),
                 "price": price,
                 "price_display": f"{price:.2f}",
+                "net_price": net_price,
+                "net_price_display": f"{net_price:.2f}",
+                "vat_pct": vat_pct,
+                "vat_pct_display": f"{vat_pct:g}",
                 "avg_cost": avg,
                 "avg_cost_display": f"{avg:.2f}",
                 "unit_cost": unit_cost,
@@ -119,10 +129,20 @@ def _avg_sql(basis: str) -> str:
     """
 
 
+_VAT_SQL = """
+    CASE
+      WHEN NVL(m.VAT_PER, 0) > 0 THEN m.VAT_PER
+      WHEN NVL(m.VAT_TYPE, 0) = 1 THEN :dflt_vat
+      ELSE 0
+    END
+"""
+
+
 def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
     """متوسط تكلفة وحدة السعر = I_CWTAVG للرئيسية × P_SIZE (كما في أونكس)."""
     avg_sql = _avg_sql(basis)
     unit_cost_sql = f"({avg_sql}) * NVL(p.P_SIZE, 1)"
+    net_price_sql = f"(p.I_PRICE / (1 + ({_VAT_SQL}) / 100))"
     return f"""
         SELECT /*+ LEADING(p) USE_NL(m d w g) INDEX(p INV_PRC_LEV_NO_INDX) */
           p.I_CODE,
@@ -132,13 +152,15 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
           NVL(g.G_A_NAME, g.G_E_NAME) AS G_NAME,
           p.W_CODE,
           ROUND(p.I_PRICE, 4) AS I_PRICE,
+          ({_VAT_SQL}) AS VAT_PCT,
+          ROUND({net_price_sql}, 4) AS NET_PRICE,
           ROUND(({unit_cost_sql}), 4) AS AVG_COST,
           ROUND(({unit_cost_sql}), 4) AS UNIT_COST,
           ROUND(NVL(m.I_CWTAVG, 0) * NVL(p.P_SIZE, 1), 4) AS ITEM_COST,
           ROUND(NVL(w.I_CWTAVG, 0) * NVL(p.P_SIZE, 1), 4) AS WH_COST,
-          ROUND(p.I_PRICE - ({unit_cost_sql}), 4) AS GAP,
+          ROUND({net_price_sql} - ({unit_cost_sql}), 4) AS GAP,
           ROUND(
-            (p.I_PRICE - ({unit_cost_sql}))
+            ({net_price_sql} - ({unit_cost_sql}))
             / NULLIF(({unit_cost_sql}), 0) * 100
           , 2) AS GAP_PCT,
           ROUND(
@@ -162,7 +184,7 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
           AND p.I_PRICE > 0
           AND NVL(p.P_SIZE, 0) > 0
           AND NVL(({avg_sql}), 0) > 0
-          AND p.I_PRICE < ({unit_cost_sql})
+          AND {net_price_sql} < ({unit_cost_sql})
           AND (m.INACTIVE IS NULL OR m.INACTIVE = 0)
           {group_sql}
           {item_sql}
@@ -200,7 +222,7 @@ def fetch_below_cost_items(
         return cached
 
     schema = _schema()
-    params: dict[str, Any] = {"wh": _bind_wh(wh)}
+    params: dict[str, Any] = {"wh": _bind_wh(wh), "dflt_vat": _DEFAULT_VAT_PCT}
 
     group_sql = ""
     if gcode:
@@ -321,9 +343,10 @@ def build_below_cost_excel(
         f" · {int(kpis.get('total_matching') or 0)} صف"
         f"</caption><thead><tr>"
         "<th>#</th><th>الرقم</th><th>اسم الصنف</th><th>الوحدة</th>"
-        "<th>المجموعة</th><th>المخزن</th><th>متوسط التكلفة العام</th>"
-        "<th>متوسط تكلفة المخزن</th>"
-        "<th>سعر الوحدة</th><th>الفرق</th><th>نسبة الخسارة %</th><th>الكمية</th>"
+        "<th>المجموعة</th><th>المخزن</th><th>متوسط تكلفة المخزن</th>"
+        "<th>متوسط التكلفة العام</th>"
+        "<th>السعر شامل الضريبة</th><th>الضريبة %</th><th>السعر قبل الضريبة</th>"
+        "<th>الفرق</th><th>نسبة الخسارة %</th><th>الكمية</th>"
         "</tr></thead><tbody>"
     )
     for i, r in enumerate(report.get("rows") or [], start=1):
@@ -337,9 +360,11 @@ def build_below_cost_excel(
             g_label = f'{r.get("g_code")} — {g_label}'
         buf.write(f'<td class="txt">{escape(g_label)}</td>')
         buf.write(f'<td class="txt">{escape(str(r.get("wh_code") or ""))}</td>')
-        buf.write(f'<td class="num">{float(r.get("item_cost") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("wh_cost") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("item_cost") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("price") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("vat_pct") or 0):.2f}</td>')
+        buf.write(f'<td class="num">{float(r.get("net_price") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("gap") or 0):.2f}</td>')
         buf.write(f'<td class="pct">{float(r.get("gap_pct") or 0):.2f}</td>')
         buf.write(f'<td class="qty">{float(r.get("qty") or 0):.3f}</td>')
