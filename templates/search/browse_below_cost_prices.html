@@ -141,7 +141,6 @@
             <th class="bc-th-key" title="سعر البيع قبل الضريبة − متوسط التكلفة">الفرق</th>
             <th class="bc-th-key bc-key-end">الخسارة %</th>
             <th>السعر شامل الضريبة</th>
-            <th>{% if report.kpis.cost_basis == 'wh' %}متوسط التكلفة العام{% else %}متوسط تكلفة المخزن{% endif %}</th>
             <th>المجموعة</th>
             <th>الكمية</th>
           </tr>
@@ -159,7 +158,6 @@
               <td class="mono bc-gap" dir="ltr">{{ r.gap_display }}</td>
               <td class="mono bc-gap bc-key-end" dir="ltr">{{ r.gap_pct_display }}%</td>
               <td class="mono bc-muted" title="ضريبة {{ r.vat_pct_display }}%" dir="ltr">{{ r.price_display }}</td>
-              <td class="mono bc-muted" dir="ltr">{% if report.kpis.cost_basis == 'wh' %}{{ r.item_cost_display }}{% else %}{{ r.wh_cost_display }}{% endif %}</td>
               <td title="{{ r.g_code }}">{{ r.g_name }}</td>
               <td class="mono" dir="ltr">{{ r.qty_display }}</td>
             </tr>

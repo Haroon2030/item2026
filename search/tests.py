@@ -728,9 +728,42 @@ class BelowCostPricesTests(TestCase):
 
         page_sql, page_params = fetch_all.call_args_list[1].args
         self.assertIn('(p.I_PRICE / (1 + (', page_sql)
-        self.assertIn('WHEN NVL(m.VAT_TYPE, 0) = 1 THEN :dflt_vat', page_sql)
+        self.assertIn('WHEN m.VAT_TYPE = 1 THEN :dflt_vat', page_sql)
         self.assertNotIn('AND p.I_PRICE < (', page_sql)
         self.assertEqual(page_params['dflt_vat'], 15.0)
+
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_excludes_inactive_units_and_service_group(self, fetch_all, _enabled, _schema):
+        from search.oracle_below_cost_prices import fetch_below_cost_items
+
+        fetch_all.side_effect = [[{'CNT': 0}], []]
+        fetch_below_cost_items(warehouse_code='60', group_code='5')
+
+        for sql, params in (c.args for c in fetch_all.call_args_list):
+            flat = ' '.join(sql.split())
+            self.assertIn('pu.ITM_UNT = p.ITM_UNT AND (pu.INACTIVE IS NULL OR pu.INACTIVE = 0)', flat)
+            self.assertIn('AND (m.G_CODE IS NULL OR m.G_CODE <> :svc_gcode)', flat)
+            self.assertEqual(params['svc_gcode'], 28)
+
+    @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
+    @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
+    @patch('search.oracle_below_cost_prices._fetch_all')
+    def test_untaxed_item_type_compares_price_directly(self, fetch_all, _enabled, _schema):
+        from search.oracle_below_cost_prices import _VAT_SQL, fetch_below_cost_items
+
+        vat_sql = ' '.join(_VAT_SQL.split())
+        self.assertNotIn('WHEN NVL(m.VAT_PER, 0) > 0 THEN m.VAT_PER', vat_sql)
+        self.assertIn('WHEN m.VAT_TYPE = 1 AND m.VAT_PER > 0 THEN m.VAT_PER', vat_sql)
+        self.assertTrue(vat_sql.endswith('ELSE 0 END'))
+
+        row = dict(self._oracle_row(), VAT_PCT=0, NET_PRICE=10.75, GAP=-0.5, GAP_PCT=-4.44, UNIT_COST=11.25, AVG_COST=11.25)
+        fetch_all.side_effect = [[{'CNT': 1}], [row]]
+        report = fetch_below_cost_items(warehouse_code='60')
+        r = report['rows'][0]
+        self.assertEqual(r['vat_pct_display'], '0')
+        self.assertEqual(r['net_price_display'], r['price_display'])
 
     @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
     @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
@@ -809,6 +842,9 @@ class BelowCostPricesTests(TestCase):
         cells = ['741014550', 'مستودع الرئيسي', '>9.65<', '>9.35<', '>-0.30<', '>-3.13%<']
         positions = [html.index(c, html.index('<tbody>')) for c in cells]
         self.assertEqual(positions, sorted(positions))
+        table = html[html.index('bc-table'):]
+        self.assertNotIn('متوسط التكلفة العام', table)
+        self.assertNotIn('11.59', table)
 
 
 class TransferRequestCompareTests(TestCase):

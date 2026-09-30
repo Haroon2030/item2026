@@ -6,7 +6,9 @@
 المستوى: 1 (سعر بيع) · كل الوحدات المسعّرة
 
 سعر البيع شامل الضريبة والتكلفة بدونها، فالمقارنة على صافي السعر:
-  صافي السعر = I_PRICE / (1 + VAT/100) — نفس قاعدة الضريبة في حد ربح التسعير
+  صافي السعر = I_PRICE / (1 + VAT/100)
+  VAT = 15% للصنف الخاضع (VAT_TYPE = 1) · صفر لغيره فيُقارن سعره مباشرة
+يُستبعد: الوحدة الموقوفة (IAS_ITM_DTL.INACTIVE) · أصناف المجموعة 28 الخدمية
 
 أساس التكلفة (الافتراضي wh):
   wh   — متوسط تكلفة المخزن نفسه (IAS_ITM_WCODE.I_CWTAVG)، وإن كان صفراً فالمتوسط العام
@@ -33,7 +35,9 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v11"
+_CACHE_VER = "v13"
+# مجموعة 28 = الخدمية: ليست بضاعة بتكلفة فلا تدخل التقرير.
+_SERVICE_GROUP_CODE = 28
 _PAGE_SIZE = 500
 _EXCEL_LIMIT = 100000
 _FETCH_LIMIT = 100000
@@ -129,10 +133,12 @@ def _avg_sql(basis: str) -> str:
     """
 
 
+# VAT_TYPE decides, not VAT_PER: POS lines charge 15% on type 1 even when
+# VAT_PER = 0, and 0% on type 2 even when VAT_PER = 15.
 _VAT_SQL = """
     CASE
-      WHEN NVL(m.VAT_PER, 0) > 0 THEN m.VAT_PER
-      WHEN NVL(m.VAT_TYPE, 0) = 1 THEN :dflt_vat
+      WHEN m.VAT_TYPE = 1 AND m.VAT_PER > 0 THEN m.VAT_PER
+      WHEN m.VAT_TYPE = 1 THEN :dflt_vat
       ELSE 0
     END
 """
@@ -144,7 +150,7 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
     unit_cost_sql = f"({avg_sql}) * NVL(p.P_SIZE, 1)"
     net_price_sql = f"(p.I_PRICE / (1 + ({_VAT_SQL}) / 100))"
     return f"""
-        SELECT /*+ LEADING(p) USE_NL(m d w g) INDEX(p INV_PRC_LEV_NO_INDX) */
+        SELECT /*+ LEADING(p) USE_NL(m d pu w g) INDEX(p INV_PRC_LEV_NO_INDX) */
           p.I_CODE,
           m.I_NAME,
           p.ITM_UNT,
@@ -172,6 +178,10 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
         JOIN {schema}.IAS_ITM_DTL d
           ON d.I_CODE = p.I_CODE
          AND NVL(d.MAIN_UNIT, 0) = 1
+        JOIN {schema}.IAS_ITM_DTL pu
+          ON pu.I_CODE = p.I_CODE
+         AND pu.ITM_UNT = p.ITM_UNT
+         AND (pu.INACTIVE IS NULL OR pu.INACTIVE = 0)
         JOIN {schema}.IAS_ITM_WCODE w
           ON w.I_CODE = p.I_CODE
          AND w.W_CODE = p.W_CODE
@@ -186,6 +196,7 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
           AND NVL(({avg_sql}), 0) > 0
           AND {net_price_sql} < ({unit_cost_sql})
           AND (m.INACTIVE IS NULL OR m.INACTIVE = 0)
+          AND (m.G_CODE IS NULL OR m.G_CODE <> :svc_gcode)
           {group_sql}
           {item_sql}
     """
@@ -222,7 +233,11 @@ def fetch_below_cost_items(
         return cached
 
     schema = _schema()
-    params: dict[str, Any] = {"wh": _bind_wh(wh), "dflt_vat": _DEFAULT_VAT_PCT}
+    params: dict[str, Any] = {
+        "wh": _bind_wh(wh),
+        "dflt_vat": _DEFAULT_VAT_PCT,
+        "svc_gcode": _SERVICE_GROUP_CODE,
+    }
 
     group_sql = ""
     if gcode:
@@ -318,7 +333,6 @@ def build_below_cost_excel(
     wh_label = escape(str(wh_name or "").strip() or wh)
     basis = normalize_cost_basis(kpis.get("cost_basis") or cost_basis)
     basis_label = COST_BASIS_LABELS[basis]
-    other_label = COST_BASIS_LABELS[COST_BASIS_ITEM if basis == COST_BASIS_WH else COST_BASIS_WH]
     buf = io.StringIO()
     buf.write("\ufeff")
     buf.write(
@@ -351,11 +365,9 @@ def build_below_cost_excel(
         '<th class="key">سعر البيع قبل الضريبة</th>'
         '<th class="key">الفرق</th><th class="key">الخسارة %</th>'
         "<th>السعر شامل الضريبة</th><th>الضريبة %</th>"
-        f"<th>{escape(other_label)}</th>"
         "<th>المجموعة</th><th>الكمية</th>"
         "</tr></thead><tbody>"
     )
-    other_key = "item_cost" if basis == COST_BASIS_WH else "wh_cost"
     for i, r in enumerate(report.get("rows") or [], start=1):
         buf.write("<tr>")
         buf.write(f'<td class="int">{i}</td>')
@@ -369,7 +381,6 @@ def build_below_cost_excel(
         buf.write(f'<td class="pct">{float(r.get("gap_pct") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("price") or 0):.2f}</td>')
         buf.write(f'<td class="num">{float(r.get("vat_pct") or 0):.2f}</td>')
-        buf.write(f'<td class="num">{float(r.get(other_key) or 0):.2f}</td>')
         g_label = str(r.get("g_name") or "").strip()
         if r.get("g_code"):
             g_label = f'{r.get("g_code")} — {g_label}'
