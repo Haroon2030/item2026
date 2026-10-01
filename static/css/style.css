@@ -22358,3 +22358,13 @@ body.fit-printing.fit-measuring table td {
   cursor: grabbing;
   user-select: none;
 }
+
+/* بطاقة الإجمالي تمتد على عرض الصف */
+.sales-overview-dash .sales-ov-kpis > .sales-ov-grand {
+  grid-column: 1 / -1;
+}
+@media (min-width: 721px) {
+  .sales-overview-dash .sales-ov-kpis:not(.sales-ov-rank-kpis) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

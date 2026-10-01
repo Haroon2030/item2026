@@ -49,6 +49,11 @@ SECTION_MANAGER_ROLES: dict[str, str] = {
     "مدير مستودع": "warehouses",
 }
 
+# أدوار تُمنح عدة أقسام معاً (ما زال بالإمكان حجب شاشات منها يدوياً)
+MULTI_SECTION_ROLES: dict[str, tuple[str, ...]] = {
+    "مدير عمليات": ("inventory", "purchases", "warehouses"),
+}
+
 ROLE_CHOICES: tuple[tuple[str, str], ...] = (
     ("رئيس تنفيذي", "رئيس تنفيذي — كل الشاشات عدا المستخدمين"),
     ("مالك", "مالك — كل الشاشات عدا المستخدمين"),
@@ -57,6 +62,7 @@ ROLE_CHOICES: tuple[tuple[str, str], ...] = (
     ("مدير تسعيرة", "مدير تسعيرة — إدارة التسعيرة"),
     ("مدير مخازن", "مدير مخازن — إدارة المخزون"),
     ("مدير مستودع", "مدير مستودع — إدارة المستودعات"),
+    ("مدير عمليات", "مدير عمليات — المخزون والمشتريات والمستودعات"),
 )
 
 
@@ -195,7 +201,8 @@ def is_executive_role(user) -> bool:
 
 
 def is_section_manager_role(user) -> bool:
-    return user_role_name(user) in SECTION_MANAGER_ROLES
+    role = user_role_name(user)
+    return role in SECTION_MANAGER_ROLES or role in MULTI_SECTION_ROLES
 
 
 def preset_sections_for_role(role_name: str) -> list[str] | None:
@@ -203,6 +210,9 @@ def preset_sections_for_role(role_name: str) -> list[str] | None:
     role = str(role_name or "").strip()
     if role in EXECUTIVE_ROLE_NAMES:
         return list(SECTION_KEYS)
+    multi = MULTI_SECTION_ROLES.get(role)
+    if multi:
+        return [k for k in multi if k in SECTION_KEYS]
     section = SECTION_MANAGER_ROLES.get(role)
     if section and section in SECTION_KEYS:
         return [section]

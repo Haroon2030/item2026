@@ -33,12 +33,22 @@
     <p class="sales-ov-scope">النطاق: {{ dashboard.scope_label }}</p>
   {% endif %}
   <section class="sales-ov-kpis" aria-label="ملخص نقاط البيع">
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total sales-ov-grand">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5V4.5M4 19.5h16"/><path d="M8 16V9.5M12.5 16V7M17 16v-4.5"/><path d="M7.2 9.2l5-2.6 4.8 2.2"/></svg>
+        </span>
+        إجمالي المبيعات (صافي بعد المرتجع)
+      </span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_sales %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · نقاط البيع + الآجل + النقدي خارج نقاط البيع</span>
+    </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-pos">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
           <svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="12.5" rx="2.2"/><path d="M8 20h8M12 17v3"/><path d="M6.5 9h4M6.5 12.5h2.5"/><circle cx="16.2" cy="10.2" r="1.6"/></svg>
         </span>
-        مبيعات نقاط البيع
+        مبيعات نقاط البيع (صافي)
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_invoices }} فاتورة</span>
@@ -48,7 +58,7 @@
         <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/><path d="M9.5 12h5.5M12.5 9.5 15 12l-2.5 2.5"/></svg>
         </span>
-        مرتجع نقاط البيع
+        مرتجع نقاط البيع (مخصوم من الصافي)
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_returns %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_return_bills }} فاتورة مرتجع</span>
@@ -58,20 +68,10 @@
         <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M14 3.2H7.2A2.2 2.2 0 0 0 5 5.4v13.2A2.2 2.2 0 0 0 7.2 21h9.6a2.2 2.2 0 0 0 2.2-2.2V8.4z"/><path d="M14 3.2v5.2h5.2M8.2 12.5h7.6M8.2 16h5.2"/></svg>
         </span>
-        مبيعات نظام المبيعات
+        آجل + نقدي فواتير خارج نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_sales %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 19.5V4.5M4 19.5h16"/><path d="M8 16V9.5M12.5 16V7M17 16v-4.5"/><path d="M7.2 9.2l5-2.6 4.8 2.2"/></svg>
-        </span>
-        مبيعات أونكس (الفترة)
-      </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.onix_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.onix_invoices }} فاتورة</span>
     </article>
   </section>
 
@@ -168,6 +168,7 @@
               <th>الفواتير</th>
               <th>المرتجع</th>
               <th>المبيعات</th>
+              <th class="sales-col-cost">متوسط السلة</th>
               <th>الحصة</th>
             </tr>
           </thead>
@@ -179,10 +180,11 @@
                 <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
                 <td class="mono">{% money row.return_total_display %}</td>
                 <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money row.avg_basket_display %}</td>
                 <td class="mono sales-col-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="sales-empty">لا مبيعات نقاط بيع في الفترة.</td></tr>
+              <tr><td colspan="7" class="sales-empty">لا مبيعات نقاط بيع في الفترة.</td></tr>
             {% endfor %}
           </tbody>
           {% if dashboard.pos.branches %}
@@ -192,6 +194,7 @@
                 <td class="mono sales-col-inv">{{ dashboard.pos.totals.invoice_count_display }}</td>
                 <td class="mono">{% money dashboard.pos.totals.return_total_display %}</td>
                 <td class="mono sales-amt">{% money dashboard.pos.totals.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money dashboard.pos.totals.avg_basket_display %}</td>
                 <td class="mono sales-col-share">100%</td>
               </tr>
             </tfoot>
@@ -217,6 +220,7 @@
               <th>الفواتير</th>
               <th>المرتجع</th>
               <th>المبيعات</th>
+              <th class="sales-col-cost">متوسط السلة</th>
               <th>الحصة</th>
             </tr>
           </thead>
@@ -228,10 +232,11 @@
                 <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
                 <td class="mono">{% money row.return_total_display %}</td>
                 <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money row.avg_basket_display %}</td>
                 <td class="mono sales-col-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
+              <tr><td colspan="7" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
             {% endfor %}
           </tbody>
           {% if dashboard.wholesale.branches %}
@@ -241,6 +246,7 @@
                 <td class="mono sales-col-inv">{{ dashboard.wholesale.totals.invoice_count_display }}</td>
                 <td class="mono">{% money dashboard.wholesale.totals.return_total_display %}</td>
                 <td class="mono sales-amt">{% money dashboard.wholesale.totals.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money dashboard.wholesale.totals.avg_basket_display %}</td>
                 <td class="mono sales-col-share">100%</td>
               </tr>
             </tfoot>

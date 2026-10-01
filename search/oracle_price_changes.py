@@ -199,6 +199,9 @@ def fetch_price_changes(
         params["gcode"] = _bind_gcode(gcode)
         filters.append("m.G_CODE = :gcode")
 
+    # مجموعتا 28 (الخدمية) و30 لا تدخلان التقرير.
+    filters.append("NVL(m.G_CODE, -1) NOT IN (28, 30)")
+
     iq = str(item_q or "").strip()
     if iq:
         params["iq"] = f"%{iq}%"

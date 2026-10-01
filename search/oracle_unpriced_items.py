@@ -23,10 +23,13 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v4"
+_CACHE_VER = "v5"
 _PAGE_SIZE = 500
 _EXCEL_LIMIT = 100000
 _FETCH_LIMIT = 100000
+# مجموعتا 28 (الخدمية) و30 لا تدخلان التقرير.
+_EXCLUDED_GROUPS = (28, 30)
+_EXCLUDED_GROUPS_SQL = ", ".join(str(g) for g in _EXCLUDED_GROUPS)
 
 
 def _f(value: Any, nd: int = 2) -> float:
@@ -117,6 +120,7 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str) -> str:
         WHERE w.W_CODE = :wh
           AND w.AVL_QTY > 0
           AND (m.INACTIVE IS NULL OR m.INACTIVE = 0)
+          AND NVL(m.G_CODE, -1) NOT IN ({_EXCLUDED_GROUPS_SQL})
           {group_sql}
           {item_sql}
           AND NOT EXISTS (
