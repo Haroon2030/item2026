@@ -16,6 +16,7 @@ from django.core.cache import cache
 from .oracle_stock import (
     OracleStockError,
     _as_date,
+    _bill_mst_ok,
     _branch_names,
     _fetch_all,
     _hung_ok,
@@ -23,6 +24,7 @@ from .oracle_stock import (
     _item_wh_unit_cost_map,
     _norm_brn_code,
     _pos_owner,
+    _rt_bill_mst_ok,
     _run_parallel,
     _schema,
     oracle_session,
@@ -907,55 +909,49 @@ def _pnl_graphic_panels(kpis: dict) -> dict:
         },
     ]
 
-    waterfall = [
-        {
-            "key": "revenue",
-            "label": "الإيرادات",
-            "tone": "rev",
-            "sign": "+",
-            "display": _fmt_money(revenue),
-            "bar_pct": bar(revenue),
-            "share_display": rev_share_disp,
-        },
-        {
-            "key": "cogs",
-            "label": "التكلفة",
-            "tone": "cogs",
-            "sign": "−",
-            "display": _fmt_money(cogs),
-            "bar_pct": bar(cogs),
-            "share_display": cogs_share_disp,
-        },
-        {
-            "key": "expense",
-            "label": "المصروفات",
-            "tone": "exp",
-            "sign": "−",
-            "display": _fmt_money(expense),
-            "bar_pct": bar(expense),
-            "share_display": exp_share_disp,
-        },
-        {
-            "key": "net",
-            "label": str(kpis.get("net_title") or "الصافي"),
-            "tone": str(kpis.get("net_kind") or "zero"),
-            "sign": "=",
-            "display": _fmt_money(net),
-            "bar_pct": bar(net_abs),
-            "share_display": net_share_disp,
-        },
+    gross_level = revenue - cogs
+    op_level = gross_level - expense
+    other = net - op_level
+    steps = [
+        ("revenue", "الإيرادات", "rev", "total", 0.0, revenue, revenue, rev_share_disp),
+        ("cogs", "التكلفة", "cogs", "minus", revenue, gross_level, -cogs, cogs_share_disp),
+        ("gross", "مجمل الربح", "rev", "total", 0.0, gross_level, gross_level, share_of_rev(gross_level)[1]),
+        ("expense", "المصروفات", "exp", "minus", gross_level, op_level, -expense, exp_share_disp),
     ]
-    # محور مخطط الأشرطة + خط مرجعي (متوسط المكوّنات)
-    avg_abs = (revenue + cogs + expense + net_abs) / 4.0
+    if abs(other) >= max(revenue, 1.0) * 0.0005:
+        steps.append(
+            ("other", "بنود أخرى (الفرق)", "other", "plus" if other > 0 else "minus", op_level, net, other, share_of_rev(other)[1])
+        )
+    steps.append(
+        ("net", str(kpis.get("net_title") or "الصافي"), str(kpis.get("net_kind") or "zero"), "total", 0.0, net, net, net_share_disp)
+    )
+    levels = [0.0] + [v for st in steps for v in (st[4], st[5])]
+    lo, hi = min(levels), max(levels)
+    span = (hi - lo) or 1.0
+
+    def pct(v: float) -> float:
+        return round((v - lo) / span * 100.0, 2)
+
+    waterfall = []
+    for key, label, tone, kind, a_val, b_val, signed, share_disp in steps:
+        start, end = sorted((a_val, b_val))
+        waterfall.append(
+            {
+                "key": key,
+                "label": label,
+                "tone": tone,
+                "kind": kind,
+                "display": _fmt_money(signed),
+                "share_display": share_disp,
+                "left_pct": pct(start),
+                "width_pct": max(round((end - start) / span * 100.0, 2), 0.6),
+            }
+        )
     waterfall_axis = {
-        "ref_pct": bar(avg_abs),
-        "peak_display": _fmt_money(peak),
+        "zero_pct": pct(0.0),
         "ticks": [
-            {"pct": 0, "label": "0"},
-            {"pct": 25, "label": _fmt_money(peak * 0.25)},
-            {"pct": 50, "label": _fmt_money(peak * 0.5)},
-            {"pct": 75, "label": _fmt_money(peak * 0.75)},
-            {"pct": 100, "label": _fmt_money(peak)},
+            {"pct": p, "label": "0" if abs(lo + span * p / 100.0) < 0.5 else f"{(lo + span * p / 100.0) / 1_000_000:,.0f} م"}
+            for p in (0, 25, 50, 75, 100)
         ],
     }
 
@@ -2059,6 +2055,185 @@ def fetch_unposted_pos_sales(date_from, date_to, *, today: date | None = None) -
     return _aggregate_unposted(sales_rows, results[-1] or [], _unposted_unit_cost_fn())
 
 
+# ─── فواتير الآجل (نظام المبيعات) التي لم تصل لدفتر IAS_POST_DTL بعد ───
+# BILL_POST على IAS_BILL_MST غير موثوق: فحص فعلي أظهر فواتير BILL_POST=0
+# لها بالفعل قيود في IAS_POST_DTL (أي محسوبة أصلاً ضمن «الإيرادات»). المعيار
+# الصحيح هو عدم وجود أي قيد يطابق رقم/سلسلة/نوع الفاتورة في IAS_POST_DTL
+# (NOT EXISTS) — هذا ما يعنيه «لم تصل للدفتر» فعلياً. تقتصر على الآجل (4/8)؛
+# النقدي (1/5) مستبعد عمداً لأنه مرآة لمبيعات نقاط البيع ولا توجد حالياً
+# قاعدة موثوقة لربطه بفاتورة POS الأصل دون تكرار.
+_UNPOSTED_BILL_DOC_TYPES = (4, 8)
+
+
+def _unposted_bill_sql() -> str:
+    """رؤوس فواتير الآجل بلا أي قيد في IAS_POST_DTL بعد، ثم تفاصيلها للتكلفة (STK_COST جاهزة)."""
+    sch = _schema()
+    types = ", ".join(str(t) for t in _UNPOSTED_BILL_DOC_TYPES)
+    return f"""
+        WITH h AS (
+            SELECT /*+ MATERIALIZE */
+                   m.BILL_NO, m.BILL_SER, m.BILL_DOC_TYPE, m.BRN_NO,
+                   m.BILL_DATE, m.BILL_AMT
+            FROM {sch}.IAS_BILL_MST m
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+              AND m.BILL_DOC_TYPE IN ({types})
+              AND {_bill_mst_ok("m")}
+              AND NOT EXISTS (
+                SELECT 1 FROM {sch}.IAS_POST_DTL p
+                WHERE p.DOC_NO = m.BILL_NO
+                  AND p.DOC_SER = m.BILL_SER
+                  AND p.DOC_TYPE = m.BILL_DOC_TYPE
+              )
+        )
+        SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.BILL_DATE) AS D,
+               NULL AS ITEM_CODE, 0 AS COST,
+               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT
+        FROM h
+        GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE)
+        UNION ALL
+        SELECT 'L', h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'), TO_CHAR(d.I_CODE),
+               SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 0, 0
+        FROM h
+        JOIN {sch}.IAS_BILL_DTL d
+          ON d.BILL_NO = h.BILL_NO
+         AND d.BILL_SER = h.BILL_SER
+         AND d.BILL_DOC_TYPE = h.BILL_DOC_TYPE
+        WHERE d.I_CODE IS NOT NULL
+        GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'), d.I_CODE
+    """
+
+
+def _unposted_bill_return_sql() -> str:
+    """مرتجع الآجل بلا أي قيد في IAS_POST_DTL — نفس منطق الرأس/التفاصيل."""
+    sch = _schema()
+    types = ", ".join(str(t) for t in _UNPOSTED_BILL_DOC_TYPES)
+    return f"""
+        WITH h AS (
+            SELECT /*+ MATERIALIZE */
+                   m.RT_BILL_NO, m.RT_BILL_SER, m.RT_BILL_DOC_TYPE, m.BRN_NO,
+                   m.RT_BILL_DATE, m.BILL_AMT
+            FROM {sch}.IAS_RT_BILL_MST m
+            WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+              AND m.RT_BILL_DOC_TYPE IN ({types})
+              AND {_rt_bill_mst_ok("m")}
+              AND NOT EXISTS (
+                SELECT 1 FROM {sch}.IAS_POST_DTL p
+                WHERE p.DOC_NO = m.RT_BILL_NO
+                  AND p.DOC_SER = m.RT_BILL_SER
+                  AND p.DOC_TYPE = m.RT_BILL_DOC_TYPE
+              )
+        )
+        SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.RT_BILL_DATE) AS D,
+               NULL AS ITEM_CODE, 0 AS COST,
+               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT
+        FROM h
+        GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE)
+        UNION ALL
+        SELECT 'L', h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'), TO_CHAR(d.I_CODE),
+               SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 0, 0
+        FROM h
+        JOIN {sch}.IAS_RT_BILL_DTL d
+          ON d.RT_BILL_NO = h.RT_BILL_NO
+         AND d.RT_BILL_SER = h.RT_BILL_SER
+         AND d.RT_BILL_DOC_TYPE = h.RT_BILL_DOC_TYPE
+        WHERE d.I_CODE IS NOT NULL
+        GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'), d.I_CODE
+    """
+
+
+def _aggregate_unposted_bill(sales_rows: list[dict], return_rows: list[dict]) -> dict:
+    """صافي (بيع − مرتجع) لكل فرع لفواتير الآجل غير المرحّلة. التكلفة من STK_COST مباشرة."""
+    by_branch: dict[str, dict] = {}
+
+    def bucket(brn: str) -> dict:
+        return by_branch.setdefault(
+            brn,
+            {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
+        )
+
+    for rows, sign in ((sales_rows, 1.0), (return_rows, -1.0)):
+        for row in rows:
+            brn = _norm_brn_code(row.get("BRN"))
+            day = _as_plain_date(row.get("D"))
+            if not brn or day is None:
+                continue
+            b = bucket(brn)
+            if str(row.get("K") or "") == "H":
+                b["amount"] += _f(row.get("AMT")) * sign
+                if sign > 0:
+                    b["bills"] += int(row.get("N") or 0)
+                else:
+                    b["returns"] += int(row.get("N") or 0)
+                if b["oldest"] is None or day < b["oldest"]:
+                    b["oldest"] = day
+            else:
+                b["cost"] += _f(row.get("COST")) * sign
+
+    for b in by_branch.values():
+        b["amount"] = round(b["amount"], 2)
+        b["cost"] = round(b["cost"], 2)
+    return {"by_branch": by_branch}
+
+
+def fetch_unposted_bill_sales(date_from, date_to) -> dict:
+    """فواتير الآجل (نظام المبيعات) غير المرحّلة محاسبياً — كل الفروع ضمن الفترة."""
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    d_to_excl = d_to + timedelta(days=1)
+    sales_sql = _unposted_bill_sql()
+    return_sql = _unposted_bill_return_sql()
+    bind = {"d_from": d_from, "d_to_excl": d_to_excl}
+
+    def sales_job():
+        with oracle_session():
+            return _fetch_all(sales_sql, bind)
+
+    def return_job():
+        with oracle_session():
+            return _fetch_all(return_sql, bind)
+
+    results = _run_parallel(
+        [sales_job, return_job],
+        max_workers=2,
+        timeout_sec=_UNPOSTED_TIMEOUT_SEC,
+    )
+    return _aggregate_unposted_bill(results[0] or [], results[1] or [])
+
+
+def _merge_unposted_sources(pos_unposted: dict, bill_unposted: dict) -> dict:
+    """يجمع غير مرحّل نقاط البيع + الآجل في نتيجة واحدة، مع إجمالي كل مصدر لعرضه في التلميح."""
+    by_branch: dict[str, dict] = {}
+    pos_total = bill_total = 0.0
+
+    for source, total_key in ((pos_unposted, "pos"), (bill_unposted, "bill")):
+        for brn, b in (source.get("by_branch") or {}).items():
+            merged = by_branch.setdefault(
+                brn,
+                {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
+            )
+            merged["amount"] += _f(b.get("amount"))
+            merged["cost"] += _f(b.get("cost"))
+            merged["bills"] += int(b.get("bills") or 0)
+            merged["returns"] += int(b.get("returns") or 0)
+            oldest = b.get("oldest")
+            if oldest and (merged["oldest"] is None or oldest < merged["oldest"]):
+                merged["oldest"] = oldest
+            if total_key == "pos":
+                pos_total += _f(b.get("amount"))
+            else:
+                bill_total += _f(b.get("amount"))
+
+    for b in by_branch.values():
+        b["amount"] = round(b["amount"], 2)
+        b["cost"] = round(b["cost"], 2)
+    return {
+        "by_branch": by_branch,
+        "missing_cost_items": int(pos_unposted.get("missing_cost_items") or 0),
+        "pos_amount": round(pos_total, 2),
+        "bill_amount": round(bill_total, 2),
+    }
+
+
 def _unposted_summary(unposted: dict, branch_code: str) -> dict:
     """بيانات بطاقة «مبيعات لم تُرحّل» بعد تصفية الفرع."""
     names = _branch_names()
@@ -2091,6 +2266,8 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
     cost = round(cost, 2)
     gross = round(amount - cost, 2)
     margin_pct = round(gross / amount * 100.0, 2) if amount else 0.0
+    pos_amount = round(_f(unposted.get("pos_amount")), 2)
+    bill_amount = round(_f(unposted.get("bill_amount")), 2)
     return {
         "available": True,
         "has_data": bool(rows),
@@ -2109,6 +2286,10 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
         "returns_display": f"{returns:,}",
         "branch_count": len(rows),
         "top_branches": rows[:3],
+        "pos_amount": pos_amount,
+        "pos_amount_display": _fmt_money(pos_amount),
+        "bill_amount": bill_amount,
+        "bill_amount_display": _fmt_money(bill_amount),
     }
 
 
@@ -2120,7 +2301,7 @@ def _cache_key(
     posted_only: bool,
 ) -> str:
     return (
-        f"income:stmt:v54:{d_from}:{d_to}:"
+        f"income:stmt:v56:{d_from}:{d_to}:"
         f"{branch_code or '-'}:"
         f"{cc_code or '-'}:"
         f"{int(bool(posted_only))}"
@@ -2194,13 +2375,17 @@ def build_income_statement(
     ttl = _INCOME_CACHE_TTL
     unposted: dict = {"available": False, "has_data": False}
     if cc:
-        unposted["reason"] = "نقاط البيع بلا مركز تكلفة"
+        unposted["reason"] = "المبيعات غير المرحّلة بلا مركز تكلفة"
     else:
         try:
-            unposted = _unposted_summary(fetch_unposted_pos_sales(d_from, d_to), brn)
+            merged = _merge_unposted_sources(
+                fetch_unposted_pos_sales(d_from, d_to),
+                fetch_unposted_bill_sales(d_from, d_to),
+            )
+            unposted = _unposted_summary(merged, brn)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Unposted POS sales unavailable: %s", exc)
-            unposted["error"] = "تعذّرت قراءة مبيعات نقاط البيع غير المرحّلة."
+            logger.warning("Unposted sales unavailable: %s", exc)
+            unposted["error"] = "تعذّرت قراءة المبيعات غير المرحّلة."
             ttl = 120
 
     scope_bits = [f"{d_from.isoformat()} → {d_to.isoformat()}"]

@@ -1758,17 +1758,19 @@ class IncomeUnpostedCardTests(TestCase):
             'missing_cost_items': 0,
         }
 
-    def _build(self, *, unposted=None, unposted_error=None, **kwargs):
+    def _build(self, *, unposted=None, unposted_error=None, bill_unposted=None, **kwargs):
         from datetime import date
 
         from search.oracle_income import build_income_statement
 
         fetch_kwargs = {'side_effect': unposted_error} if unposted_error else {'return_value': unposted or self._unposted()}
+        bill_fetch_kwargs = {'return_value': bill_unposted if bill_unposted is not None else {'by_branch': {}}}
         with patch('search.oracle_income._fetch_income_base_rows', return_value=list(self.LEDGER_BASE)), \
                 patch('search.oracle_income.fetch_income_branch_profits', return_value=[]), \
                 patch('search.oracle_income._fetch_income_kind_rows', return_value=[]), \
                 patch('search.oracle_income.fetch_cash_box_checks', return_value={'all_ok': True, 'summary': 'ok', 'chart': []}), \
                 patch('search.oracle_income._branch_names', return_value={'7': 'فرع 7', '9': 'فرع 9'}), \
+                patch('search.oracle_income.fetch_unposted_bill_sales', **bill_fetch_kwargs), \
                 patch('search.oracle_income.fetch_unposted_pos_sales', **fetch_kwargs) as fetch:
             statement = build_income_statement(date(2026, 9, 1), date(2026, 9, 28), **kwargs)
         return statement, fetch
@@ -1843,6 +1845,20 @@ class IncomeUnpostedCardTests(TestCase):
         self.assertEqual((u['bills'], u['returns'], u['branch_count']), (16, 1, 2))
         self.assertEqual(u['oldest'], '2026-09-26')
         self.assertEqual(u['top_branches'][0]['branch_code'], '7')
+        self.assertEqual((u['pos_amount'], u['bill_amount']), (800, 0))
+
+    def test_unposted_bill_sales_merge_into_card_without_double_counting(self):
+        bill_unposted = {
+            'by_branch': {
+                '7': {'amount': 150.0, 'cost': 100.0, 'bills': 2, 'returns': 0, 'oldest': __import__('datetime').date(2026, 9, 20)},
+            },
+        }
+        statement, _fetch = self._build(bill_unposted=bill_unposted)
+        u = statement['unposted']
+        self.assertEqual((u['amount'], u['cost']), (950, 760))
+        self.assertEqual(u['pos_amount'], 800)
+        self.assertEqual(u['bill_amount'], 150)
+        self.assertEqual(u['oldest'], '2026-09-20')
 
     def test_branch_filter_limits_card_to_that_branch(self):
         statement, _fetch = self._build(branch_code='9')

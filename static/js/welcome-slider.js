@@ -1,5 +1,5 @@
 /**
- * سلايدر ترحيب غرفة القرار — تشغيل تلقائي + نقاط + أزرار (RTL).
+ * سلايدر ترحيب غرفة القرار — النقطة النشطة شريط تقدّم CSS؛ انتهاؤه ينقل للشريحة التالية (RTL).
  */
 (function () {
   "use strict";
@@ -16,14 +16,25 @@
     if (!slides.length) return;
 
     var index = 0;
-    var timer = null;
     var reduced =
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var intervalMs = 5200;
+    root.style.setProperty("--welcome-interval", intervalMs + "ms");
+
+    var leaveTimer = null;
 
     function show(i) {
+      var prevSlide = slides[index];
       index = (i + slides.length) % slides.length;
+      if (prevSlide && prevSlide !== slides[index]) {
+        slides.forEach(function (s) { s.classList.remove("is-leaving"); });
+        prevSlide.classList.add("is-leaving");
+        window.clearTimeout(leaveTimer);
+        leaveTimer = window.setTimeout(function () {
+          prevSlide.classList.remove("is-leaving");
+        }, 900);
+      }
       slides.forEach(function (slide, n) {
         var on = n === index;
         slide.classList.toggle("is-active", on);
@@ -33,49 +44,42 @@
       dots.forEach(function (dot, n) {
         var on = n === index;
         dot.setAttribute("aria-selected", on ? "true" : "false");
-        dot.classList.toggle("is-active", on);
+        dot.classList.remove("is-active");
+        if (on) {
+          void dot.offsetWidth;
+          dot.classList.add("is-active");
+        }
       });
     }
 
     function go(delta) {
       show(index + delta);
-      restart();
     }
 
-    function restart() {
-      if (timer) window.clearInterval(timer);
-      timer = null;
-      if (reduced || slides.length < 2) return;
-      timer = window.setInterval(function () {
-        show(index + 1);
-      }, intervalMs);
-    }
+    function pause() { root.classList.add("is-paused"); }
+    function resume() { root.classList.remove("is-paused"); }
 
     if (prev) prev.addEventListener("click", function () { go(-1); });
     if (next) next.addEventListener("click", function () { go(1); });
     dots.forEach(function (dot) {
       dot.addEventListener("click", function () {
-        var n = parseInt(dot.getAttribute("data-welcome-dot") || "0", 10);
-        show(n);
-        restart();
+        show(parseInt(dot.getAttribute("data-welcome-dot") || "0", 10));
+      });
+      dot.addEventListener("animationend", function (ev) {
+        if (ev.animationName === "welcome-progress" && !reduced && slides.length > 1) {
+          show(index + 1);
+        }
       });
     });
 
-    root.addEventListener("mouseenter", function () {
-      if (timer) window.clearInterval(timer);
-      timer = null;
-    });
-    root.addEventListener("mouseleave", restart);
-    root.addEventListener("focusin", function () {
-      if (timer) window.clearInterval(timer);
-      timer = null;
-    });
+    root.addEventListener("mouseenter", pause);
+    root.addEventListener("mouseleave", resume);
+    root.addEventListener("focusin", pause);
     root.addEventListener("focusout", function (ev) {
-      if (!root.contains(ev.relatedTarget)) restart();
+      if (!root.contains(ev.relatedTarget)) resume();
     });
 
     show(0);
-    restart();
   }
 
   function boot() {

@@ -31,3 +31,6 @@ _oracle_*.py
 _diag_*.py
 _verify_*.py
 debug-*.log
+
+# Node
+node_modules/

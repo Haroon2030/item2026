@@ -87,6 +87,16 @@
   {% with u=statement.unposted %}
   {% if u.has_data %}
   <section class="income-kpi-grid" aria-label="مبيعات لم تُرحّل — خارج أرقام القائمة">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev" title="إجمالي المبيعات (نقاط البيع + فواتير الآجل) التي لم تُنقل إلى دفتر الترحيل بعد">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg>
+        </span>
+        مبيعات لم تُرحّل
+      </span>
+      <strong class="dash-kpi-value mono">{{ u.amount_display }}</strong>
+      <span class="dash-kpi-hint">{{ u.bills_display }} فاتورة{% if u.returns %} · {{ u.returns_display }} مرتجع{% endif %} · نقاط بيع {{ u.pos_amount_display }} + آجل {{ u.bill_amount_display }}</span>
+    </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs" title="الكمية × متوسط التكلفة الحالي للصنف في المخزن{% if u.missing_cost_items %} — {{ u.missing_cost_items }} صنف بلا تكلفة{% endif %}">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
@@ -116,7 +126,7 @@
   {% elif u.available %}
     <div class="income-exp-decision is-ok" role="status">
       <strong>مبيعات لم تُرحّل</strong>
-      <span>كل مبيعات نقاط البيع في الفترة مرحّلة.</span>
+      <span>كل مبيعات نقاط البيع وفواتير الآجل في الفترة مرحّلة.</span>
     </div>
   {% endif %}
   {% endwith %}
@@ -264,60 +274,30 @@
         </div>
       </div>
       {% if statement.waterfall %}
-      <div
-        class="income-hbar-chart income-waterfall-hbar income-axis-hbar"
-        role="list"
-        aria-label="مكوّنات قائمة الدخل"
-      >
-        <div class="income-axis-plot">
-          <div class="income-axis-grid" aria-hidden="true">
-            {% for tick in statement.waterfall_axis.ticks %}
-              <span class="income-axis-grid-line" style="inset-inline-start: {{ tick.pct }}%"></span>
-            {% empty %}
-              <span class="income-axis-grid-line" style="inset-inline-start: 25%"></span>
-              <span class="income-axis-grid-line" style="inset-inline-start: 50%"></span>
-              <span class="income-axis-grid-line" style="inset-inline-start: 75%"></span>
-              <span class="income-axis-grid-line" style="inset-inline-start: 100%"></span>
-            {% endfor %}
-            <span
-              class="income-axis-ref"
-              style="inset-inline-start: {{ statement.waterfall_axis.ref_pct|default:50 }}%"
-              title="متوسط المكوّنات"
-            ></span>
-          </div>
-          <div class="income-axis-rows">
-            {% for row in statement.waterfall %}
-              <div
-                class="income-hbar-row income-axis-row is-{{ row.tone }}"
-                role="listitem"
-                style="--bar-pct: {{ row.bar_pct }}%; --i: {{ forloop.counter0 }}"
-                title="{{ row.label }} — {{ row.display }} ({{ row.share_display }})"
-              >
-                <span class="income-hbar-label">{{ row.label }}</span>
-                <div class="income-hbar-track" aria-hidden="true">
-                  <span
-                    class="income-hbar-fill"
-                    data-bar-pct="{{ row.bar_pct }}"
-                    style="width: {{ row.bar_pct }}%"
-                  ></span>
-                </div>
-                <span class="income-hbar-val mono">{{ row.display }}</span>
-              </div>
-            {% endfor %}
-          </div>
+      <div class="wf-chart" role="list" aria-label="مكوّنات قائمة الدخل">
+        <div class="wf-legend" aria-hidden="true">
+          <span><i class="wf-key is-total"></i>إجمالي</span>
+          <span><i class="wf-key is-minus"></i>خصم</span>
+          <span><i class="wf-key is-plus"></i>إضافة</span>
         </div>
-        <div class="income-axis-scale" aria-hidden="true">
-          <span class="income-axis-scale-spacer"></span>
-          <div class="income-axis-scale-track">
-            {% for tick in statement.waterfall_axis.ticks %}
-              <span class="income-axis-tick" style="inset-inline-start: {{ tick.pct }}%">{{ tick.label }}</span>
-            {% empty %}
-              <span class="income-axis-tick" style="inset-inline-start: 0%">0</span>
-              <span class="income-axis-tick" style="inset-inline-start: 50%">50%</span>
-              <span class="income-axis-tick" style="inset-inline-start: 100%">100%</span>
-            {% endfor %}
+        <div class="wf-rows">
+          {% for row in statement.waterfall %}
+          <div class="wf-row is-{{ row.kind }}" role="listitem" title="{{ row.label }} — {{ row.display }} ({{ row.share_display }})">
+            <span class="wf-label">{{ row.label }}</span>
+            <div class="wf-track" aria-hidden="true">
+              {% for tick in statement.waterfall_axis.ticks %}<span class="wf-grid" style="inset-inline-start: {{ tick.pct }}%"></span>{% endfor %}
+              <span class="wf-bar{% if row.kind == 'total' and row.tone == 'loss' %} is-loss{% endif %}" style="inset-inline-start: {{ row.left_pct|unlocalize }}%; width: {{ row.width_pct|unlocalize }}%"></span>
+            </div>
+            <span class="wf-val mono"><b>{{ row.display }}</b><small>{{ row.share_display }}</small></span>
           </div>
-          <span class="income-axis-scale-spacer is-end"></span>
+          {% endfor %}
+        </div>
+        <div class="wf-axis" aria-hidden="true">
+          <span class="wf-axis-spacer"></span>
+          <div class="wf-axis-track">
+            {% for tick in statement.waterfall_axis.ticks %}<span style="inset-inline-start: {{ tick.pct }}%">{{ tick.label }}</span>{% endfor %}
+          </div>
+          <span class="wf-axis-spacer is-end"></span>
         </div>
       </div>
       {% else %}
@@ -385,51 +365,8 @@
           <strong>ملاحظة محاسبية</strong>
           <span>{{ statement.expense_mix.decision }}</span>
         </div>
-        <div class="income-comp-board income-expense-mix-board" role="group" aria-label="تحليل بنود المصروفات">
-          <ul class="income-comp-callouts" role="list">
-            {% for s in statement.expense_mix.slices %}
-              <li class="income-comp-callout income-exp-callout" style="--i: {{ forloop.counter0 }}; --c: {{ s.color }}">
-                <span class="income-comp-callout-bar" aria-hidden="true"></span>
-                <div class="income-comp-callout-body">
-                  <span class="income-exp-callout-kicker">اسم الحساب</span>
-                  <strong class="income-comp-callout-name income-exp-callout-name" title="{{ s.full_name }}">{{ s.full_name }}</strong>
-                  <span class="income-comp-callout-meta">{% money s.amount_compact %}</span>
-                  <span class="income-comp-callout-sub"><span class="mono">{{ s.share_display }}</span> من المصروف</span>
-                </div>
-              </li>
-            {% endfor %}
-          </ul>
-          <div class="income-comp-visual">
-            <svg class="income-comp-svg" viewBox="0 0 100 100" role="img" aria-label="تحليل بنود المصروفات">
-              {% localize off %}
-              <circle class="income-comp-ring income-comp-ring-out" cx="50" cy="50" r="48.6" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
-              <circle class="income-comp-ring income-comp-ring-in" cx="50" cy="50" r="26.2" fill="none" stroke="#e5e7eb" stroke-width="0.55"></circle>
-              {% for s in statement.expense_mix.slices %}
-                {% if s.path_d %}
-                  <path class="income-comp-wedge" d="{{ s.path_d }}" fill="{{ s.color }}">
-                    <title>{{ s.full_name }} — {{ s.share_display }} — {{ s.amount_display }}</title>
-                  </path>
-                {% endif %}
-              {% endfor %}
-              {% for s in statement.expense_mix.slices %}
-                {% if s.show_label %}
-                  <text
-                    class="income-comp-wedge-pct"
-                    x="{{ s.label_x }}"
-                    y="{{ s.label_y }}"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >{{ s.share_display }}</text>
-                {% endif %}
-              {% endfor %}
-              {% endlocalize %}
-            </svg>
-            <div class="income-comp-center" title="{{ statement.expense_mix.center.label }} {{ statement.expense_mix.center.value_full }}">
-              <span class="income-comp-center-lbl">{{ statement.expense_mix.center.label }}</span>
-              <span class="income-comp-center-val">{% money statement.expense_mix.center.value_display %}</span>
-            </div>
-          </div>
-        </div>
+        <div id="expense-mix-chart" class="exp-chart" role="img" aria-label="تحليل بنود المصروفات"></div>
+        {{ statement.expense_mix.slices|json_script:"expense-mix-data" }}
       {% else %}
         <p class="sales-empty">لا مصروفات ضمن الفلتر.</p>
       {% endif %}
@@ -449,29 +386,15 @@
         </button>
       </div>
     </div>
-    <p class="income-rank-period">أعمدة أعلى صناديق حسب |الرصيد الختامي| · أخضر موجب / أحمر سالب</p>
+    <p class="income-rank-period">كل الصناديق ذات الرصيد (الصفرية غير معروضة) · مرتّبة من الأعلى رصيداً إلى الأدنى · مرّر للأسفل لرؤية الباقي</p>
     {% if statement.reconciliation.chart %}
-      <div class="income-vchart income-cash-vchart" role="list" aria-label="صناديق — مخطط عمودي">
-        {% for row in statement.reconciliation.chart %}
-          <div
-            class="income-vcol is-{{ row.tone }}"
-            role="listitem"
-            style="--i: {{ forloop.counter0 }}"
-            title="#{{ row.cash_no }} {{ row.cash_name }} — {{ row.close_display }} ({{ row.status }})"
-          >
-            <span class="income-vpct mono" title="رقم الصندوق">{{ row.cash_no }}</span>
-            <div class="income-vtrack" aria-hidden="true">
-              <div
-                class="income-vfill"
-                data-bar-pct="{{ row.bar_pct }}"
-                style="height: {{ row.bar_pct }}%"
-              ></div>
-            </div>
-            <strong class="income-vname" title="{{ row.cash_name }}">{{ row.cash_name }}</strong>
-            <span class="income-vmeta mono">{{ row.close_display }}</span>
-          </div>
-        {% endfor %}
+      <div class="wf-legend cash-legend" aria-hidden="true">
+        <span><i class="wf-key" style="background:#37D26F"></i>رصيد موجب</span>
+        <span><i class="wf-key" style="background:#fb7185"></i>رصيد سالب</span>
+        <span><i class="wf-key cash-key-hatch"></i>مخطط = غير مطابق</span>
       </div>
+      <div class="cash-scroll"><div id="cash-balance-chart" class="exp-chart" role="img" aria-label="أرصدة الصناديق"></div></div>
+      {{ statement.reconciliation.rows|json_script:"cash-balance-data" }}
     {% else %}
       <p class="sales-empty">لا بيانات صناديق ضمن الفلتر.</p>
     {% endif %}
@@ -480,6 +403,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="/static/js/vendor/echarts.common.min.js?v={{ app_client_version }}"></script>
+<script src="/static/js/expense-mix-chart.js?v={{ app_client_version }}"></script>
+<script src="/static/js/cash-balance-chart.js?v={{ app_client_version }}"></script>
 <script>
 (function () {
   function ready(fn) {

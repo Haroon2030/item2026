@@ -51,7 +51,7 @@
         مبيعات نقاط البيع (صافي)
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_invoices }} فاتورة</span>
+      <span class="dash-kpi-hint mono" title="شامل الضريبة · بعد خصم مرتجعات {{ dashboard.kpis.pos_returns }} — قبل الخصم {{ dashboard.kpis.pos_gross_before_returns }} (يطابق تقرير أونكس)">{{ dashboard.kpis.pos_invoices }} فاتورة · قبل المرتجع {{ dashboard.kpis.pos_gross_before_returns }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
       <span class="dash-kpi-label">

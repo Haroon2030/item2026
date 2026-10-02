@@ -187,9 +187,12 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
     )
     avg_basket = round(total_sales / total_invoices, 2) if total_invoices else 0.0
     active_count = sum(1 for r in out if not r.get("no_sales"))
+    gross_before_returns = round(total_sales + total_returns, 2)
     totals = {
         "sales_total": total_sales,
         "sales_total_display": _money(total_sales),
+        "gross_before_returns": gross_before_returns,
+        "gross_before_returns_display": _money(gross_before_returns),
         "invoice_count": total_invoices,
         "invoice_count_display": f"{total_invoices:,}",
         "return_total": total_returns,
@@ -669,6 +672,7 @@ def _assemble_sales_branches_dashboard(
         "ranks": ranks,
         "kpis": {
             "pos_sales": pos_totals["sales_total_display"],
+            "pos_gross_before_returns": pos_totals["gross_before_returns_display"],
             "pos_invoices": pos_totals["invoice_count_display"],
             "pos_returns": pos_totals["return_total_display"],
             "pos_return_bills": pos_totals["return_count_display"],
