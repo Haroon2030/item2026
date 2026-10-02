@@ -8,7 +8,7 @@
 سعر البيع شامل الضريبة والتكلفة بدونها، فالمقارنة على صافي السعر:
   صافي السعر = I_PRICE / (1 + VAT/100)
   VAT = 15% للصنف الخاضع (VAT_TYPE = 1) · صفر لغيره فيُقارن سعره مباشرة
-يُستبعد: الوحدة الموقوفة (IAS_ITM_DTL.INACTIVE) · أصناف المجموعة 28 الخدمية
+يُستبعد: الوحدة الموقوفة (IAS_ITM_DTL.INACTIVE) · أصناف المجموعتين 28 (الخدمية) و30 (قسم المواليد)
 
 أساس التكلفة (الافتراضي wh):
   wh   — متوسط تكلفة المخزن نفسه (IAS_ITM_WCODE.I_CWTAVG)، وإن كان صفراً فالمتوسط العام
@@ -35,9 +35,10 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v13"
-# مجموعة 28 = الخدمية: ليست بضاعة بتكلفة فلا تدخل التقرير.
-_SERVICE_GROUP_CODE = 28
+_CACHE_VER = "v14"
+# 28 = الخدمية (ليست بضاعة بتكلفة) · 30 = قسم المواليد: لا تدخلان التقرير.
+_EXCLUDED_GROUPS = (28, 30)
+_EXCLUDED_GROUPS_SQL = ", ".join(str(g) for g in _EXCLUDED_GROUPS)
 _PAGE_SIZE = 500
 _EXCEL_LIMIT = 100000
 _FETCH_LIMIT = 100000
@@ -196,7 +197,7 @@ def _base_sql(schema: str, *, group_sql: str, item_sql: str, basis: str) -> str:
           AND NVL(({avg_sql}), 0) > 0
           AND {net_price_sql} < ({unit_cost_sql})
           AND (m.INACTIVE IS NULL OR m.INACTIVE = 0)
-          AND (m.G_CODE IS NULL OR m.G_CODE <> :svc_gcode)
+          AND NVL(m.G_CODE, -1) NOT IN ({_EXCLUDED_GROUPS_SQL})
           {group_sql}
           {item_sql}
     """
@@ -236,7 +237,6 @@ def fetch_below_cost_items(
     params: dict[str, Any] = {
         "wh": _bind_wh(wh),
         "dflt_vat": _DEFAULT_VAT_PCT,
-        "svc_gcode": _SERVICE_GROUP_CODE,
     }
 
     group_sql = ""

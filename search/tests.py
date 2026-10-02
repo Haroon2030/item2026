@@ -735,7 +735,7 @@ class BelowCostPricesTests(TestCase):
     @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
     @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
     @patch('search.oracle_below_cost_prices._fetch_all')
-    def test_excludes_inactive_units_and_service_group(self, fetch_all, _enabled, _schema):
+    def test_excludes_inactive_units_service_and_newborn_groups(self, fetch_all, _enabled, _schema):
         from search.oracle_below_cost_prices import fetch_below_cost_items
 
         fetch_all.side_effect = [[{'CNT': 0}], []]
@@ -744,8 +744,7 @@ class BelowCostPricesTests(TestCase):
         for sql, params in (c.args for c in fetch_all.call_args_list):
             flat = ' '.join(sql.split())
             self.assertIn('pu.ITM_UNT = p.ITM_UNT AND (pu.INACTIVE IS NULL OR pu.INACTIVE = 0)', flat)
-            self.assertIn('AND (m.G_CODE IS NULL OR m.G_CODE <> :svc_gcode)', flat)
-            self.assertEqual(params['svc_gcode'], 28)
+            self.assertIn('AND NVL(m.G_CODE, -1) NOT IN (28, 30)', flat)
 
     @patch('search.oracle_below_cost_prices._schema', return_value='IAS20261')
     @patch('search.oracle_below_cost_prices.oracle_enabled', return_value=True)
