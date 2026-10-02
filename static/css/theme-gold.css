@@ -5216,14 +5216,14 @@ body.theme-navy .page.below-cost-dash .bc-table .bc-wh-code {
   font-weight: 800 !important;
 }
 body.theme-navy .page.below-cost-dash .bc-table td.bc-unit {
-  color: #CFE0FF !important;
+  color: #111111 !important;
   font-weight: 700 !important;
 }
 body.theme-navy .page.below-cost-dash .bc-table .bc-wh-name {
-  color: #8BA3CC !important;
+  color: #5b5532 !important;
 }
 body.theme-navy .page.below-cost-dash .bc-table td.bc-muted {
-  color: #7F93B8 !important;
+  color: #5b5532 !important;
   font-weight: 600 !important;
 }
 
@@ -7104,3 +7104,71 @@ html body.theme-navy.theme-navy.theme-navy .page.page .wh-exp-kpi > span[class*=
 html body.theme-navy.theme-navy.theme-navy .page.page .wh-out-kpi > span[class*="kpi-value"]:not(#fx),
 html body.theme-navy.theme-navy.theme-navy .page.page .wqc-kpi > span[class*="kpi-value"]:not(#fx),
 html body.theme-navy.theme-navy.theme-navy .page.page .ss-turn-card > span[class*="kpi-value"]:not(#fx) { font-size: 1.05rem !important; font-weight: 700 !important; color: #3a3a3a !important; }
+
+/* عنوان نتائج الجداول — خط وحجم متناسبان مع الثيم */
+body.theme-navy .lm-sheet-head,
+body.theme-navy .up-sheet-head {
+  font-family: var(--font) !important;
+  padding: 0.65rem 0.9rem !important;
+}
+body.theme-navy .lm-sheet-head h3,
+body.theme-navy .up-sheet-head h3 {
+  font-family: var(--font) !important;
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0;
+}
+body.theme-navy .lm-sheet-count,
+body.theme-navy .up-sheet-count {
+  font-family: var(--font) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+}
+body.theme-navy .up-sheet-head .up-excel-btn,
+body.theme-navy .up-sheet-head .up-pdf-btn {
+  font-family: var(--font) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+}
+
+/* ===== توحيد عنوان "نتيجة العرض" في كل الصفحات ===== */
+body.theme-navy .page[class][class] .lm-sheet-head,
+body.theme-navy .page[class][class] .up-sheet-head,
+body.theme-navy .page[class][class] .wqc-sheet-head,
+body.theme-navy .page[class][class] .wh-out-sheet-head {
+  background: #FDF6D8 !important;
+  background-image: none !important;
+  color: #111111 !important;
+  border-bottom: 1px solid rgba(17,17,17,0.06) !important;
+  box-shadow: none !important;
+  font-family: var(--font) !important;
+  padding: 0.65rem 0.9rem !important;
+}
+body.theme-navy .page[class][class] .lm-sheet-head h3,
+body.theme-navy .page[class][class] .up-sheet-head h3,
+body.theme-navy .page[class][class] .wqc-sheet-head h3,
+body.theme-navy .page[class][class] .wh-out-sheet-head h3 {
+  color: #111111 !important;
+  font-family: var(--font) !important;
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+}
+body.theme-navy .page[class][class] .lm-sheet-count,
+body.theme-navy .page[class][class] .up-sheet-count,
+body.theme-navy .page[class][class] .wqc-sheet-count,
+body.theme-navy .page[class][class] .wh-out-sheet-count {
+  color: #5b5532 !important;
+  background: transparent !important;
+  border: 0 !important;
+  font-family: var(--font) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+}
+body.theme-navy .page[class][class] .lm-sheet-head .btn-ghost,
+body.theme-navy .page[class][class] .up-sheet-head .btn-ghost,
+body.theme-navy .page[class][class] .wqc-sheet-head .btn-ghost,
+body.theme-navy .page[class][class] .wh-out-sheet-head .btn-ghost {
+  font-family: var(--font) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+}
