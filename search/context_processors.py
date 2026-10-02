@@ -17,10 +17,15 @@ def _css_stamp() -> str:
     return format(latest // 1_000_000_000, "x")
 
 
+def client_version_string() -> str:
+    """نفس الرقم في الصفحة وفي /client-version/ وإلا يعيد force-refresh.js التحميل في كل زيارة."""
+    version = str(getattr(settings, "APP_CLIENT_VERSION", "") or "1").strip() or "1"
+    return f"{version}-{_css_stamp()}"
+
+
 def app_client(request):
     """رقم إصدار الواجهة + إشارة تحديث إجباري بعد تسجيل الدخول."""
-    version = str(getattr(settings, "APP_CLIENT_VERSION", "") or "1").strip() or "1"
-    version = f"{version}-{_css_stamp()}"
+    version = client_version_string()
     force_hard_refresh = False
     user = getattr(request, "user", None)
     session = getattr(request, "session", None)

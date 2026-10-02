@@ -30,8 +30,10 @@ class AppLogoutView(auth_views.LogoutView):
 @require_GET
 def client_version(_request):
     """رقم إصدار الواجهة الحالي — بدون كاش، لفرض التحديث بعد النشر."""
+    from search.context_processors import client_version_string
+
     resp = HttpResponse(
-        str(getattr(settings, 'APP_CLIENT_VERSION', '') or ''),
+        client_version_string(),
         content_type='text/plain; charset=utf-8',
     )
     resp['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
