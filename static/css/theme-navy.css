@@ -409,6 +409,39 @@ body.theme-navy .page .dash-head-copy p {
   color: #8F99B7 !important;
 }
 
+/* —— Search head (browse pages) —— */
+body.theme-navy .search-head {
+  background: rgba(22, 27, 46, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25) !important;
+  color: #D7DDF5 !important;
+}
+
+body.theme-navy .search-head h2 {
+  color: #D7DDF5 !important;
+  font-weight: 800 !important;
+}
+
+body.theme-navy .search-head p {
+  color: #8F99B7 !important;
+  font-weight: 700 !important;
+}
+
+body.theme-navy .search-box,
+body.theme-navy .page.results-focus.search-keep-form .search-box {
+  background: rgba(22, 27, 46, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+body.theme-navy .search-head {
+  border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+}
+body.theme-navy .toolbar {
+  background: rgba(16, 25, 51, 0.6) !important;
+  border-top-color: rgba(255, 255, 255, 0.06) !important;
+  color: #D7DDF5 !important;
+}
+
 body.theme-navy .dash-panel,
 body.theme-navy .dash-panel-glass,
 body.theme-navy .page .dash-panel,
@@ -491,7 +524,7 @@ body.theme-navy .dash-pdf-btn svg {
 body.theme-navy .btn-primary,
 body.theme-navy .page .btn-primary,
 body.theme-navy .income-filter-submit {
-  background: linear-gradient(135deg, #4D8DFF, #A85DFF) !important;
+  background: #2F6FE8 !important;
   border-color: transparent !important;
   color: #fff !important;
 }
@@ -1741,7 +1774,7 @@ body.theme-navy .dash-tab:hover .money {
   color: #D7DDF5 !important;
 }
 body.theme-navy .dash-tab.is-active {
-  background: linear-gradient(135deg, #4D8DFF, #A85DFF) !important;
+  background: #2F6FE8 !important;
   border-color: transparent !important;
   color: #fff !important;
   box-shadow: 0 4px 14px rgba(77, 141, 255, 0.35) !important;
@@ -2438,7 +2471,7 @@ body.theme-navy .item-search-page .scope-option.is-active,
 body.theme-navy .item-search-page .scope-option:has(> input[type="radio"]:checked),
 body.theme-navy .sales-search-page .scope-option.is-active,
 body.theme-navy .sales-search-page .scope-option:has(> input[type="radio"]:checked) {
-  background: #4D8DFF !important;
+  background: #2F6FE8 !important;
   color: #fff !important;
   border-color: transparent !important;
   box-shadow: 0 2px 8px rgba(77, 141, 255, 0.35) !important;
@@ -4602,6 +4635,16 @@ body.theme-navy .tb-filter-bar input[type="date"] {
   position: relative !important;
 }
 
+/* بحث الأصناف: أيقونة التقويم على اليسار حتى لا تغطي نص التاريخ في الواجهة العربية */
+body.theme-navy .page input[type="date"],
+body.theme-navy .field input[type="date"],
+body.theme-navy .ss-toolbar input[type="date"] {
+  background-position: left 0.6rem center !important;
+  padding-inline-start: 0.7rem !important;
+  padding-inline-end: 2.2rem !important;
+  text-align: start;
+}
+
 body.theme-navy input[type="date"]:disabled,
 body.theme-navy input[type="date"][readonly],
 body.theme-navy .perf-period.is-disabled input[type="date"] {
@@ -5286,10 +5329,12 @@ body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-a .dash-kpi-value { co
 body.theme-navy .page.wqc-dash .wqc-kpi.dash-kpi-glass.is-b .dash-kpi-value { color: #fbbf24 !important; }
 
 /* Print light preview while fit-printing class is on (before @media print) */
-body.theme-navy.fit-printing,
-body.fit-printing.theme-navy {
-  background: #ffffff !important;
-  color: #0f172a !important;
+@media print {
+  body.theme-navy.fit-printing,
+  body.fit-printing.theme-navy {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
 }
 
 /* ===== Screen locks: selected row final (opaque, after cell stripes) ===== */
@@ -6563,4 +6608,66 @@ body.theme-navy .page .is-panning table thead th,
 body.theme-navy .page .is-panning table tbody td {
   cursor: grabbing !important;
   user-select: none !important;
+}
+
+/* —— KPI cards: one structure everywhere (colors stay semantic per card) —— */
+@media screen {
+  body.theme-navy .page .dash-kpi-card.dash-kpi-glass {
+    border-radius: 12px !important;
+    padding: 14px 16px !important;
+  }
+}
+
+@media screen {
+  body.theme-navy .page .dash-kpi-card .dash-kpi-ico svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+}
+
+/* —— Accessibility: light-theme text colors leaking into navy (contrast < 4.5) —— */
+body.theme-navy .inv-rank-period,
+body.theme-navy .inv-scope-sep,
+body.theme-navy .inv-rank-meta,
+body.theme-navy .income-filter-period-label,
+body.theme-navy .income-comp-callout-name {
+  color: #8F99B7 !important;
+}
+body.theme-navy .inv-rank-vname,
+body.theme-navy .inv-hl-name {
+  color: #D7DDF5 !important;
+}
+body.theme-navy .perf-note {
+  color: #E9C46A !important;
+}
+body.theme-navy .money-value.is-neg,
+body.theme-navy .money-value.neg {
+  color: #fb7185 !important;
+}
+body.theme-navy .sales-overview-dash .sales-table tbody tr.sales-zero-row td,
+body.theme-navy .sales-overview-dash .sales-table tbody tr.sales-zero-row .sales-amt,
+body.theme-navy .sales-overview-dash .sales-table tbody tr.sales-zero-row .money,
+body.theme-navy .sales-overview-dash .sales-table tbody tr.sales-zero-row .money-value,
+body.theme-navy .sales-overview-dash .sales-table tbody tr.sales-zero-row .sar-symbol {
+  color: #fb7185 !important;
+}
+
+@media screen {
+  body.theme-navy a:focus-visible,
+  body.theme-navy button:focus-visible,
+  body.theme-navy input:focus-visible,
+  body.theme-navy select:focus-visible,
+  body.theme-navy textarea:focus-visible,
+  body.theme-navy [tabindex]:focus-visible {
+    outline: 2px solid #8BB4FF !important;
+    outline-offset: 2px !important;
+  }
+}
+
+body.theme-navy .sales-view-btn {
+  background: #2F6FE8 !important;
+  color: #fff !important;
+}
+body.theme-navy .sales-view-btn:hover {
+  background: #1F5BD6 !important;
 }

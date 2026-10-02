@@ -121,8 +121,8 @@
       if (natural > PAGE_WIDTH_PX && natural > 0) {
         var scale = PAGE_WIDTH_PX / natural;
         table.setAttribute('data-fit-scale', '1');
+        /* التصغير يُطبَّق من CSS داخل @media print فقط (zoom: var(--fit-print-scale)) */
         table.style.setProperty('--fit-print-scale', String(scale));
-        table.style.zoom = String(scale);
       }
     });
     document.body.classList.remove('fit-measuring');
@@ -149,7 +149,178 @@
     fitVisibleTables();
   }
 
+  /* ── ثيم الطباعة: خلفية بيضاء + ألوان نص/حدود مناسبة لها ─────────────────
+     الشاشات تحدّد ألوانها بـ !important (نيون على كحلي). عند التصدير نحسب
+     اللون الفعلي لكل عنصر ونحوّله مع الحفاظ على الدرجة اللونية، ثم نعيد
+     القيم الأصلية بعد الطباعة. */
+  var themed = [];
+  var themedOn = false;
+
+  function parseColor(str) {
+    if (!str) return null;
+    var m = str.match(/rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+%?))?\s*\)/);
+    if (m) {
+      var a = m[4] === undefined ? 1 : (m[4].indexOf('%') > -1 ? parseFloat(m[4]) / 100 : parseFloat(m[4]));
+      return { r: +m[1], g: +m[2], b: +m[3], a: a };
+    }
+    m = str.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\)/);
+    if (m) {
+      var a2 = m[4] === undefined ? 1 : (m[4].indexOf('%') > -1 ? parseFloat(m[4]) / 100 : parseFloat(m[4]));
+      return { r: m[1] * 255, g: m[2] * 255, b: m[3] * 255, a: a2 };
+    }
+    return null;
+  }
+
+  function lum(c) {
+    return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+  }
+
+  function toHsl(c) {
+    var r = c.r / 255, g = c.g / 255, b = c.b / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return { h: h, s: s, l: l };
+  }
+
+  function hsl(h, s, l) {
+    return 'hsl(' + Math.round(h) + ',' + Math.round(s * 100) + '%,' + Math.round(l * 100) + '%)';
+  }
+
+  /* نص فاتح (للخلفية الداكنة) → نفس اللون بدرجة غامقة مقروءة على الأبيض */
+  function printText(c) {
+    if (lum(c) < 0.42) return null;
+    var p = toHsl(c);
+    if (p.s < 0.2 || isNavyHue(p)) return '#0f172a';
+    return hsl(p.h, Math.min(p.s, 0.9), 0.26);
+  }
+
+  /* الأزرق/الكحلي هو لون الثيم نفسه لا لون دلالي: يتحوّل إلى أبيض/نص داكن محايد */
+  function isNavyHue(p) {
+    return p.h >= 200 && p.h <= 260 && p.s < 0.75;
+  }
+
+  /* خلفية داكنة → درجة فاتحة جدًا من نفس اللون؛ الشفافة تُلغى */
+  function printBg(c) {
+    if (c.a < 0.5) return 'transparent';
+    if (lum(c) > 0.62) return null;
+    if (lum(c) > 0.3) return null;
+    var p = toHsl(c);
+    return p.s < 0.2 || isNavyHue(p) ? '#ffffff' : hsl(p.h, Math.min(p.s, 0.6), 0.94);
+  }
+
+  function printBorder(c) {
+    if (c.a < 0.05) return null;
+    if (lum(c) < 0.55 && c.a >= 0.5) return null;
+    var p = toHsl(c);
+    return p.s < 0.2 ? '#cbd5e1' : hsl(p.h, Math.min(p.s, 0.5), 0.72);
+  }
+
+  /* القيم لا تُكتب على العنصر بل في ورقة @media print فقط، فالشاشة لا تتأثر أبدًا.
+     العناصر التي لها نفس الإعلانات تتشارك كلاسًا واحدًا (pt-N). */
+  var ptRules = {};
+  var ptCount = 0;
+  var ptStyle = null;
+
+  function setImp(el, prop, val, store) {
+    store.push(prop + ':' + val + ' !important');
+  }
+
+  function themeElement(el) {
+    var cs = window.getComputedStyle(el);
+    if (cs.display === 'none') return;
+    var store = [];
+    var col = parseColor(cs.color);
+    if (col) {
+      var t = printText(col);
+      if (t) setImp(el, 'color', t, store);
+    }
+    var bgc = parseColor(cs.backgroundColor);
+    var hasImg = cs.backgroundImage && cs.backgroundImage !== 'none' && cs.backgroundImage.indexOf('url(') === -1;
+    if (hasImg) setImp(el, 'background-image', 'none', store);
+    if (bgc && bgc.a > 0) {
+      var b = printBg(bgc);
+      if (b) setImp(el, 'background-color', b, store);
+    }
+    ['top', 'right', 'bottom', 'left'].forEach(function (side) {
+      if (parseFloat(cs['border' + side.charAt(0).toUpperCase() + side.slice(1) + 'Width']) > 0) {
+        var bc = parseColor(cs['border' + side.charAt(0).toUpperCase() + side.slice(1) + 'Color']);
+        if (bc) {
+          var v = printBorder(bc);
+          if (v) setImp(el, 'border-' + side + '-color', v, store);
+        }
+      }
+    });
+    if (cs.boxShadow && cs.boxShadow !== 'none') setImp(el, 'box-shadow', 'none', store);
+    if (cs.textShadow && cs.textShadow !== 'none') setImp(el, 'text-shadow', 'none', store);
+    if (el instanceof SVGElement) {
+      var fill = parseColor(cs.fill);
+      if (fill) {
+        var f = printText(fill);
+        if (f) setImp(el, 'fill', f, store);
+      }
+    }
+    if (!store.length) return;
+    var decl = store.join(';');
+    var cls = ptRules[decl];
+    if (!cls) {
+      cls = ptRules[decl] = 'pt-' + (++ptCount);
+    }
+    el.classList.add(cls);
+    themed.push(el);
+  }
+
+  function applyPrintTheme() {
+    if (themedOn || !document.body.classList.contains('theme-navy')) return;
+    themedOn = true;
+    var root = document.querySelector('main') || document.body;
+    [document.documentElement, document.body, root.parentElement, root].forEach(function (el) {
+      if (el) themeElement(el);
+    });
+    root.querySelectorAll('*').forEach(themeElement);
+
+    /* خصوصية عالية حتى تتفوّق على أقفال ثيم Navy (!important متعددة الكلاسات) */
+    var css = '@media print{';
+    Object.keys(ptRules).forEach(function (decl) {
+      var sel = ('.' + ptRules[decl]).repeat(16);
+      /* الوصفاء + body + html نفسهما (لا يطابقهما محدد «html body .x») */
+      /* :not(#id) يضيف خصوصية معرّف حتى تتفوّق على أقفال الثيم المربوطة بـ #id */
+      var tail = ':not(#fit-pt-a):not(#fit-pt-b):not(#fit-pt-c)';
+      css += 'html body ' + sel + tail + ',html body' + sel + tail + ',html' + sel + tail + '{' + decl + '}';
+    });
+    css += '}';
+    ptStyle = document.createElement('style');
+    ptStyle.id = 'fit-print-theme';
+    ptStyle.textContent = css;
+    document.head.appendChild(ptStyle);
+  }
+
+  function restorePrintTheme() {
+    themed.forEach(function (el) {
+      var drop = [];
+      el.classList.forEach(function (c) {
+        if (/^pt-\d+$/.test(c)) drop.push(c);
+      });
+      drop.forEach(function (c) { el.classList.remove(c); });
+      if (!el.getAttribute('class')) el.removeAttribute('class');
+    });
+    if (ptStyle && ptStyle.parentNode) ptStyle.parentNode.removeChild(ptStyle);
+    ptStyle = null;
+    ptRules = {};
+    ptCount = 0;
+    themed = [];
+    themedOn = false;
+  }
+
   function cleanup() {
+    restorePrintTheme();
     document.body.classList.remove('fit-printing');
     document.body.classList.remove('print-landscape');
     document.body.classList.remove('fit-table-only');
@@ -192,7 +363,10 @@
     prepare(tablesForButton(btn));
     window.setTimeout(function () {
       fitVisibleTables();
+      applyPrintTheme();
       window.print();
+      /* print() يعود بعد إغلاق نافذة المعاينة؛ نعيد الشاشة لحالتها حتى لو لم يصل afterprint */
+      window.setTimeout(cleanup, 300);
     }, 40);
   }
 
@@ -207,8 +381,17 @@
     } else {
       ensureLandscapeStyle();
     }
+    applyPrintTheme();
   });
   window.addEventListener('afterprint', cleanup);
+  if (window.matchMedia) {
+    var printMql = window.matchMedia('print');
+    var onPrintChange = function (e) {
+      if (!e.matches) cleanup();
+    };
+    if (printMql.addEventListener) printMql.addEventListener('change', onPrintChange);
+    else if (printMql.addListener) printMql.addListener(onPrintChange);
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

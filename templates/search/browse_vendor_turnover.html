@@ -170,6 +170,50 @@
 
 {% else %}
 
+<form method="get" action="{% url 'browse_vendor_turnover' %}" class="purchase-filter dash-panel-glass" role="search" id="vt-filter-form">
+  <div class="field">
+    <label for="vt-from">من</label>
+    <input id="vt-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="vt-to">إلى</label>
+    <input id="vt-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field">
+    <label for="vt-branch">الفرع</label>
+    <select id="vt-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for row in branches %}
+        <option value="{{ row.code }}" {% if row.code == selected_branch %}selected{% endif %}>{{ row.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field purchase-vendor-field">
+    <label for="vt-vendor">المورد</label>
+    <select id="vt-vendor" name="vendor">
+      <option value="">كل الموردين</option>
+      {% for row in vendors %}
+        <option value="{{ row.code }}" {% if row.code == selected_vendor %}selected{% endif %}>{{ row.name }} · {{ row.code }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="vt-decision">الاستحقاق</label>
+    <select id="vt-decision" name="decision">
+      <option value="" {% if not selected_decision %}selected{% endif %}>الكل</option>
+      <option value="settle" {% if selected_decision == 'settle' %}selected{% endif %}>يستحق سداد</option>
+      <option value="partial" {% if selected_decision == 'partial' %}selected{% endif %}>دفعة بسيطة</option>
+      <option value="hold" {% if selected_decision == 'hold' %}selected{% endif %}>لا يستحق سداد</option>
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+  {% if report %}
+    <button type="submit" class="btn-ghost vt-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">
+      Excel
+    </button>
+  {% endif %}
+</form>
+
 {% if report %}
   <section class="vt-kpis" aria-label="ملخص الدوران">
     <article class="dash-kpi-card dash-kpi-glass vt-kpi vt-kpi-vendors">
@@ -244,50 +288,6 @@
     </article>
   </section>
 {% endif %}
-
-<form method="get" action="{% url 'browse_vendor_turnover' %}" class="purchase-filter dash-panel-glass" role="search" id="vt-filter-form">
-  <div class="field">
-    <label for="vt-from">من</label>
-    <input id="vt-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
-  </div>
-  <div class="field">
-    <label for="vt-to">إلى</label>
-    <input id="vt-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
-  </div>
-  <div class="field">
-    <label for="vt-branch">الفرع</label>
-    <select id="vt-branch" name="branch">
-      <option value="">كل الفروع</option>
-      {% for row in branches %}
-        <option value="{{ row.code }}" {% if row.code == selected_branch %}selected{% endif %}>{{ row.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field purchase-vendor-field">
-    <label for="vt-vendor">المورد</label>
-    <select id="vt-vendor" name="vendor">
-      <option value="">كل الموردين</option>
-      {% for row in vendors %}
-        <option value="{{ row.code }}" {% if row.code == selected_vendor %}selected{% endif %}>{{ row.name }} · {{ row.code }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="vt-decision">الاستحقاق</label>
-    <select id="vt-decision" name="decision">
-      <option value="" {% if not selected_decision %}selected{% endif %}>الكل</option>
-      <option value="settle" {% if selected_decision == 'settle' %}selected{% endif %}>يستحق سداد</option>
-      <option value="partial" {% if selected_decision == 'partial' %}selected{% endif %}>دفعة بسيطة</option>
-      <option value="hold" {% if selected_decision == 'hold' %}selected{% endif %}>لا يستحق سداد</option>
-    </select>
-  </div>
-  <button type="submit" class="btn-primary">عرض</button>
-  {% if report %}
-    <button type="submit" class="btn-ghost vt-excel-btn" name="export" value="excel" title="تصدير الجدول إلى Excel">
-      Excel
-    </button>
-  {% endif %}
-</form>
 
 {% if report %}
   <section class="dash-panel vt-table-panel" aria-label="جدول دوران الموردين">

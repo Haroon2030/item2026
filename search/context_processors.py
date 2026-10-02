@@ -4,9 +4,23 @@
 from django.conf import settings
 
 
+def _css_stamp() -> str:
+    """آخر تعديل لملفات CSS/JS حتى يتغيّر رابطها فيُحدَّث المتصفح دون Ctrl+Shift+R."""
+    latest = 0
+    static = settings.BASE_DIR / "static"
+    for pattern in ("css/*.css", "js/*.js"):
+        for path in static.glob(pattern):
+            try:
+                latest = max(latest, path.stat().st_mtime_ns)
+            except OSError:
+                continue
+    return format(latest // 1_000_000_000, "x")
+
+
 def app_client(request):
     """رقم إصدار الواجهة + إشارة تحديث إجباري بعد تسجيل الدخول."""
     version = str(getattr(settings, "APP_CLIENT_VERSION", "") or "1").strip() or "1"
+    version = f"{version}-{_css_stamp()}"
     force_hard_refresh = False
     user = getattr(request, "user", None)
     session = getattr(request, "session", None)

@@ -14515,7 +14515,9 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   .sales-search-page .ss-sales-grid.is-compare {
     grid-template-columns: 1fr 1fr;
   }
-  .sales-search-page .ss-sales-grid .ss-query {
+  .sales-search-page .ss-sales-grid .ss-query,
+  .sales-search-page .ss-sales-grid .warehouse-field,
+  .sales-search-page .ss-sales-grid .scope-field {
     grid-column: 1 / -1;
   }
   .sales-search-page .ss-sales-grid .ss-actions {
@@ -14797,14 +14799,55 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   line-height: 1;
 }
 
+/* حقل المخزن يرث max-width/flex من شريط البحث القديم — نلغيها هنا ليملأ خليّته */
+.ss-page .ss-toolbar .warehouse-field,
+.item-search-page .ss-item-row .warehouse-field {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  z-index: auto;
+}
+
+.item-search-page .ss-item-row .scope-field {
+  width: auto;
+}
+
+/* ملء الصفوف: الأزرار والمزامنة لا تتمدد بعرض كامل على الشاشات الضيقة */
+.item-search-page .ss-item-row-search .ss-actions,
+.item-search-page .ss-item-row-search .ss-sync {
+  min-width: 0;
+}
+
+.item-search-page .ss-item-row-search .ss-actions {
+  gap: 0.45rem;
+}
+
+.item-search-page .ss-item-row-search .ss-actions .btn-primary {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 6rem;
+}
+
+.item-search-page .ss-item-row-search .ss-actions .btn-scan {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 1100px) {
   .item-search-page .ss-item-row-filters,
   .item-search-page .ss-item-row-search {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .item-search-page .ss-item-row-search .ss-vendor,
+  .item-search-page .ss-item-row-search .ss-query,
+  .item-search-page .ss-item-row-search .ss-actions,
+  .item-search-page .ss-item-row-search .ss-sync {
+    grid-column: 1 / -1;
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 560px) {
   .item-search-page .ss-item-row-filters,
   .item-search-page .ss-item-row-search {
     grid-template-columns: 1fr;
@@ -16143,8 +16186,30 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 }
 
 @media (max-width: 640px) {
-  .vendor-turnover-dash .vt-kpis {
-    grid-template-columns: 1fr;
+  /* بطاقتان في الصف بدل عمود طويل؛ الأخيرة الفردية تمتد بعرض كامل */
+  .vendor-turnover-dash .vt-kpis,
+  .vendor-turnover-dash .vt-kpis:has(.vt-kpi-vendors):not(:has(.vt-kpi-due)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .vendor-turnover-dash .vt-kpis > .vt-kpi:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .vendor-turnover-dash .vt-kpi {
+    min-height: 0;
+    padding: 0.6rem 0.65rem;
+  }
+
+  .vendor-turnover-dash .vt-kpi .dash-kpi-value {
+    font-size: 1.15rem;
+  }
+
+  .vendor-turnover-dash .vt-kpi .dash-kpi-hint {
+    white-space: normal;
+    font-size: 0.68rem;
+    line-height: 1.35;
   }
 }
 
