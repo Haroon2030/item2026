@@ -6,6 +6,10 @@
 {% block body_class %}login-body{% endblock %}
 {% block page_class %}login-page{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/login-gold.css?v={{ app_client_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="login-shell" aria-labelledby="login-brand">
   <div class="login-welcome">

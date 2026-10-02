@@ -13,7 +13,7 @@
   }
   if (!slices.length) return;
 
-  var SCREEN = { text: "#E8ECF8", sub: "#C9D1EC", muted: "#8F99B7", grid: "rgba(255,255,255,0.07)", rest: "#5C6A94", bar: "#fb7185" };
+  var SCREEN = { text: "#111111", sub: "#3a3a3a", muted: "#5b5532", grid: "rgba(17,17,17,0.12)", rest: "#BFB27A", bar: "#be123c" };
   var PRINT = { text: "#111827", sub: "#374151", muted: "#4b5563", grid: "rgba(17,24,39,0.12)", rest: "#9ca3af", bar: "#e11d48" };
   var chart = echarts.init(host, null, { renderer: "svg" });
 
@@ -43,9 +43,9 @@
       tooltip: {
         trigger: "item",
         confine: true,
-        backgroundColor: "#0A1229",
-        borderColor: "rgba(255,255,255,0.14)",
-        textStyle: { color: "#F2F5FF", fontSize: 13 },
+        backgroundColor: "#111111",
+        borderColor: "#F2C811",
+        textStyle: { color: "#FDF6D8", fontSize: 13 },
         formatter: function (p) {
           var r = rows[p.dataIndex];
           return "<b>" + r.name + "</b><br/>" + r.full + "<br/>" + r.share.toFixed(1) + "% من المصروف";

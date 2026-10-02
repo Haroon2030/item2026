@@ -18,8 +18,9 @@
   <link rel="stylesheet" href="/static/css/style.css?v={{ app_client_version }}&amp;age=6">
   <link rel="stylesheet" href="/static/css/theme-v2.css?v={{ app_client_version }}">
   {% if request.user.is_authenticated %}
-  <link rel="stylesheet" href="/static/css/theme-navy.css?v={{ app_client_version }}&amp;age=6">
+  <link rel="stylesheet" href="/static/css/theme-gold.css?v={{ app_client_version }}">
   {% endif %}
+  {% block extra_css %}{% endblock %}
   <script src="/static/js/force-refresh.js?v={{ app_client_version }}"></script>
 </head>
 <body class="{% block body_theme %}theme-navy{% endblock %} {% block body_class %}{% endblock %}">

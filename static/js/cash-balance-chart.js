@@ -14,8 +14,8 @@
   if (!raw.length) return;
 
   var SCREEN = {
-    text: "#E8ECF8", muted: "#8F99B7", warn: "#FFB21E", grid: "rgba(255,255,255,0.08)",
-    zero: "rgba(255,255,255,0.45)", pos: "#37D26F", neg: "#fb7185", hatch: "rgba(10,18,41,0.38)", band: "rgba(255,255,255,0.045)"
+    text: "#111111", muted: "#5b5532", warn: "#9a6700", grid: "rgba(17,17,17,0.12)",
+    zero: "rgba(17,17,17,0.6)", pos: "#15803d", neg: "#be123c", hatch: "rgba(255,255,255,0.6)", band: "rgba(242,200,17,0.12)"
   };
   var PRINT = {
     text: "#111827", muted: "#4b5563", warn: "#b45309", grid: "rgba(17,24,39,0.12)",
@@ -51,9 +51,9 @@
       tooltip: {
         trigger: "item",
         confine: true,
-        backgroundColor: "#0A1229",
-        borderColor: "rgba(255,255,255,0.14)",
-        textStyle: { color: "#F2F5FF", fontSize: 13 },
+        backgroundColor: "#111111",
+        borderColor: "#F2C811",
+        textStyle: { color: "#FDF6D8", fontSize: 13 },
         formatter: function (p) {
           var r = rows[p.dataIndex];
           return "<b>" + r.name + "</b><br/>صندوق " + r.no + "<br/>" + r.disp + "<br/>" + (r.ok ? "مطابق" : "غير مطابق");

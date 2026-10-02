@@ -2668,10 +2668,6 @@ body.login-body {
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
 }
-    border-radius: 14px !important;
-    border: 1px solid rgba(8, 145, 178, 0.1) !important;
-  }
-}
 
 /* —— Sales / inventory canvas —— */
 body.sales-dash-body,
@@ -2698,115 +2694,6 @@ body.theme-navy .page,
   background: transparent;
   color: #e8ecf8;
 }
-
-.welcome-dash .welcome-hero{
-  border-color: var(--line);
-  background:
-    radial-gradient(ellipse 70% 45% at 100% 0%, rgba(15, 122, 107, 0.07), transparent 52%),
-    radial-gradient(ellipse 55% 40% at 0% 0%, rgba(8, 145, 178, 0.06), transparent 48%),
-    #fff !important;
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
-}
-
-.welcome-title {
-  color: var(--brand-dark) !important;
-}
-
-.welcome-kicker,
-.welcome-name {
-  color: var(--brand) !important;
-}
-
-.welcome-greeting,
-.welcome-sub {
-  color: var(--ink-soft) !important;
-}
-
-.welcome-role {
-  color: var(--brand-dark) !important;
-  background: var(--brand-soft) !important;
-  border-color: #c5dde8 !important;
-}
-
-.welcome-card{
-  border-color: var(--line);
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-}
-
-.welcome-card::before{
-  background: var(--brand-mid);
-}
-
-.welcome-card strong{
-  color: var(--brand-dark);
-}
-
-.welcome-card > span:last-child{
-  color: var(--muted);
-}
-
-.welcome-card-ico{
-  color: #fff;
-  background: var(--brand);
-}
-
-.welcome-card--sales{
-  background: #ecfeff;
-  border-color: #d7e8ec;
-}
-.welcome-card--sales::before{ background: #06b6d4; }
-.welcome-card--sales .welcome-card-ico{ background: #06b6d4; }
-.welcome-card--sales strong{ color: #0e7490; }
-
-.welcome-card--perf{
-  background: #ecfeff;
-  border-color: #cffafe;
-}
-.welcome-card--perf::before{ background: #06b6d4; }
-.welcome-card--perf .welcome-card-ico{ background: #06b6d4; }
-.welcome-card--perf strong{ color: #0e7490; }
-
-.welcome-card--inv{
-  background: #ffedd5;
-  border-color: #fdba74;
-}
-.welcome-card--inv::before{ background: #d97706; }
-.welcome-card--inv .welcome-card-ico{ background: #d97706; }
-.welcome-card--inv strong{ color: #9a3412; }
-
-.welcome-card--purch{
-  background: #e0f7fa;
-  border-color: #d7e8ec;
-}
-.welcome-card--purch::before{ background: #0891b2; }
-.welcome-card--purch .welcome-card-ico{ background: #0891b2; }
-.welcome-card--purch strong{ color: #115e59; }
-
-.welcome-card--income{
-  background: #d1fae5;
-  border-color: #6ee7b7;
-}
-.welcome-card--income::before{ background: #15803d; }
-.welcome-card--income .welcome-card-ico{ background: #15803d; }
-.welcome-card--income strong{ color: #14532d; }
-
-.welcome-card--assets{
-  background: #f5f3ff;
-  border-color: #c4b5fd;
-}
-.welcome-card--assets::before{ background: #7c3aed; }
-.welcome-card--assets .welcome-card-ico{ background: #7c3aed; }
-.welcome-card--assets strong{ color: #5b21b6; }
-
-.welcome-card--search{
-  background: #e0e7ff;
-  border-color: #a5b4fc;
-}
-.welcome-card--search::before{ background: #4f46e5; }
-.welcome-card--search .welcome-card-ico{ background: #4f46e5; }
-.welcome-card--search strong{ color: #312e81; }
 
 body.sales-dash-body .app-backdrop,
 body.inv-dash-body .app-backdrop{
@@ -2998,7 +2885,6 @@ body.inv-dash-body .app-backdrop{
   width: fit-content !important;
   max-width: 100% !important;
 }
-
 
 .income-dash .income-kpi-rev .dash-kpi-value{ color: #874bee; }
 .income-dash .income-kpi-rev .dash-kpi-hint{
@@ -3863,7 +3749,6 @@ body :where(.muted, .tagline, .dash-kpi-hint, .sidebar-section-label){
   background: #fff;
 }
 
-
 /* —— Tables density · mobile —— */
 @media (max-width: 900px) {
   .data-table th{
@@ -4111,8 +3996,6 @@ body :where(.muted, .tagline, .dash-kpi-hint, .sidebar-section-label){
     grid-template-columns: 1fr !important;
   }
 }
-
-
 
 /* —— Site-wide KPI shell · Aqua Mist —— */
 .low-margin-dash .lm-kpi,

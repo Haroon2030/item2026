@@ -15183,7 +15183,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
 .sales-overview-dash .sales-ov-kpis {
   display: grid;
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.4rem;
   margin: 0 0 0.9rem;
   align-items: stretch;
@@ -15221,7 +15221,7 @@ body :where(.mono, td.mono, th.mono, .purchase-amount, .purchase-qty, .purchase-
   height: 100%;
   min-height: 6.2rem;
   max-height: 6.2rem;
-  min-width: 0;
+  min-width: 0 !important;
   padding: 0.5rem 0.6rem !important;
   gap: 0.18rem !important;
   overflow: hidden;
