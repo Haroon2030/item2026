@@ -38,40 +38,50 @@
         <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 19.5V4.5M4 19.5h16"/><path d="M8 16V9.5M12.5 16V7M17 16v-4.5"/><path d="M7.2 9.2l5-2.6 4.8 2.2"/></svg>
         </span>
-        إجمالي المبيعات (صافي بعد المرتجع)
+        إجمالي المبيعات (شامل المرتجعات)
       </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · نقاط البيع + الآجل + النقدي خارج نقاط البيع</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_gross %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.combined_sales }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-pos">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
           <svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="12.5" rx="2.2"/><path d="M8 20h8M12 17v3"/><path d="M6.5 9h4M6.5 12.5h2.5"/><circle cx="16.2" cy="10.2" r="1.6"/></svg>
         </span>
-        مبيعات نقاط البيع (صافي)
+        مبيعات نقاط البيع (شامل المرتجعات)
       </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_sales %}</strong>
-      <span class="dash-kpi-hint mono" title="شامل الضريبة · بعد خصم مرتجعات {{ dashboard.kpis.pos_returns }} — قبل الخصم {{ dashboard.kpis.pos_gross_before_returns }} (يطابق تقرير أونكس)">{{ dashboard.kpis.pos_invoices }} فاتورة · قبل المرتجع {{ dashboard.kpis.pos_gross_before_returns }}</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_gross_before_returns %}</strong>
+      <span class="dash-kpi-hint mono" title="شامل الضريبة · بعد خصم مرتجعات {{ dashboard.kpis.pos_returns }} — قبل الخصم {{ dashboard.kpis.pos_gross_before_returns }} (يطابق تقرير أونكس)">{{ dashboard.kpis.pos_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.pos_sales }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/><path d="M9.5 12h5.5M12.5 9.5 15 12l-2.5 2.5"/></svg>
         </span>
-        مرتجع نقاط البيع (مخصوم من الصافي)
+        مرتجع نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_returns %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_return_bills }} فاتورة مرتجع</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns dash-kpi-glass-wholesale-returns">
+      <span class="dash-kpi-label">
+        <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/><path d="M9.5 12h5.5M12.5 9.5 15 12l-2.5 2.5"/></svg>
+        </span>
+        مرتجع نظام المبيعات (آجل + نقدي)
+      </span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_returns %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_return_bills }} فاتورة مرتجع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M14 3.2H7.2A2.2 2.2 0 0 0 5 5.4v13.2A2.2 2.2 0 0 0 7.2 21h9.6a2.2 2.2 0 0 0 2.2-2.2V8.4z"/><path d="M14 3.2v5.2h5.2M8.2 12.5h7.6M8.2 16h5.2"/></svg>
         </span>
-        آجل + نقدي فواتير خارج نقاط البيع
+        إجمالي مبيعات الجملة (شامل المرتجعات)
       </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_sales %}</strong>
-      <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة</span>
+      <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_gross %}</strong>
+      <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.wholesale_sales }}</span>
     </article>
   </section>
 
@@ -105,16 +115,6 @@
       </span>
       <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_return_branch.code }}">{{ dashboard.ranks.top_return_branch.name }}</strong>
       <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_return_branch.value_display != "—" %}{% money dashboard.ranks.top_return_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_return_branch.hint }}</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-item-ret dash-kpi-ranked" id="sales-rank-item-card">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-item-ret" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 8.2 12 4.2l8 4v8.2l-8 4-8-4z"/><path d="M12 12.2v8.2M4 8.2l8 4 8-4"/><path d="M15.2 9.6 18 7.8"/></svg>
-        </span>
-        أكثر صنف إرجاع
-      </span>
-      <strong class="dash-kpi-value" id="sales-rank-item-name">{{ dashboard.ranks.top_return_item.name }}</strong>
-      <span class="dash-kpi-hint mono" id="sales-rank-item-hint">{{ dashboard.ranks.top_return_item.hint }}</span>
     </article>
   </section>
 {% endif %}
@@ -409,33 +409,15 @@
             <span class="result-pill" id="sales-users-pill">…</span>
           </div>
         </div>
-        <div class="table-wrap sales-ov-scroll">
-          <table class="data-table sales-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>المستخدم</th>
-                <th>الفواتير</th>
-                <th class="sales-col-cost">متوسط السلة</th>
-                <th class="sales-col-amt">إجمالي المبيعات</th>
-                <th class="sales-col-share">الحصة</th>
-              </tr>
-            </thead>
-            <tbody id="sales-users-body">
-              <tr>
-                <td colspan="6" class="sales-empty sales-ov-loading">جاري تحميل أكثر المستخدمين بيعاً…</td>
-              </tr>
-            </tbody>
-            <tfoot id="sales-users-foot" hidden>
-              <tr class="sales-grand-row">
-                <td colspan="2">الإجمالي</td>
-                <td class="mono sales-col-inv" id="sales-users-tot-inv">0</td>
-                <td class="mono sales-col-cost">—</td>
-                <td class="mono sales-amt sales-col-amt" id="sales-users-tot-sales">0.00</td>
-                <td class="mono sales-col-share">100%</td>
-              </tr>
-            </tfoot>
-          </table>
+        <div class="sales-ov-scroll sales-users-chart-wrap">
+          <ol class="sales-users-chart" id="sales-users-chart" aria-label="مخطط أكثر المستخدمين بيعاً">
+            <li class="sales-users-empty sales-ov-loading">جاري تحميل أكثر المستخدمين بيعاً…</li>
+          </ol>
+          <div class="sales-users-total" id="sales-users-total" hidden>
+            <span>الإجمالي</span>
+            <span class="mono" id="sales-users-tot-inv">0</span>
+            <strong class="mono sales-amt" id="sales-users-tot-sales">0.00</strong>
+          </div>
         </div>
       </section>
     </div>
@@ -445,6 +427,7 @@
 
 {% block extra_js %}
 <script src="/static/js/fit-kpi.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/kpi-jump.js?v={{ app_client_version }}" defer></script>
 <script src="/static/js/sales-returns-donut.js?v={{ app_client_version }}" defer></script>
 <script src="/static/js/sales-groups-loader.js?v={{ app_client_version }}" defer></script>
 <script src="/static/js/sales-top-items-loader.js?v={{ app_client_version }}" defer></script>

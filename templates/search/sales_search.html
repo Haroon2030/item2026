@@ -34,13 +34,24 @@
         <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
       </div>
 
-      <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
-        <label for="warehouse">المخزن</label>
-        <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
-          {% for wh in warehouses %}
-            <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
-          {% endfor %}
-        </select>
+      <div class="ss-branch-wh">
+        <div class="field branch-field ss-branch ss-wh" id="branch-field">
+          <label for="branch">الفرع</label>
+          <select id="branch" name="branch" class="warehouse-select" aria-label="اختر الفرع">
+            <option value="">كل الفروع</option>
+            {% for b in branches %}
+              <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field warehouse-field ss-wh" id="warehouse-field"{% if compare_mode %} hidden{% endif %}>
+          <label for="warehouse">المخزن</label>
+          <select id="warehouse" name="warehouse" class="warehouse-select" aria-label="اختر المخزن">
+            {% for wh in warehouses %}
+              <option value="{{ wh.code }}" {% if wh.code == warehouse %}selected{% endif %}>{{ wh.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
 
       <div class="field scope-field ss-scope ss-scope-range" role="radiogroup" aria-label="نطاق البحث">
@@ -229,10 +240,44 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ warehouses|json_script:"ss-wh-data" }}
 <script src="/static/js/vendor/zxing.min.js" defer></script>
 <script src="/static/js/vendor/zxing-browser.min.js" defer></script>
 <script src="/static/js/barcode-scanner.js" defer></script>
 <script src="/static/js/inv-select.js?v={{ app_client_version }}" defer></script>
+<script>
+(function () {
+  var branchEl = document.getElementById("branch");
+  var whEl = document.getElementById("warehouse");
+  var dataEl = document.getElementById("ss-wh-data");
+  if (!branchEl || !whEl || !dataEl) return;
+  var all = [];
+  try { all = JSON.parse(dataEl.textContent || "[]") || []; } catch (e) { all = []; }
+
+  function fill(keep) {
+    var brn = String(branchEl.value || "").trim();
+    var list = brn
+      ? all.filter(function (w) { return String(w.branch_code || "").trim() === brn; })
+      : all;
+    var chosen = list.some(function (w) { return String(w.code) === String(keep); })
+      ? String(keep)
+      : (list[0] ? String(list[0].code) : "");
+    whEl.innerHTML = "";
+    list.forEach(function (w) {
+      var o = document.createElement("option");
+      o.value = w.code;
+      o.textContent = w.name || w.code;
+      if (String(w.code) === chosen) o.selected = true;
+      whEl.appendChild(o);
+    });
+    whEl.value = chosen;
+    if (typeof window.invSelectRefresh === "function") window.invSelectRefresh(whEl);
+  }
+
+  branchEl.addEventListener("change", function () { fill(""); });
+  document.addEventListener("DOMContentLoaded", function () { fill(whEl.value); });
+})();
+</script>
 <script>
 (function () {
   var form = document.getElementById("sales-search-form");

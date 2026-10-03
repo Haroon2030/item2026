@@ -1,0 +1,480 @@
+/* ==========================================================================
+   app-components.css — مكوّنات التطبيق فوق الثيم (theme-gold.css)
+
+   القاعدة الوحيدة لسهولة الصيانة:
+     كل ما في هذا الملف داخل  @layer app-components .
+     الإعلانات المهمة (!important) داخل طبقة تتفوّق على !important خارج أي طبقة
+     (وهو حال كل ملفات الثيم القديمة) مهما كانت خصوصية محدّداتها، لذلك:
+       • المحدّدات هنا قصيرة وبسيطة — لا :not(#fx) ولا تكرار أصناف.
+       • لتجاوز قاعدة قديمة اكتب الإعلان هنا مع !important.
+       • المكوّنات الجديدة كلياً (آخر حركة، مخطط المستخدمين) لا تحتاج !important.
+
+   الفهرس:
+     0. الرموز (الألوان، المنحنى الزمني)
+     1. أعمدة الجداول الملوّنة        (يضيف الفئات static/js/table-columns.js)
+     2. القائمة الجانبية
+     3. إصلاحات التباين (بقايا الثيم الداكن)
+     4. بطاقات المؤشرات (up-kpi + مؤشرات تحليل المبيعات)
+     5. تحليل المبيعات: مخطط المستخدمين، البحث بالفرع والمخزن
+     6. شاشة آخر حركة على الصنف
+     7. الطباعة وتقليل الحركة
+   ========================================================================== */
+
+@layer app-components {
+
+  /* ---------------------------------------------------------------- 0 --- */
+  :root {
+    --ac-gold: #F2C811;
+    --ac-ink: #111;
+    --ac-muted: #51647F;
+    --ac-ok: #166534;
+    --ac-warn: #854D0E;
+    --ac-danger: #9F1239;
+    --ac-cream: #FDF6D8;
+    --ac-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  /* ---------------------------------------------------------------- 1 --- */
+  /* لون كل عمود: --c-bg الأساس · --c-bg-h عند المرور · --c-ring لون الإطار (RGB) */
+  td.tcc-1 { --c-bg: #E6F0FA; --c-bg-h: #D3E5F6; --c-ring: 50 100 160; }   /* أعداد  */
+  td.tcc-2 { --c-bg: #E8F4E3; --c-bg-h: #D6EBCE; --c-ring: 60 120 60; }    /* مبالغ  */
+  td.tcc-3 { --c-bg: #FBE8E4; --c-bg-h: #F6D5CF; --c-ring: 160 60 50; }    /* مرتجع  */
+  td.tcc-4 { --c-bg: #EEEAF8; --c-bg-h: #E2DCF3; --c-ring: 100 80 160; }   /* متوسط  */
+  td.tcc-5 { --c-bg: #FCEBD3; --c-bg-h: #F8DDB8; --c-ring: 170 110 30; }   /* حصة    */
+  td.tcc-6 { --c-bg: #E1F3F1; --c-bg-h: #CDE8E4; --c-ring: 30 130 120; }   /* كمية   */
+  td.tcc-7 { --c-bg: #F8E6F1; --c-bg-h: #F1D3E6; --c-ring: 160 60 130; }
+  td.tcc-8 { --c-bg: #EEF3D4; --c-bg-h: #E2EBBB; --c-ring: 110 130 30; }
+  td.tcc-9 { --c-bg: #EFEBE2; --c-bg-h: #E3DDCF; --c-ring: 110 100 80; }
+
+  td[class*="tcc-"] {
+    background: var(--c-bg) !important;
+    box-shadow: inset 0 0 0 1px rgb(var(--c-ring) / 0.12);
+  }
+  tr:hover > td[class*="tcc-"] { background: var(--c-bg-h) !important; }
+  tfoot td[class*="tcc-"] { font-weight: 800; }
+
+  /* عمود الاسم: ذهبي */
+  td.tc-name {
+    background: linear-gradient(180deg, #FCEAA0 0%, #F8DB6A 100%) !important;
+    color: var(--ac-ink) !important;
+    font-weight: 800;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 0 rgb(120 90 0 / 0.18);
+  }
+  tr:hover > td.tc-name,
+  tr.is-selected > td.tc-name {
+    background: linear-gradient(180deg, #F8DB6A 0%, #F0CB45 100%) !important;
+  }
+
+  /* الأرقام وعناوينها في الوسط */
+  th.tc-head-num,
+  td.tc-num { text-align: center !important; }
+  td.tc-num .money { justify-content: center !important; }
+
+  /* رمز الريال وقيمته في صفوف الإجمالي داكنان (كانا أبيضين) */
+  tfoot .money,
+  tfoot .sar-symbol,
+  tr.sales-grand-row .money,
+  tr.sales-grand-row .sar-symbol { color: var(--ac-ink) !important; }
+
+  /* ---------------------------------------------------------------- 2 --- */
+  .sidebar-nav .sidebar-link:not(.is-active) .sidebar-ico { color: var(--ac-gold) !important; }
+  .sidebar-nav .sidebar-link:not(.is-active) .sidebar-group-chevron {
+    color: var(--ac-gold) !important;
+    opacity: 1 !important;
+  }
+  /* العنصر النشط ومجموعة الصفحة الحالية: خلفية صفراء، فالأيقونة سوداء */
+  .sidebar-nav .sidebar-link.is-active .sidebar-ico,
+  .sidebar-nav .sidebar-group.is-current > .sidebar-group-toggle .sidebar-ico,
+  .sidebar-nav .sidebar-group.is-current > .sidebar-group-toggle .sidebar-group-chevron {
+    color: var(--ac-ink) !important;
+    opacity: 1 !important;
+  }
+
+  /* ---------------------------------------------------------------- 3 --- */
+  .dash-pdf-btn {
+    background: #FFF1F2 !important;
+    border-color: #E9A3B0 !important;
+    color: var(--ac-danger) !important;
+  }
+
+  .perf-note,
+  .income-filter-sep,
+  .wnt-period-sep { color: #5B678A !important; }
+  .inv-summary-scope-label,
+  .inv-summary-scope-title,
+  .tb-b-code { color: #0E7490 !important; }
+  .pr-compare-chip.is-today,
+  .pr-compare-chip-muted { color: var(--ac-ok) !important; }
+  .pr-compare-meta-label,
+  .pr-compare-sheet-note { color: var(--ac-muted) !important; }
+
+  /* ورقة المقارنة: أسماء المخازن على الرأس الأسود */
+  .pr-compare-sheet thead th .pr-compare-sheet-wh-name { color: var(--ac-gold) !important; }
+  .pr-compare-sheet thead th .pr-compare-sheet-wh-branch { color: #E8E1C4 !important; }
+
+  /* تحليل الأداء: بطاقات الأفضل/التراجع/المرتجع وبطاقة الصحة بخلفيات فاتحة */
+  .perf-meta-card.perf-meta-best   { background: #ECFDF3 !important; border-color: #86D6A4 !important; box-shadow: none !important; }
+  .perf-meta-card.perf-meta-drop   { background: #FFF1F2 !important; border-color: #F0A9B6 !important; box-shadow: none !important; }
+  .perf-meta-card.perf-meta-return { background: #FFF6E0 !important; border-color: #EBC46A !important; box-shadow: none !important; }
+  .perf-meta-mark { box-shadow: none !important; }
+  .perf-meta-label { color: #4A4A4A !important; }
+  .perf-meta-best .perf-meta-name,   .perf-meta-best .perf-meta-value   { color: var(--ac-ok) !important; }
+  .perf-meta-drop .perf-meta-name,   .perf-meta-drop .perf-meta-value   { color: var(--ac-danger) !important; }
+  .perf-meta-return .perf-meta-name, .perf-meta-return .perf-meta-value { color: var(--ac-warn) !important; }
+
+  .perf-hero.perf-hero-good { background: linear-gradient(145deg, #DDF6E6, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-ok   { background: linear-gradient(145deg, #DDF1F6, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-warn { background: linear-gradient(145deg, #FFEBC8, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-bad  { background: linear-gradient(145deg, #FFDCE2, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-score-good .perf-score-ring { background: #ECFDF3 !important; box-shadow: none !important; }
+  .perf-score-ok .perf-score-ring   { background: #ECF8FB !important; box-shadow: none !important; }
+  .perf-score-warn .perf-score-ring { background: #FFF6E0 !important; box-shadow: none !important; }
+  .perf-score-bad .perf-score-ring  { background: #FFF1F2 !important; box-shadow: none !important; }
+
+  /* علامة الناقص تبقى يسار الرقم في صفحة RTL (‑100.0% لا 100.0%‑) */
+  .perf-meta-value:not(:has(.money)) { direction: ltr; unicode-bidi: isolate; text-align: right; }
+  .perf-orb-hub-delta { direction: ltr; unicode-bidi: isolate; }
+  td.perf-cell-delta { direction: ltr; unicode-bidi: isolate; text-align: left; }
+
+  /* ---------------------------------------------------------------- 4 --- */
+  /*
+   * بطاقة مؤشر واحدة تخدم صفحات التسعير (.up-kpi) وتحليل المبيعات (.dash-kpi-card).
+   * اللون من ثلاثة متغيرات: --kpi-accent الشريط/التركيز · --kpi-tint الخلفية الفاتحة · --kpi-ink النص.
+   */
+  .up-kpi,
+  .sales-ov-kpis .dash-kpi-card {
+    --kpi-accent: #D9A800; --kpi-tint: #FBF0BD; --kpi-ink: #7A5A00;
+    position: relative !important;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF2 100%) !important;
+    border: 1px solid rgb(17 17 17 / 0.1) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 8px 22px rgb(80 62 0 / 0.09) !important;
+    overflow: hidden !important;
+    color: var(--ac-ink) !important;
+    transition: transform 0.18s var(--ac-ease), box-shadow 0.18s var(--ac-ease);
+    animation: kpi-in 0.26s var(--ac-ease) both;
+  }
+  .up-kpi:nth-child(2), .sales-ov-kpis .dash-kpi-card:nth-child(2) { animation-delay: 0.05s; }
+  .up-kpi:nth-child(3), .sales-ov-kpis .dash-kpi-card:nth-child(3) { animation-delay: 0.10s; }
+  .up-kpi:nth-child(4), .sales-ov-kpis .dash-kpi-card:nth-child(4) { animation-delay: 0.15s; }
+  .up-kpi:nth-child(5), .sales-ov-kpis .dash-kpi-card:nth-child(5) { animation-delay: 0.20s; }
+  .up-kpi:nth-child(n+6), .sales-ov-kpis .dash-kpi-card:nth-child(n+6) { animation-delay: 0.25s; }
+
+  /* ألوان الحالات */
+  .up-kpi.is-match, .up-kpi.pc-kpi-down, .sales-ov-kpis .dash-kpi-glass-returns
+    { --kpi-accent: #D6455D; --kpi-tint: #FBE3E7; --kpi-ink: #9F1239; }
+  .up-kpi.is-shown, .sales-ov-kpis .dash-kpi-glass-pos
+    { --kpi-accent: #2F7CC4; --kpi-tint: #E0EEFA; --kpi-ink: #1D5C99; }
+  .up-kpi.is-wh, .sales-ov-kpis .dash-kpi-glass-wholesale
+    { --kpi-accent: #1E9C8E; --kpi-tint: #DDF3EF; --kpi-ink: #0F6F65; }
+  .up-kpi.pc-kpi-up, .sales-ov-kpis .dash-kpi-glass-branches
+    { --kpi-accent: #3C9A55; --kpi-tint: #E1F3E6; --kpi-ink: #1F6B34; }
+  .sales-ov-kpis .dash-kpi-glass-visit
+    { --kpi-accent: #7C5CC4; --kpi-tint: #ECE6F8; --kpi-ink: #5B3FA3; }
+
+  /* الشريط الجانبي */
+  .up-kpi::before,
+  .sales-ov-kpis .dash-kpi-card::before {
+    content: "";
+    position: absolute;
+    inset-block: 14px;
+    inset-inline-start: 0;
+    width: 4px;
+    height: auto;
+    border-radius: 0 4px 4px 0;
+    background: var(--kpi-accent) !important;
+    transition: transform 0.18s var(--ac-ease);
+    transform-origin: right center;
+  }
+  /* الأيقونة: مربع مستدير بلون الحالة */
+  .up-kpi .up-kpi-ico,
+  .sales-ov-kpis .dash-kpi-card .dash-kpi-ico {
+    background: var(--kpi-tint) !important;
+    color: var(--kpi-ink) !important;
+    border: 1px solid color-mix(in srgb, var(--kpi-accent) 35%, transparent) !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    transition: transform 0.18s var(--ac-ease);
+  }
+  .up-kpi .up-kpi-ico svg,
+  .sales-ov-kpis .dash-kpi-card .dash-kpi-ico svg { stroke: currentColor !important; }
+  /* الشرح السفلي: شارة */
+  .up-kpi .up-kpi-hint,
+  .sales-ov-kpis .dash-kpi-card .dash-kpi-hint {
+    background: var(--kpi-tint) !important;
+    color: var(--kpi-ink) !important;
+  }
+
+  /* بطاقات صفحات التسعير: الشبكة والمقاسات */
+  .up-kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr)) !important;
+    gap: 0.8rem !important;
+    margin-bottom: 1rem !important;
+  }
+  .up-kpi {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    gap: 0.55rem !important;
+    min-height: 7.6rem !important;
+    padding: 1rem 1.15rem 0.95rem 1rem !important;
+  }
+  .up-kpi .up-kpi-label {
+    display: flex !important;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.86rem !important;
+    font-weight: 800 !important;
+    color: #3A3A3A !important;
+  }
+  .up-kpi .up-kpi-ico {
+    flex: 0 0 auto;
+    width: 2.1rem !important;
+    height: 2.1rem !important;
+    display: inline-grid !important;
+    place-items: center;
+  }
+  .up-kpi .up-kpi-ico svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .up-kpi .up-kpi-value {
+    font-size: clamp(1.7rem, 3.4vw, 2.2rem) !important;
+    font-weight: 800 !important;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ac-ink) !important;
+  }
+  .up-kpi .up-kpi-hint {
+    align-self: flex-start;
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    line-height: 1.4;
+  }
+
+  /* مؤشرات تحليل المبيعات: قابلة للضغط للانتقال إلى القسم (static/js/kpi-jump.js) */
+  .sales-ov-kpis .dash-kpi-card.is-jumpable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .sales-ov-kpis .dash-kpi-card.is-jumpable::after {
+    content: "↓";
+    position: absolute;
+    inset-block-end: 10px;
+    inset-inline-end: 12px;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--kpi-accent);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 800;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.18s var(--ac-ease);
+    pointer-events: none;
+  }
+  .sales-ov-kpis .dash-kpi-card.is-jumpable:focus-visible { outline: 3px solid var(--kpi-accent); outline-offset: 2px; }
+  .sales-ov-kpis .dash-kpi-card.is-jumpable:focus-visible::after { opacity: 1; transform: none; }
+  .sales-ov-kpis .dash-kpi-card.is-jumpable:active { transform: scale(0.985) !important; transition-duration: 0.1s; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .up-kpi:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 14px 30px rgb(80 62 0 / 0.16) !important;
+    }
+    .sales-ov-kpis .dash-kpi-card.is-jumpable:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 16px 32px rgb(80 62 0 / 0.17) !important;
+    }
+    .sales-ov-kpis .dash-kpi-card.is-jumpable:hover::before { transform: scaleX(1.6); }
+    .sales-ov-kpis .dash-kpi-card.is-jumpable:hover .dash-kpi-ico { transform: translateY(-1px) scale(1.07); }
+    .sales-ov-kpis .dash-kpi-card.is-jumpable:hover::after { opacity: 1; transform: none; }
+  }
+
+  /* وميض القسم الهدف بعد الانتقال */
+  .kpi-target-pulse { animation: kpi-target-pulse 0.9s var(--ac-ease) 1; }
+
+  /* آخر بطاقة فردية في صف أبرز الترتيبات تمتد بعرض الصف */
+  .sales-ov-rank-kpis > .dash-kpi-card:last-child:nth-child(odd) { grid-column: 1 / -1 !important; }
+
+  @keyframes kpi-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes kpi-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes kpi-target-pulse {
+    0%   { box-shadow: 0 0 0 0 rgb(242 200 17 / 0.75); }
+    100% { box-shadow: 0 0 0 14px rgb(242 200 17 / 0); }
+  }
+
+  /* ---------------------------------------------------------------- 5 --- */
+  /* مخطط أكثر المستخدمين بيعاً: أشرطة أفقية (static/js/sales-top-users-loader.js) */
+  .sales-users-chart { list-style: none; margin: 0; padding: 0.35rem 0.2rem 0.2rem; display: flex; flex-direction: column; gap: 0.55rem; }
+  .sales-users-row { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); gap: 0.6rem; align-items: center; }
+  .sales-users-rank {
+    width: 1.9rem; height: 1.9rem; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 0.78rem; font-weight: 800;
+    background: var(--ac-cream); color: var(--ac-ink) !important;
+    border: 1px solid rgb(17 17 17 / 0.14);
+  }
+  .sales-users-row.is-top .sales-users-rank { background: var(--ac-ink) !important; color: var(--ac-gold) !important; border-color: var(--ac-ink); }
+  .sales-users-main { min-width: 0; }
+  .sales-users-line { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.25rem; }
+  .sales-users-name { font-weight: 800; font-size: 0.9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sales-users-name small { color: var(--ac-muted) !important; font-weight: 600; font-size: 0.7rem; }
+  .sales-users-amt { font-weight: 800; font-size: 0.92rem; white-space: nowrap; direction: ltr; }
+  .sales-users-amt .money { gap: 0.25em; }
+  .sales-users-track { height: 0.75rem; border-radius: 999px; background: rgb(17 17 17 / 0.07); overflow: hidden; }
+  .sales-users-bar {
+    display: block; height: 100%; border-radius: 999px;
+    background: linear-gradient(270deg, #F2C811, #D9A800);
+    transform-origin: right center;
+    animation: sales-users-grow 0.6s ease-out both;
+  }
+  .sales-users-row.is-top .sales-users-bar { background: linear-gradient(270deg, #F2C811, #B98A00); }
+  .sales-users-meta { display: flex; gap: 0.9rem; margin-top: 0.22rem; font-size: 0.72rem; font-weight: 600; color: var(--ac-muted) !important; }
+  .sales-users-share { margin-inline-start: auto; font-weight: 800; color: var(--ac-warn) !important; }
+  .sales-users-empty { padding: 1rem; text-align: center; color: #5B678A; font-weight: 600; }
+  .sales-users-total { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-top: 0.7rem; padding: 0.55rem 0.8rem; border-radius: 8px; background: var(--ac-cream); font-weight: 800; font-size: 0.85rem; }
+  .sales-users-total[hidden] { display: none; }
+  @keyframes sales-users-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+  /* البحث عن مبيعات صنف: الفرع والمخزن جنباً إلى جنب */
+  .sales-search-page .ss-branch-wh {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 1.3fr);
+    gap: 0.4rem 0.45rem;
+    align-items: end;
+    min-width: 0;
+  }
+  .sales-search-page .ss-branch-wh > .field {
+    grid-column: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0;
+  }
+  .sales-search-page .ss-branch-wh #branch { width: 100%; }
+  @media (max-width: 1100px) {
+    .sales-search-page .ss-branch-wh { grid-column: 1 / -1; width: 100%; }
+  }
+  @media (max-width: 720px) {
+    .sales-search-page .ss-branch-wh { grid-template-columns: 1fr; }
+  }
+
+  /* ---------------------------------------------------------------- 6 --- */
+  /* آخر حركة على الصنف (templates/search/browse_last_movement.html + static/js/last-movement.js) */
+  .lastmove-dash .lastmove-filter { flex-wrap: wrap; }
+  /* العجلة فوق الجدول تمرّر الصفحة بدل أن تحبس المؤشر داخله */
+  .lastmove-dash .table-wrap {
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+
+  .lastmove-table th,
+  .lastmove-table td { padding: 0.28rem 0.45rem; font-size: 0.8rem; line-height: 1.25; }
+  .lastmove-table .pr-item { max-width: 15rem; }
+  .lastmove-table .lm-col-date,
+  .lastmove-table .lm-col-qty { min-width: 5.6rem; }
+  .lastmove-table .lm-col-wh { min-width: 8rem; }
+
+  .lm-date { text-align: center; white-space: nowrap; }
+  .lm-day { font-weight: 800; display: block; }
+  .lm-day.is-fresh { color: var(--ac-ok); }
+  .lm-day.is-mid   { color: var(--ac-warn); }
+  .lm-day.is-old   { color: var(--ac-danger); }
+  .lm-age { display: block; font-size: 0.7rem; font-weight: 600; color: var(--ac-muted); }
+  .lm-none, .lm-pending { color: var(--ac-muted); font-weight: 600; font-size: 0.78rem; }
+  .lm-barcode { letter-spacing: 0.02em; }
+  .lm-wh { white-space: normal; font-size: 0.76rem; font-weight: 700; max-width: 10rem; }
+
+  /* خلية الرصيد: المجموع في سطر واحد، والتفصيل في نافذة منبثقة */
+  .lm-stock { min-width: 7.5rem; vertical-align: middle; }
+  .lm-qty-line { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+  .lm-qty-val { font-weight: 800; }
+  .lm-qty-val.is-zero-val { color: var(--ac-danger); }
+  .lm-unit { font-size: 0.68rem; font-weight: 600; color: var(--ac-muted); }
+  .lm-more {
+    border: 1px solid rgb(17 17 17 / 0.25);
+    background: var(--ac-cream);
+    color: var(--ac-ink);
+    border-radius: 999px;
+    padding: 0 0.45rem;
+    height: 1.2rem;
+    font: inherit; font-size: 0.68rem; font-weight: 800; line-height: 1;
+    cursor: pointer;
+  }
+  .lm-more:hover { background: var(--ac-gold); }
+
+  .lm-pop {
+    position: fixed; z-index: 9999;
+    min-width: 15rem; max-width: 22rem; max-height: 18rem; overflow: auto;
+    background: #FFFEF7;
+    border: 1px solid rgb(17 17 17 / 0.35);
+    border-top: 3px solid var(--ac-gold);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgb(60 45 0 / 0.28);
+    padding: 0.55rem 0.7rem;
+    color: var(--ac-ink);
+    font-size: 0.78rem;
+  }
+  .lm-pop[hidden] { display: none; }
+  .lm-pop-title { font-weight: 800; margin-bottom: 0.35rem; color: var(--ac-muted); font-size: 0.72rem; }
+  .lm-pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; }
+  .lm-pop li { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed rgb(17 17 17 / 0.14); padding-top: 0.2rem; font-weight: 600; }
+  .lm-pop li b { font-weight: 800; white-space: nowrap; }
+  .lm-pop .lm-pop-total { border-top: 2px solid var(--ac-ink); font-weight: 800; }
+
+  /* ترقيم الصفحات */
+  .lastmove-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.7rem 0.5rem 0.9rem; }
+  .lastmove-pager[hidden] { display: none; }
+  .lm-pg {
+    min-width: 2rem; height: 2rem; padding: 0 0.6rem;
+    border-radius: 8px;
+    border: 1px solid rgb(17 17 17 / 0.2);
+    background: #FFFEF7;
+    color: var(--ac-ink);
+    font: inherit; font-weight: 700; font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .lm-pg:hover:not(:disabled) { background: var(--ac-cream); }
+  .lm-pg.is-current { background: var(--ac-ink); color: var(--ac-gold); border-color: var(--ac-ink); }
+  .lm-pg:disabled { opacity: 0.4; cursor: default; }
+  .lm-pg-gap { color: var(--ac-muted); font-weight: 700; }
+
+  /* أهداف اللمس: 44px على الأجهزة التي تعمل باللمس دون تغيير الشكل على الحاسوب */
+  .lm-more { position: relative; }
+  .lm-more::after { content: ""; position: absolute; inset: -12px -6px; }   /* منطقة ضغط أوسع غير مرئية */
+  @media (pointer: coarse) {
+    .lm-pg { min-width: 2.75rem; height: 2.75rem; font-size: 0.9rem; }
+    .lm-more { height: 1.5rem; padding: 0 0.6rem; font-size: 0.75rem; }
+    .lastmove-pager { gap: 0.45rem; }
+  }
+
+  /* ---------------------------------------------------------------- 7 --- */
+  @media print {
+    td[class*="tcc-"], td.tc-name, .up-kpi, .sales-ov-kpis .dash-kpi-card {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .up-kpi, .sales-ov-kpis .dash-kpi-card { animation: none !important; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .up-kpi,
+    .sales-ov-kpis .dash-kpi-card { animation: kpi-fade 0.2s ease both; transition: none; }
+    .sales-users-bar { animation: none; }
+    .kpi-target-pulse { animation: none; outline: 3px solid var(--ac-gold); outline-offset: 3px; }
+  }
+}

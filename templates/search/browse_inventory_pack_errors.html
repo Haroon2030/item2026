@@ -73,7 +73,7 @@
               <option value="" {% if not selected_warehouse_from %}selected{% endif %}>كل المخازن</option>
             {% endif %}
             {% for w in warehouses_from %}
-              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse_from %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse_from %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
             {% empty %}
               <option value="">لا توجد مخازن</option>
             {% endfor %}
@@ -89,7 +89,7 @@
               <option value="" {% if not selected_warehouse_to %}selected{% endif %}>كل المخازن</option>
             {% endif %}
             {% for w in warehouses_to %}
-              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse_to %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse_to %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
             {% empty %}
               <option value="">لا توجد مخازن</option>
             {% endfor %}

@@ -93,7 +93,7 @@
     <select id="cadj-wh" name="warehouse">
       <option value="">كل المخازن</option>
       {% for w in branch_warehouses %}
-        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
       {% endfor %}
     </select>
   </div>

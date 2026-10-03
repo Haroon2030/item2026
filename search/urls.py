@@ -13,6 +13,9 @@ urlpatterns = [
     path('browse/', views.browse_groups, name='browse_groups'),
     path('inventory/', views.browse_inventory, name='browse_inventory'),
     path('inventory/unsold/', views.browse_unsold, name='browse_unsold'),
+    path('inventory/last-movement/', views.browse_last_movement, name='browse_last_movement'),
+    path('inventory/last-movement/api/', views.browse_last_movement_api, name='browse_last_movement_api'),
+    path('inventory/last-movement/purchases/', views.browse_last_purchases_api, name='browse_last_purchases_api'),
     path(
         'inventory/turnover/',
         views.browse_stock_turnover,

@@ -205,7 +205,7 @@
           <select id="wh-exp-src-one-branch" name="src_one">
             <option value="">كل مخازن المصدر</option>
             {% for w in report.source_options %}
-              <option value="{{ w.code }}" {% if src_one == w.code %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+              <option value="{{ w.code }}" {% if src_one == w.code %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
             {% endfor %}
           </select>
           <button type="submit" class="btn-primary">تطبيق</button>

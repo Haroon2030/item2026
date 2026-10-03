@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}آخر حركة على الصنف{% endblock %}
+{% block page_class %}sales-dash purchase-dash lastmove-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="آخر حركة على الصنف">
+  <div class="dash-head-copy">
+    <h2>آخر حركة على الصنف</h2>
+    <p class="sales-ov-sub">تاريخ آخر شراء وآخر بيع لكل صنف · الباركود والوحدة · حسب الفرع والمجموعة والمخزن</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_last_movement' %}" class="purchase-filter dash-panel-glass lastmove-filter" role="search">
+  <div class="field">
+    <label for="lm-branch">الفرع</label>
+    <select id="lm-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="lm-group">المجموعة</label>
+    <select id="lm-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }} - {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="lm-from">من</label>
+    <input id="lm-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
+  </div>
+  <div class="field">
+    <label for="lm-to">إلى</label>
+    <input id="lm-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
+  </div>
+  <div class="field pr-q-field">
+    <label for="lm-q">بحث بالاسم / الكود / الباركود</label>
+    <input id="lm-q" type="search" name="q" value="{{ q }}" placeholder="اسم الصنف أو كوده أو باركوده…" maxlength="80" autocomplete="off">
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+<section class="dash-panel dash-panel-glass ed-panel" aria-label="آخر حركة على الأصناف">
+  <div class="dash-panel-head">
+    <div>
+      <h3>الأصناف التي لها حركة</h3>
+      <p class="sales-ov-sub" id="lm-sub">{{ date_from }} → {{ date_to }} · جاري تحميل الحركة…</p>
+    </div>
+    <div class="sales-groups-head-meta">
+      <span class="sales-groups-status is-loading" id="lm-status" aria-live="polite">جاري التحميل…</span>
+      <span class="result-pill" id="lm-pill">…</span>
+    </div>
+  </div>
+  <div class="table-wrap pr-vendors-wrap">
+    <table
+      class="data-table sales-table lastmove-table"
+      id="lm-table"
+      aria-label="آخر حركة على الأصناف"
+      data-api="{% url 'browse_last_movement_api' %}"
+      data-purchases-api="{% url 'browse_last_purchases_api' %}"
+      data-date-from="{{ date_from }}"
+      data-date-to="{{ date_to }}"
+      data-branch="{{ selected_branch }}"
+      data-group="{{ selected_group }}"
+      data-q="{{ q }}"
+    >
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الصنف</th>
+          <th>الباركود</th>
+          <th>الوحدة</th>
+          <th>المجموعة</th>
+          <th class="lm-col-date" title="آخر شراء للصنف على مستوى الفرع، بغض النظر عن الفترة">آخر شراء (بالفرع)</th>
+          <th class="lm-col-wh" title="المخزن الذي استلم آخر فاتورة شراء">مخزن الشراء</th>
+          <th class="lm-col-date">آخر بيع</th>
+          <th class="lm-col-qty" title="رصيد مخازن الفرع بعد خصم مبيعات نقاط البيع غير المرحّلة، مع التفصيل لكل مخزن">المتبقي بعد الترحيل (مخازن الفرع)</th>
+        </tr>
+      </thead>
+      <tbody id="lm-body">
+        <tr><td colspan="9" class="sales-empty sales-ov-loading">جاري تحميل الأصناف…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <nav class="lastmove-pager" id="lm-pager" aria-label="التنقل بين الصفحات" hidden></nav>
+</section>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/branch-wh-cascade.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/last-movement.js?v={{ app_client_version }}" defer></script>
+{% endblock %}

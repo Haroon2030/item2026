@@ -9,12 +9,10 @@
       .replace(/"/g, "&quot;");
   }
 
+  var SAR_SVG = "<svg class=\"sar-symbol\" viewBox=\"0 0 1124.14 1256.39\" aria-label=\"ريال سعودي\" role=\"img\" focusable=\"false\"><path fill=\"currentColor\" d=\"M699.62,1113.02h0c-20.06,44.48-33.32,92.75-38.4,143.37l424.51-90.24c20.06-44.47,33.31-92.75,38.4-143.37l-424.51,90.24Z\"/><path fill=\"currentColor\" d=\"M1085.73,895.8c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.33v-135.2l292.27-62.11c20.06-44.47,33.32-92.75,38.4-143.37l-330.68,70.27V66.13c-50.67,28.45-95.67,66.32-132.25,110.99v403.35l-123.31,26.15V0c-50.67,28.44-95.67,66.32-132.25,110.99v525.69l-295.91,62.83c-20.06,44.47-33.33,92.75-38.42,143.37l334.33-71.05v170.26l-358.3,76.14c-20.06,44.47-33.32,92.75-38.4,143.37l375.04-79.7c30.53-6.35,56.77-24.4,73.83-50.9l36.68-30.52v92.57l-123.31,26.15v-92.57l36.68,30.52c17.06,26.5,43.3,44.55,73.83,50.9l375.04,79.7Z\"/></svg>";
+
   function moneyHtml(v) {
-    return (
-      '<span class="money">' +
-      esc(v) +
-      ' <span class="sar-symbol" aria-hidden="true">ر.س</span></span>'
-    );
+    return '<span class="money"><span class="money-value">' + esc(v) + "</span>" + SAR_SVG + "</span>";
   }
 
   function formatDuration(ms) {
@@ -44,28 +42,25 @@
   }
 
   function setLoading(msg) {
-    var body = document.getElementById("sales-users-body");
+    var body = document.getElementById("sales-users-chart");
     var sub = document.getElementById("sales-users-sub");
     var pill = document.getElementById("sales-users-pill");
     setStatus("loading", "جاري التحميل…");
     if (body) {
       body.innerHTML =
-        '<tr><td colspan="6" class="sales-empty sales-ov-loading">' +
-        esc(msg) +
-        "</td></tr>";
+        '<li class="sales-users-empty sales-ov-loading">' + esc(msg) + "</li>";
     }
     if (sub) sub.textContent = "نقاط البيع · " + msg;
     if (pill) pill.textContent = "…";
   }
 
   function fail(msg, elapsedMs) {
-    var body = document.getElementById("sales-users-body");
+    var body = document.getElementById("sales-users-chart");
     var sub = document.getElementById("sales-users-sub");
     var pill = document.getElementById("sales-users-pill");
     setStatus("error", "غير مكتمل");
     if (body) {
-      body.innerHTML =
-        '<tr><td colspan="6" class="sales-empty">' + esc(msg) + "</td></tr>";
+      body.innerHTML = '<li class="sales-users-empty">' + esc(msg) + "</li>";
     }
     if (pill) pill.textContent = "!";
     if (sub) {
@@ -75,8 +70,8 @@
   }
 
   function render(data, elapsedMs) {
-    var body = document.getElementById("sales-users-body");
-    var foot = document.getElementById("sales-users-foot");
+    var body = document.getElementById("sales-users-chart");
+    var foot = document.getElementById("sales-users-total");
     var sub = document.getElementById("sales-users-sub");
     var pill = document.getElementById("sales-users-pill");
     var totInv = document.getElementById("sales-users-tot-inv");
@@ -94,7 +89,7 @@
     if (!rows.length) {
       if (body) {
         body.innerHTML =
-          '<tr><td colspan="6" class="sales-empty">لا مبيعات مستخدمين في الفترة.</td></tr>';
+          '<li class="sales-users-empty">لا مبيعات مستخدمين في الفترة.</li>';
       }
       if (foot) foot.hidden = true;
       if (pill) pill.textContent = "0";
@@ -103,36 +98,52 @@
       return;
     }
 
+    var max = 0;
+    rows.forEach(function (row) {
+      max = Math.max(max, Number(row.sales_total) || 0);
+    });
+
     var html = "";
     rows.forEach(function (row, i) {
+      var rank = row.rank || i + 1;
+      var pct = max > 0 ? Math.max(2, ((Number(row.sales_total) || 0) / max) * 100) : 0;
       html +=
-        "<tr>" +
-        '<td class="mono">' +
-        (row.rank || i + 1) +
-        "</td>" +
-        '<td title="' +
+        '<li class="sales-users-row' +
+        (rank <= 3 ? " is-top" : "") +
+        '" title="' +
+        esc(row.user_name) +
+        " #" +
         esc(row.user_code) +
         '">' +
+        '<span class="sales-users-rank mono">' +
+        rank +
+        "</span>" +
+        '<div class="sales-users-main">' +
+        '<div class="sales-users-line">' +
+        '<span class="sales-users-name">' +
         esc(row.user_name) +
         ' <small class="mono">#' +
         esc(row.user_code) +
-        "</small></td>" +
-        '<td class="mono sales-col-inv">' +
-        esc(row.invoice_count_display) +
-        "</td>" +
-        '<td class="mono sales-col-cost">' +
-        esc(row.avg_basket_display) +
-        "</td>" +
-        '<td class="mono sales-amt sales-col-amt">' +
+        "</small></span>" +
+        '<span class="sales-users-amt mono">' +
         moneyHtml(row.sales_total_display) +
-        "</td>" +
-        '<td class="mono sales-col-share">' +
+        "</span></div>" +
+        '<div class="sales-users-track"><span class="sales-users-bar" style="width:' +
+        pct.toFixed(1) +
+        '%"></span></div>' +
+        '<div class="sales-users-meta mono">' +
+        "<span>" +
+        esc(row.invoice_count_display) +
+        " فاتورة</span>" +
+        "<span>متوسط السلة " +
+        esc(row.avg_basket_display) +
+        "</span>" +
+        '<span class="sales-users-share">' +
         esc(row.share_display) +
-        "</td>" +
-        "</tr>";
+        "</span></div></div></li>";
     });
     if (body) body.innerHTML = html;
-    if (totInv) totInv.textContent = totals.invoice_count_display || "0";
+    if (totInv) totInv.textContent = (totals.invoice_count_display || "0") + " فاتورة";
     if (totSales) totSales.innerHTML = moneyHtml(totals.sales_total_display || "0.00");
     if (foot) foot.hidden = false;
     if (pill) pill.textContent = String(rows.length);

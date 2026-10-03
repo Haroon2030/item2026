@@ -658,6 +658,12 @@ def _assemble_sales_branches_dashboard(
         pos_raw, credit_raw, cash_raw
     )
 
+    combined_returns = round(
+        sum(float(r.get("return_total") or 0) for r in pos_raw)
+        + sum(float(r.get("return_total") or 0) for r in wholesale_raw),
+        2,
+    )
+
     payload = {
         "period_label": f"{date_from.isoformat()} → {date_to.isoformat()}",
         "scope_label": _scope_label(brn, gcode),
@@ -679,7 +685,10 @@ def _assemble_sales_branches_dashboard(
             "pos_avg": pos_totals["avg_basket_display"],
             "pos_branches": pos_totals["branch_count_display"],
             "wholesale_sales": wholesale_totals["sales_total_display"],
+            "wholesale_gross": wholesale_totals["gross_before_returns_display"],
             "wholesale_invoices": wholesale_totals["invoice_count_display"],
+            "wholesale_returns": wholesale_totals["return_total_display"],
+            "wholesale_return_bills": wholesale_totals["return_count_display"],
             "wholesale_branches": wholesale_totals["branch_count_display"],
             "onix_sales": onix_totals["sales_total_display"],
             "onix_invoices": onix_totals["invoice_count_display"],
@@ -687,6 +696,7 @@ def _assemble_sales_branches_dashboard(
             "group_sales": groups["totals"]["sales_total_display"],
             "group_count": groups["totals"]["group_count_display"],
             "combined_sales": _money(combined_sales),
+            "combined_gross": _money(combined_sales + combined_returns),
             "combined_invoices": f"{combined_invoices:,}",
         },
     }

@@ -9,6 +9,9 @@ from typing import Any, Iterable
 SCREEN_ALIASES: dict[str, str] = {
     "browse_tr_compare_detail": "browse_tr_compare",
     "browse_pr_compare_detail": "browse_pr_compare",
+    "browse_last_movement_api": "browse_last_movement",
+    "browse_last_purchases_api": "browse_last_movement",
+    "browse_groups": "browse_last_movement",
 }
 
 # مسارات بلا قسم (دائماً مسموحة للمُسجّل) أو تُدار بـ is_staff
@@ -86,7 +89,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
         (
             NavScreen("browse_inventory", "تحليل المخزون"),
             NavScreen("browse_stock_turnover", "حركة فواتير الشراء"),
-            NavScreen("browse_groups", "مخزون المجموعات"),
+            NavScreen("browse_last_movement", "آخر حركة على الصنف"),
             NavScreen("browse_unsold", "رصيد بلا مبيعات"),
         ),
     ),

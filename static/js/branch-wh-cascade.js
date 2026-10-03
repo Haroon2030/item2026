@@ -93,7 +93,7 @@
         var opt = document.createElement('option');
         opt.value = w.code;
         opt.title = w.name || w.code;
-        opt.textContent = w.code + ' — ' + (w.name || w.code);
+        opt.textContent = w.code + ' - ' + (w.name || w.code);
         if (keep && String(keep) === String(w.code)) {
           opt.selected = true;
         }

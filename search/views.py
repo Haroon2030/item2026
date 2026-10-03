@@ -274,14 +274,13 @@ def _warehouses() -> list[dict]:
             if not code:
                 continue
             raw_name = str(w.get('name') or '').strip()
-            if raw_name and raw_name != code:
-                # أزل تكرار رقم المخزن إن وُجد داخل الاسم
-                suffix = f'({code})'
-                if raw_name.endswith(suffix):
-                    raw_name = raw_name[: -len(suffix)].strip()
-                label = f'{raw_name} - {code}'
+            branch_label = str(w.get('branch_name') or '').strip()
+            if branch_label and branch_label != '—':
+                label = f'{code} - {branch_label}'
+            elif raw_name and raw_name != code:
+                label = f'{code} - {raw_name}'
             else:
-                label = f'مخزن {code}'
+                label = f'{code} - مخزن {code}'
             out.append(
                 {
                     'code': code,
@@ -309,6 +308,13 @@ def _branches_from_warehouses(warehouses: list[dict]) -> list[dict]:
         {'code': code, 'name': name}
         for code, name in sorted(seen.items(), key=lambda item: (item[1], item[0]))
     ]
+
+
+def _branch_of_warehouse(warehouses: list[dict], code: str) -> str:
+    for row in warehouses or []:
+        if str(row.get('code') or '').strip() == str(code or '').strip():
+            return str(row.get('branch_code') or '').strip()
+    return ''
 
 
 def _warehouses_for_branch(warehouses: list[dict], branch_code: str) -> list[dict]:
@@ -1151,6 +1157,8 @@ def sales_search(request):
                 'date_to': date_to.isoformat(),
                 'sales_bundle': None,
                 'compare_warehouses': _compare_warehouse_codes(warehouses),
+                'branches': _branches_from_warehouses(warehouses),
+                'selected_branch': _branch_of_warehouse(warehouses, warehouse),
             },
         )
 
@@ -1231,6 +1239,8 @@ def sales_search(request):
             'date_to': date_to.isoformat(),
             'sales_bundle': sales_bundle,
             'compare_warehouses': _compare_warehouse_codes(warehouses),
+            'branches': _branches_from_warehouses(warehouses),
+            'selected_branch': _branch_of_warehouse(warehouses, warehouse),
         },
     )
 
@@ -4210,6 +4220,254 @@ def browse_purchases(request):
             'error': error,
         },
     )
+
+
+def _last_move_warehouse_codes(
+    warehouses: list[dict], branch: str, warehouse: str
+) -> list[str]:
+    """مخازن البحث عن آخر حركة: مخزن محدد، أو كل مخازن الفرع، أو الكل (قائمة فارغة)."""
+    wh = str(warehouse or '').strip()
+    if wh:
+        return [wh]
+    brn = str(branch or '').strip()
+    if brn:
+        return [
+            str(w.get('code') or '').strip()
+            for w in _warehouses_for_branch(warehouses, brn)
+            if str(w.get('code') or '').strip()
+        ]
+    return []
+
+
+def _last_move_warehouses() -> list[dict]:
+    from .oracle_stock import fetch_warehouse_options, oracle_enabled
+
+    if not oracle_enabled():
+        return []
+    return [
+        {
+            'code': w['code'],
+            'name': w['name'],
+            'branch_code': w.get('branch_code', ''),
+            'branch_name': w.get('branch_name', ''),
+        }
+        for w in fetch_warehouse_options(active_only=True)
+    ]
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_last_movement(request):
+    """آخر حركة على الصنف: آخر شراء وآخر بيع ضمن فترة مع الباركود والوحدة."""
+    from datetime import date
+
+    from .models import ItemGroup
+
+    today = date.today()
+    month_start = today.replace(day=1)
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    q = str(request.GET.get('q') or '').strip()[:80]
+    error = ''
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or month_start.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        date_from, date_to = month_start, today
+        error = str(exc)
+
+    warehouses: list[dict] = []
+    try:
+        warehouses = _last_move_warehouses()
+        if not warehouses:
+            error = error or 'أوراكل غير مفعّل — لا تتوفر تواريخ الحركة.'
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Last movement warehouses failed: %s', exc)
+        error = error or f'تعذّر تحميل المخازن: {exc}'
+
+    branches = _branches_from_warehouses(warehouses)
+    if selected_branch and selected_branch not in {b['code'] for b in branches}:
+        selected_branch = ''
+    groups = [
+        {'code': g.g_code, 'name': g.g_name or g.g_code}
+        for g in ItemGroup.objects.order_by('g_name', 'g_code')
+    ]
+    if selected_group not in {g['code'] for g in groups}:
+        selected_group = ''
+
+    return render(
+        request,
+        'search/browse_last_movement.html',
+        {
+            'branches': branches,
+            'groups': groups,
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'q': q,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'default_from': month_start.isoformat(),
+            'default_to': today.isoformat(),
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_last_movement_api(request):
+    """كل الأصناف التي لها حركة ضمن الفترة مع آخر شراء وآخر بيع (JSON، دفعة واحدة)."""
+    from datetime import date
+
+    from django.db.models import Max
+
+    from .models import ItemBarcode, ItemGroup
+
+    today = date.today()
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or today.replace(day=1).isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+    max_items = 5000
+    branch = str(request.GET.get('branch') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    q = str(request.GET.get('q') or '').strip()[:80]
+
+    try:
+        from .oracle_last_move import fetch_movement_summary
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            warehouses = _last_move_warehouses()
+            whs = _last_move_warehouse_codes(warehouses, branch, '')
+            if branch and not whs:
+                return JsonResponse({'ok': True, 'total': 0, 'shown': 0, 'rows': []})
+            movement = fetch_movement_summary(date_from, date_to, whs)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_last_movement_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+    codes = set(movement)
+    if group or q:
+        local = ItemBarcode.objects.exclude(item_code='')
+        if group:
+            local = local.filter(g_code=group)
+        if q:
+            from django.db.models import Q
+
+            local = local.filter(
+                Q(item_code__icontains=q)
+                | Q(name__icontains=q)
+                | Q(barcode__icontains=q)
+            )
+        codes &= set(local.values_list('item_code', flat=True).distinct())
+
+    ordered = sorted(
+        codes,
+        key=lambda c: max(movement[c]['sale'], movement[c]['purchase']),
+        reverse=True,
+    )
+    total = len(ordered)
+    page_codes = ordered[:max_items]
+
+    group_names = {g.g_code: (g.g_name or g.g_code) for g in ItemGroup.objects.all()}
+    local_rows: dict[str, list[dict]] = {}
+    for start in range(0, len(page_codes), 500):
+        agg = (
+            ItemBarcode.objects.filter(item_code__in=page_codes[start : start + 500])
+            .values('item_code', 'unit')
+            .annotate(
+                barcode=Max('barcode'), item_name=Max('name'), gcode=Max('g_code')
+            )
+            .order_by('item_code', 'unit')
+        )
+        for r in agg:
+            local_rows.setdefault(r['item_code'], []).append(r)
+
+    rows: list[dict] = []
+    for code in page_codes:
+        mv = movement[code]
+        base = {'purchase': mv['purchase'], 'sale': mv['sale'], 'item_code': code}
+        entries = local_rows.get(code) or [
+            {'item_name': '', 'unit': '', 'barcode': '', 'gcode': ''}
+        ]
+        for r in entries:
+            rows.append(
+                {
+                    **base,
+                    'name': r['item_name'] or '',
+                    'unit': r['unit'] or '',
+                    'barcode': r['barcode'] or '',
+                    'group_name': group_names.get(r['gcode'], r['gcode'] or ''),
+                }
+            )
+    return JsonResponse(
+        {'ok': True, 'total': total, 'shown': len(page_codes), 'rows': rows}
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_last_purchases_api(request):
+    """آخر شراء لأصناف صفحة واحدة على مستوى الفرع (بلا حصره بفترة الشاشة)."""
+    codes = [
+        c.strip()
+        for c in str(request.GET.get('codes') or '').split(',')
+        if c.strip().isdigit()
+    ][:100]
+    branch = str(request.GET.get('branch') or '').strip()
+    if not codes:
+        return JsonResponse({'ok': True, 'rows': {}})
+    try:
+        from .oracle_last_move import fetch_last_purchases, fetch_stock_by_warehouse
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        with oracle_session():
+            warehouses = _last_move_warehouses()
+            whs = _last_move_warehouse_codes(warehouses, branch, '')
+            purchases = fetch_last_purchases(codes, whs)
+            stock = fetch_stock_by_warehouse(codes, whs)
+            wh_names = {w['code']: w['name'] for w in warehouses}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_last_purchases_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+    def _wh_label(code: str) -> str:
+        return f"{code} - {wh_names[code]}" if code in wh_names else code
+
+    rows: dict[str, dict] = {}
+    for code in codes:
+        rec = purchases.get(code) or {}
+        stock_rows = [
+            {
+                'wh': s['wh'],
+                'wh_name': _wh_label(s['wh']),
+                'qty': s['qty'],
+                'unit': s['unit'],
+            }
+            for s in stock.get(code, [])
+        ]
+        rows[code] = {
+            'date': rec.get('date', ''),
+            'wh': rec.get('wh', ''),
+            'wh_name': _wh_label(rec['wh']) if rec.get('wh') else '',
+            'stock': stock_rows,
+            'stock_total': round(sum(s['qty'] for s in stock.get(code, [])), 2),
+            'stock_unit': (stock.get(code) or [{}])[0].get('unit', ''),
+        }
+    return JsonResponse({'ok': True, 'rows': rows})
 
 
 @login_required

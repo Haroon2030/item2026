@@ -92,7 +92,7 @@
     <select id="lm-wh" name="warehouses">
       <option value="">{% if selected_branch %}كل مخازن الفرع{% else %}كل المخازن{% endif %}</option>
       {% for w in branch_warehouses %}
-        <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+        <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
       {% endfor %}
     </select>
   </div>

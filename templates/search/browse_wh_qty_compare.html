@@ -75,7 +75,7 @@
           <option value="">{% if selected_branch_a %}اختر مستودعاً{% else %}اختر الفرع أولاً{% endif %}</option>
           {% for w in all_warehouses %}
             {% if selected_branch_a and w.branch_code == selected_branch_a %}
-              <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_a %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+              <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_a %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
             {% endif %}
           {% endfor %}
         </select>
@@ -94,7 +94,7 @@
           <option value="">{% if selected_branch_b %}اختر مستودعاً{% else %}اختر الفرع أولاً{% endif %}</option>
           {% for w in all_warehouses %}
             {% if selected_branch_b and w.branch_code == selected_branch_b %}
-              <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_b %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+              <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_wh_b %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
             {% endif %}
           {% endfor %}
         </select>

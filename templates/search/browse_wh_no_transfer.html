@@ -63,7 +63,7 @@
     <select id="wnt-wh" name="warehouse" required aria-required="true">
       <option value="">اختر مخزناً</option>
       {% for w in branch_warehouses %}
-        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+        <option value="{{ w.code }}" title="{{ w.branch_name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
       {% endfor %}
     </select>
   </div>

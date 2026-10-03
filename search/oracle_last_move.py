@@ -1,0 +1,354 @@
+"""آخر حركة على الأصناف خلال فترة: آخر تاريخ شراء وآخر تاريخ بيع — SELECT فقط.
+
+- الشراء : IAS_PI_BILL_DTL / IAS_PI_BILL_MST
+- البيع  : IAS_BILL_DTL / IAS_BILL_MST (آجل ونقدي) + IAS_POS_BILL_DTL / IAS_POS_BILL_MST (نقاط البيع)
+النتيجة مخزّنة مؤقتاً دقائق قليلة لأن الاستعلام على فترة شهر قد يستغرق ثوانٍ.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from datetime import date, timedelta
+from typing import Any
+
+from django.core.cache import cache
+
+from .oracle_stock import (
+    _bill_mst_ok,
+    _fetch_all,
+    _hung_ok,
+    _pos_owner,
+    _schema,
+    oracle_enabled,
+)
+
+logger = logging.getLogger(__name__)
+
+CACHE_SECONDS = 300
+LOCK_SECONDS = 90
+
+
+def _day(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return value.strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001
+        return str(value)[:10]
+
+
+def _int_list(values) -> list[int]:
+    out: list[int] = []
+    for v in values or []:
+        text = str(v or "").strip()
+        if text.isdigit():
+            out.append(int(text))
+    return out
+
+
+def _merge_max(target: dict[str, str], rows: list[dict]) -> None:
+    for row in rows:
+        code = str(row.get("I_CODE") or "").strip()
+        if code.endswith(".0"):
+            code = code[:-2]
+        day = _day(row.get("LAST_DT"))
+        if code and day and day > target.get(code, ""):
+            target[code] = day
+
+
+def fetch_movement_summary(
+    date_from: date,
+    date_to: date,
+    warehouses: list[str] | None = None,
+) -> dict[str, dict[str, str]]:
+    """{item_code: {"purchase": 'YYYY-MM-DD'|'', "sale": 'YYYY-MM-DD'|''}} للأصناف
+    التي لها شراء أو بيع ضمن [date_from, date_to] (شاملة)."""
+    if not oracle_enabled():
+        return {}
+    whs = sorted(set(_int_list(warehouses)))
+    key = f"lastmove:v1:{date_from.isoformat()}:{date_to.isoformat()}:{','.join(map(str, whs))}"
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    # طلبات متزامنة لنفس الفترة: واحد يحسب والباقي ينتظر نتيجته بدل أن تُثقل أوراكل
+    lock_key = key + ":lock"
+    if not cache.add(lock_key, 1, LOCK_SECONDS):
+        waited = 0.0
+        while waited < LOCK_SECONDS:
+            time.sleep(0.5)
+            waited += 0.5
+            hit = cache.get(key)
+            if hit is not None:
+                return hit
+            if cache.get(lock_key) is None:
+                break
+    try:
+        return _compute_movement_summary(key, date_from, date_to, whs)
+    finally:
+        cache.delete(lock_key)
+
+
+def _compute_movement_summary(
+    key: str, date_from: date, date_to: date, whs: list[int]
+) -> dict[str, dict[str, str]]:
+    schema = _schema()
+    pos = _pos_owner()
+    params: dict[str, Any] = {
+        "d_from": date_from,
+        "d_to_excl": date_to + timedelta(days=1),
+    }
+    wh_list = ", ".join(str(w) for w in whs)
+    wh_pur = f"AND NVL(d.W_CODE, m.W_CODE) IN ({wh_list})" if whs else ""
+    wh_bill = f"AND d.W_CODE IN ({wh_list})" if whs else ""
+    wh_pos = f"AND m.W_CODE IN ({wh_list})" if whs else ""
+
+    purchase: dict[str, str] = {}
+    sale: dict[str, str] = {}
+    failed = False
+    try:
+        _merge_max(
+            purchase,
+            _fetch_all(
+                f"""
+                SELECT d.I_CODE AS I_CODE, MAX(m.BILL_DATE) AS LAST_DT
+                FROM {schema}.IAS_PI_BILL_DTL d
+                JOIN {schema}.IAS_PI_BILL_MST m
+                  ON m.BILL_NO = d.BILL_NO
+                 AND m.BILL_SER = d.BILL_SER
+                 AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+                WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                  AND d.I_CODE IS NOT NULL
+                  {wh_pur}
+                GROUP BY d.I_CODE
+                """,
+                dict(params),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        failed = True
+        logger.warning("Last purchase summary failed: %s", exc)
+    try:
+        _merge_max(
+            sale,
+            _fetch_all(
+                f"""
+                SELECT d.I_CODE AS I_CODE, MAX(b.BILL_DATE) AS LAST_DT
+                FROM {schema}.IAS_BILL_DTL d
+                JOIN {schema}.IAS_BILL_MST b ON b.BILL_SER = d.BILL_SER
+                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+                  AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
+                  AND {_bill_mst_ok("b")}
+                  AND d.I_CODE IS NOT NULL
+                  {wh_bill}
+                GROUP BY d.I_CODE
+                """,
+                dict(params),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        failed = True
+        logger.warning("Last bill sale summary failed: %s", exc)
+    try:
+        _merge_max(
+            sale,
+            _fetch_all(
+                f"""
+                SELECT /*+ LEADING(m d) USE_NL(d)
+                           INDEX(m POSBILLMST_BILLDATEUSRBRN)
+                           INDEX(d IAS_POS_INDX_BILL_DTL) */
+                       d.I_CODE AS I_CODE, MAX(m.BILL_DATE) AS LAST_DT
+                FROM {pos}.IAS_POS_BILL_MST m
+                JOIN {pos}.IAS_POS_BILL_DTL d ON d.BILL_NO = m.BILL_NO
+                WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+                  AND {_hung_ok("m")}
+                  AND d.I_CODE IS NOT NULL
+                  {wh_pos}
+                GROUP BY d.I_CODE
+                """,
+                dict(params),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        failed = True
+        logger.warning("Last POS sale summary failed: %s", exc)
+
+    out: dict[str, dict[str, str]] = {}
+    for code in set(purchase) | set(sale):
+        out[code] = {"purchase": purchase.get(code, ""), "sale": sale.get(code, "")}
+    if not failed:
+        cache.set(key, out, CACHE_SECONDS)
+    return out
+
+
+def fetch_stock_by_warehouse(
+    item_codes: list[str],
+    warehouses: list[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """الكمية المتبقية بعد الترحيل لكل صنف في كل مخزن (>0 فقط)، لأصناف صفحة صغيرة.
+
+    = IAS_ITM_WCODE.AVL_QTY − مبيعات نقاط البيع غير المرحّلة (لا تقل عن صفر)،
+    بوحدة المخزون (أصغر عبوة). يعيد {item_code: [{"wh","qty","unit"}, ...]}.
+    """
+    from .oracle_stock import _PENDING_SALES_LOOKBACK_DAYS, _pos_owner as _pos
+
+    codes = _int_list(item_codes)[:100]
+    if not codes or not oracle_enabled():
+        return {}
+    whs = sorted(set(_int_list(warehouses)))
+    schema = _schema()
+    pos = _pos()
+    in_items = ", ".join("'" + str(c) + "'" for c in codes)
+    wh_w = f"AND w.W_CODE IN ({', '.join(str(w) for w in whs)})" if whs else ""
+    wh_pend = (
+        f"AND NVL(d.W_CODE, m.W_CODE) IN ({', '.join(str(w) for w in whs)})"
+        if whs
+        else ""
+    )
+    days = int(_PENDING_SALES_LOOKBACK_DAYS)
+    qty_expr = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+    try:
+        rows = _fetch_all(
+            f"""
+            SELECT TO_CHAR(s.I_CODE) AS I_CODE, TO_CHAR(s.W_CODE) AS W_CODE,
+                   s.ITM_UNT AS UNIT,
+                   GREATEST(0, NVL(s.AVL_QTY, 0) - GREATEST(0, NVL(pend.QTY, 0))) AS QTY
+            FROM (
+                SELECT w.I_CODE, w.W_CODE, w.ITM_UNT, w.AVL_QTY,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY w.I_CODE, w.W_CODE
+                           ORDER BY NVL(w.P_SIZE, 1), w.ITM_UNT
+                       ) AS RN
+                FROM {schema}.IAS_ITM_WCODE w
+                WHERE w.I_CODE IN ({in_items})
+                  {wh_w}
+            ) s
+            LEFT JOIN (
+                SELECT I_CODE, W_CODE, ROUND(SUM(QTY), 4) AS QTY
+                FROM (
+                    SELECT TO_CHAR(d.I_CODE) AS I_CODE,
+                           TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
+                           SUM({qty_expr}) AS QTY
+                    FROM {pos}.IAS_POS_BILL_DTL d
+                    JOIN {pos}.IAS_POS_BILL_MST m
+                      ON m.BILL_NO = d.BILL_NO
+                     AND m.BRN_NO = d.BRN_NO
+                     AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+                    WHERE d.I_CODE IN ({in_items})
+                      AND NVL(m.POSTED, 0) = 0
+                      AND NVL(m.HUNG, 0) = 0
+                      AND m.BILL_DATE >= TRUNC(SYSDATE) - {days}
+                      AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+                      {wh_pend}
+                    GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+                    UNION ALL
+                    SELECT TO_CHAR(d.I_CODE) AS I_CODE,
+                           TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
+                           -SUM({qty_expr}) AS QTY
+                    FROM {pos}.IAS_POS_RT_BILL_DTL d
+                    JOIN {pos}.IAS_POS_RT_BILL_MST m
+                      ON m.RT_BILL_NO = d.RT_BILL_NO
+                     AND m.BRN_NO = d.BRN_NO
+                    WHERE d.I_CODE IN ({in_items})
+                      AND NVL(m.POSTED, 0) = 0
+                      AND NVL(m.HUNG, 0) = 0
+                      AND m.RT_BILL_DATE >= TRUNC(SYSDATE) - {days}
+                      AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
+                      {wh_pend}
+                    GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, m.W_CODE))
+                )
+                GROUP BY I_CODE, W_CODE
+            ) pend
+              ON pend.I_CODE = TO_CHAR(s.I_CODE)
+             AND pend.W_CODE = TO_CHAR(s.W_CODE)
+            WHERE s.RN = 1
+            """,
+            {},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Stock by warehouse failed: %s", exc)
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        code = str(row.get("I_CODE") or "").strip()
+        if code.endswith(".0"):
+            code = code[:-2]
+        wh = str(row.get("W_CODE") or "").strip()
+        if wh.endswith(".0"):
+            wh = wh[:-2]
+        try:
+            qty = float(row.get("QTY") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        if not code or not wh or qty <= 0:
+            continue
+        out.setdefault(code, []).append(
+            {"wh": wh, "qty": qty, "unit": str(row.get("UNIT") or "").strip()}
+        )
+    for lst in out.values():
+        lst.sort(key=lambda r: -r["qty"])
+    return out
+
+
+def fetch_last_purchases(
+    item_codes: list[str],
+    warehouses: list[str] | None = None,
+    *,
+    lookback_days: int = 2000,
+) -> dict[str, dict[str, str]]:
+    """{item_code: {"date": 'YYYY-MM-DD', "wh": رقم مخزن آخر شراء}} في المخازن المحددة
+    (بلا حصره بفترة الشاشة)."""
+    codes = _int_list(item_codes)[:100]
+    if not codes or not oracle_enabled():
+        return {}
+    whs = sorted(set(_int_list(warehouses)))
+    schema = _schema()
+    in_items = ", ".join("'" + str(c) + "'" for c in codes)
+    wh_pur = (
+        f"AND NVL(d.W_CODE, m.W_CODE) IN ({', '.join(str(w) for w in whs)})"
+        if whs
+        else ""
+    )
+    since = date.today() - timedelta(days=max(1, int(lookback_days)))
+    try:
+        rows = _fetch_all(
+            f"""
+            SELECT I_CODE, LAST_DT, W_CODE
+            FROM (
+                SELECT d.I_CODE AS I_CODE,
+                       m.BILL_DATE AS LAST_DT,
+                       NVL(d.W_CODE, m.W_CODE) AS W_CODE,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY d.I_CODE
+                           ORDER BY m.BILL_DATE DESC NULLS LAST,
+                                    m.BILL_NO DESC NULLS LAST
+                       ) AS RN
+                FROM {schema}.IAS_PI_BILL_DTL d
+                JOIN {schema}.IAS_PI_BILL_MST m
+                  ON m.BILL_NO = d.BILL_NO
+                 AND m.BILL_SER = d.BILL_SER
+                 AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+                WHERE d.I_CODE IN ({in_items})
+                  AND m.BILL_DATE >= :d_from
+                  {wh_pur}
+            )
+            WHERE RN = 1
+            """,
+            {"d_from": since},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Last purchases failed: %s", exc)
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for row in rows:
+        code = str(row.get("I_CODE") or "").strip()
+        if code.endswith(".0"):
+            code = code[:-2]
+        day = _day(row.get("LAST_DT"))
+        wh = row.get("W_CODE")
+        wh_text = "" if wh is None else str(wh).strip()
+        if wh_text.endswith(".0"):
+            wh_text = wh_text[:-2]
+        if code and day:
+            out[code] = {"date": day, "wh": wh_text}
+    return out

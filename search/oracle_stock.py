@@ -1209,11 +1209,26 @@ def count_oracle_group_catalog(warehouse: str, group_code: str) -> tuple[int, in
     return int(rows[0].get("CATALOG_COUNT") or 0), int(rows[0].get("ZERO_COUNT") or 0)
 
 
+def clean_warehouse_name(code: str, name: str) -> str:
+    """اسم المخزن بلا تكرار رقمه: «64(مرتجعات اسكاي)» → «مرتجعات اسكاي»."""
+    code = str(code or "").strip()
+    text = str(name or "").strip()
+    if not text:
+        return code
+    if code:
+        text = re.sub(rf"^\s*{re.escape(code)}\s*[-–—:.]?\s*", "", text)
+        text = re.sub(rf"\s*[-–—]?\s*\(\s*{re.escape(code)}\s*\)\s*$", "", text)
+    m = re.fullmatch(r"\(\s*(.+?)\s*\)", text)
+    if m:
+        text = m.group(1)
+    return re.sub(r"\s{2,}", " ", text).strip() or code
+
+
 def fetch_warehouse_options(*, active_only: bool = True) -> list[dict]:
     """قائمة المخازن من WAREHOUSE_DETAILS مع فرع الربط."""
     if not oracle_enabled():
         return []
-    cache_key = f"inv:wh_options:v2:{int(active_only)}"
+    cache_key = f"inv:wh_options:v4:{int(active_only)}"
     hit, cached = _django_lookup_get(cache_key)
     if hit:
         return cached
@@ -1244,7 +1259,7 @@ def fetch_warehouse_options(*, active_only: bool = True) -> list[dict]:
         if not code:
             continue
         brn = _norm_brn_code(row.get("BRANCH_CODE"))
-        name = str(row.get("W_NAME") or row.get("W_E_NAME") or "").strip() or code
+        name = clean_warehouse_name(code, row.get("W_NAME") or row.get("W_E_NAME") or "")
         out.append(
             {
                 "code": code,

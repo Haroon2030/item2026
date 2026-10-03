@@ -147,7 +147,7 @@
             data-branch="{{ w.branch_code }}"
             {% if w.code == selected_warehouse %}selected{% endif %}
             {% if selected_branch and w.branch_code != selected_branch %}hidden disabled{% endif %}
-          >{{ w.name }} · {{ w.code }}</option>
+          >{{ w.code }} - {{ w.name }}</option>
         {% endfor %}
       </select>
     </div>

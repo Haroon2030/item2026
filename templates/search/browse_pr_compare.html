@@ -52,7 +52,7 @@
           {% else %}
             <option value="">كل المخازن</option>
             {% for w in warehouses %}
-              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+              <option value="{{ w.code }}" title="{{ w.name }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
             {% empty %}
               <option value="">لا توجد مخازن لهذا الفرع</option>
             {% endfor %}
