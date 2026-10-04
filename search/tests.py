@@ -1902,3 +1902,144 @@ class IncomeUnpostedCardTests(TestCase):
         self.assertContains(response, '1,000.00')
         self.assertNotContains(response, 'income-kpi-hint-wrap')
         self.assertNotContains(response, 'فروع لم تُرحّل')
+
+
+class PurchaseControlTests(TestCase):
+    """رقابة فواتير الشراء: التجميع (بدون أوراكل) والصلاحيات."""
+
+    def test_assemble_report_counts_cash_credit_user_device(self):
+        from search.oracle_purchase_control import assemble_report
+
+        summary = [
+            {'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'HP', 'KIND_CODE': 1, 'N': 3, 'POSTED_N': 1, 'AMT': 300},
+            {'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'HP', 'KIND_CODE': 4, 'N': 5, 'POSTED_N': 5, 'AMT': 1000},
+            {'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'HP', 'KIND_CODE': 8, 'N': 2, 'POSTED_N': 0, 'AMT': 200},
+            {'BRANCH_CODE': '2', 'USER_ID': '9', 'TERMINAL': 'PC', 'KIND_CODE': 1, 'N': 1, 'POSTED_N': 0, 'AMT': 50},
+            {'BRANCH_CODE': '2', 'USER_ID': '9', 'TERMINAL': 'PC', 'KIND_CODE': 99, 'N': 4, 'POSTED_N': 0, 'AMT': 9},
+        ]
+        r = assemble_report(
+            summary,
+            branch_names={'1': 'الربوة', '2': 'النسيم'},
+            user_names={'7': 'أحمد', '9': 'سعد'},
+        )
+        t = r['totals']
+        self.assertEqual(t['total'], '11')          # نوع 99 مُهمل
+        self.assertEqual(t['cash'], '4')
+        self.assertEqual(t['credit'], '7')          # 4 و8 آجل
+        self.assertEqual(t['unposted'], '5')
+        top = r['control_rows'][0]
+        self.assertEqual((top['user'], top['terminal'], top['branch']), ('أحمد', 'HP', 'الربوة'))
+        self.assertEqual((top['user_id'], top['branch_code']), ('7', '1'))
+        self.assertEqual((top['cash'], top['credit'], top['total'], top['unposted']), (3, 7, 10, 4))
+
+    def test_assemble_details_formats_rows(self):
+        import datetime
+
+        from search.oracle_purchase_control import assemble_details
+
+        r = assemble_details(
+            [{'BRANCH_CODE': '1', 'W_CODE': '60', 'BILL_NO': '10', 'BILL_DATE': datetime.date(2026, 10, 4), 'AD_DATE': datetime.datetime(2026, 10, 4, 9, 5),
+              'V_NAME': 'مورد', 'USER_ID': '7', 'TERMINAL': 'HP', 'POSTED': 0, 'AMT': 12.5}],
+            {'N': 3, 'AMT': 99},
+            kind='credit',
+            branch_names={'1': 'الربوة'},
+            user_names={'7': 'أحمد'},
+            warehouse_names={'60': 'مخزن 60'},
+            limit=1000,
+        )
+        self.assertEqual((r['kind_label'], r['count'], r['truncated']), ('آجل', '3', True))
+        inv = r['invoices'][0]
+        self.assertEqual((inv['branch'], inv['warehouse'], inv['posted']), ('الربوة', 'مخزن 60', False))
+        self.assertEqual((inv['user'], inv['terminal']), ('أحمد', 'HP'))
+        self.assertEqual(inv['added_at'], '2026-10-04 09:05')
+
+    def test_details_rejects_bad_kind_and_user(self):
+        from search.oracle_purchase_control import OracleStockError, build_purchase_control_details
+
+        with patch('search.oracle_purchase_control.oracle_enabled', return_value=True):
+            with self.assertRaises(OracleStockError):
+                build_purchase_control_details('2026-10-01', '2026-10-01', kind='x', user_id='1', terminal='HP')
+            with self.assertRaises(OracleStockError):
+                build_purchase_control_details('2026-10-01', '2026-10-01', kind='cash', user_id='1 OR 1=1', terminal='HP')
+
+    def test_user_filter_rejects_non_numeric_and_is_kept_in_form(self):
+        from search.oracle_purchase_control import OracleStockError, build_purchase_control
+
+        with patch('search.oracle_purchase_control.oracle_enabled', return_value=True):
+            with self.assertRaises(OracleStockError):
+                build_purchase_control('2026-10-01', '2026-10-01', user_id='8 OR 1=1')
+        admin = get_user_model().objects.create_user('ctl_admin3', password='x-Test-123', is_staff=True)
+        self.client.force_login(admin)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            ok = self.client.get(reverse('browse_purchase_control'), {'user': '8053'})
+            bad = self.client.get(
+                reverse('browse_purchase_control'),
+                {'date_from': '2026-10-01', 'date_to': '2026-10-01', 'user': 'abc'},
+            )
+        self.assertContains(ok, 'value="8053"')
+        self.assertContains(bad, 'أرقاماً فقط')
+
+    def test_screens_require_login_and_render(self):
+        for name in ('browse_purchase_control', 'browse_purchase_control_details'):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 302)
+        user = get_user_model().objects.create_user('ctl_admin', password='x-Test-123', is_staff=True)
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            response = self.client.get(reverse('browse_purchase_control'))
+            self.assertContains(response, 'رقابة فواتير الشراء')
+            response = self.client.get(reverse('browse_purchase_control_details'), {'kind': 'cash'})
+            self.assertContains(response, 'تفاصيل فواتير الشراء')
+
+    def test_control_section_is_admin_only(self):
+        """قسم «الرقابة» للمدير فقط: لا يظهر ولا يُفتح لغيره، ولا يُمنح عبر الصلاحيات."""
+        from search.nav_permissions import ALL_SCREEN_KEYS, STAFF_ONLY
+
+        names = ('browse_purchase_control', 'browse_purchase_control_details')
+        for name in names:
+            self.assertIn(name, STAFF_ONLY)
+            self.assertNotIn(name, ALL_SCREEN_KEYS)  # لا يظهر في نموذج صلاحيات المستخدمين
+
+        User = get_user_model()
+        plain = User.objects.create_user('plain_user', password='x-Test-123')
+        exec_user = User.objects.create_user('exec_user', password='x-Test-123')
+        UserProfile.objects.create(user=exec_user, display_name='تنفيذي', phone='0500000001', role_name='رئيس تنفيذي')
+        admin = User.objects.create_user('ctl_admin2', password='x-Test-123', is_staff=True)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            for user in (plain, exec_user):
+                self.client.force_login(user)
+                for name in names:
+                    response = self.client.get(reverse(name))
+                    self.assertEqual(response.status_code, 302, f'{user.username} فتح {name}')
+                home = self.client.get(reverse('home'))
+                self.assertNotContains(home, 'رقابة فواتير الشراء')
+            self.client.force_login(admin)
+            self.assertEqual(self.client.get(reverse('browse_purchase_control')).status_code, 200)
+            self.assertContains(self.client.get(reverse('home')), 'رقابة فواتير الشراء')
+
+    def test_detail_sql_bind_names_are_valid_oracle_identifiers(self):
+        """أسماء المتغيرات يجب ألا تكون كلمات محجوزة (مثل :uid → ORA-01745) وكل متغير له قيمة."""
+        import re
+        from datetime import date
+
+        from search import oracle_purchase_control as pc
+
+        captured = []
+
+        def fake_fetch_all(sql, params=None):
+            captured.append((sql, dict(params or {})))
+            return []
+
+        with patch.object(pc, '_fetch_all', fake_fetch_all):
+            pc._fetch_detail(
+                date(2026, 10, 1), date(2026, 10, 2), '8', '60', '9',
+                user_id='7', terminal='HP', doc_types=(4, 8), limit=10,
+            )
+            pc._fetch_summary(date(2026, 10, 1), date(2026, 10, 2), '8', '60', '9', '7')
+        self.assertEqual(captured[-1][1].get('f_user'), 7)
+        self.assertIn('AD_U_ID = :f_user', captured[-1][0])
+        reserved = {'uid', 'user', 'date', 'level', 'rowid', 'rownum', 'sysdate', 'null', 'number'}
+        self.assertEqual(len(captured), 3)
+        for sql, params in captured:
+            names = set(re.findall(r':([A-Za-z_][A-Za-z0-9_]*)', sql))
+            self.assertFalse(names & reserved, names & reserved)
+            self.assertLessEqual(names, set(params), names - set(params))

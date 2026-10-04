@@ -6588,6 +6588,183 @@ def browse_wh_no_transfer(request):
 
 
 @login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_purchase_control(request):
+    """رقابة فواتير الشراء: نقد/آجل، ومن أدخلها ومن أي جهاز."""
+    from datetime import date
+
+    today = date.today()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_user = str(request.GET.get('user') or '').strip()[:12]
+    report = None
+    error = ''
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    submitted = 'date_from' in request.GET
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'), request.GET.get('date_to')
+        )
+    except ValidationError as exc:
+        date_from = date_to = today
+        error = str(exc)
+        submitted = False
+    if selected_user and not selected_user.isdigit():
+        error = error or 'رقم المستخدم يجب أن يكون أرقاماً فقط.'
+        selected_user = ''
+        submitted = False
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_purchase_control import MAX_DAYS, build_purchase_control
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = error or 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                warehouses = fetch_warehouse_options(active_only=True)
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_warehouse not in {row['code'] for row in warehouses}:
+                    selected_warehouse = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                if submitted and not error:
+                    if (date_to - date_from).days >= MAX_DAYS:
+                        error = f'الفترة القصوى {MAX_DAYS} يوماً.'
+                    else:
+                        report = build_purchase_control(
+                            date_from,
+                            date_to,
+                            branch_code=selected_branch,
+                            warehouse_code=selected_warehouse,
+                            group_code=selected_group,
+                            user_id=selected_user,
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_purchase_control failed: %s', exc)
+        error = f'تعذّر تحميل رقابة فواتير الشراء: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_purchase_control.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'selected_user': selected_user,
+            'branches': branches,
+            'warehouses': warehouses,
+            'groups': groups,
+            'report': report,
+            'submitted': submitted,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_purchase_control_details(request):
+    """تفاصيل فواتير مستخدم على جهاز من نوع واحد (نقد/آجل) — تُفتح من شاشة الرقابة."""
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    kind = str(request.GET.get('kind') or '').strip()
+    user_id = str(request.GET.get('user') or '').strip()
+    terminal = str(request.GET.get('terminal') or '-').strip()[:60]
+    row_branch = str(request.GET.get('branch') or '').strip()
+    warehouse = str(request.GET.get('warehouse') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    report = None
+    error = ''
+    row_info = {'user': user_id or '-', 'terminal': terminal or '-', 'branch': row_branch}
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'), request.GET.get('date_to')
+        )
+    except ValidationError as exc:
+        from datetime import date
+
+        date_from = date_to = date.today()
+        error = str(exc)
+
+    back_qs = {
+        'date_from': date_from.isoformat(),
+        'date_to': date_to.isoformat(),
+        'branch': str(request.GET.get('fbranch') or '').strip(),
+        'warehouse': warehouse,
+        'group': group,
+        'user': str(request.GET.get('fuser') or '').strip()[:12],
+    }
+    back_url = f"{reverse('browse_purchase_control')}?{urlencode(back_qs)}"
+
+    if not error:
+        try:
+            from .oracle_purchase_control import build_purchase_control_details
+            from .oracle_stock import _branch_names, oracle_enabled, oracle_session
+
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+            else:
+                with oracle_session():
+                    report = build_purchase_control_details(
+                        date_from,
+                        date_to,
+                        kind=kind,
+                        user_id=user_id,
+                        terminal=terminal,
+                        branch_code=row_branch,
+                        warehouse_code=warehouse,
+                        group_code=group,
+                    )
+                    row_info['branch'] = (
+                        _branch_names().get(row_branch) or row_branch or '-'
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_purchase_control_details failed: %s', exc)
+            error = f'تعذّر تحميل التفاصيل: {exc}'
+            report = None
+
+    if report:
+        row_info['user'] = report.get('user') or row_info['user']
+
+    return render(
+        request,
+        'search/browse_purchase_control_details.html',
+        {
+            'report': report,
+            'error': error,
+            'row': row_info,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'back_url': back_url,
+        },
+    )
+
+
+@login_required
 @require_GET
 @never_cache
 def browse_sold_no_supply(request):

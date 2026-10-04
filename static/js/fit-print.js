@@ -84,6 +84,24 @@
     document.body.setAttribute('data-print-scope', 'table');
   }
 
+  /* زر داخل لوحة بلا جدول (مخطط، قائمة…): اللوحة نفسها هي المطلوب طباعتها لا الصفحة كلها */
+  function panelWithoutTables(btn) {
+    var panel = btn.closest('.dash-panel');
+    if (panel && !collectTables(panel).length) return panel;
+    return null;
+  }
+
+  function markPanel(panel) {
+    panel.classList.add('is-print-target');
+    var el = panel.parentElement;
+    while (el && el !== document.body) {
+      el.classList.add('is-print-ancestor');
+      el = el.parentElement;
+    }
+    document.body.classList.add('fit-table-only');
+    document.body.setAttribute('data-print-scope', 'panel');
+  }
+
   function fitVisibleTables() {
     clearTableFit();
     var roots = document.querySelectorAll('.is-print-target');
@@ -128,16 +146,20 @@
     document.body.classList.remove('fit-measuring');
   }
 
-  function prepare(tables) {
+  function prepare(tables, panel) {
     ensureLandscapeStyle();
     clearPrintTargets();
     clearTableFit();
     document.body.classList.add('fit-printing');
     document.body.classList.add('print-landscape');
-    if (!tables || !tables.length) {
-      tables = collectTables(document.querySelector('main') || document.body);
+    if (panel) {
+      markPanel(panel);
+    } else {
+      if (!tables || !tables.length) {
+        tables = collectTables(document.querySelector('main') || document.body);
+      }
+      markTables(tables);
     }
-    markTables(tables);
     document.querySelectorAll(
       '.table-wrap, [class*="-scroll"], #lm-wrap'
     ).forEach(function (el) {
@@ -360,7 +382,8 @@
     var btn = ev.target.closest(BTN);
     if (!btn) return;
     ev.preventDefault();
-    prepare(tablesForButton(btn));
+    var panel = panelWithoutTables(btn);
+    prepare(panel ? [] : tablesForButton(btn), panel);
     window.setTimeout(function () {
       fitVisibleTables();
       applyPrintTheme();

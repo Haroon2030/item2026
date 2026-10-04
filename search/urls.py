@@ -44,6 +44,12 @@ urlpatterns = [
         name='browse_tr_compare_detail',
     ),
     path('purchases/', views.browse_purchases, name='browse_purchases'),
+    path('control/purchases/', views.browse_purchase_control, name='browse_purchase_control'),
+    path(
+        'control/purchases/details/',
+        views.browse_purchase_control_details,
+        name='browse_purchase_control_details',
+    ),
     path(
         'purchases/turnover/',
         views.browse_vendor_turnover,

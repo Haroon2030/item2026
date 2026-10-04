@@ -23,6 +23,8 @@
   <link rel="stylesheet" href="/static/css/shell-v3.css?v={{ app_client_version }}">
   <link rel="stylesheet" href="/static/css/cards-v3.css?v={{ app_client_version }}">
   <link rel="stylesheet" href="/static/css/tables-v3.css?v={{ app_client_version }}">
+  <link rel="stylesheet" href="/static/css/filters-v3.css?v={{ app_client_version }}">
+  <link rel="stylesheet" href="/static/css/print-table-only.css?v={{ app_client_version }}">
   <link rel="stylesheet" href="/static/css/returns-v3.css?v={{ app_client_version }}">
   {% endif %}
   {% block extra_css %}{% endblock %}
@@ -438,6 +440,27 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'user_activity' %}is-active{% endif %}" href="{% url 'user_activity' %}" title="نشاط المستخدمين">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                 <span>نشاط المستخدمين</span>
+              </a>
+            </div>
+          </div>
+          <div
+            class="sidebar-group{% if request.resolver_match.url_name == 'browse_purchase_control' or request.resolver_match.url_name == 'browse_purchase_control_details' %} is-open is-current{% endif %}"
+            data-sidebar-group
+          >
+            <button
+              type="button"
+              class="sidebar-link sidebar-group-toggle"
+              aria-expanded="{% if request.resolver_match.url_name == 'browse_purchase_control' or request.resolver_match.url_name == 'browse_purchase_control_details' %}true{% else %}false{% endif %}"
+              title="الرقابة"
+            >
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
+              <span>الرقابة</span>
+              <svg class="sidebar-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="sidebar-group-items" role="group" aria-label="الرقابة">
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_control' or request.resolver_match.url_name == 'browse_purchase_control_details' %}is-active{% endif %}" href="{% url 'browse_purchase_control' %}" title="نقد/آجل ومن أدخل فاتورة الشراء ومن أي جهاز">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+                <span>رقابة فواتير الشراء</span>
               </a>
             </div>
           </div>

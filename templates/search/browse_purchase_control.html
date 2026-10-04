@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}رقابة فواتير الشراء{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash pctl-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/purchase-control.css?v={{ app_client_version }}">
+{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="رقابة فواتير الشراء">
+  <div class="dash-head-copy">
+    <h2>رقابة فواتير الشراء</h2>
+    <p class="sales-ov-sub">نقد · آجل — ومن أدخل الفاتورة ومن أي جهاز</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_purchase_control' %}" class="purchase-filter dash-panel-glass" role="search" id="pctl-form">
+  <div class="field">
+    <label for="pctl-from">من</label>
+    <input id="pctl-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+  <div class="field">
+    <label for="pctl-to">إلى</label>
+    <input id="pctl-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+  <div class="field">
+    <label for="pctl-branch">الفرع</label>
+    <select id="pctl-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="pctl-wh">المخزن</label>
+    <select id="pctl-wh" name="warehouse">
+      <option value="">كل المخازن</option>
+      {% for w in warehouses %}
+        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="pctl-group">المجموعة</label>
+    <select id="pctl-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="pctl-user">رقم المستخدم</label>
+    <input id="pctl-user" type="text" name="user" value="{{ selected_user }}" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="مثال: 8053" autocomplete="off">
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <section class="dash-panel dash-panel-glass" aria-label="رقابة حسب المنفذ والجهاز">
+    <div class="dash-panel-head">
+      <div>
+        <h3>المنفِّذ والجهاز</h3>
+        <p class="sales-ov-sub">{{ report.period_label }} · كل صف = مستخدم على جهاز · اضغط على عدد «نقد» أو «آجل» لعرض فواتيره</p>
+      </div>
+      <span class="result-pill">{{ report.control_rows|length }} صف</span>
+    </div>
+    <div class="table-wrap pctl-wrap">
+      <table class="data-table sales-table" aria-label="رقابة فواتير الشراء حسب المنفذ والجهاز">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>المنفِّذ</th>
+            <th>الفرع</th>
+            <th>الجهاز</th>
+            <th>نقد</th>
+            <th>آجل</th>
+            <th>الإجمالي</th>
+            <th>غير مرحّلة</th>
+            <th>المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.control_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.user }}</td>
+            <td>{{ r.branch }}</td>
+            <td class="mono">{{ r.terminal }}</td>
+            <td class="mono">{% if r.cash %}<a class="pctl-count" href="{% url 'browse_purchase_control_details' %}?kind=cash&amp;user={{ r.user_id|urlencode }}&amp;terminal={{ r.terminal|urlencode }}&amp;branch={{ r.branch_code|urlencode }}&amp;fbranch={{ selected_branch|urlencode }}&amp;warehouse={{ selected_warehouse|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;fuser={{ selected_user|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}" title="عرض فواتير النقد">{{ r.cash }}</a>{% else %}0{% endif %}</td>
+            <td class="mono">{% if r.credit %}<a class="pctl-count" href="{% url 'browse_purchase_control_details' %}?kind=credit&amp;user={{ r.user_id|urlencode }}&amp;terminal={{ r.terminal|urlencode }}&amp;branch={{ r.branch_code|urlencode }}&amp;fbranch={{ selected_branch|urlencode }}&amp;warehouse={{ selected_warehouse|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;fuser={{ selected_user|urlencode }}&amp;date_from={{ date_from }}&amp;date_to={{ date_to }}" title="عرض فواتير الآجل">{{ r.credit }}</a>{% else %}0{% endif %}</td>
+            <td class="mono">{{ r.total }}</td>
+            <td class="mono">{{ r.unposted }}</td>
+            <td class="mono">{{ r.amount_display }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9">لا توجد فواتير في هذه الفترة.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.control_rows %}
+        <tfoot>
+          <tr>
+            <td colspan="4">الإجمالي</td>
+            <td class="mono">{{ report.totals.cash }}</td>
+            <td class="mono">{{ report.totals.credit }}</td>
+            <td class="mono">{{ report.totals.total }}</td>
+            <td class="mono">{{ report.totals.unposted }}</td>
+            <td class="mono">{{ report.totals.amount }}</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% elif not error and not submitted %}
+  <p class="welcome-empty" role="status">اختر الفلاتر ثم اضغط «عرض» (الفترة القصوى 31 يوماً).</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+  (function () {
+    var branch = document.getElementById("pctl-branch");
+    var wh = document.getElementById("pctl-wh");
+    if (!branch || !wh) return;
+    function sync() {
+      var b = branch.value;
+      Array.prototype.forEach.call(wh.options, function (o) {
+        if (!o.value) return;
+        var show = !b || o.getAttribute("data-branch") === b;
+        o.hidden = !show;
+        o.disabled = !show;
+      });
+      if (wh.selectedOptions[0] && wh.selectedOptions[0].disabled) wh.value = "";
+    }
+    branch.addEventListener("change", sync);
+    sync();
+  })();
+</script>
+{% endblock %}

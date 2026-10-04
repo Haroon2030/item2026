@@ -1,0 +1,13 @@
+/* تصدير PDF للجدول فقط (كل الصفحات).
+
+   fit-print.js يضع .is-print-ancestor على أسلاف الجدول و.is-print-target على الجدول، وstyle.css يُخفي بقية الإخوة.
+   لكن ملفات التصميم (cards-v3 و app-components…) تفرض display:grid/flex !important داخل @layer، وقواعد !important
+   داخل الطبقات تتغلب على أي !important خارجها — فكانت بطاقات المؤشرات وغيرها تُطبع فوق الجدول.
+   هذه القاعدة في نفس الطبقة وبخصوصية أعلى، فتُخفي كل ما عدا الجدول وأسلافه. */
+@layer app-components {
+  @media print {
+    html body.fit-printing.fit-table-only .is-print-ancestor > *:not(.is-print-ancestor):not(.is-print-target):not(#fx) {
+      display: none !important;
+    }
+  }
+}
