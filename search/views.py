@@ -4259,7 +4259,7 @@ def _last_move_warehouses() -> list[dict]:
 @require_GET
 @never_cache
 def browse_last_movement(request):
-    """آخر حركة على الصنف: آخر شراء وآخر بيع ضمن فترة مع الباركود والوحدة."""
+    """أصناف كميتها كبيرة ومبيعاتها قليلة (مخازن المبيعات فقط)."""
     from datetime import date
 
     from .models import ItemGroup
@@ -4269,6 +4269,9 @@ def browse_last_movement(request):
     selected_branch = str(request.GET.get('branch') or '').strip()
     selected_group = str(request.GET.get('group') or '').strip()
     q = str(request.GET.get('q') or '').strip()[:80]
+    min_qty = str(request.GET.get('min_qty') or '100').strip()[:12]
+    max_pct = str(request.GET.get('max_pct') or '5').strip()[:6]
+    show = '1' if request.GET.get('show') else ''
     error = ''
     try:
         date_from, date_to = _parse_sales_dates(
@@ -4307,6 +4310,9 @@ def browse_last_movement(request):
             'selected_branch': selected_branch,
             'selected_group': selected_group,
             'q': q,
+            'min_qty': min_qty,
+            'max_pct': max_pct,
+            'show': show,
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
             'default_from': month_start.isoformat(),
@@ -4320,7 +4326,7 @@ def browse_last_movement(request):
 @require_GET
 @never_cache
 def browse_last_movement_api(request):
-    """كل الأصناف التي لها حركة ضمن الفترة مع آخر شراء وآخر بيع (JSON، دفعة واحدة)."""
+    """أصناف كميتها كبيرة ومبيعاتها ≤ النسبة المحددة من الكمية (مخازن المبيعات فقط)."""
     from datetime import date
 
     from django.db.models import Max
@@ -4339,9 +4345,14 @@ def browse_last_movement_api(request):
     branch = str(request.GET.get('branch') or '').strip()
     group = str(request.GET.get('group') or '').strip()
     q = str(request.GET.get('q') or '').strip()[:80]
+    try:
+        min_qty = max(0.0, float(request.GET.get('min_qty') or 100))
+        max_pct = min(100.0, max(0.0, float(request.GET.get('max_pct') or 5)))
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'قيمة غير صالحة.'}, status=400)
 
     try:
-        from .oracle_last_move import fetch_movement_summary
+        from .oracle_last_move import fetch_overstock_items
         from .oracle_stock import oracle_enabled, oracle_session
 
         if not oracle_enabled():
@@ -4351,12 +4362,16 @@ def browse_last_movement_api(request):
             whs = _last_move_warehouse_codes(warehouses, branch, '')
             if branch and not whs:
                 return JsonResponse({'ok': True, 'total': 0, 'shown': 0, 'rows': []})
-            movement = fetch_movement_summary(date_from, date_to, whs)
+            result = fetch_overstock_items(
+                date_from, date_to, whs, min_qty=min_qty, max_pct=max_pct
+            )
+            wh_names = {w['code']: w['name'] for w in warehouses}
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_last_movement_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
-    codes = set(movement)
+    found = result['items']
+    codes = set(found)
     if group or q:
         local = ItemBarcode.objects.exclude(item_code='')
         if group:
@@ -4371,47 +4386,59 @@ def browse_last_movement_api(request):
             )
         codes &= set(local.values_list('item_code', flat=True).distinct())
 
-    ordered = sorted(
-        codes,
-        key=lambda c: max(movement[c]['sale'], movement[c]['purchase']),
-        reverse=True,
-    )
+    ordered = sorted(codes, key=lambda c: -found[c]['stock'])
     total = len(ordered)
     page_codes = ordered[:max_items]
 
     group_names = {g.g_code: (g.g_name or g.g_code) for g in ItemGroup.objects.all()}
-    local_rows: dict[str, list[dict]] = {}
+    local_rows: dict[str, dict] = {}
     for start in range(0, len(page_codes), 500):
         agg = (
             ItemBarcode.objects.filter(item_code__in=page_codes[start : start + 500])
-            .values('item_code', 'unit')
+            .values('item_code')
             .annotate(
                 barcode=Max('barcode'), item_name=Max('name'), gcode=Max('g_code')
             )
-            .order_by('item_code', 'unit')
         )
         for r in agg:
-            local_rows.setdefault(r['item_code'], []).append(r)
+            local_rows[r['item_code']] = r
 
     rows: list[dict] = []
     for code in page_codes:
-        mv = movement[code]
-        base = {'purchase': mv['purchase'], 'sale': mv['sale'], 'item_code': code}
-        entries = local_rows.get(code) or [
-            {'item_name': '', 'unit': '', 'barcode': '', 'gcode': ''}
-        ]
-        for r in entries:
-            rows.append(
-                {
-                    **base,
-                    'name': r['item_name'] or '',
-                    'unit': r['unit'] or '',
-                    'barcode': r['barcode'] or '',
-                    'group_name': group_names.get(r['gcode'], r['gcode'] or ''),
-                }
-            )
+        rec = found[code]
+        r = local_rows.get(code) or {}
+        rows.append(
+            {
+                'item_code': code,
+                'name': r.get('item_name') or '',
+                'barcode': r.get('barcode') or '',
+                'group_name': group_names.get(r.get('gcode'), r.get('gcode') or ''),
+                'unit': rec['unit'],
+                'stock': rec['stock'],
+                'sold': rec['sold'],
+                'pct': rec['pct'],
+                'whs': [
+                    {
+                        'name': (
+                            f"{w['wh']} - {wh_names[w['wh']]}"
+                            if w['wh'] in wh_names
+                            else w['wh']
+                        ),
+                        'qty': w['qty'],
+                        'sold': w['sold'],
+                    }
+                    for w in rec['whs']
+                ],
+            }
+        )
     return JsonResponse(
-        {'ok': True, 'total': total, 'shown': len(page_codes), 'rows': rows}
+        {
+            'ok': True,
+            'total': total,
+            'shown': len(page_codes),
+            'wh_count': len(result['warehouses']),
+            'rows': rows,
+        }
     )
 
 

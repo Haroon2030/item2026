@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}آخر حركة على الصنف{% endblock %}
+{% block title %}أصناف راكدة بكميات كبيرة{% endblock %}
 {% block page_class %}sales-dash purchase-dash lastmove-dash{% endblock %}
 {% block body_class %}sales-dash-body{% endblock %}
 
 {% block content %}
-<section class="dash-head" aria-label="آخر حركة على الصنف">
+<section class="dash-head" aria-label="أصناف كميتها كبيرة ومبيعاتها قليلة">
   <div class="dash-head-copy">
-    <h2>آخر حركة على الصنف</h2>
-    <p class="sales-ov-sub">تاريخ آخر شراء وآخر بيع لكل صنف · الباركود والوحدة · حسب الفرع والمجموعة والمخزن</p>
+    <h2>كميات كبيرة ومبيعات بسيطة</h2>
+    <p class="sales-ov-sub">أصناف رصيدها كبير ومبيعاتها في الفترة لا تتجاوز النسبة المحددة من الكمية · في المخازن المرتبطة بنقاط البيع والمبيعات فقط</p>
   </div>
 </section>
 
@@ -50,18 +50,26 @@
     <label for="lm-q">بحث بالاسم / الكود / الباركود</label>
     <input id="lm-q" type="search" name="q" value="{{ q }}" placeholder="اسم الصنف أو كوده أو باركوده…" maxlength="80" autocomplete="off">
   </div>
-  <button type="submit" class="btn-primary">عرض</button>
+  <div class="field">
+    <label for="lm-minqty">أقل كمية (رقم كبير)</label>
+    <input id="lm-minqty" type="number" name="min_qty" value="{{ min_qty }}" min="0" step="any" inputmode="decimal">
+  </div>
+  <div class="field">
+    <label for="lm-pct">أقصى نسبة مبيعات %</label>
+    <input id="lm-pct" type="number" name="max_pct" value="{{ max_pct }}" min="0" max="100" step="any" inputmode="decimal">
+  </div>
+  <button type="submit" name="show" value="1" class="btn-primary">عرض</button>
 </form>
 
 <section class="dash-panel dash-panel-glass ed-panel" aria-label="آخر حركة على الأصناف">
   <div class="dash-panel-head">
     <div>
-      <h3>الأصناف التي لها حركة</h3>
-      <p class="sales-ov-sub" id="lm-sub">{{ date_from }} → {{ date_to }} · جاري تحميل الحركة…</p>
+      <h3>الأصناف الراكدة بكميات كبيرة</h3>
+      <p class="sales-ov-sub" id="lm-sub">{% if show %}{{ date_from }} → {{ date_to }} · جاري التحميل…{% else %}اختر الفلاتر ثم اضغط «عرض»{% endif %}</p>
     </div>
     <div class="sales-groups-head-meta">
-      <span class="sales-groups-status is-loading" id="lm-status" aria-live="polite">جاري التحميل…</span>
-      <span class="result-pill" id="lm-pill">…</span>
+      <span class="sales-groups-status {% if show %}is-loading{% endif %}" id="lm-status" aria-live="polite">{% if show %}جاري التحميل…{% endif %}</span>
+      <span class="result-pill" id="lm-pill">{% if show %}…{% else %}—{% endif %}</span>
     </div>
   </div>
   <div class="table-wrap pr-vendors-wrap">
@@ -70,28 +78,30 @@
       id="lm-table"
       aria-label="آخر حركة على الأصناف"
       data-api="{% url 'browse_last_movement_api' %}"
-      data-purchases-api="{% url 'browse_last_purchases_api' %}"
       data-date-from="{{ date_from }}"
       data-date-to="{{ date_to }}"
       data-branch="{{ selected_branch }}"
       data-group="{{ selected_group }}"
       data-q="{{ q }}"
+      data-show="{{ show }}"
+      data-min-qty="{{ min_qty }}"
+      data-max-pct="{{ max_pct }}"
     >
       <thead>
         <tr>
           <th>#</th>
+          <th>رقم الصنف</th>
           <th>الصنف</th>
           <th>الباركود</th>
           <th>الوحدة</th>
           <th>المجموعة</th>
-          <th class="lm-col-date" title="آخر شراء للصنف على مستوى الفرع، بغض النظر عن الفترة">آخر شراء (بالفرع)</th>
-          <th class="lm-col-wh" title="المخزن الذي استلم آخر فاتورة شراء">مخزن الشراء</th>
-          <th class="lm-col-date">آخر بيع</th>
-          <th class="lm-col-qty" title="رصيد مخازن الفرع بعد خصم مبيعات نقاط البيع غير المرحّلة، مع التفصيل لكل مخزن">المتبقي بعد الترحيل (مخازن الفرع)</th>
+          <th class="lm-col-qty">الكمية بالمخازن</th>
+          <th class="lm-col-qty">المباع بالفترة</th>
+          <th class="lm-col-qty">نسبة المبيع %</th>
         </tr>
       </thead>
       <tbody id="lm-body">
-        <tr><td colspan="9" class="sales-empty sales-ov-loading">جاري تحميل الأصناف…</td></tr>
+        <tr><td colspan="9" class="sales-empty{% if show %} sales-ov-loading{% endif %}">{% if show %}جاري تحميل الأصناف…{% else %}حدّد خيارات الفلترة ثم اضغط «عرض» لتحميل النتائج{% endif %}</td></tr>
       </tbody>
     </table>
   </div>

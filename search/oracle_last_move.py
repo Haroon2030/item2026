@@ -181,6 +181,197 @@ def _compute_movement_summary(
     return out
 
 
+def _num(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _norm_code(value: Any) -> str:
+    text = str(value or "").strip()
+    return text[:-2] if text.endswith(".0") else text
+
+
+def fetch_overstock_items(
+    date_from: date,
+    date_to: date,
+    warehouses: list[str] | None = None,
+    *,
+    min_qty: float = 100.0,
+    max_pct: float = 5.0,
+) -> dict[str, Any]:
+    """أصناف كميتها كبيرة ومبيعاتها ضمن الفترة لا تتجاوز max_pct% من الكمية.
+
+    تُحسب فقط في المخازن المرتبطة بالمبيعات (التي سُجّل عليها بيع نقاط بيع/فواتير
+    ضمن الفترة). النتيجة مجمّعة لكل صنف:
+    {"warehouses": [codes], "items": {code: {"stock", "sold", "pct", "unit", "whs": [{"wh","qty","sold"}]}}}
+    الكمية بوحدة المخزون (أصغر عبوة). SELECT فقط.
+    """
+    empty: dict[str, Any] = {"warehouses": [], "items": {}}
+    if not oracle_enabled():
+        return empty
+    whs = sorted(set(_int_list(warehouses)))
+    key = (
+        f"overstock:v2:{date_from.isoformat()}:{date_to.isoformat()}:"
+        f"{','.join(map(str, whs))}:{min_qty}:{max_pct}"
+    )
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+
+    schema = _schema()
+    pos = _pos_owner()
+    params: dict[str, Any] = {
+        "d_from": date_from,
+        "d_to_excl": date_to + timedelta(days=1),
+    }
+    wh_in = ", ".join(str(w) for w in whs)
+    wh_bill = f"AND d.W_CODE IN ({wh_in})" if whs else ""
+    wh_pos = f"AND NVL(d.W_CODE, m.W_CODE) IN ({wh_in})" if whs else ""
+    wh_stock = f"AND w.W_CODE IN ({wh_in})" if whs else ""
+    pos_qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+
+    sold: dict[tuple[str, str], float] = {}
+
+    def _add_sold(rows: list[dict]) -> None:
+        for row in rows:
+            code = _norm_code(row.get("I_CODE"))
+            wh = _norm_code(row.get("W_CODE"))
+            if code and wh:
+                sold[(code, wh)] = sold.get((code, wh), 0.0) + _num(row.get("QTY"))
+
+    # مبيعات نقاط البيع
+    _add_sold(
+        _fetch_all(
+            f"""
+            SELECT d.I_CODE AS I_CODE, NVL(d.W_CODE, m.W_CODE) AS W_CODE,
+                   SUM({pos_qty}) AS QTY
+            FROM {pos}.IAS_POS_BILL_MST m
+            JOIN {pos}.IAS_POS_BILL_DTL d ON d.BILL_NO = m.BILL_NO
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+              AND {_hung_ok("m")}
+              AND d.I_CODE IS NOT NULL
+              {wh_pos}
+            GROUP BY d.I_CODE, NVL(d.W_CODE, m.W_CODE)
+            """,
+            dict(params),
+        )
+    )
+    # مبيعات الفواتير (آجل/نقدي)
+    try:
+        _add_sold(
+            _fetch_all(
+                f"""
+                SELECT d.I_CODE AS I_CODE, d.W_CODE AS W_CODE,
+                       SUM(NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1)) AS QTY
+                FROM {schema}.IAS_BILL_DTL d
+                JOIN {schema}.IAS_BILL_MST b ON b.BILL_SER = d.BILL_SER
+                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+                  AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
+                  AND {_bill_mst_ok("b")}
+                  AND d.I_CODE IS NOT NULL
+                  {wh_bill}
+                GROUP BY d.I_CODE, d.W_CODE
+                """,
+                dict(params),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Overstock bill sales (with P_SIZE) failed: %s", exc)
+        _add_sold(
+            _fetch_all(
+                f"""
+                SELECT d.I_CODE AS I_CODE, d.W_CODE AS W_CODE,
+                       SUM(NVL(d.I_QTY, 0)) AS QTY
+                FROM {schema}.IAS_BILL_DTL d
+                JOIN {schema}.IAS_BILL_MST b ON b.BILL_SER = d.BILL_SER
+                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+                  AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
+                  AND {_bill_mst_ok("b")}
+                  AND d.I_CODE IS NOT NULL
+                  {wh_bill}
+                GROUP BY d.I_CODE, d.W_CODE
+                """,
+                dict(params),
+            )
+        )
+
+    # المخازن المرتبطة بالمبيعات = المخزن الافتراضي لأجهزة نقاط البيع الفعّالة
+    # (IAS_POS_MACHINE.DEF_WCODE) + أي مخزن سُجّل عليه بيع ضمن الفترة
+    linked_set = {wh for (_code, wh) in sold}
+    try:
+        for row in _fetch_all(
+            f"""
+            SELECT DISTINCT TO_CHAR(DEF_WCODE) AS W_CODE
+            FROM {pos}.IAS_POS_MACHINE
+            WHERE DEF_WCODE IS NOT NULL AND NVL(INACTIVE, 0) = 0
+            """,
+            {},
+        ):
+            wh = _norm_code(row.get("W_CODE"))
+            if wh and (not whs or int(wh) in whs if wh.isdigit() else False):
+                linked_set.add(wh)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("POS machine default warehouses failed: %s", exc)
+    linked = sorted(w for w in linked_set if w.isdigit())
+    if not linked:
+        return empty
+
+    stock_rows = _fetch_all(
+        f"""
+        SELECT TO_CHAR(s.I_CODE) AS I_CODE, TO_CHAR(s.W_CODE) AS W_CODE,
+               s.ITM_UNT AS UNIT, NVL(s.AVL_QTY, 0) AS QTY
+        FROM (
+            SELECT w.I_CODE, w.W_CODE, w.ITM_UNT, w.AVL_QTY,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY w.I_CODE, w.W_CODE
+                       ORDER BY NVL(w.P_SIZE, 1), w.ITM_UNT
+                   ) AS RN
+            FROM {schema}.IAS_ITM_WCODE w
+            WHERE w.W_CODE IN ({", ".join(linked)})
+              AND NVL(w.AVL_QTY, 0) > 0
+              {wh_stock}
+        ) s
+        WHERE s.RN = 1
+        """,
+        {},
+    )
+
+    items: dict[str, dict[str, Any]] = {}
+    for row in stock_rows:
+        code = _norm_code(row.get("I_CODE"))
+        wh = _norm_code(row.get("W_CODE"))
+        qty = _num(row.get("QTY"))
+        if not code or not wh or qty <= 0:
+            continue
+        rec = items.setdefault(
+            code,
+            {"stock": 0.0, "sold": 0.0, "unit": str(row.get("UNIT") or "").strip(), "whs": []},
+        )
+        sold_q = sold.get((code, wh), 0.0)
+        rec["stock"] += qty
+        rec["sold"] += sold_q
+        rec["whs"].append({"wh": wh, "qty": qty, "sold": sold_q})
+
+    out_items: dict[str, dict[str, Any]] = {}
+    for code, rec in items.items():
+        if rec["stock"] < min_qty:
+            continue
+        pct = rec["sold"] / rec["stock"] * 100.0
+        if pct > max_pct:
+            continue
+        rec["pct"] = round(max(pct, 0.0), 2)
+        rec["stock"] = round(rec["stock"], 2)
+        rec["sold"] = round(max(rec["sold"], 0.0), 2)
+        rec["whs"].sort(key=lambda r: -r["qty"])
+        out_items[code] = rec
+
+    result = {"warehouses": linked, "items": out_items}
+    cache.set(key, result, CACHE_SECONDS)
+    return result
+
+
 def fetch_stock_by_warehouse(
     item_codes: list[str],
     warehouses: list[str] | None = None,

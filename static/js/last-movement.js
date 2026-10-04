@@ -72,8 +72,8 @@
 
   function openPop(btn) {
     var code = btn.getAttribute("data-code");
-    var rec = purchaseCache[code];
-    if (!rec || !rec.stock) return;
+    var rec = rowByCode[code];
+    if (!rec || !rec.whs) return;
     if (!pop) {
       pop = document.createElement("div");
       pop.className = "lm-pop";
@@ -85,14 +85,14 @@
       return;
     }
     var html = '<div class="lm-pop-title">الكمية حسب المخزن</div><ul>';
-    rec.stock.forEach(function (s) {
+    rec.whs.forEach(function (s) {
       html +=
-        "<li><span>" + esc(s.wh_name) + '</span><b class="mono">' + fmtQty(s.qty) +
-        (s.unit ? " " + esc(s.unit) : "") + "</b></li>";
+        "<li><span>" + esc(s.name) + '</span><b class="mono">' + fmtQty(s.qty) +
+        (rec.unit ? " " + esc(rec.unit) : "") + " · مباع " + fmtQty(s.sold) + "</b></li>";
     });
     html +=
       '<li class="lm-pop-total"><span>الإجمالي</span><b class="mono">' +
-      fmtQty(rec.stock_total) + (rec.stock_unit ? " " + esc(rec.stock_unit) : "") +
+      fmtQty(rec.stock) + (rec.unit ? " " + esc(rec.unit) : "") +
       "</b></li></ul>";
     pop.innerHTML = html;
     pop.hidden = false;
@@ -143,16 +143,17 @@
     return (
       "<tr>" +
       '<td class="mono">' + (first ? n : "") + "</td>" +
-      '<td class="pr-item" title="' + esc(r.name) + '">' +
-      esc(r.name || "—") +
-      ' <small class="mono">#' + esc(r.item_code) + "</small></td>" +
-      '<td class="mono lm-barcode">' + esc(r.barcode || "—") + "</td>" +
-      "<td>" + esc(r.unit || "—") + "</td>" +
-      '<td class="pr-group" title="' + esc(r.group_name) + '">' + esc(r.group_name || "—") + "</td>" +
-      '<td class="mono lm-date lm-purchase" data-code="' + esc(r.item_code) + '"><span class="lm-pending">…</span></td>' +
-      '<td class="lm-wh lm-purchase-wh" data-code="' + esc(r.item_code) + '"><span class="lm-pending">…</span></td>' +
-      '<td class="mono lm-date">' + dateCell(r.sale) + "</td>" +
-      '<td class="lm-qty lm-stock" data-code="' + esc(r.item_code) + '"><span class="lm-pending">…</span></td>' +
+      '<td class="mono lm-code lm-c-code">' + esc(r.item_code) + "</td>" +
+      '<td class="pr-item lm-c-name" title="' + esc(r.name) + '">' + esc(r.name || "—") + "</td>" +
+      '<td class="mono lm-barcode lm-c-barcode">' + esc(r.barcode || "—") + "</td>" +
+      '<td class="lm-c-unit">' + esc(r.unit || "—") + "</td>" +
+      '<td class="pr-group lm-c-group" title="' + esc(r.group_name) + '">' + esc(r.group_name || "—") + "</td>" +
+      '<td class="lm-qty lm-c-stock"><span class="lm-qty-line"><span class="lm-qty-val">' + fmtQty(r.stock) + "</span>" +
+      (r.unit ? '<small class="lm-unit">' + esc(r.unit) + "</small>" : "") +
+      '<button type="button" class="lm-more" data-code="' + esc(r.item_code) +
+      '" aria-haspopup="true" title="تفصيل الكمية حسب المخزن">' + (r.whs || []).length + " ▾</button></span></td>" +
+      '<td class="mono lm-qty lm-c-sold">' + fmtQty(r.sold) + "</td>" +
+      '<td class="mono lm-qty lm-c-pct"><span class="lm-pct ' + (r.pct <= 0 ? "is-zero" : r.pct <= 1 ? "is-low" : r.pct <= 3 ? "is-mid" : "is-high") + '">' + fmtQty(r.pct) + "%</span></td>" +
       "</tr>"
     );
   }
@@ -203,11 +204,10 @@
     });
     setBody(
       html ||
-        '<tr><td colspan="9" class="sales-empty">لا أصناف لها حركة ضمن الفلتر والفترة المحددة</td></tr>'
+        '<tr><td colspan="9" class="sales-empty">لا أصناف تنطبق عليها الشروط ضمن الفلتر والفترة المحددة</td></tr>'
     );
     closePop();
     renderPager(totalPages);
-    loadPurchases(slice);
     var pill = document.getElementById("lm-pill");
     if (pill && meta) {
       pill.textContent = groups.length
@@ -216,65 +216,14 @@
     }
   }
 
-  var purchaseCache = {};
-
-  function fillPurchases(map) {
-    document.querySelectorAll("#lm-body td.lm-purchase").forEach(function (td) {
-      var code = td.getAttribute("data-code");
-      var rec = map[code] || null;
-      var ok = /^\d+$/.test(code || "");
-      td.innerHTML = ok ? dateCell(rec ? rec.date : "") : '<span class="lm-none">—</span>';
-      var stTd = td.parentNode.querySelector("td.lm-stock");
-      if (stTd) stTd.innerHTML = ok ? qtyHtml(rec, code) : '<span class="lm-none">—</span>';
-      var whTd = td.parentNode.querySelector("td.lm-purchase-wh");
-      if (whTd) {
-        whTd.innerHTML =
-          ok && rec && rec.wh
-            ? '<span title="' + esc(rec.wh_name || rec.wh) + '">' + esc(rec.wh_name || rec.wh) + "</span>"
-            : '<span class="lm-none">—</span>';
-      }
-    });
-  }
-
-  function loadPurchases(slice) {
-    var table = document.getElementById("lm-table");
-    var codes = [];
-    slice.forEach(function (g) {
-      if (/^\d+$/.test(g.code) && codes.indexOf(g.code) < 0) codes.push(g.code);
-    });
-    var need = codes.filter(function (c) { return !(c in purchaseCache); });
-    if (!need.length) {
-      fillPurchases(purchaseCache);
-      return;
-    }
-    var qs = new URLSearchParams({
-      codes: need.join(","),
-      branch: table.getAttribute("data-branch") || "",
-    });
-    var reqPage = current;
-    fetch(table.getAttribute("data-purchases-api") + "?" + qs.toString(), {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || data.ok === false) throw new Error("fail");
-        need.forEach(function (c) { purchaseCache[c] = (data.rows || {})[c] || null; });
-        if (reqPage === current) fillPurchases(purchaseCache);
-      })
-      .catch(function () {
-        document.querySelectorAll("#lm-body .lm-pending").forEach(function (el) {
-          el.textContent = "—";
-        });
-      });
-  }
+  var rowByCode = {};
 
   function render(data) {
     var table = document.getElementById("lm-table");
     var sub = document.getElementById("lm-sub");
     meta = data;
-    purchaseCache = {};
+    rowByCode = {};
+    (data.rows || []).forEach(function (r) { rowByCode[r.item_code] = r; });
     groups = groupRows(data.rows || []);
     var secs = Math.max(1, Math.round((Date.now() - started) / 1000));
     setStatus("ready", "مكتمل ✓ " + secs + "ث");
@@ -283,9 +232,9 @@
         table.getAttribute("data-date-from") +
         " → " +
         table.getAttribute("data-date-to") +
-        " · مرتبة بالأحدث حركة" +
+        " · " + (data.wh_count || 0) + " مخزن مرتبط بالمبيعات · مرتبة بالأكبر كمية" +
         (data.shown < data.total
-          ? " · عُرض أحدث " + data.shown + " من " + data.total + " — ضيّق الفلتر لعرض الباقي"
+          ? " · عُرض أكبر " + data.shown + " من " + data.total + " — ضيّق الفلتر لعرض الباقي"
           : "");
     }
     showPage(1);
@@ -300,6 +249,8 @@
       branch: table.getAttribute("data-branch") || "",
       group: table.getAttribute("data-group") || "",
       q: table.getAttribute("data-q") || "",
+      min_qty: table.getAttribute("data-min-qty") || "",
+      max_pct: table.getAttribute("data-max-pct") || "",
     });
     started = Date.now();
     setStatus("loading", "جاري التحميل…");
@@ -348,7 +299,8 @@
     });
     window.addEventListener("scroll", closePop, { passive: true });
     window.addEventListener("resize", closePop);
-    load();
+    var tbl = document.getElementById("lm-table");
+    if (tbl && tbl.getAttribute("data-show")) load();
   }
 
   if (document.readyState === "loading") {

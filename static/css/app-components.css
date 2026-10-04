@@ -478,3 +478,21 @@
     .kpi-target-pulse { animation: none; outline: 3px solid var(--ac-gold); outline-offset: 3px; }
   }
 }
+
+/* تلوين جدول الكميات الكبيرة والمبيعات البسيطة */
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected):nth-child(even) td { background-image: linear-gradient(rgb(17 17 17 / 0.05), rgb(17 17 17 / 0.05)) !important; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected):hover td { background-image: linear-gradient(rgb(240 200 20 / 0.30), rgb(240 200 20 / 0.30)) !important; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-code    { background-color: rgb(120 120 130 / 0.14) !important; color: #3f3f46 !important; font-weight: 800; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-name    { background-color: rgb(245 200 40 / 0.30) !important; font-weight: 800; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-barcode { background-color: rgb(139 92 246 / 0.12) !important; color: #5b21b6 !important; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-unit    { background-color: rgb(20 184 166 / 0.14) !important; color: #0f766e !important; font-weight: 700; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-group   { background-color: rgb(236 72 153 / 0.11) !important; color: #9d174d !important; font-weight: 700; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-stock   { background-color: rgb(59 130 246 / 0.16) !important; color: #1d4ed8 !important; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-sold    { background-color: rgb(249 115 22 / 0.15) !important; color: #c2410c !important; font-weight: 800; }
+body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-pct     { text-align: center; }
+.lm-pct { display: inline-block; min-width: 3.4rem; padding: 0.12rem 0.5rem; border-radius: 999px; font-weight: 800; }
+.lm-pct.is-zero { background: rgb(220 38 38 / 0.18); color: #b91c1c; }
+.lm-pct.is-low  { background: rgb(245 158 11 / 0.22); color: #b45309; }
+.lm-pct.is-mid  { background: rgb(234 179 8 / 0.25); color: #854d0e; }
+.lm-pct.is-high { background: rgb(34 197 94 / 0.20); color: #15803d; }
+
