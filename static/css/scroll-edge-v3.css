@@ -1,0 +1,19 @@
+/* زر النزول/الصعود العائم (#scroll-edge-btn) ثابت أسفل اليسار، فكان يحجب آخر صف وصف الإجمالي
+   عند النزول لنهاية أي صفحة. نترك أسفل كل صفحة فراغاً بحجم الزر ليستقر تحت الجداول لا فوقها. */
+@layer app-components {
+  html body.theme-navy .page.has-sidebar:not(#fx) {
+    /* ارتفاع الزر 2.7rem + هامشه 1.25rem + مسافة أمان */
+    padding-bottom: 5.5rem !important;
+  }
+
+  @media (max-width: 720px) {
+    html body.theme-navy .page.has-sidebar:not(#fx) {
+      /* زر الجوال 2.4rem + هامش 1rem + مسافة أمان */
+      padding-bottom: 5rem !important;
+    }
+  }
+
+  @media print {
+    html body.theme-navy .page.has-sidebar:not(#fx) { padding-bottom: 0 !important; }
+  }
+}
