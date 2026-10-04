@@ -103,46 +103,41 @@
       max = Math.max(max, Number(row.sales_total) || 0);
     });
 
+    var VISIBLE = 6;
     var html = "";
     rows.forEach(function (row, i) {
       var rank = row.rank || i + 1;
-      var pct = max > 0 ? Math.max(2, ((Number(row.sales_total) || 0) / max) * 100) : 0;
+      var pct = max > 0 ? Math.max(3, ((Number(row.sales_total) || 0) / max) * 100) : 0;
       html +=
-        '<li class="sales-users-row' +
-        (rank <= 3 ? " is-top" : "") +
-        '" title="' +
-        esc(row.user_name) +
-        " #" +
-        esc(row.user_code) +
-        '">' +
-        '<span class="sales-users-rank mono">' +
-        rank +
-        "</span>" +
-        '<div class="sales-users-main">' +
-        '<div class="sales-users-line">' +
-        '<span class="sales-users-name">' +
-        esc(row.user_name) +
-        ' <small class="mono">#' +
-        esc(row.user_code) +
-        "</small></span>" +
-        '<span class="sales-users-amt mono">' +
-        moneyHtml(row.sales_total_display) +
-        "</span></div>" +
-        '<div class="sales-users-track"><span class="sales-users-bar" style="width:' +
-        pct.toFixed(1) +
-        '%"></span></div>' +
-        '<div class="sales-users-meta mono">' +
-        "<span>" +
-        esc(row.invoice_count_display) +
-        " فاتورة</span>" +
-        "<span>متوسط السلة " +
-        esc(row.avg_basket_display) +
-        "</span>" +
-        '<span class="sales-users-share">' +
-        esc(row.share_display) +
-        "</span></div></div></li>";
+        '<li class="rb-row' + (i >= VISIBLE ? " is-extra" : "") + '" title="' +
+        esc(row.user_name) + " #" + esc(row.user_code) + " · متوسط السلة " + esc(row.avg_basket_display) + '">' +
+        '<div class="rb-bar-col">' +
+        '<span class="rb-pct mono">' + esc(row.share_display) + "</span>" +
+        '<span class="rb-track" aria-hidden="true"><span class="rb-fill" style="width:' + pct.toFixed(1) + '%"></span></span>' +
+        "</div>" +
+        '<div class="rb-details">' +
+        '<span class="rb-name"><span class="rb-rank mono">' + rank + "</span>" + esc(row.user_name) + "</span>" +
+        '<span class="rb-meta mono">' + moneyHtml(row.sales_total_display) + " · " + esc(row.invoice_count_display) + " فاتورة</span>" +
+        "</div></li>";
     });
+    var board = document.getElementById("sales-users-board");
+    var oldBtn = board && board.querySelector(".rb-more");
+    if (oldBtn) oldBtn.remove();
+    if (board) board.classList.remove("is-open");
     if (body) body.innerHTML = html;
+    if (board && body && rows.length > VISIBLE) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "rb-more";
+      btn.setAttribute("aria-expanded", "false");
+      btn.innerHTML = '<span class="rb-more-text">عرض المزيد</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+      btn.addEventListener("click", function () {
+        var open = board.classList.toggle("is-open");
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.querySelector(".rb-more-text").textContent = open ? "عرض أقل" : "عرض المزيد";
+      });
+      body.insertAdjacentElement("afterend", btn);
+    }
     if (totInv) totInv.textContent = (totals.invoice_count_display || "0") + " فاتورة";
     if (totSales) totSales.innerHTML = moneyHtml(totals.sales_total_display || "0.00");
     if (foot) foot.hidden = false;

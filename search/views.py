@@ -1,5 +1,7 @@
 import logging
 
+from django.utils.safestring import mark_safe
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -33,33 +35,57 @@ from .validators import ValidationError, looks_like_item_code, resolve_group, re
 logger = logging.getLogger(__name__)
 
 
+# أيقونات بطاقات الصفحة الرئيسية (viewBox 48×48، خطوط بيضاء) — مطابقة لتصميم الواجهة
+_WELCOME_ICONS = {
+    'welcome-card--income': (
+        '<path d="M21.5 15.5c-1.6-2.6-7.2-2.9-8.7.4-1.4 3.2 2.1 5 5.2 5.8 3.9 1 6.4 2.8 5 6.3-1.7 3.7-7.5 3.2-9.5-.3"/>'
+        '<path d="M17.6 11.5v4M17.6 31.8v4"/>'
+        '<path d="M26 11c8.5 2 13.5 9 11.5 18-1 4.6-4.2 8-8.8 10.4"/>'
+    ),
+    'welcome-card--inv': (
+        '<path d="M24 7l18 8.6-18 8.6-18-8.6z"/>'
+        '<path d="M6 20.8l18 8.6 18-8.6M6 26l18 8.6 18-8.6M6 31.2l18 8.6 18-8.6"/>'
+    ),
+    'welcome-card--assets': (
+        '<path d="M9 8.5h30l2.4 7H6.6z"/>'
+        '<path d="M6.6 15.5c1 2.6 3.4 2.6 4.4 0 1 2.6 3.4 2.6 4.4 0 1 2.6 3.4 2.6 4.4 0 1 2.6 3.4 2.6 4.4 0 1 2.6 3.4 2.6 4.4 0 1 2.6 3.4 2.6 4.4 0"/>'
+        '<path d="M10 20.5V41h28V20.5"/>'
+        '<rect x="14" y="25" width="12" height="9" rx="1"/>'
+        '<path d="M30.5 25H36v16h-5.5z"/>'
+    ),
+    'welcome-card--purch': (
+        '<path d="M5.5 7.5h4.4l5 22.5h20.6l4-15.8H12.4"/>'
+        '<path d="M16.6 34.2h21.4"/>'
+        '<circle cx="20" cy="40.2" r="2.3"/><circle cx="34" cy="40.2" r="2.3"/>'
+    ),
+    'welcome-card--sales': (
+        '<path d="M6 38.5h36"/>'
+        '<rect x="10" y="27.5" width="5" height="11"/><rect x="18.5" y="19" width="5" height="19.500"/>'
+        '<rect x="27" y="23.500" width="5" height="15"/><rect x="35" y="8.500" width="5" height="30"/>'
+    ),
+    'welcome-card--perf': (
+        '<path d="M9.5 35.5l8.5-8.2 9 4.600 12-15.600"/>'
+        '<circle cx="8" cy="36.800" r="2.600"/><circle cx="18" cy="26.800" r="2.600"/>'
+        '<circle cx="27" cy="31.500" r="2.600"/><circle cx="40" cy="15.500" r="2.600"/>'
+    ),
+}
+
+
 def _welcome_cards_for_user(user) -> list[dict]:
     """بطاقات الترحيب حسب الشاشات المسموح بها."""
     from django.urls import reverse
 
     from .nav_permissions import user_can_access_screen
 
+    # الترتيب والجهة كما في تصميم الصفحة الرئيسية: عمود أيسر (3) وعمود أيمن (3)
     catalog = (
         (
             'browse_income',
             'قائمة الدخل',
             'النتيجة المالية للفترة',
             'welcome-card--income',
-            'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
-        ),
-        (
-            'browse_sales',
-            'المبيعات',
-            'صافي الفروع والقنوات بعد المرتجع',
-            'welcome-card--sales',
-            'M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4',
-        ),
-        (
-            'browse_performance',
-            'الأداء',
-            'مقارنة الفترات ومؤشرات التشغيل',
-            'welcome-card--perf',
-            'M12 20V10M18 20V4M6 20v-4M4 20h16',
+            'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM14.6 9.3c-.5-.9-1.5-1.3-2.6-1.3-1.5 0-2.6.8-2.6 2 0 2.9 5.2 1.4 5.2 4.2 0 1.2-1.1 2.1-2.6 2.1-1.2 0-2.2-.5-2.7-1.5M12 6v2M12 16.4v1.8',
+            'left',
         ),
         (
             'browse_inventory',
@@ -67,24 +93,43 @@ def _welcome_cards_for_user(user) -> list[dict]:
             'الأرصدة وحركة المجموعات',
             'welcome-card--inv',
             'M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4',
-        ),
-        (
-            'browse_purchases',
-            'تحليل المشتريات',
-            'التوريد ودورة الموردين',
-            'welcome-card--purch',
-            'M6 6h15l-1.5 9H8L6 6zM9 20a1.5 1.5 0 1 0 0-0.01M18 20a1.5 1.5 0 1 0 0-0.01M6 6L5 3H2',
+            'left',
         ),
         (
             'browse_assets',
             'الأصول',
             'الأصول المسجّلة على الفروع',
             'welcome-card--assets',
-            'M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6',
+            'M3 9l1.5-5h15L21 9M3 9v1a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0V9M4.5 13v7h15v-7M9 20v-4.5h6V20',
+            'left',
+        ),
+        (
+            'browse_purchases',
+            'تحليل المشتريات',
+            'التوريد ودورة الموردين',
+            'welcome-card--purch',
+            'M3 4h2.2l2.3 11h10.3l2-8H6.3M9.6 20.2a1.1 1.1 0 1 0 0-.01M17 20.2a1.1 1.1 0 1 0 0-.01',
+            'right',
+        ),
+        (
+            'browse_sales',
+            'المبيعات',
+            'صافي الفروع والقنوات بعد المرتجع',
+            'welcome-card--sales',
+            'M3 20h18M6 20v-5h3v5M11 20V9h3v11M16 20V6h3v14',
+            'right',
+        ),
+        (
+            'browse_performance',
+            'الأداء',
+            'مقارنة الفترات ومؤشرات التشغيل',
+            'welcome-card--perf',
+            'M3.5 17.5l5-6 4 3 7-7M3.5 17.5a.8.8 0 1 0 .01 0M8.5 11.5a.8.8 0 1 0 .01 0M12.5 14.5a.8.8 0 1 0 .01 0M19.5 7.5a.8.8 0 1 0 .01 0',
+            'right',
         ),
     )
     cards: list[dict] = []
-    for key, title, hint, css, path_d in catalog:
+    for key, title, hint, css, path_d, side in catalog:
         if not user_can_access_screen(user, key):
             continue
         try:
@@ -99,6 +144,8 @@ def _welcome_cards_for_user(user) -> list[dict]:
                 'css': css,
                 'href': href,
                 'path_d': path_d,
+                'icon': mark_safe(_WELCOME_ICONS.get(css, '')),
+                'side': side,
             }
         )
     return cards

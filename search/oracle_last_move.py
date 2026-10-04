@@ -19,6 +19,7 @@ from .oracle_stock import (
     _fetch_all,
     _hung_ok,
     _pos_owner,
+    _run_parallel,
     _schema,
     oracle_enabled,
 )
@@ -232,20 +233,13 @@ def fetch_overstock_items(
     wh_stock = f"AND w.W_CODE IN ({wh_in})" if whs else ""
     pos_qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
 
-    sold: dict[tuple[str, str], float] = {}
-
-    def _add_sold(rows: list[dict]) -> None:
-        for row in rows:
-            code = _norm_code(row.get("I_CODE"))
-            wh = _norm_code(row.get("W_CODE"))
-            if code and wh:
-                sold[(code, wh)] = sold.get((code, wh), 0.0) + _num(row.get("QTY"))
-
-    # مبيعات نقاط البيع
-    _add_sold(
-        _fetch_all(
+    def _job_pos() -> list[dict]:
+        return _fetch_all(
             f"""
-            SELECT d.I_CODE AS I_CODE, NVL(d.W_CODE, m.W_CODE) AS W_CODE,
+            SELECT /*+ LEADING(m d) USE_NL(d)
+                       INDEX(m POSBILLMST_BILLDATEUSRBRN)
+                       INDEX(d IAS_POS_INDX_BILL_DTL) */
+                   d.I_CODE AS I_CODE, NVL(d.W_CODE, m.W_CODE) AS W_CODE,
                    SUM({pos_qty}) AS QTY
             FROM {pos}.IAS_POS_BILL_MST m
             JOIN {pos}.IAS_POS_BILL_DTL d ON d.BILL_NO = m.BILL_NO
@@ -257,93 +251,103 @@ def fetch_overstock_items(
             """,
             dict(params),
         )
+
+    def _job_bill() -> list[dict]:
+        sql = """
+            SELECT d.I_CODE AS I_CODE, d.W_CODE AS W_CODE,
+                   SUM({qty}) AS QTY
+            FROM {schema}.IAS_BILL_DTL d
+            JOIN {schema}.IAS_BILL_MST b ON b.BILL_SER = d.BILL_SER
+            WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+              AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
+              AND {ok}
+              AND d.I_CODE IS NOT NULL
+              {wh}
+            GROUP BY d.I_CODE, d.W_CODE
+            """
+        try:
+            return _fetch_all(
+                sql.format(
+                    qty="NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1)",
+                    schema=schema, ok=_bill_mst_ok("b"), wh=wh_bill,
+                ),
+                dict(params),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Overstock bill sales (with P_SIZE) failed: %s", exc)
+            return _fetch_all(
+                sql.format(
+                    qty="NVL(d.I_QTY, 0)",
+                    schema=schema, ok=_bill_mst_ok("b"), wh=wh_bill,
+                ),
+                dict(params),
+            )
+
+    def _job_machines() -> list[dict]:
+        try:
+            return _fetch_all(
+                f"""
+                SELECT DISTINCT TO_CHAR(DEF_WCODE) AS W_CODE
+                FROM {pos}.IAS_POS_MACHINE
+                WHERE DEF_WCODE IS NOT NULL AND NVL(INACTIVE, 0) = 0
+                """,
+                {},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("POS machine default warehouses failed: %s", exc)
+            return []
+
+    def _job_stock() -> list[dict]:
+        # كل الأرصدة الموجبة دفعة واحدة (بالتوازي مع المبيعات) ثم نُصفّيها
+        # بالمخازن المرتبطة في بايثون — أسرع من انتظار نتيجة المبيعات أولاً.
+        return _fetch_all(
+            f"""
+            SELECT TO_CHAR(s.I_CODE) AS I_CODE, TO_CHAR(s.W_CODE) AS W_CODE,
+                   s.ITM_UNT AS UNIT, NVL(s.AVL_QTY, 0) AS QTY
+            FROM (
+                SELECT w.I_CODE, w.W_CODE, w.ITM_UNT, w.AVL_QTY,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY w.I_CODE, w.W_CODE
+                           ORDER BY NVL(w.P_SIZE, 1), w.ITM_UNT
+                       ) AS RN
+                FROM {schema}.IAS_ITM_WCODE w
+                WHERE NVL(w.AVL_QTY, 0) > 0
+                  {wh_stock}
+            ) s
+            WHERE s.RN = 1
+            """,
+            {},
+        )
+
+    pos_rows, bill_rows, machine_rows, stock_rows = _run_parallel(
+        [_job_pos, _job_bill, _job_machines, _job_stock], max_workers=4
     )
-    # مبيعات الفواتير (آجل/نقدي)
-    try:
-        _add_sold(
-            _fetch_all(
-                f"""
-                SELECT d.I_CODE AS I_CODE, d.W_CODE AS W_CODE,
-                       SUM(NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1)) AS QTY
-                FROM {schema}.IAS_BILL_DTL d
-                JOIN {schema}.IAS_BILL_MST b ON b.BILL_SER = d.BILL_SER
-                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-                  AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
-                  AND {_bill_mst_ok("b")}
-                  AND d.I_CODE IS NOT NULL
-                  {wh_bill}
-                GROUP BY d.I_CODE, d.W_CODE
-                """,
-                dict(params),
-            )
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Overstock bill sales (with P_SIZE) failed: %s", exc)
-        _add_sold(
-            _fetch_all(
-                f"""
-                SELECT d.I_CODE AS I_CODE, d.W_CODE AS W_CODE,
-                       SUM(NVL(d.I_QTY, 0)) AS QTY
-                FROM {schema}.IAS_BILL_DTL d
-                JOIN {schema}.IAS_BILL_MST b ON b.BILL_SER = d.BILL_SER
-                WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
-                  AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
-                  AND {_bill_mst_ok("b")}
-                  AND d.I_CODE IS NOT NULL
-                  {wh_bill}
-                GROUP BY d.I_CODE, d.W_CODE
-                """,
-                dict(params),
-            )
-        )
+
+    sold: dict[tuple[str, str], float] = {}
+    for row in list(pos_rows) + list(bill_rows):
+        code = _norm_code(row.get("I_CODE"))
+        wh = _norm_code(row.get("W_CODE"))
+        if code and wh:
+            sold[(code, wh)] = sold.get((code, wh), 0.0) + _num(row.get("QTY"))
 
     # المخازن المرتبطة بالمبيعات = المخزن الافتراضي لأجهزة نقاط البيع الفعّالة
     # (IAS_POS_MACHINE.DEF_WCODE) + أي مخزن سُجّل عليه بيع ضمن الفترة
     linked_set = {wh for (_code, wh) in sold}
-    try:
-        for row in _fetch_all(
-            f"""
-            SELECT DISTINCT TO_CHAR(DEF_WCODE) AS W_CODE
-            FROM {pos}.IAS_POS_MACHINE
-            WHERE DEF_WCODE IS NOT NULL AND NVL(INACTIVE, 0) = 0
-            """,
-            {},
-        ):
-            wh = _norm_code(row.get("W_CODE"))
-            if wh and (not whs or int(wh) in whs if wh.isdigit() else False):
-                linked_set.add(wh)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("POS machine default warehouses failed: %s", exc)
+    for row in machine_rows:
+        wh = _norm_code(row.get("W_CODE"))
+        if wh.isdigit() and (not whs or int(wh) in whs):
+            linked_set.add(wh)
     linked = sorted(w for w in linked_set if w.isdigit())
     if not linked:
         return empty
-
-    stock_rows = _fetch_all(
-        f"""
-        SELECT TO_CHAR(s.I_CODE) AS I_CODE, TO_CHAR(s.W_CODE) AS W_CODE,
-               s.ITM_UNT AS UNIT, NVL(s.AVL_QTY, 0) AS QTY
-        FROM (
-            SELECT w.I_CODE, w.W_CODE, w.ITM_UNT, w.AVL_QTY,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY w.I_CODE, w.W_CODE
-                       ORDER BY NVL(w.P_SIZE, 1), w.ITM_UNT
-                   ) AS RN
-            FROM {schema}.IAS_ITM_WCODE w
-            WHERE w.W_CODE IN ({", ".join(linked)})
-              AND NVL(w.AVL_QTY, 0) > 0
-              {wh_stock}
-        ) s
-        WHERE s.RN = 1
-        """,
-        {},
-    )
+    linked_lookup = set(linked)
 
     items: dict[str, dict[str, Any]] = {}
     for row in stock_rows:
         code = _norm_code(row.get("I_CODE"))
         wh = _norm_code(row.get("W_CODE"))
         qty = _num(row.get("QTY"))
-        if not code or not wh or qty <= 0:
+        if not code or wh not in linked_lookup or qty <= 0:
             continue
         rec = items.setdefault(
             code,

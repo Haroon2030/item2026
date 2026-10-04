@@ -1,0 +1,46 @@
+/* ترويسة اللوحات (لوح ذهبي لامع) والجداول (ترويسة داكنة وأعمدة ملوّنة) في كل الصفحات */
+@layer app-components {
+  /* ترويسة اللوحة: إطار #FDB51C وسطح داخلي يتدرّج من الأصفر إلى العنبري */
+  html body.theme-navy .page .dash-panel > .dash-panel-head:not(#fx) {
+    position: relative !important; isolation: isolate; box-sizing: border-box;
+    margin: 0 0 .8rem !important; padding: 1rem 1.4rem !important; min-height: 4.6rem;
+    background: #fdb51c !important; border: 0 !important; border-radius: 20px 0 0 0 !important; box-shadow: none !important;
+    color: #231f20 !important;
+  }
+  html body.theme-navy .page .dash-panel > .dash-panel-head:not(#fx)::before {
+    content: "" !important; position: absolute !important; inset: 7px !important; z-index: -1 !important; border-radius: 12px !important;
+    background: linear-gradient(180deg, #ffda18 0%, #ffd72f 22%, #fed259 48%, #fecc54 62%, #fec043 82%, #fdb51c 100%) !important;
+  }
+  html body.theme-navy .page .dash-panel > .dash-panel-head :is(h3, h2, p, .sales-ov-sub):not(#fx) { color: #231f20 !important; }
+  html body.theme-navy .page .dash-panel > .dash-panel-head .result-pill:not(#fx) { background: #231f20 !important; color: #fff !important; border: 0 !important; }
+  html body.theme-navy .page .dash-panel > .dash-panel-head .result-pill *:not(#fx) { color: inherit !important; }
+
+  /* إطار الجدول */
+  html body.theme-navy .page .dash-panel .table-wrap:not(#fx) {
+    border: 1.5px solid #231f20 !important; border-radius: 6px !important; background: #fff !important;
+  }
+
+  /* الترويسة الداكنة */
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) thead th:not(#fx) {
+    background: #231f20 !important; color: #fff !important; font-weight: 400 !important; text-shadow: none !important;
+    border-inline-end: 1px solid #bdbec0 !important; border-bottom: 0 !important;
+  }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) thead th:nth-child(2):not(#fx) { font-weight: 800 !important; }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) thead th:last-child:not(#fx) { border-inline-end: 0 !important; }
+
+  /* الخلايا: خلفية بيضاء وفواصل رمادية رفيعة وأعمدة ملوّنة (2 كريمي · 4 برتقالي · 5 أصفر) */
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) tbody td:not(#fx) {
+    background: #fff !important; border-inline-end: 1px solid #bdbec0 !important; border-bottom: 1px solid #ececec !important; box-shadow: none !important;
+  }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) tbody td:last-child:not(#fx) { border-inline-end: 0 !important; }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table):not(.lastmove-table) tbody td:nth-child(2):not(#fx) { background: #fff0c2 !important; font-weight: 800 !important; }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table):not(.lastmove-table) tbody td:nth-child(4):not(#fx) { background: #fcbe61 !important; }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table):not(.lastmove-table) tbody td:nth-child(5):not(#fx) { background: #fed865 !important; }
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) tbody tr:hover td:not(#fx) { filter: brightness(.97); }
+
+  /* صف الإجمالي: خلفية كريمية ونص داكن بدل الألوان القديمة */
+  html body.theme-navy .page .dash-panel :is(.data-table, .up-table, .lm-table, .vt-table, .inv-table) tfoot td:not(#fx) {
+    background: #fff4d6 !important; color: #231f20 !important; font-weight: 800 !important; border-top: 2px solid #231f20 !important;
+    border-inline-end: 1px solid #bdbec0 !important; box-shadow: none !important;
+  }
+}

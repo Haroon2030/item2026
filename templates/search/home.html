@@ -6,46 +6,77 @@
 {% block body_class %}sales-dash-body welcome-body{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/exec-home.css?v={{ app_client_version }}">
+<link rel="stylesheet" href="/static/css/home-v3.css?v={{ app_client_version }}">
 {% endblock %}
 
 {% block content %}
-<div class="ex-home" data-ex-stage>
-  <canvas class="ex-canvas" data-ex-canvas aria-hidden="true"></canvas>
-  <div class="ex-aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="hv-stage">
+  <svg class="hv-chart" viewBox="0 0 1020 300" preserveAspectRatio="xMidYMax slice" aria-hidden="true" dir="ltr">
+    <g class="hv-grid"><line x1="0" y1="17" x2="1020" y2="17"/><line x1="0" y1="78" x2="1020" y2="78"/><line x1="0" y1="139" x2="1020" y2="139"/><line x1="0" y1="200" x2="1020" y2="200"/><line x1="0" y1="262" x2="1020" y2="262"/></g>
+    <polyline class="hv-line hv-line-lilac" points="18,162 105,162 195,95 285,168 375,225 465,225 562,30 652,106 742,106 840,51 930,51 1000,51"/>
+    <polyline class="hv-line hv-line-pink" points="18,260 105,190 195,222 285,185 375,185 465,150 552,107 640,150 732,43 822,179 910,179 1000,115"/>
+    <polyline class="hv-line hv-line-green" points="18,97 105,122 195,122 285,92 375,92 465,92 552,48 640,48 732,2 822,232 910,150 1000,150"/>
+    <circle class="hv-peak" cx="732" cy="2" r="5"/>
+    <g class="hv-months">
+      <text x="16" y="292">Jan</text><text x="105" y="292">Feb</text><text x="195" y="292">Mar</text><text x="285" y="292">Apr</text>
+      <text x="375" y="292">May</text><text x="465" y="292">Jun</text><text x="552" y="292">Jul</text><text x="642" y="292">Aug</text>
+      <text x="732" y="292">Sep</text><text x="822" y="292">Oct</text><text x="912" y="292">Nov</text><text x="1000" y="292">Dec</text>
+    </g>
+  </svg>
 
-  <div class="ex-center">
-    <p class="ex-kicker">{{ welcome_kicker|default:"حسب صلاحياتك" }}</p>
-    <h1 class="ex-title">غرفة القرار</h1>
-    <p class="ex-greet">أهلاً بك{% if role_name %}، <span>{{ role_name }}</span>{% endif %}</p>
-    <p class="ex-sub">{{ welcome_subtitle }}</p>
-    <div class="ex-meta">
-      <span class="ex-chip" data-ex-date></span>
-      <span class="ex-chip{% if is_staff_user %} is-staff{% endif %}"><i></i>{{ role_name }}</span>
-    </div>
-    <p class="ex-hint">مرّر على أي قسم لاستكشافه</p>
-  </div>
-
-  {% if welcome_cards %}
-  <nav class="ex-orbit" aria-label="أقسام المنصة المتاحة">
-    {% for card in welcome_cards %}
-    <a class="ex-node ex-k-{{ card.css|cut:"welcome-card--" }}" href="{{ card.href }}" data-ex-node>
-      <span class="ex-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="{{ card.path_d }}"/></svg></span>
-      <span class="ex-body">
-        <strong>{{ card.title }}</strong>
-        <small>{{ card.hint }}</small>
-      </span>
-      <span class="ex-go" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+  <nav class="hv-col hv-col-left" aria-label="أقسام المنصة">
+    {% for card in welcome_cards %}{% if card.side == 'left' %}
+    <a class="hv-card hv-k-{{ card.css|cut:"welcome-card--" }}" href="{{ card.href }}">
+      <span class="hv-ico" aria-hidden="true"><svg viewBox="0 0 48 48">{{ card.icon }}</svg></span>
+      <span class="hv-body"><strong>{{ card.title }}</strong><small>{{ card.hint }}</small></span>
     </a>
-    {% endfor %}
+    {% endif %}{% endfor %}
   </nav>
-  {% else %}
-  <p class="welcome-empty" role="status">لا توجد شاشات متاحة لدورك حالياً. راجع مدير النظام.</p>
-  {% endif %}
+
+  <section class="hv-center" aria-labelledby="hv-title">
+    <div class="hv-hub">
+      <div class="hv-hub-in">
+        <span class="hv-logo" aria-hidden="true">
+          <svg viewBox="0 0 40 40" focusable="false">
+            <rect x="4" y="19" width="7" height="17" fill="#FFC21A"/>
+            <rect x="13" y="13" width="7" height="23" fill="#F7931E"/>
+            <rect x="22" y="6" width="7" height="30" fill="#EF5A2A"/>
+            <rect x="31" y="22" width="5" height="14" fill="#FFB02E"/>
+          </svg>
+        </span>
+        <h1 id="hv-title" class="hv-title">غرفة القرار</h1>
+        <p class="hv-greet">أهلاً بك{% if role_name %} .. <span>{{ role_name }}</span>{% endif %}</p>
+      </div>
+    </div>
+    <div class="hv-chips">
+      <span class="hv-chip hv-chip-role">{{ role_name|default:"حسب صلاحياتك" }}</span>
+      <span class="hv-chip hv-chip-date" data-hv-date></span>
+    </div>
+    {% if not welcome_cards %}
+    <p class="welcome-empty" role="status">لا توجد شاشات متاحة لدورك حالياً. راجع مدير النظام.</p>
+    {% endif %}
+  </section>
+
+  <nav class="hv-col hv-col-right" aria-label="أقسام المنصة">
+    {% for card in welcome_cards %}{% if card.side == 'right' %}
+    <a class="hv-card hv-k-{{ card.css|cut:"welcome-card--" }}" href="{{ card.href }}">
+      <span class="hv-ico" aria-hidden="true"><svg viewBox="0 0 48 48">{{ card.icon }}</svg></span>
+      <span class="hv-body"><strong>{{ card.title }}</strong><small>{{ card.hint }}</small></span>
+    </a>
+    {% endif %}{% endfor %}
+  </nav>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 {{ block.super }}
-<script src="/static/js/exec-home.js?v={{ app_client_version }}" defer></script>
+<script>
+  (function () {
+    var d = document.querySelector("[data-hv-date]");
+    if (!d) return;
+    try {
+      d.textContent = new Date().toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    } catch (e) {}
+  })();
+</script>
 {% endblock %}

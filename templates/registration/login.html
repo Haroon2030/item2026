@@ -3,96 +3,124 @@
 
 {% block title %}تسجيل الدخول — غرفة القرار{% endblock %}
 {% block body_theme %}{% endblock %}
-{% block body_class %}login-body{% endblock %}
-{% block page_class %}login-page{% endblock %}
+{% block body_class %}login-body lg-body{% endblock %}
+{% block page_class %}login-page lg-page{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/login-gold.css?v={{ app_client_version }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&family=Montserrat:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/login-v3.css?v={{ app_client_version }}">
 {% endblock %}
 
 {% block content %}
-<section class="login-shell" aria-labelledby="login-brand">
-  <div class="login-welcome">
-    <div class="login-welcome-media" aria-hidden="true">
+<section class="lg-shell" aria-labelledby="lg-brand">
+  <div class="lg-hero">
+    <div class="lg-hero-media" aria-hidden="true">
       <img
-        src="{% static 'img/welcome/login-hero.jpg' %}?v={{ app_client_version }}"
+        src="{% static 'img/welcome/login-hero-v2.jpg' %}?v={{ app_client_version }}"
         alt=""
-        width="720"
-        height="405"
+        width="1294"
+        height="852"
         decoding="async"
         fetchpriority="high"
       >
-      <span class="login-welcome-scrim"></span>
-      <span class="login-welcome-glow"></span>
     </div>
 
-    <div class="login-welcome-copy">
-      <p class="login-kicker">
-        <span class="login-kicker-ico" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16V9M13 16V6M18 16v-4"/></svg>
-        </span>
-        تحليل الأعمال · قرار تنفيذي
-      </p>
+    <p class="lg-badge">
+      <span class="lg-badge-ico" aria-hidden="true">
+        <svg viewBox="0 0 48 48" focusable="false">
+                <defs>
+                  <linearGradient id="lgRing" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F26854"/><stop offset=".5" stop-color="#F58446"/><stop offset="1" stop-color="#FAA128"/></linearGradient>
+                  <linearGradient id="lgHandle" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3724F"/><stop offset=".4" stop-color="#F9A12B"/><stop offset="1" stop-color="#FAA623"/></linearGradient>
+                  <linearGradient id="lgLens" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C8C9CB"/><stop offset=".35" stop-color="#A9ACAF"/><stop offset=".65" stop-color="#858B90"/><stop offset="1" stop-color="#6E747A"/></linearGradient>
+                  <linearGradient id="lgBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F69284"/><stop offset="1" stop-color="#F3705A"/></linearGradient>
+                  <clipPath id="lgClip"><circle cx="20" cy="20" r="14.3"/></clipPath>
+                </defs>
+                <rect x="33.2" y="28.5" width="7.2" height="15.5" rx="3.6" transform="rotate(-45 36.8 36.2)" fill="url(#lgHandle)"/>
+                <circle cx="20" cy="20" r="18" fill="url(#lgRing)"/>
+                <circle cx="20" cy="20" r="14.3" fill="url(#lgLens)"/>
+                <g clip-path="url(#lgClip)">
+                  <g fill="url(#lgBar)" stroke="#31363a" stroke-width="1.4" stroke-linejoin="round">
+                    <rect x="9.4" y="26" width="5" height="14"/>
+                    <rect x="17.6" y="28" width="5" height="12"/>
+                    <rect x="25.6" y="23.3" width="5" height="17"/>
+                  </g>
+                  <path d="M5.5 22.6l5-4.3 6.2 6.1 8-6.6" fill="none" stroke="#fff" stroke-width="4.6" stroke-linejoin="miter" stroke-linecap="butt"/>
+                </g>
+                <path d="M34.5 9L22.4 13.4l8 8.2z" fill="#fff"/>
+              </svg>
+      </span>
+      <span class="lg-badge-text">تحليل الأعمال - قرار تنفيذي</span>
+    </p>
 
-      <div class="login-mark" aria-hidden="true" title="غرفة القرار">
-        <svg viewBox="0 0 24 24" focusable="false">
-          <defs>
-            <linearGradient id="loginGrow" x1="19.1" y1="4.4" x2="19.1" y2="20.4" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#67E8F9"/>
-              <stop offset="55%" stop-color="#A78BFA"/>
-              <stop offset="100%" stop-color="#37D26F"/>
-            </linearGradient>
-          </defs>
-          <rect class="brand-bar" x="3.4" y="13.2" width="3.2" height="7.2" rx="1.6"/>
-          <rect class="brand-bar" x="8.1" y="10.2" width="3.2" height="10.2" rx="1.6"/>
-          <rect class="brand-bar" x="12.8" y="7.6" width="3.2" height="12.8" rx="1.6"/>
-          <rect x="17.5" y="4.4" width="3.2" height="16" rx="1.6" fill="url(#loginGrow)"/>
-        </svg>
+    <div class="lg-hero-copy">
+      <div class="lg-brand-row">
+        <div class="lg-logo" aria-hidden="true">
+          <svg viewBox="0 0 40 40" focusable="false">
+            <rect x="4" y="19" width="7" height="17" fill="#FFC21A"/>
+            <rect x="13" y="13" width="7" height="23" fill="#F7931E"/>
+            <rect x="22" y="6" width="7" height="30" fill="#EF5A2A"/>
+            <rect x="31" y="22" width="5" height="14" fill="#FFB02E"/>
+          </svg>
+        </div>
+        <div>
+          <h1 id="lg-brand" class="lg-brand">غرفة القرار</h1>
+          <p class="lg-sub">من البيانات إلى قرار الإدارة</p>
+        </div>
       </div>
 
-      <h1 id="login-brand" class="login-brand">غرفة القرار</h1>
-      <p class="login-hello">من البيانات إلى قرار الإدارة</p>
-      <p class="login-lead">قائمة الدخل، المبيعات، مؤشرات الأداء، المخزون، المشتريات والأصول — صورة تنفيذية واحدة للقياس والمقارنة واتخاذ القرار بثقة.</p>
+      <p class="lg-lead">قائمة الدخل، المبيعات، مؤشرات الأداء، المخزون، المشتريات والأصول.<br>صورة تنفيذية واحدة للقياس والمقارنة واتخاذ القرار بثقة.</p>
 
-      <ul class="login-points" aria-label="محاور المنصة">
+      <ul class="lg-pills" aria-label="محاور المنصة">
         <li>قراءة تنفيذية للدخل والأداء</li>
         <li>ربحية الفروع والقنوات</li>
         <li>كفاءة المخزون والتوريد</li>
       </ul>
     </div>
+
+    <svg class="lg-chart" viewBox="0 0 647 190" preserveAspectRatio="xMidYMax meet" aria-hidden="true" dir="ltr">
+      <g class="lg-chart-grid"><line x1="0" y1="16" x2="647" y2="16"/><line x1="0" y1="56" x2="647" y2="56"/><line x1="0" y1="96" x2="647" y2="96"/><line x1="0" y1="136" x2="647" y2="136"/></g>
+      <polyline class="lg-chart-line" points="26,60 76,92 125,94 175,58 224,100 274,118 324,118 373,92 423,62 472,28 522,118 571,96 621,86"/>
+      <polyline class="lg-chart-line" points="26,92 76,52 125,74 175,98 224,78 274,78 324,66 373,42 423,60 472,78 522,124 571,100 621,82"/>
+      <line class="lg-chart-tick" x1="414" y1="26" x2="432" y2="26"/>
+      <line class="lg-chart-base" x1="26" y1="150" x2="621" y2="150"/>
+      <g class="lg-chart-dots"><circle cx="26" cy="150" r="4.5"/><circle cx="76" cy="150" r="4.5"/><circle cx="125" cy="150" r="4.5"/><circle cx="175" cy="150" r="4.5"/><circle cx="224" cy="150" r="4.5"/><circle cx="274" cy="150" r="4.5"/><circle cx="324" cy="150" r="4.5"/><circle cx="373" cy="150" r="4.5"/><circle cx="423" cy="150" r="4.5"/><circle cx="472" cy="150" r="4.5"/><circle cx="522" cy="150" r="4.5"/><circle cx="571" cy="150" r="4.5"/><circle cx="621" cy="150" r="4.5"/></g>
+      <g class="lg-chart-months"><text x="26" y="178">Jan</text><text x="76" y="178">Feb</text><text x="125" y="178">Mar</text><text x="175" y="178">Apr</text><text x="224" y="178">May</text><text x="274" y="178">Jun</text><text x="324" y="178">Jul</text><text x="373" y="178">Aug</text><text x="423" y="178">Sep</text><text x="472" y="178">Oct</text><text x="522" y="178">Nov</text><text x="571" y="178">Dec</text></g>
+    </svg>
   </div>
 
-  <div class="login-panel">
-    <div class="login-card">
-      <header class="login-brand-block">
-        <p class="login-panel-kicker">غرفة القرار</p>
-        <h2 class="login-panel-title">تسجيل الدخول</h2>
-        <p class="login-tagline">ادخل إلى لوحة المؤشرات التنفيذية</p>
+  <div class="lg-panel">
+    <div class="lg-card">
+      <div class="lg-avatar" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1z"/></svg>
+      </div>
+
+      <header class="lg-card-head">
+        <h2 class="lg-title">تسجيل الدخول</h2>
+        <p class="lg-tagline">الدخول إلى لوحة المؤشرات التنفيذية</p>
       </header>
 
       {% if error %}
-        <div class="login-error" role="alert">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        <div class="lg-error" role="alert">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
           <span>{{ error }}</span>
         </div>
       {% elif form.errors %}
-        <div class="login-error" role="alert">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        <div class="lg-error" role="alert">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
           <span>اسم المستخدم أو كلمة المرور غير صحيحة.</span>
         </div>
       {% endif %}
 
-      <form method="post" action="{% url 'login' %}" class="login-form" novalidate>
+      <form method="post" action="{% url 'login' %}" class="lg-form" novalidate>
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next }}">
 
-        <div class="login-field">
-          <label for="id_username">الاسم أو الرقم</label>
-          <div class="login-input-wrap">
-            <svg class="login-field-ico" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
+        <div class="lg-field">
+          <label for="id_username">الاســم أو الــرقــم</label>
+          <div class="lg-input">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1z"/></svg>
             <input
               id="id_username"
               name="username"
@@ -101,7 +129,7 @@
               maxlength="150"
               required
               autofocus
-              placeholder=" "
+              placeholder="Username"
               value=""
               enterkeyhint="next"
               autocapitalize="off"
@@ -110,31 +138,26 @@
           </div>
         </div>
 
-        <div class="login-field">
-          <label for="id_password">كلمة المرور</label>
-          <div class="login-input-wrap">
-            <svg class="login-field-ico" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="4" y="10" width="16" height="11" rx="2"/>
-              <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
-            </svg>
+        <div class="lg-field">
+          <label for="id_password">كلــمة الــمــرور</label>
+          <div class="lg-input">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
             <input
               id="id_password"
               name="password"
               type="password"
               autocomplete="current-password"
               required
-              placeholder=" "
+              placeholder="***********"
               value=""
               enterkeyhint="go"
             >
           </div>
         </div>
 
-        <button type="submit" class="login-submit">
-          <span>دخول إلى غرفة القرار</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
-          </svg>
+        <button type="submit" class="lg-submit" aria-label="الدخول">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>
+          <span aria-hidden="true">الدخــــــول</span>
         </button>
       </form>
     </div>

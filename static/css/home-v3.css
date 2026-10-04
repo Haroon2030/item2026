@@ -1,0 +1,102 @@
+/* الصفحة الرئيسية — بطاقات ذهبية يمين ويسار ومحور دائري في الوسط على خلفية بيضاء */
+html body.welcome-body:not(#fx) { background: #fff !important; }
+html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
+
+.hv-stage {
+  --hv-ink: #231f20;
+  --hv-orange: #f9a11b;
+  position: relative; isolation: isolate; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  column-gap: clamp(1rem, 3vw, 3rem);
+  min-height: calc(100dvh - 2rem);
+  padding: 2.4rem clamp(1rem, 4vw, 4.5rem) 6rem;
+  background: #fff; direction: ltr; color: var(--hv-ink);
+}
+
+/* خلفية الرسم البياني الباهتة */
+.hv-chart { position: absolute; inset-inline: 0; bottom: 0; width: 100%; height: 34%; z-index: -1; pointer-events: none; }
+.hv-grid line { stroke: #f3f7fb; stroke-width: 3; }
+.hv-line { fill: none; stroke-width: 3.2; stroke-linejoin: round; }
+.hv-line-green { stroke: #cfeede; }
+.hv-line-lilac { stroke: #e5e2f0; }
+.hv-line-pink { stroke: #ffdce4; }
+.hv-peak { fill: #ffe3c4; }
+.hv-months text { fill: #ebf0f5; font: 500 22px "Montserrat", "Segoe UI", sans-serif; text-anchor: middle; }
+
+/* الأعمدة */
+.hv-col { display: flex; flex-direction: column; gap: 2.6rem; direction: rtl; }
+.hv-col-left { justify-self: start; }
+.hv-col-right { justify-self: end; }
+
+.hv-card {
+  display: flex; align-items: center; gap: .9rem; box-sizing: border-box;
+  width: clamp(15rem, 21vw, 18.5rem); min-height: 4.7rem; padding: .7rem .9rem .7rem 1rem;
+  border: 2px solid #fff; border-radius: 16px 0 0 0; text-decoration: none; color: var(--hv-ink);
+  background: linear-gradient(90deg, #fffbd1 0%, #ffe59f 35%, #ffd881 58%, #fec245 100%);
+  box-shadow: 0 0 0 1px #e6e6e6, 0 8px 18px rgba(120, 80, 0, .08);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.hv-card:hover, .hv-card:focus-visible { transform: translateY(-3px); box-shadow: 0 0 0 1px #e6e6e6, 0 14px 26px rgba(120, 80, 0, .18); outline: none; }
+.hv-card:focus-visible { outline: 3px solid var(--hv-ink); outline-offset: 3px; }
+.hv-ico {
+  flex: none; display: grid; place-items: center; width: 3.1rem; height: 3.1rem;
+  border-radius: .55rem; background: var(--hv-ink);
+}
+.hv-ico svg { width: 2.15rem; height: 2.15rem; fill: none; stroke: #fff; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+.hv-body { display: grid; gap: .15rem; min-width: 0; flex: 1; }
+.hv-body strong { font: 700 1rem/1.25 var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif); color: var(--hv-ink); }
+.hv-body small { font: 400 .72rem/1.45 var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif); color: #4a3d12; }
+
+/* المحور الدائري */
+.hv-center { display: flex; flex-direction: column; align-items: center; gap: 5rem; direction: rtl; }
+.hv-hub {
+  width: clamp(15rem, 22vw, 17.4rem); aspect-ratio: 1; padding: .95rem; border-radius: 50%; box-sizing: border-box;
+  background: linear-gradient(90deg, #fffffc 0%, #ffeb96 48%, #ffdb02 100%);
+  box-shadow: 0 8px 30px rgba(255, 190, 0, .28), 0 0 0 1px #efefef;
+}
+.hv-hub-in {
+  display: grid; place-content: center; justify-items: center; gap: .55rem; width: 100%; height: 100%;
+  border: 2px solid #fff; border-radius: 50%; box-sizing: border-box;
+  background: linear-gradient(90deg, #fff8cb 0%, #ffda8a 50%, #fec043 100%);
+}
+.hv-logo { display: grid; place-items: center; width: 3.1rem; height: 3.1rem; border: 1.5px solid rgba(255, 255, 255, .85); }
+.hv-logo svg { width: 2.1rem; height: 2.1rem; }
+.hv-title { margin: 0; font: 800 clamp(1.7rem, 2.3vw, 2.1rem)/1.1 var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif); color: var(--hv-ink); }
+.hv-greet { margin: 0; font: 600 .95rem/1.5 var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif); color: var(--hv-ink); }
+.hv-greet span { display: inline-block; padding: 0 .55rem .1rem; border-radius: .45rem; background: var(--hv-orange); color: #fff; font-weight: 700; }
+
+.hv-chips { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+.hv-chip {
+  display: inline-grid; place-items: center; min-width: 9.4rem; height: 3.1rem; padding: 0 1rem; box-sizing: border-box;
+  border-radius: .65rem; font: 700 .95rem/1 var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif);
+}
+.hv-chip-role { background: #ffc60b; color: var(--hv-ink); border: 2px solid #ffe285; box-shadow: 0 0 0 1px #ffc60b; }
+.hv-chip-date { background: var(--hv-ink); color: #fff; border: 1.5px solid rgba(255, 255, 255, .55); box-shadow: 0 0 0 1px var(--hv-ink); }
+
+.welcome-empty { margin: 0; color: #4a3d12; font-weight: 600; text-align: center; }
+
+/* الشاشات المتوسطة والصغيرة */
+@media (max-width: 1100px) {
+  .hv-stage { grid-template-columns: 1fr 1fr; row-gap: 2rem; padding-bottom: 7rem; }
+  .hv-center { grid-column: 1 / -1; grid-row: 1; gap: 1.6rem; }
+  .hv-col-left, .hv-col-right { justify-self: stretch; }
+  .hv-card { width: auto; }
+}
+@media (max-width: 640px) {
+  .hv-stage { grid-template-columns: 1fr; padding-inline: 1rem; }
+  .hv-col-left, .hv-col-right { grid-column: 1; gap: 1rem; }
+  .hv-col-right { grid-row: 3; }
+}
+@media (prefers-reduced-motion: reduce) { .hv-card { transition: none; } }
+
+/* حماية من قواعد الثيم العامة التي تفرض ألوان الروابط والعناوين */
+html body.welcome-body .hv-card:not(#fx),
+html body.welcome-body .hv-card strong:not(#fx),
+html body.welcome-body .hv-title:not(#fx),
+html body.welcome-body .hv-greet:not(#fx) { color: #231f20 !important; -webkit-text-fill-color: #231f20 !important; background-clip: border-box; }
+html body.welcome-body .hv-card small:not(#fx) { color: #4a3d12 !important; }
+html body.welcome-body .hv-greet span:not(#fx) { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+html body.welcome-body .hv-chip-role:not(#fx) { color: #231f20 !important; }
+html body.welcome-body .hv-chip-date:not(#fx) { color: #fff !important; }
+html body.welcome-body .hv-ico:not(#fx) { background: #231f20 !important; }
+html body.welcome-body .hv-card:not(#fx) { background: linear-gradient(90deg, #fffbd1 0%, #ffe59f 35%, #ffd881 58%, #fec245 100%) !important; }
