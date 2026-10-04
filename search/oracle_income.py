@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from .oracle_sqlutil import num_bind as _num_bind
+
 import logging
 import math
 from datetime import date, timedelta
@@ -78,11 +80,11 @@ def _period_filters(
         parts.append("NVL(p.DOC_POST, 0) = 1")
     brn = str(branch_code or "").strip()
     if brn:
-        parts.append("TO_CHAR(p.BRN_NO) = :brn")
+        parts.append("p.BRN_NO = CASE WHEN REGEXP_LIKE(:brn, '^ *[0-9]+ *$') THEN TO_NUMBER(:brn) END")
         params["brn"] = brn
     cc = str(cc_code or "").strip()
     if cc:
-        parts.append("TO_CHAR(p.CC_CODE) = :cc")
+        parts.append("p.CC_CODE = :cc")
         params["cc"] = cc
     return " AND ".join(parts), params
 
@@ -1389,12 +1391,12 @@ def fetch_cash_box_checks(
     master_where = "NVL(INACTIVE, 0) = 0"
     brn = str(branch_code or "").strip()
     if brn:
-        master_where += " AND TO_CHAR(CONN_BRN_NO) = :mbrn"
+        master_where += " AND CONN_BRN_NO = CASE WHEN REGEXP_LIKE(:mbrn, '^ *[0-9]+ *$') THEN TO_NUMBER(:mbrn) END"
         master_params["mbrn"] = brn
     if wanted:
         in_binds = {f"c{i}": n for i, n in enumerate(wanted)}
-        in_clause = ", ".join(f":{k}" for k in in_binds)
-        master_where += f" AND TO_CHAR(CASH_NO) IN ({in_clause})"
+        in_clause = ", ".join(_num_bind(f":{k}") for k in in_binds)
+        master_where += f" AND CASH_NO IN ({in_clause})"
         master_params.update(in_binds)
 
     masters = _fetch_all(
@@ -1440,8 +1442,8 @@ def fetch_cash_box_checks(
     agg_params: dict[str, Any] = {"dfrom": d_from, "dto": d_to, **extra_params}
     if wanted:
         in_binds = {f"c{i}": n for i, n in enumerate(wanted)}
-        in_clause = ", ".join(f":{k}" for k in in_binds)
-        cash_filter_sql += f" AND TO_CHAR(p.CASH_NO) IN ({in_clause})"
+        in_clause = ", ".join(_num_bind(f":{k}") for k in in_binds)
+        cash_filter_sql += f" AND p.CASH_NO IN ({in_clause})"
         agg_params.update(in_binds)
 
     agg_rows = _fetch_all(
@@ -1474,8 +1476,8 @@ def fetch_cash_box_checks(
                ), 2) AS MV_CR
         FROM {sch}.IAS_POST_DTL p
         JOIN {sch}.CASH_IN_HAND c
-          ON TO_CHAR(p.CASH_NO) = TO_CHAR(c.CASH_NO)
-         AND TO_CHAR(p.A_CODE) = TO_CHAR(c.A_CODE)
+          ON p.CASH_NO = c.CASH_NO
+         AND p.A_CODE = c.A_CODE
         WHERE {cash_filter_sql}
           AND {extra_sql}
           AND (

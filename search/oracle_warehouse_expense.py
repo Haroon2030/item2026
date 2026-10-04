@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .oracle_sqlutil import num_bind as _num_bind
+
 import io
 from datetime import date
 from html import escape
@@ -92,7 +94,7 @@ def _fetch_wh_names(wh_codes: list[str]) -> dict[str, str]:
         SELECT TO_CHAR(w.W_CODE) AS W_CODE,
                NVL(NULLIF(TRIM(w.W_NAME), ''), TO_CHAR(w.W_CODE)) AS W_NAME
         FROM {schema}.WAREHOUSE_DETAILS w
-        WHERE TO_CHAR(w.W_CODE) IN ({", ".join(keys)})
+        WHERE w.W_CODE IN ({", ".join(_num_bind(k) for k in keys)})
         """,
         params,
     )
@@ -148,7 +150,7 @@ def _fetch_transfer_rows(
           AND m.TR_INOUT_TYPE = 1
           AND {_hung_ok("m")}
           {posted_sql}
-          AND TO_CHAR(m.F_W_CODE) IN ({", ".join(wh_keys)})
+          AND m.F_W_CODE IN ({", ".join(_num_bind(k) for k in wh_keys)})
         GROUP BY m.TR_NO, m.TR_SER, m.TR_DATE, m.F_W_CODE, m.T_W_CODE,
                  tw.CONN_BRN_NO, tw.W_NAME
         HAVING ROUND(SUM(NVL(d.I_QTY, 0)), 2) <> 0
@@ -167,7 +169,7 @@ def _fetch_cc_name(cc_code: str) -> str:
         f"""
         SELECT NVL(NULLIF(TRIM(CC_A_NAME), ''), TO_CHAR(CC_CODE)) AS CC_NAME
         FROM {schema}.COST_CENTERS
-        WHERE TO_CHAR(CC_CODE) = :cc
+        WHERE CC_CODE = :cc
           AND ROWNUM = 1
         """,
         {"cc": code},
@@ -207,7 +209,7 @@ def _fetch_cc_expense_total(
           ON a.A_CODE = p.A_CODE
         WHERE p.DOC_DATE >= :d_from
           AND p.DOC_DATE < :d_to_excl
-          AND TO_CHAR(p.CC_CODE) = :cc
+          AND p.CC_CODE = :cc
           AND TO_CHAR(p.A_CODE) LIKE '5%'
           AND ABS(NVL(p.AMT, 0)) < 1000000000
         GROUP BY p.A_CODE

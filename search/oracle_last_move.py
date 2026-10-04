@@ -454,7 +454,7 @@ def fetch_stock_by_warehouse(
                 )
                 GROUP BY I_CODE, W_CODE
             ) pend
-              ON pend.I_CODE = TO_CHAR(s.I_CODE)
+              ON pend.I_CODE = s.I_CODE
              AND pend.W_CODE = TO_CHAR(s.W_CODE)
             WHERE s.RN = 1
             """,

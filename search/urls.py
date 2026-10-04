@@ -4,6 +4,7 @@ from . import user_views, views
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('home/today/', views.home_today_api, name='home_today_api'),
     path('items/', views.item_search, name='item_search'),
     path(
         'items/vendor-item-count/',

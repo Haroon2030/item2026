@@ -130,7 +130,7 @@ def _fetch_wh_qty(
     params: dict[str, Any] = {"wh": _bind_wh(warehouse)}
     joins = ""
     filters = [
-        "TO_CHAR(w.W_CODE) = TO_CHAR(:wh)",
+        "w.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END",
         "NVL(w.AVL_QTY, 0) > 0",
         "w.I_CODE IS NOT NULL",
     ]
@@ -180,8 +180,8 @@ def _fetch_wh_pending(warehouse: str) -> dict[str, float]:
     qty = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
     hung = _hung_ok("m")
     wh_ok = (
-        "(TO_CHAR(d.W_CODE) = TO_CHAR(:wh)"
-        " OR (d.W_CODE IS NULL AND TO_CHAR(m.W_CODE) = TO_CHAR(:wh)))"
+        "(d.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END"
+        " OR (d.W_CODE IS NULL AND m.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END))"
     )
 
     sales = _fetch_all(

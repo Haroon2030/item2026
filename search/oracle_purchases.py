@@ -126,7 +126,7 @@ def _scope_filters(
                     WHERE gx.BILL_NO = m.BILL_NO
                       AND gx.BILL_SER = m.BILL_SER
                       AND gx.BILL_DOC_TYPE = m.BILL_DOC_TYPE
-                      AND TO_CHAR(gi.G_CODE) = :group_code
+                      AND gi.G_CODE = :group_code
                 )"""
             )
         else:
@@ -138,7 +138,7 @@ def _scope_filters(
                     WHERE gx.RT_BILL_NO = r.RT_BILL_NO
                       AND gx.RT_BILL_SER = r.RT_BILL_SER
                       AND gx.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
-                      AND TO_CHAR(gi.G_CODE) = :group_code
+                      AND gi.G_CODE = :group_code
                 )"""
             )
         params["group_code"] = group
@@ -176,7 +176,7 @@ def _detail_filters(
         filters.append(f"TO_CHAR({prefix}.BRN_NO) = :branch")
         params["branch"] = branch
     if group:
-        filters.append("TO_CHAR(i.G_CODE) = :group_code")
+        filters.append("i.G_CODE = :group_code")
         params["group_code"] = group
     if vendor:
         filters.append(f"TO_CHAR({prefix}.V_CODE) = :vendor")
@@ -535,13 +535,13 @@ def build_purchase_dashboard(
     ]
     request_params = _base_params(d_from, d_to)
     if branch:
-        request_filters.append("TO_CHAR(p.BRN_NO) = :branch")
+        request_filters.append("p.BRN_NO = CASE WHEN REGEXP_LIKE(:branch, '^ *[0-9]+ *$') THEN TO_NUMBER(:branch) END")
         request_params["branch"] = branch
     if vendor:
-        request_filters.append("TO_CHAR(p.V_CODE) = :vendor")
+        request_filters.append("p.V_CODE = :vendor")
         request_params["vendor"] = vendor
     if group:
-        request_filters.append("TO_CHAR(i.G_CODE) = :group_code")
+        request_filters.append("i.G_CODE = :group_code")
         request_params["group_code"] = group
 
     request_user_rows = _fetch_all(

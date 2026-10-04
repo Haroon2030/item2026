@@ -93,7 +93,7 @@ def _filters(
         parts.append("NVL(p.DOC_POST, 0) = 1")
     brn = str(branch_code or "").strip()
     if brn:
-        parts.append("TO_CHAR(p.BRN_NO) = :brn")
+        parts.append("p.BRN_NO = CASE WHEN REGEXP_LIKE(:brn, '^ *[0-9]+ *$') THEN TO_NUMBER(:brn) END")
         params["brn"] = brn
     return (" AND ".join(parts) if parts else "1=1"), params
 
@@ -302,10 +302,10 @@ def _fetch_tb_detail_rows(
          AND TO_CHAR(cu.C_CODE) = TO_CHAR(p.AC_CODE_DTL)
         LEFT JOIN {sch}.V_DETAILS vd
           ON {dtl_typ_expr} = 4
-         AND TO_CHAR(vd.V_CODE) = TO_CHAR(p.AC_CODE_DTL)
+         AND vd.V_CODE = TO_CHAR(p.AC_CODE_DTL)
         LEFT JOIN {sch}.COST_CENTERS cc
           ON {dtl_typ_expr} = 5
-         AND TO_CHAR(cc.CC_CODE) = TO_CHAR(p.AC_CODE_DTL)
+         AND cc.CC_CODE = TO_CHAR(p.AC_CODE_DTL)
         LEFT JOIN {sch}.S_EMP em
           ON {dtl_typ_expr} = 7
          AND TO_CHAR(em.EMP_NO) = TO_CHAR(p.AC_CODE_DTL)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .oracle_sqlutil import num_bind as _num_bind
+
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -80,7 +82,7 @@ def _fetch_unit_packs_map(item_codes: list[str]) -> dict[str, dict[str, float]]:
                    ITM_UNT AS ITEM_UNIT,
                    P_SIZE
             FROM {schema}.IAS_ITM_DTL
-            WHERE TO_CHAR(I_CODE) IN ({', '.join(keys)})
+            WHERE I_CODE IN ({', '.join(keys)})
               AND NVL(P_SIZE, 0) > 0
             """,
             params,
@@ -147,7 +149,7 @@ def fetch_warehouses_for_branch(branch_code: str = "") -> list[dict]:
         WHERE w.W_CODE IS NOT NULL
           AND NVL(w.INACTIVE, 0) = 0
           AND (
-            TO_CHAR(w.CONN_BRN_NO) = :branch
+            w.CONN_BRN_NO = CASE WHEN REGEXP_LIKE(:branch, '^ *[0-9]+ *$') THEN TO_NUMBER(:branch) END
             OR LTRIM(REGEXP_REPLACE(TO_CHAR(w.CONN_BRN_NO), '[^0-9]', ''), '0') = :branch_norm
             OR LTRIM(REGEXP_REPLACE(TO_CHAR(w.CONN_BRN_NO), '[^0-9]', ''), '0') =
                LTRIM(REGEXP_REPLACE(:branch, '[^0-9]', ''), '0')
@@ -214,7 +216,7 @@ def fetch_today_purchase_requests(
         "branch_norm": brn_norm or brn,
     }
     if wh:
-        wh_filter = "AND TO_CHAR(p.W_CODE) = :wh"
+        wh_filter = "AND p.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END"
         params["wh"] = wh
     rows = _fetch_all(
         f"""
@@ -240,12 +242,12 @@ def fetch_today_purchase_requests(
          AND d.PR_SER = p.PR_SER
         LEFT JOIN {schema}.USER_R u ON u.U_ID = p.AD_U_ID
         LEFT JOIN {schema}.V_DETAILS vd
-          ON TO_CHAR(vd.V_CODE) = TO_CHAR(p.V_CODE)
+          ON vd.V_CODE = p.V_CODE
         WHERE p.PR_DATE >= :d_from
           AND p.PR_DATE < :d_to_excl
           AND NVL(p.INACTIVE, 0) = 0
           AND (
-            TO_CHAR(p.BRN_NO) = :branch
+            p.BRN_NO = CASE WHEN REGEXP_LIKE(:branch, '^ *[0-9]+ *$') THEN TO_NUMBER(:branch) END
             OR LTRIM(REGEXP_REPLACE(TO_CHAR(p.BRN_NO), '[^0-9]', ''), '0') = :branch_norm
             OR LTRIM(REGEXP_REPLACE(TO_CHAR(p.BRN_NO), '[^0-9]', ''), '0') =
                LTRIM(REGEXP_REPLACE(:branch, '[^0-9]', ''), '0')
@@ -311,10 +313,10 @@ def _fetch_request_header(pr_type: str, pr_no: str, pr_ser: str) -> dict | None:
         FROM {schema}.P_REQUEST p
         LEFT JOIN {schema}.USER_R u ON u.U_ID = p.AD_U_ID
         LEFT JOIN {schema}.V_DETAILS vd
-          ON TO_CHAR(vd.V_CODE) = TO_CHAR(p.V_CODE)
-        WHERE TO_CHAR(p.PR_TYPE) = :pr_type
-          AND TO_CHAR(p.PR_NO) = :pr_no
-          AND TO_CHAR(p.PR_SER) = :pr_ser
+          ON vd.V_CODE = p.V_CODE
+        WHERE p.PR_TYPE = CASE WHEN REGEXP_LIKE(:pr_type, '^ *[0-9]+ *$') THEN TO_NUMBER(:pr_type) END
+          AND p.PR_NO = CASE WHEN REGEXP_LIKE(:pr_no, '^ *[0-9]+ *$') THEN TO_NUMBER(:pr_no) END
+          AND p.PR_SER = CASE WHEN REGEXP_LIKE(:pr_ser, '^ *[0-9]+ *$') THEN TO_NUMBER(:pr_ser) END
           AND NVL(p.INACTIVE, 0) = 0
         FETCH FIRST 1 ROWS ONLY
         """,
@@ -353,9 +355,9 @@ def _fetch_request_items(pr_type: str, pr_no: str, pr_ser: str) -> list[dict]:
                ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS REQ_QTY
         FROM {schema}.P_REQUEST_DETAIL d
         LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-        WHERE TO_CHAR(d.PR_TYPE) = :pr_type
-          AND TO_CHAR(d.PR_NO) = :pr_no
-          AND TO_CHAR(d.PR_SER) = :pr_ser
+        WHERE d.PR_TYPE = CASE WHEN REGEXP_LIKE(:pr_type, '^ *[0-9]+ *$') THEN TO_NUMBER(:pr_type) END
+          AND d.PR_NO = CASE WHEN REGEXP_LIKE(:pr_no, '^ *[0-9]+ *$') THEN TO_NUMBER(:pr_no) END
+          AND d.PR_SER = CASE WHEN REGEXP_LIKE(:pr_ser, '^ *[0-9]+ *$') THEN TO_NUMBER(:pr_ser) END
         GROUP BY TO_CHAR(d.I_CODE), NVL(NULLIF(TRIM(TO_CHAR(d.ITM_UNT)), ''), '—')
         HAVING ROUND(SUM(NVL(d.I_QTY, 0)), 2) <> 0
         ORDER BY MAX(NVL(NULLIF(TRIM(i.I_NAME), ''), TO_CHAR(d.I_CODE))),
@@ -417,7 +419,7 @@ def _fetch_stock_for_items(
             key = f"w{i}"
             wh_keys.append(f":{key}")
             params[key] = wh
-        scope_filters.append(f"TO_CHAR(w.W_CODE) IN ({', '.join(wh_keys)})")
+        scope_filters.append(f"w.W_CODE IN ({', '.join(_num_bind(k) for k in wh_keys)})")
 
     scope_sql = f"AND {' AND '.join(scope_filters)}" if scope_filters else ""
 
@@ -432,8 +434,8 @@ def _fetch_stock_for_items(
                ROUND(SUM(NVL(w.AVL_QTY, 0)), 2) AS QTY
         FROM {schema}.IAS_ITM_WCODE w
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
-          ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
-        WHERE TO_CHAR(w.I_CODE) IN ({', '.join(code_keys)})
+          ON wh.W_CODE = w.W_CODE
+        WHERE w.I_CODE IN ({', '.join(code_keys)})
           AND NVL(w.AVL_QTY, 0) > 0
           {scope_sql}
         GROUP BY TO_CHAR(w.I_CODE),

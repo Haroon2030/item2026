@@ -9,12 +9,12 @@ from django.conf import settings
 
 
 # أكواد باركود/رقم صنف
-_QUERY_RE = re.compile(r'^[\w\-/\\.$+:%]+$', re.UNICODE)
+_QUERY_RE = re.compile(r'^[\w\-/\\.$+:%*]+$', re.UNICODE)
 # أسماء أصناف: مسافات وعربية وعلامات شائعة في أسماء المنتجات
 _NAME_QUERY_RE = re.compile(r'^[\w\-/\\.$+:%\s()\[\]«»"،,.*+-]+$', re.UNICODE)
 _WAREHOUSE_RE = re.compile(r'^[0-9A-Za-z_-]{1,16}$')
 _GROUP_RE = re.compile(r'^[\w\-/\\.$+:%]{1,64}$', re.UNICODE)
-_CODE_LIKE_RE = re.compile(r'^[\w\-/\\.]+$', re.UNICODE)
+_CODE_LIKE_RE = re.compile(r'^[\w\-/\\.*]+$', re.UNICODE)
 
 # أنماط شائعة لمحاولات SQL Injection (دفاع إضافي فوق ORM)
 _SQLI_PATTERNS = (
@@ -25,7 +25,8 @@ _SQLI_PATTERNS = (
     re.compile(r'(sleep\s*\(|benchmark\s*\(|waitfor\s+delay|pg_sleep\s*\()', re.I),
     re.compile(r'(xp_cmdshell|load_file\s*\(|into\s+(out|dump)file)', re.I),
     re.compile(r'(;\s*(select|drop|delete|update|insert|exec|execute)\b)', re.I),
-    re.compile(r'(--|#|/\*|\*/)', re.I),
+    # '*/' وحدها بلا '/*' ليست حقناً، وأكواد أصناف حقيقية تحتويها (مثل **/86132)
+    re.compile(r'(--|#|/\*)', re.I),
 )
 
 # حقول لا تُفحص (كلمات السر قد تحتوي رموزاً خاصة عمداً)

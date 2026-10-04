@@ -227,7 +227,11 @@ def user_activity(request):
 
     latest_open_ids = set()
     seen_users = set()
-    for row in UserActivitySession.objects.filter(logout_at__isnull=True).order_by('-login_at'):
+    # آخر جلسة مفتوحة لكل مستخدم — نقيّدها بالجلسات خلال يوم العمل الأخير بدل مسح الجدول كله
+    open_since = timezone.now() - timedelta(days=2)
+    for row in UserActivitySession.objects.filter(
+        logout_at__isnull=True, login_at__gte=open_since
+    ).only('id', 'user_id', 'login_at').order_by('-login_at')[:2000]:
         key = row.user_id if row.user_id is not None else f'anon-{row.pk}'
         if key in seen_users:
             continue

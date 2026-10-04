@@ -1,14 +1,16 @@
+import hmac
 import logging
 
 from django.utils.safestring import mark_safe
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.cache import cache
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
@@ -276,8 +278,57 @@ def home(request):
             'welcome_kicker': ctx['welcome_kicker'],
             'welcome_subtitle': ctx['welcome_subtitle'],
             'welcome_cards': ctx['welcome_cards'],
+            'can_see_today': any(c['key'] == 'browse_sales' for c in ctx['welcome_cards']),
         },
     )
+
+
+@login_required
+@require_GET
+@never_cache
+def home_today_api(request):
+    """ملخص مبيعات اليوم للصفحة الرئيسية — يُحمَّل لاحقاً حتى لا تنتظر الصفحة أوراكل."""
+    from .nav_permissions import user_can_access_screen
+
+    if not user_can_access_screen(request.user, 'browse_sales'):
+        return JsonResponse({'ok': False, 'error': 'غير مصرّح.'}, status=403)
+
+    today = timezone.localdate()
+    cache_key = f'home_today:{today.isoformat()}'
+    cached = cache.get(cache_key)
+    if cached:
+        return JsonResponse({'ok': True, **cached})
+
+    from .oracle_stock import oracle_enabled
+    from .sales_dashboard import build_sales_branches, build_sales_branches_from_cache
+
+    if not oracle_enabled():
+        return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=503)
+
+    stale = False
+    try:
+        dash = build_sales_branches(today, today)
+    except Exception:  # noqa: BLE001
+        logger.warning('home_today_api: oracle failed, using cache', exc_info=True)
+        dash = build_sales_branches_from_cache(today, today)
+        stale = True
+    if not dash:
+        return JsonResponse({'ok': False, 'error': 'تعذّر تحميل أرقام اليوم.'}, status=503)
+
+    kpis = dash['kpis']
+    data = {
+        'date': today.isoformat(),
+        'sales': kpis['combined_sales'],
+        'invoices': kpis['combined_invoices'],
+        'pos_sales': kpis['pos_sales'],
+        'wholesale_sales': kpis['wholesale_sales'],
+        'returns': kpis['pos_returns'],
+        'updated': timezone.localtime().strftime('%H:%M'),
+        'stale': stale,
+    }
+    if not stale:
+        cache.set(cache_key, data, 300)
+    return JsonResponse({'ok': True, **data})
 
 
 def _fetch_suppliers_safe(item_code: str) -> list[dict]:
@@ -1292,6 +1343,7 @@ def sales_search(request):
     )
 
 @login_required
+@user_passes_test(lambda u: u.is_staff)
 @require_POST
 def sync_barcodes(request):
     wants_json = (
@@ -1318,7 +1370,7 @@ def sync_barcodes(request):
 
     if expected:
         provided = (request.POST.get('sync_secret') or '').strip()
-        if provided != expected:
+        if not hmac.compare_digest(provided.encode(), expected.encode()):
             return respond_error('رمز المزامنة غير صحيح.', status=403)
 
     try:
@@ -1328,7 +1380,8 @@ def sync_barcodes(request):
         return respond_error(str(exc), status=502)
     except Exception as exc:
         # أي فشل قاعدة بيانات/مزامنة يجب أن يعود JSON للواجهة لا صفحة HTML
-        return respond_error(f'فشلت المزامنة: {exc}', status=500)
+        logger.exception('barcode sync failed')
+        return respond_error('فشلت المزامنة. راجع سجل الخادم.', status=500)
 
 def _parse_qty(value) -> float | None:
     if value is None or value == '':

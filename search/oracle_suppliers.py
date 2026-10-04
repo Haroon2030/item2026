@@ -100,9 +100,9 @@ def build_suppliers_report(
 
     if brn:
         params["brn"] = brn
-        inv_filters.append("TO_CHAR(m.BRN_NO) = :brn")
-        pay_filters.append("TO_CHAR(v.BRN_NO) = :brn")
-        stock_filters.append("TO_CHAR(wh.CONN_BRN_NO) = :brn")
+        inv_filters.append("m.BRN_NO = CASE WHEN REGEXP_LIKE(:brn, '^ *[0-9]+ *$') THEN TO_NUMBER(:brn) END")
+        pay_filters.append("v.BRN_NO = CASE WHEN REGEXP_LIKE(:brn, '^ *[0-9]+ *$') THEN TO_NUMBER(:brn) END")
+        stock_filters.append("wh.CONN_BRN_NO = CASE WHEN REGEXP_LIKE(:brn, '^ *[0-9]+ *$') THEN TO_NUMBER(:brn) END")
 
     search_sql = ""
     if query:
@@ -110,7 +110,7 @@ def build_suppliers_report(
         params["q_like"] = f"%{query}%"
         search_sql = """
           AND (
-            TO_CHAR(vend.V_CODE) = :q_exact
+            vend.V_CODE = :q_exact
             OR UPPER(NVL(vend.V_NAME, '')) LIKE UPPER(:q_like)
           )
         """
@@ -138,7 +138,7 @@ def build_suppliers_report(
             MAX(m.BILL_DATE) AS LAST_BILL_DATE
         FROM {schema}.IAS_PI_BILL_MST m
         LEFT JOIN {schema}.V_DETAILS vd
-          ON TO_CHAR(vd.V_CODE) = TO_CHAR(m.V_CODE)
+          ON vd.V_CODE = m.V_CODE
         WHERE {' AND '.join(inv_filters)}
         GROUP BY TO_CHAR(m.V_CODE)
     ),
@@ -177,7 +177,7 @@ def build_suppliers_report(
                 FROM {schema}.IAS_VNDR_ITM vi0
             )
             WHERE RN = 1
-        ) mv ON mv.I_CODE = TO_CHAR(im.I_CODE)
+        ) mv ON mv.I_CODE = im.I_CODE
     ),
     stk AS (
         -- الرصيد المتاح بعد الترحيل (AVL_QTY) × متوسط التكلفة لكل مخزن
@@ -190,7 +190,7 @@ def build_suppliers_report(
             ) AS STOCK_VALUE
         FROM itm_v iv
         JOIN {schema}.IAS_ITM_WCODE w
-          ON TO_CHAR(w.I_CODE) = iv.I_CODE
+          ON w.I_CODE = iv.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
           ON wh.W_CODE = w.W_CODE
         WHERE iv.V_CODE IS NOT NULL
@@ -215,7 +215,7 @@ def build_suppliers_report(
         FROM inv i
         FULL OUTER JOIN pay p ON p.V_CODE = i.V_CODE
         LEFT JOIN {schema}.V_DETAILS vd
-          ON TO_CHAR(vd.V_CODE) = NVL(i.V_CODE, p.V_CODE)
+          ON vd.V_CODE = NVL(i.V_CODE, p.V_CODE)
     )
     SELECT * FROM (
         SELECT

@@ -22,9 +22,13 @@
 
 from __future__ import annotations
 
+from .oracle_sqlutil import num_bind as _num_bind
+
 import logging
 import re
+import sys
 import threading
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from typing import Any, Iterator
@@ -901,9 +905,35 @@ def _lookup_cache_set(key: str, value: Any) -> Any:
     return value
 
 
+def _log_slow_query(
+    sql: str, seconds: float, row_count: int, *, failed: str = ""
+) -> None:
+    """يسجّل الاستعلامات البطيئة (ORACLE_SLOW_QUERY_SECONDS، افتراضي 5 ثوانٍ) لتحديد ما يحتاج تحسيناً.
+
+    الاستعلام الذي ينتهي بمهلة أو خطأ يُسجَّل أيضاً (failed=سبب الفشل) لأنه أخطر أنواع البطء."""
+    try:
+        threshold = float(getattr(settings, "ORACLE", {}).get("SLOW_QUERY_SECONDS") or 5)
+    except (TypeError, ValueError):
+        threshold = 5.0
+    if seconds >= threshold:
+        snippet = " ".join(sql.split())[:300]
+        callers: list[str] = []
+        frame = sys._getframe(2)
+        while frame is not None and len(callers) < 3:
+            if "search" in frame.f_code.co_filename.replace("\\", "/").split("/"):
+                callers.append(f"{frame.f_code.co_name}")
+            frame = frame.f_back
+        logger.warning(
+            "%s Oracle query %.1fs rows=%s via=%s sql=%s",
+            f"FAILED ({failed})" if failed else "Slow",
+            seconds, row_count, "<".join(callers), snippet,
+        )
+
+
 def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
     safe_sql = _assert_readonly_sql(sql)
     owned = False
+    started = time.monotonic()
     conn = getattr(_tls, "conn", None)
     if conn is None:
         conn = _connect()
@@ -922,8 +952,14 @@ def _fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict]:
         rows = []
         for tup in cur:
             rows.append({cols[i]: tup[i] for i in range(len(cols))})
+        _log_slow_query(safe_sql, time.monotonic() - started, len(rows))
         return rows
     except Exception as exc:  # noqa: BLE001
+        if _is_call_timeout(exc):
+            reason = "timeout"
+        else:
+            reason = type(exc).__name__
+        _log_slow_query(safe_sql, time.monotonic() - started, 0, failed=reason)
         if owned:
             _drop_conn(conn)
             owned = False
@@ -1103,7 +1139,7 @@ def fetch_item_max_pack_map(item_codes: list[str] | None = None) -> dict[str, di
                          ORDER BY NVL(d.P_SIZE, 0) DESC, d.ITM_UNT
                        ) AS RN
                 FROM {schema}.IAS_ITM_DTL d
-                WHERE TO_CHAR(d.I_CODE) IN ({in_list})
+                WHERE d.I_CODE IN ({in_list})
                   AND NVL(d.P_SIZE, 0) > 0
             ) x
             WHERE x.RN = 1
@@ -1163,8 +1199,8 @@ def fetch_oracle_group_stock(warehouse: str, group_code: str) -> list[dict]:
                 ) AS RN
             FROM {schema}.IAS_ITM_WCODE w
             JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
-            WHERE TO_CHAR(w.W_CODE) = TO_CHAR(:wh)
-              AND TO_CHAR(m.G_CODE) = TO_CHAR(:g)
+            WHERE w.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END
+              AND m.G_CODE = :g
               AND NVL(w.AVL_QTY, 0) > 0
         ) s
         LEFT JOIN (
@@ -1181,7 +1217,7 @@ def fetch_oracle_group_stock(warehouse: str, group_code: str) -> list[dict]:
               AND d.I_CODE IN (
                   SELECT m2.I_CODE
                   FROM {schema}.IAS_ITM_MST m2
-                  WHERE TO_CHAR(m2.G_CODE) = TO_CHAR(:g)
+                  WHERE m2.G_CODE = :g
               )
         ) p ON p.I_CODE = s.I_CODE AND p.RN = 1
         WHERE s.RN = 1
@@ -1200,8 +1236,8 @@ def count_oracle_group_catalog(warehouse: str, group_code: str) -> tuple[int, in
             SUM(CASE WHEN NVL(w.AVL_QTY, 0) > 0 THEN 0 ELSE 1 END) AS ZERO_COUNT
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
-        WHERE TO_CHAR(w.W_CODE) = TO_CHAR(:wh)
-          AND TO_CHAR(m.G_CODE) = TO_CHAR(:g)
+        WHERE w.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END
+          AND m.G_CODE = :g
     """
     rows = _fetch_all(sql, {"wh": warehouse, "g": group_code})
     if not rows:
@@ -1339,7 +1375,7 @@ def _inventory_stock_filters(
     brn = str(branch_code or "").strip()
     if wh:
         params["wh"] = wh
-        filters.append("TO_CHAR(w.W_CODE) = :wh")
+        filters.append("w.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END")
     if gcode:
         params["gcode"] = _bind_gcode(gcode)
         filters.append("m.G_CODE = :gcode")
@@ -1468,9 +1504,9 @@ def fetch_inventory_by_warehouse(
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
-          ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+          ON wh.W_CODE = w.W_CODE
         LEFT JOIN {pend_sql} pend
-          ON pend.I_CODE = TO_CHAR(w.I_CODE)
+          ON pend.I_CODE = w.I_CODE
          AND pend.W_CODE = TO_CHAR(w.W_CODE)
         WHERE {where}
         GROUP BY TO_CHAR(w.W_CODE)
@@ -1531,9 +1567,9 @@ def fetch_inventory_by_group(
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
-          ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+          ON wh.W_CODE = w.W_CODE
         LEFT JOIN {pend_sql} pend
-          ON pend.I_CODE = TO_CHAR(w.I_CODE)
+          ON pend.I_CODE = w.I_CODE
          AND pend.W_CODE = TO_CHAR(w.W_CODE)
         WHERE {where}
         GROUP BY NVL(TO_CHAR(m.G_CODE), '(بلا)')
@@ -1588,9 +1624,9 @@ def fetch_inventory_by_branch(
         FROM {schema}.IAS_ITM_WCODE w
         JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
         LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
-          ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+          ON wh.W_CODE = w.W_CODE
         LEFT JOIN {pend_sql} pend
-          ON pend.I_CODE = TO_CHAR(w.I_CODE)
+          ON pend.I_CODE = w.I_CODE
          AND pend.W_CODE = TO_CHAR(w.W_CODE)
         WHERE {where}
         GROUP BY NVL(TO_CHAR(wh.CONN_BRN_NO), '(بلا)')
@@ -1658,9 +1694,9 @@ def fetch_stagnant_items(
           FROM {schema}.IAS_ITM_WCODE w
           JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
           LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
-            ON TO_CHAR(wh.W_CODE) = TO_CHAR(w.W_CODE)
+            ON wh.W_CODE = w.W_CODE
           LEFT JOIN {pend_sql} pend
-            ON pend.I_CODE = TO_CHAR(w.I_CODE)
+            ON pend.I_CODE = w.I_CODE
            AND pend.W_CODE = TO_CHAR(w.W_CODE)
           WHERE {where}
           GROUP BY TO_CHAR(w.I_CODE)
@@ -1817,7 +1853,7 @@ def fetch_inventory_wastage(
         return cached
 
     filters = [
-        "TO_CHAR(m.A_CODE) = '41101006'",
+        "m.A_CODE = '41101006'",
         "m.OUT_DATE >= :d_from",
         "m.OUT_DATE < :d_to_excl",
     ]
@@ -1826,7 +1862,7 @@ def fetch_inventory_wastage(
         "d_to_excl": d_to + timedelta(days=1),
     }
     if wh:
-        filters.append("TO_CHAR(m.W_CODE) = :wh")
+        filters.append("m.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END")
         params["wh"] = wh
     if gcode:
         filters.append("i.G_CODE = :gcode")
@@ -2147,7 +2183,7 @@ def fetch_item_suppliers(item_code: str, *, limit: int = 40) -> list[dict]:
              AND m.BILL_SER = d.BILL_SER
              AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
             LEFT JOIN {schema}.V_DETAILS vd
-              ON TO_CHAR(vd.V_CODE) = TO_CHAR(m.V_CODE)
+              ON vd.V_CODE = m.V_CODE
             WHERE d.I_CODE = :code
               AND m.V_CODE IS NOT NULL
             GROUP BY
@@ -2179,7 +2215,7 @@ def fetch_item_suppliers(item_code: str, *, limit: int = 40) -> list[dict]:
                 NVL(vi.MAIN_VNDR, 0) AS MAIN_VNDR
             FROM {schema}.IAS_VNDR_ITM vi
             LEFT JOIN {schema}.V_DETAILS vd
-              ON TO_CHAR(vd.V_CODE) = TO_CHAR(vi.V_CODE)
+              ON vd.V_CODE = vi.V_CODE
             WHERE vi.I_CODE = :code
               AND vi.V_CODE IS NOT NULL
             ORDER BY NVL(vi.MAIN_VNDR, 0) DESC,
@@ -2206,7 +2242,7 @@ def fetch_item_suppliers(item_code: str, *, limit: int = 40) -> list[dict]:
             1 AS MAIN_VNDR
         FROM {schema}.IAS_ITM_MST m
         LEFT JOIN {schema}.V_DETAILS vd
-          ON TO_CHAR(vd.V_CODE) = TO_CHAR(m.V_CODE)
+          ON vd.V_CODE = m.V_CODE
         WHERE m.I_CODE = :code
           AND m.V_CODE IS NOT NULL
     """
@@ -2285,7 +2321,7 @@ def fetch_last_purchase_by_warehouse(
               ON m.BILL_NO = d.BILL_NO
              AND m.BILL_SER = d.BILL_SER
              AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
-            WHERE TO_CHAR(d.I_CODE) = :code
+            WHERE d.I_CODE = :code
               AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
               {wh_filter}
         )
@@ -2329,7 +2365,7 @@ def fetch_last_purchase_by_warehouse(
             f"""
             SELECT ITM_UNT, P_SIZE, MAIN_UNIT, STOCK_UNIT, SALE_UNIT
             FROM {schema}.IAS_ITM_DTL
-            WHERE TO_CHAR(I_CODE) = :code
+            WHERE I_CODE = :code
               AND NVL(P_SIZE, 0) > 0
             """,
             {"code": code},
@@ -2388,7 +2424,7 @@ def fetch_item_stock_by_warehouses(
             key = f"w{i}"
             placeholders.append(f":{key}")
             params[key] = wh
-        wh_filter = f"AND TO_CHAR(w.W_CODE) IN ({', '.join(placeholders)})"
+        wh_filter = f"AND w.W_CODE IN ({', '.join(_num_bind(k) for k in placeholders)})"
 
     sql = f"""
         SELECT
@@ -2397,7 +2433,7 @@ def fetch_item_stock_by_warehouses(
             ROUND(NVL(w.AVL_QTY, 0), 4) AS QTY,
             ROUND(NVL(w.I_CWTAVG, w.PRIMARY_COST), 6) AS COST
         FROM {schema}.IAS_ITM_WCODE w
-        WHERE TO_CHAR(w.I_CODE) = :code
+        WHERE w.I_CODE = :code
           {wh_filter}
     """
     try:
@@ -2489,7 +2525,7 @@ def fetch_pending_sales_qty_map(
               ON m.BILL_NO = d.BILL_NO
              AND m.BRN_NO = d.BRN_NO
              AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
-            WHERE TO_CHAR(d.I_CODE) IN ({code_in})
+            WHERE d.I_CODE IN ({code_in})
               AND NVL(m.POSTED, 0) = 0
               AND NVL(m.HUNG, 0) = 0
               AND m.BILL_DATE >= TRUNC(SYSDATE) - :lookback_days
@@ -2514,7 +2550,7 @@ def fetch_pending_sales_qty_map(
             JOIN {pos}.IAS_POS_RT_BILL_MST m
               ON m.RT_BILL_NO = d.RT_BILL_NO
              AND m.BRN_NO = d.BRN_NO
-            WHERE TO_CHAR(d.I_CODE) IN ({code_in})
+            WHERE d.I_CODE IN ({code_in})
               AND NVL(m.POSTED, 0) = 0
               AND NVL(m.HUNG, 0) = 0
               AND m.RT_BILL_DATE >= TRUNC(SYSDATE) - :lookback_days
@@ -2655,7 +2691,7 @@ def fetch_posted_item_sales_by_warehouses(
                   ON d.BILL_NO = m.BILL_NO
                  AND d.BRN_NO = m.BRN_NO
                  AND NVL(d.BILL_SRL, 0) = NVL(m.BILL_SRL, 0)
-                WHERE TO_CHAR(d.I_CODE) = :code
+                WHERE d.I_CODE = :code
                   AND m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
                   AND {hung_m}
                   AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
@@ -2691,7 +2727,7 @@ def fetch_posted_item_sales_by_warehouses(
                 JOIN {pos}.IAS_POS_RT_BILL_DTL d
                   ON d.RT_BILL_NO = m.RT_BILL_NO
                  AND d.BRN_NO = m.BRN_NO
-                WHERE TO_CHAR(d.I_CODE) = :code
+                WHERE d.I_CODE = :code
                   AND m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
                   AND NVL(m.HUNG, 0) = 0
                   AND NVL(d.W_CODE, m.W_CODE) IS NOT NULL
@@ -2735,7 +2771,7 @@ def fetch_posted_item_sales_by_warehouses(
                   ON b.BILL_NO = d.BILL_NO
                  AND b.BILL_SER = d.BILL_SER
                  AND b.BILL_DOC_TYPE = d.BILL_DOC_TYPE
-                WHERE TO_CHAR(d.I_CODE) = :code
+                WHERE d.I_CODE = :code
                   AND b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
                   AND {_bill_mst_ok("b")}
                   {doc_filter}
@@ -2781,7 +2817,7 @@ def fetch_posted_item_sales_by_warehouses(
                 JOIN {schema}.IAS_RT_BILL_MST r
                   ON r.RT_BILL_SER = d.RT_BILL_SER
                  AND r.BRN_NO = d.BRN_NO
-                WHERE TO_CHAR(d.I_CODE) = :code
+                WHERE d.I_CODE = :code
                   AND r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
                   AND {_rt_bill_mst_ok("r")}
                   {ret_doc}
@@ -2808,7 +2844,7 @@ def fetch_posted_item_sales_by_warehouses(
             f"""
             SELECT NVL(I_NAME, TO_CHAR(I_CODE)) AS ITEM_NAME
             FROM {schema}.IAS_ITM_MST
-            WHERE TO_CHAR(I_CODE) = :code
+            WHERE I_CODE = :code
             """,
             {"code": code},
         )
@@ -2964,7 +3000,7 @@ def fetch_item_compare_from_oracle(
         key = f"w{i}"
         placeholders.append(f":{key}")
         params[key] = wh
-    wh_in = ", ".join(placeholders)
+    wh_in = ", ".join(_num_bind(k) for k in placeholders)
 
     prices: dict[str, dict[str, str]] = {}
     try:
@@ -2975,9 +3011,9 @@ def fetch_item_compare_from_oracle(
                 p.ITM_UNT AS UNIT,
                 ROUND(p.I_PRICE, 4) AS PRICE
             FROM {schema}.IAS_ITEM_PRICE p
-            WHERE TO_CHAR(p.I_CODE) = :code
+            WHERE p.I_CODE = :code
               AND NVL(p.LEV_NO, 1) = :lev
-              AND TO_CHAR(p.W_CODE) IN ({wh_in})
+              AND p.W_CODE IN ({wh_in})
               AND NVL(p.I_PRICE, 0) <> 0
             """,
             params,

@@ -419,6 +419,8 @@ ORACLE = {
     'POOL_PING_INTERVAL': int(_env('ORACLE_POOL_PING_INTERVAL', '30') or '30'),
     # مللي ثانية: أقصى مدة لاستعلام أوراكل واحد (call timeout)
     'CALL_TIMEOUT_MS': int(_env('ORACLE_CALL_TIMEOUT_MS', '120000') or '120000'),
+    # ثوانٍ: استعلام أبطأ من هذا يُسجَّل تحذيراً في السجل
+    'SLOW_QUERY_SECONDS': float(_env('ORACLE_SLOW_QUERY_SECONDS', '5') or '5'),
 }
 # oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
 STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()

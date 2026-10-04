@@ -1,11 +1,29 @@
 """معالجات سياق القوالب."""
 
 
+import time
+
 from django.conf import settings
 
 
+_STAMP_TTL = 30.0
+_stamp_cache: tuple[float, str] = (0.0, "")
+
+
 def _css_stamp() -> str:
-    """آخر تعديل لملفات CSS/JS حتى يتغيّر رابطها فيُحدَّث المتصفح دون Ctrl+Shift+R."""
+    """آخر تعديل لملفات CSS/JS حتى يتغيّر رابطها فيُحدَّث المتصفح دون Ctrl+Shift+R.
+
+    يُخزَّن 30 ثانية: كان يمسح مجلد static ويعمل stat لكل ملف في كل طلب."""
+    global _stamp_cache
+    now = time.monotonic()
+    if _stamp_cache[1] and now - _stamp_cache[0] < _STAMP_TTL:
+        return _stamp_cache[1]
+    value = _compute_css_stamp()
+    _stamp_cache = (now, value)
+    return value
+
+
+def _compute_css_stamp() -> str:
     latest = 0
     static = settings.BASE_DIR / "static"
     for pattern in ("css/*.css", "js/*.js"):

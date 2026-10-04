@@ -52,6 +52,17 @@
       <span class="hv-chip hv-chip-role">{{ role_name|default:"حسب صلاحياتك" }}</span>
       <span class="hv-chip hv-chip-date" data-hv-date></span>
     </div>
+    {% if can_see_today %}
+    <div class="hv-today" data-hv-today data-url="{% url 'home_today_api' %}" aria-live="polite">
+      <div class="hv-today-head"><strong>مبيعات اليوم</strong><span data-hv-t="updated"></span></div>
+      <div class="hv-today-grid">
+        <div><small>صافي المبيعات</small><b data-hv-t="sales">…</b></div>
+        <div><small>عدد الفواتير</small><b data-hv-t="invoices">…</b></div>
+        <div><small>المرتجعات</small><b data-hv-t="returns">…</b></div>
+      </div>
+      <p class="hv-today-note" data-hv-t="note" hidden></p>
+    </div>
+    {% endif %}
     {% if not welcome_cards %}
     <p class="welcome-empty" role="status">لا توجد شاشات متاحة لدورك حالياً. راجع مدير النظام.</p>
     {% endif %}
@@ -71,6 +82,23 @@
 {% block extra_js %}
 {{ block.super }}
 <script>
+  (function () {
+    var box = document.querySelector("[data-hv-today]");
+    if (!box) return;
+    function set(k, v) { var el = box.querySelector('[data-hv-t="' + k + '"]'); if (el) el.textContent = v; }
+    fetch(box.dataset.url, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || "");
+        set("sales", d.sales); set("invoices", d.invoices); set("returns", d.returns);
+        set("updated", "آخر تحديث " + d.updated);
+        if (d.stale) { var n = box.querySelector('[data-hv-t="note"]'); n.textContent = "أرقام محفوظة — تعذّر الاتصال بقاعدة البيانات."; n.hidden = false; }
+      })
+      .catch(function () {
+        ["sales", "invoices", "returns"].forEach(function (k) { set(k, "—"); });
+        var n = box.querySelector('[data-hv-t="note"]'); n.textContent = "تعذّر تحميل أرقام اليوم الآن."; n.hidden = false;
+      });
+  })();
   (function () {
     var d = document.querySelector("[data-hv-date]");
     if (!d) return;

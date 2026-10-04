@@ -575,8 +575,8 @@ def build_pack_mismatch_branch_detail(
           AND m.TR_DATE < :d_to_excl
           AND m.TR_INOUT_TYPE = 1
           AND {_hung_ok('m')}
-          AND TO_CHAR(m.F_W_CODE) = :src_wh
-          AND TO_CHAR(d.I_CODE) = :icode
+          AND m.F_W_CODE = CASE WHEN REGEXP_LIKE(:src_wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:src_wh) END
+          AND d.I_CODE = :icode
           AND ABS(NVL(d.P_SIZE, 0) - :out_ps) < 0.0001
         GROUP BY
           TO_CHAR(NVL(tw.CONN_BRN_NO, '')),
@@ -596,7 +596,7 @@ def build_pack_mismatch_branch_detail(
         f"""
         SELECT NVL(NULLIF(TRIM(I_NAME), ''), TO_CHAR(I_CODE)) AS I_NAME
         FROM {schema}.IAS_ITM_MST
-        WHERE TO_CHAR(I_CODE) = :icode
+        WHERE I_CODE = :icode
           AND ROWNUM = 1
         """,
         {"icode": code},

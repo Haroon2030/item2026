@@ -100,3 +100,12 @@ html body.welcome-body .hv-chip-role:not(#fx) { color: #231f20 !important; }
 html body.welcome-body .hv-chip-date:not(#fx) { color: #fff !important; }
 html body.welcome-body .hv-ico:not(#fx) { background: #231f20 !important; }
 html body.welcome-body .hv-card:not(#fx) { background: linear-gradient(90deg, #fffbd1 0%, #ffe59f 35%, #ffd881 58%, #fec245 100%) !important; }
+
+/* ملخص مبيعات اليوم */
+.hv-today { margin-top: 1rem; background: rgba(255,255,255,.92); border: 1.5px solid #ffe285; border-radius: 14px; padding: .8rem 1.1rem; color: #231f20; box-sizing: border-box; width: min(420px, 100%); }
+.hv-today-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .5rem; }
+.hv-today-head span { font-size: .78rem; opacity: .65; }
+.hv-today-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; text-align: center; }
+.hv-today-grid small { display: block; font-size: .75rem; opacity: .7; }
+.hv-today-grid b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.hv-today-note { margin: .5rem 0 0; font-size: .78rem; color: #9a3412; }

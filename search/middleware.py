@@ -84,11 +84,12 @@ class RateLimitMiddleware:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     def _client_ip(self, request) -> str:
-        # خلف Dokploy/Nginx: أول IP في X-Forwarded-For هو العميل الحقيقي
+        # خلف Dokploy/Nginx: الوكيل يُلحق عنوان العميل في آخر X-Forwarded-For؛
+        # الأول يمكن للعميل تزويره لتجاوز حد المحاولات.
         if getattr(settings, 'USE_X_FORWARDED_HOST', False) or settings.SECURE_PROXY_SSL_HEADER:
             forwarded = (request.META.get('HTTP_X_FORWARDED_FOR') or '').split(',')
-            if forwarded and forwarded[0].strip():
-                return forwarded[0].strip()
+            if forwarded and forwarded[-1].strip():
+                return forwarded[-1].strip()
         return request.META.get('REMOTE_ADDR') or 'unknown'
 
     def _allow(self, key: str, limit: int, window_sec: int) -> bool:

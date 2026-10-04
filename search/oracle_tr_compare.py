@@ -485,7 +485,7 @@ def fetch_recent_pr_by_items(
                 WHERE p.PR_DATE >= :d_from
                   AND p.PR_DATE < :d_to_excl
                   AND (p.INACTIVE IS NULL OR p.INACTIVE = 0)
-                  AND TO_CHAR(d.I_CODE) IN ({", ".join(keys)})
+                  AND d.I_CODE IN ({", ".join(keys)})
                 ORDER BY NVL(p.AD_DATE, p.PR_DATE) DESC, p.PR_NO DESC
                 """,
                 params,
