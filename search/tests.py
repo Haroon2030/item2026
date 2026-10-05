@@ -2284,8 +2284,19 @@ class ConnectionSettingsTests(TestCase):
         self.client.force_login(self.admin)
         self.assertContains(self.client.get(reverse('home')), reverse('connection_settings'))
 
+    def setUp_check_ok(self):
+        from unittest import mock
+
+        patcher = mock.patch(
+            'search.runtime_config.test_oracle',
+            return_value={'ok': True, 'schemas': ['IAS20262'], 'schema_ok': True},
+        )
+        self.check_mock = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_save_overrides_settings_and_encrypts_password(self):
         from django.conf import settings
+        self.setUp_check_ok()
         from search.models import ConnectionSetting
 
         self.client.force_login(self.admin)
@@ -2313,6 +2324,29 @@ class ConnectionSettingsTests(TestCase):
         })
         self.assertEqual(settings.ORACLE['HOST'], '10.1.2.4')
         self.assertEqual(settings.ORACLE['PASSWORD'], 'Pa$$w0rd')
+
+    def test_save_blocked_when_connection_or_schema_fails(self):
+        from unittest import mock
+
+        from search.models import ConnectionSetting
+
+        self.client.force_login(self.admin)
+        data = {
+            'oracle_host': 'h', 'oracle_port': '1521', 'oracle_service_name': 'XE',
+            'oracle_user': 'u', 'oracle_password': 'p', 'oracle_schema': 'BADSCHEMA',
+        }
+        with mock.patch('search.runtime_config.test_oracle', return_value={
+            'ok': True, 'schemas': ['IAS20261'], 'schema_ok': False,
+            'schema_error': 'ORA-00942: table or view does not exist',
+        }):
+            r = self.client.post(reverse('connection_settings'), data)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'لم يُحفظ الربط')
+        self.assertContains(r, 'IAS20261')
+        with mock.patch('search.runtime_config.test_oracle', return_value={'ok': False, 'error': 'انتهت مهلة الشبكة'}):
+            r = self.client.post(reverse('connection_settings'), data)
+        self.assertContains(r, 'لم يُحفظ الربط')
+        self.assertFalse(ConnectionSetting.objects.exists())
 
     def test_invalid_schema_rejected(self):
         from search.models import ConnectionSetting

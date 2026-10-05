@@ -409,6 +409,16 @@ def connection_settings(request):
             errors.append('كلمة سر أوراكل مطلوبة.')
         if cfg['SCHEMA'] and not re.fullmatch(r'[A-Za-z][A-Za-z0-9_$#]*', cfg['SCHEMA']):
             errors.append('اسم المخطط (Schema) غير صالح.')
+        if not errors:
+            # لا يُحفظ ربط معطوب: الاتصال والمخطط يجب أن ينجحا أولاً
+            check = runtime_config.test_oracle(cfg)
+            if not check.get('ok'):
+                errors.append('لم يُحفظ الربط — ' + (check.get('error') or 'فشل الاتصال بأوراكل.'))
+            elif check.get('schema_ok') is False:
+                errors.append(
+                    'لم يُحفظ الربط — المخطط غير صالح: ' + (check.get('schema_error') or '')
+                    + ((' · المخططات المتاحة: ' + '، '.join(check['schemas'])) if check.get('schemas') else '')
+                )
         if errors:
             for e in errors:
                 messages.error(request, e)
