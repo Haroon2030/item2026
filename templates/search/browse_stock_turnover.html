@@ -106,37 +106,37 @@
   {% with k=report.kpis %}
   <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات حركة فواتير الشراء">
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
-      <span class="dash-kpi-label">المشتريات</span>
+      <span class="dash-kpi-label">تكلفة المشتريات</span>
       <strong class="dash-kpi-value mono">{% money k.cost_display %}</strong>
       <span class="dash-kpi-hint">{{ k.invoice_count }} فاتورة · {{ k.item_count }} صنف · كمية {{ k.qty_display }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
-      <span class="dash-kpi-label">المباع منها</span>
+      <span class="dash-kpi-label">نسبة المباع منها</span>
       <strong class="dash-kpi-value mono">{{ k.sell_pct_display }}</strong>
       <span class="dash-kpi-hint">كمية {{ k.sold_display }} · بالتكلفة {% money k.sold_value_display %}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
-      <span class="dash-kpi-label">المتبقي منها</span>
+      <span class="dash-kpi-label">قيمة المتبقي منها</span>
       <strong class="dash-kpi-value mono">{% money k.remaining_value_display %}</strong>
       <span class="dash-kpi-hint">كمية {{ k.remaining_display }} بتكلفة الفاتورة</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
-      <span class="dash-kpi-label">بنود نفدت</span>
+      <span class="dash-kpi-label">بنود نافدة</span>
       <strong class="dash-kpi-value mono">{{ k.sold_out_count }} / {{ k.line_count }}</strong>
       <span class="dash-kpi-hint">متوسط النفاد {{ k.avg_sellout_display }} يوم من الشراء</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vat">
-      <span class="dash-kpi-label">بطيئة</span>
+      <span class="dash-kpi-label">قيمة البنود البطيئة</span>
       <strong class="dash-kpi-value mono">{% money k.slow_value_display %}</strong>
       <span class="dash-kpi-hint">{{ k.slow_count }} بند يتوقع نفاده بعد أكثر من 45 يوماً من شرائه</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vat">
-      <span class="dash-kpi-label">راكدة</span>
+      <span class="dash-kpi-label">قيمة البنود الراكدة</span>
       <strong class="dash-kpi-value mono">{% money k.stagnant_value_display %}</strong>
       <span class="dash-kpi-hint">{{ k.stagnant_count }} بند بلا بيع للصنف 30 يوماً</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
-      <span class="dash-kpi-label">مبيع من رصيد سابق</span>
+      <span class="dash-kpi-label">كمية مباعة من رصيد سابق</span>
       <strong class="dash-kpi-value mono">{{ k.prior_qty_display }}</strong>
       <span class="dash-kpi-hint">بيع قبل وصول الفاتورة أو زيادة على المستلم</span>
     </article>

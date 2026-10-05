@@ -158,12 +158,12 @@
   {% endif %}
   <section class="income-kpi-grid wqc-kpi-grid" aria-label="ملخص المقارنة">
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count">
-      <span class="dash-kpi-label">المعروض</span>
+      <span class="dash-kpi-label">الأصناف المعروضة</span>
       <strong class="dash-kpi-value mono">{{ report.kpis.item_count }}</strong>
       <span class="dash-kpi-hint">من أصل {{ all_n }} صنف · {{ report.filters.mode_label }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-gap">
-      <span class="dash-kpi-label">لا يتوفر / مختلف</span>
+      <span class="dash-kpi-label">غير متوفر / مختلف</span>
       <strong class="dash-kpi-value mono">{{ report.kpis.zero_b_count_all|default:report.kpis.zero_b_count }} / {{ report.kpis.diff_count_all|default:report.kpis.diff_count }}</strong>
       <span class="dash-kpi-hint">متطابق {{ report.kpis.both_count_all|default:report.kpis.both_count }} · {{ report.filters.qty_basis_label }}</span>
     </article>

@@ -1896,8 +1896,9 @@ class IncomeUnpostedCardTests(TestCase):
                 patch('search.oracle_income.build_income_statement', return_value=statement):
             response = self.client.get(reverse('browse_income'), {'date_from': '2026-09-01', 'date_to': '2026-09-28'})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'تكلفتها التقديرية')
-        self.assertContains(response, 'هامشها التقديري')
+        self.assertContains(response, 'مبيعات غير مرحّلة')
+        self.assertContains(response, 'التكلفة التقديرية')
+        self.assertContains(response, 'هامش الربح التقديري')
         self.assertContains(response, '660.00')
         self.assertContains(response, '1,000.00')
         self.assertNotContains(response, 'income-kpi-hint-wrap')
@@ -2099,3 +2100,131 @@ class PurchaseControlTests(TestCase):
             names = set(re.findall(r':([A-Za-z_][A-Za-z0-9_]*)', sql))
             self.assertFalse(names & reserved, names & reserved)
             self.assertLessEqual(names, set(params), names - set(params))
+
+
+class ZeroCostSalesTests(TestCase):
+    """أصناف تُباع بتكلفة صفرية: الدمج (بدون أوراكل) والصلاحيات."""
+
+    def test_assemble_merges_pos_and_bills_per_item(self):
+        from search.oracle_zero_cost_sales import assemble_report
+
+        pos = [
+            {'ITEM_CODE': '82574', 'I_NAME': 'صنف أ', 'G_CODE': '9', 'BRANCH_CODE': '19', 'W_CODE': '1901', 'QTY': 10, 'AMT': 100.5, 'BILLS': 4},
+            {'ITEM_CODE': '82574', 'I_NAME': 'صنف أ', 'G_CODE': '9', 'BRANCH_CODE': '7', 'W_CODE': '701', 'QTY': 2, 'AMT': 20, 'BILLS': 1},
+            {'ITEM_CODE': 'B2', 'I_NAME': 'صنف ب', 'G_CODE': '17', 'BRANCH_CODE': '19', 'W_CODE': '1901', 'QTY': 1, 'AMT': 5, 'BILLS': 1},
+        ]
+        bills = [
+            {'ITEM_CODE': '82574', 'I_NAME': 'صنف أ', 'G_CODE': '9', 'BRANCH_CODE': '19', 'W_CODE': '1901', 'QTY': 3, 'AMT': 50, 'BILLS': 2},
+        ]
+        r = assemble_report(pos, bills, branch_names={'19': 'حائل', '7': 'الدمام'}, group_names={'9': 'الأجبان', '17': 'الأحذية'})
+        self.assertEqual(r['kpis']['items'], '2')
+        self.assertEqual(r['kpis']['branches'], '2')
+        self.assertEqual(r['kpis']['total'], '175.50')
+        top = r['rows'][0]
+        self.assertEqual((top['code'], top['group']), ('82574', 'الأجبان'))
+        self.assertEqual((top['pos_amt_display'], top['bill_amt_display'], top['total_display']), ('120.50', '50.00', '170.50'))
+        self.assertEqual(top['branch'], 'حائل +1')          # الأعلى مبيعاً + عدد الباقي
+        self.assertEqual(top['docs'], 7)
+        self.assertEqual(top['qty_display'], '15')
+        self.assertEqual(r['rows'][1]['branch'], 'حائل')
+
+    def test_zero_cost_sql_bind_names_valid_and_read_only(self):
+        import re
+        from datetime import date
+
+        from search import oracle_zero_cost_sales as zc
+
+        captured = []
+        with patch.object(zc, '_fetch_all', lambda sql, params=None: captured.append((sql, dict(params or {}))) or []):
+            zc._fetch_pos(date(2026, 10, 1), date(2026, 10, 5), '19', '9')
+            zc._fetch_bills(date(2026, 10, 1), date(2026, 10, 5), '19', '9')
+            zc._fetch_pos(date(2026, 10, 1), date(2026, 10, 5), '', '')
+        reserved = {'uid', 'user', 'date', 'level', 'rowid', 'rownum', 'sysdate', 'null', 'number'}
+        self.assertEqual(len(captured), 3)
+        for sql, params in captured:
+            names = set(re.findall(r':([A-Za-z_][A-Za-z0-9_]*)', sql))
+            self.assertFalse(names & reserved)
+            self.assertLessEqual(names, set(params))
+            self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertIn('I_CWTAVG', captured[0][0])        # تكلفة صفرية
+        self.assertIn('STK_COST', captured[1][0])
+
+    def test_screen_registered_under_sales_and_renders(self):
+        from search.nav_permissions import section_for_screen
+
+        self.assertEqual(section_for_screen('browse_sales_zero_cost'), 'sales')
+        url = reverse('browse_sales_zero_cost')
+        self.assertEqual(self.client.get(url).status_code, 302)
+        user = get_user_model().objects.create_user('zc_admin', password='x-Test-123', is_staff=True)
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            ok = self.client.get(url)
+            bad = self.client.get(url, {'date_from': '2026-10-01', 'date_to': '2026-12-31'})
+        self.assertContains(ok, 'أصناف تُباع بتكلفة صفرية')
+        self.assertEqual(bad.status_code, 200)
+
+    def test_window_limit_and_dates_validated(self):
+        from search.oracle_zero_cost_sales import OracleStockError, build_zero_cost_sales
+
+        with patch('search.oracle_zero_cost_sales.oracle_enabled', return_value=True):
+            with self.assertRaises(OracleStockError):
+                build_zero_cost_sales('2026-10-05', '2026-10-01')
+            with self.assertRaises(OracleStockError):
+                build_zero_cost_sales('2026-01-01', '2026-10-01')
+
+
+class ZeroCostStockTests(TestCase):
+    """مخزون بتكلفة صفرية: التجهيز (بدون أوراكل) والصلاحيات والاستعلام."""
+
+    def test_assemble_report_rows_and_kpis(self):
+        from search.oracle_zero_cost_stock import assemble_report
+
+        rows = [
+            {'ITEM_CODE': '1', 'I_NAME': 'صنف أ', 'G_CODE': '9', 'W_CODE': '1901', 'W_NAME': 'مخزن بريدة', 'BRANCH_CODE': '19',
+             'UNIT': 'كرتون', 'QTY': 12, 'PRIMARY_COST': 0, 'CARD_COST': 0},
+            {'ITEM_CODE': '2', 'I_NAME': 'صنف ب', 'G_CODE': '17', 'W_CODE': '1901', 'W_NAME': 'مخزن بريدة', 'BRANCH_CODE': '19',
+             'UNIT': 'حبة', 'QTY': 3.5, 'PRIMARY_COST': 4.25, 'CARD_COST': 0},
+            {'ITEM_CODE': '1', 'I_NAME': 'صنف أ', 'G_CODE': '9', 'W_CODE': '701', 'W_NAME': 'مخزن الدمام', 'BRANCH_CODE': '7',
+             'UNIT': 'كرتون', 'QTY': 1, 'PRIMARY_COST': 0, 'CARD_COST': 2},
+        ]
+        r = assemble_report(rows, 3, branch_names={'19': 'بريدة', '7': 'الدمام'}, group_names={'9': 'الأجبان'})
+        k = r['kpis']
+        self.assertEqual((k['items'], k['warehouses'], k['branches'], k['rows']), ('2', '2', '2', '3'))
+        self.assertEqual(k['fixable'], '2')            # صفان لهما تكلفة بديلة
+        self.assertEqual(r['rows'][0]['group'], 'الأجبان')
+        self.assertEqual(r['rows'][1]['group'], '17')    # بلا اسم مجموعة → الرمز
+        self.assertEqual((r['rows'][0]['qty_display'], r['rows'][1]['qty_display']), ('12', '3.50'))
+        self.assertEqual((r['rows'][1]['primary_display'], r['rows'][0]['primary_display']), ('4.25', '—'))
+        self.assertFalse(r['truncated'])
+        self.assertTrue(assemble_report(rows[:2], 5, branch_names={}, group_names={})['truncated'])
+
+    def test_zero_cost_stock_sql_valid_and_read_only(self):
+        import re
+
+        from search import oracle_zero_cost_stock as zs
+
+        captured = []
+        with patch.object(zs, '_fetch_all', lambda sql, params=None: captured.append((sql, dict(params or {}))) or [{'N': 0}]):
+            zs._fetch('19', '1901', '9', 50)
+            zs._fetch('', '', '', 50)
+        reserved = {'uid', 'user', 'date', 'level', 'rowid', 'rownum', 'sysdate', 'null', 'number'}
+        self.assertEqual(len(captured), 4)
+        for sql, params in captured:
+            names = set(re.findall(r':([A-Za-z_][A-Za-z0-9_]*)', sql))
+            self.assertFalse(names & reserved)
+            self.assertLessEqual(names, set(params))
+            self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertIn('AVL_QTY', captured[0][0])
+        self.assertIn('PRIMARY_COST', captured[0][0])
+
+    def test_screen_under_inventory_section_and_renders(self):
+        from search.nav_permissions import section_for_screen
+
+        self.assertEqual(section_for_screen('browse_inventory_zero_cost'), 'inventory')
+        url = reverse('browse_inventory_zero_cost')
+        self.assertEqual(self.client.get(url).status_code, 302)
+        user = get_user_model().objects.create_user('izc_admin', password='x-Test-123', is_staff=True)
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            response = self.client.get(url)
+        self.assertContains(response, 'أصناف لها رصيد وتكلفتها صفر')

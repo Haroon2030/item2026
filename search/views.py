@@ -6767,6 +6767,143 @@ def browse_purchase_control_details(request):
 @login_required
 @require_GET
 @never_cache
+def browse_sales_zero_cost(request):
+    """أصناف تُباع بتكلفة صفرية — فلتر الفرع والمجموعة والفترة."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    report = None
+    error = ''
+    branches: list[dict] = []
+    groups: list[dict] = []
+    submitted = 'date_from' in request.GET
+    default_from = today - timedelta(days=6)
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from') or default_from.isoformat(),
+            request.GET.get('date_to') or today.isoformat(),
+        )
+    except ValidationError as exc:
+        date_from, date_to = default_from, today
+        error = str(exc)
+        submitted = False
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import fetch_sales_group_options, oracle_enabled, oracle_session
+        from .oracle_zero_cost_sales import MAX_DAYS, build_zero_cost_sales
+
+        if not oracle_enabled():
+            error = error or 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                if submitted and not error:
+                    if (date_to - date_from).days >= MAX_DAYS:
+                        error = f'الفترة القصوى {MAX_DAYS} يوماً.'
+                    else:
+                        report = build_zero_cost_sales(
+                            date_from,
+                            date_to,
+                            branch_code=selected_branch,
+                            group_code=selected_group,
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_zero_cost failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_sales_zero_cost.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_group': selected_group,
+            'branches': branches,
+            'groups': groups,
+            'report': report,
+            'submitted': submitted,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_inventory_zero_cost(request):
+    """أصناف لها رصيد وتكلفتها صفر — فلتر الفرع والمخزن والمجموعة."""
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    report = None
+    error = ''
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+        from .oracle_zero_cost_stock import build_zero_cost_stock
+
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                warehouses = fetch_warehouse_options(active_only=True)
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_warehouse not in {row['code'] for row in warehouses}:
+                    selected_warehouse = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                report = build_zero_cost_stock(
+                    branch_code=selected_branch,
+                    warehouse_code=selected_warehouse,
+                    group_code=selected_group,
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_inventory_zero_cost failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_inventory_zero_cost.html',
+        {
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'branches': branches,
+            'warehouses': warehouses,
+            'groups': groups,
+            'report': report,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_sold_no_supply(request):
     """أصناف تُباع بلا مشتريات على الفرع ولا تحويل وارد إليه."""
     from datetime import date

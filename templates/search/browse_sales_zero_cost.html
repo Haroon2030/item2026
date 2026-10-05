@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}أصناف بتكلفة صفرية{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash zc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="أصناف بتكلفة صفرية">
+  <div class="dash-head-copy">
+    <h2>أصناف تُباع بتكلفة صفرية</h2>
+    <p class="sales-ov-sub">مبيعات أصناف لا تكلفة مسجّلة لها — تُشوّه الهامش وقائمة الدخل</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_sales_zero_cost' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="zc-from">من</label>
+    <input id="zc-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+  <div class="field">
+    <label for="zc-to">إلى</label>
+    <input id="zc-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+  <div class="field">
+    <label for="zc-branch">الفرع</label>
+    <select id="zc-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="zc-group">المجموعة</label>
+    <select id="zc-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات الأصناف بتكلفة صفرية">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label"><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4"/></svg></span>عدد الأصناف</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.items }}</strong>
+      <span class="dash-kpi-hint">{{ report.period_label }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label"><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c.5-1 1.500-1.500 2.500-1.500 1.500 0 2.500.8 2.500 2s-1 1.800-2.500 2-2.500.8-2.500 2 1 2 2.500 2c1 0 2-.5 2.500-1.500"/></svg></span>إجمالي المبيعات</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.total }}</strong>
+      <span class="dash-kpi-hint">نقاط البيع {{ report.kpis.pos }} · الفواتير {{ report.kpis.bills }}</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label"><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/></svg></span>عدد الفروع</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.branches }}</strong>
+      <span class="dash-kpi-hint">فرع باع بتكلفة صفرية</span>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass" aria-label="الأصناف المباعة بتكلفة صفرية">
+    <div class="dash-panel-head">
+      <div>
+        <h3>الأصناف</h3>
+        <p class="sales-ov-sub">
+          مرتبة حسب قيمة المبيعات{% if report.truncated %} · عُرض أعلى {{ report.limit }} صنف فقط{% endif %}
+        </p>
+        <p class="sales-ov-sub">نقاط البيع: متوسط تكلفة الصنف صفر في بطاقته وفي المخزن المباع منه · الفواتير: تكلفة السطر صفر وقت البيع · يُستثنى الخدمي والهدايا.</p>
+      </div>
+      <span class="result-pill">{{ report.rows|length }} صنف</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table sales-table" aria-label="أصناف تُباع بتكلفة صفرية">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>رقم الصنف</th>
+            <th>اسم الصنف</th>
+            <th>المجموعة</th>
+            <th>الفرع</th>
+            <th>المخازن</th>
+            <th>مبيعات نقاط البيع</th>
+            <th>مبيعات الفواتير</th>
+            <th>إجمالي المبيعات</th>
+            <th>الكمية</th>
+            <th>عدد الفواتير</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td class="mono">{{ r.code }}</td>
+            <td class="tc-name">{{ r.name }}</td>
+            <td>{{ r.group }}</td>
+            <td>{{ r.branch }}</td>
+            <td class="mono">{{ r.warehouses|default:"-" }}</td>
+            <td class="mono">{{ r.pos_amt_display }}</td>
+            <td class="mono">{{ r.bill_amt_display }}</td>
+            <td class="mono">{{ r.total_display }}</td>
+            <td class="mono">{{ r.qty_display }}</td>
+            <td class="mono">{{ r.docs }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="11">لا توجد أصناف مباعة بتكلفة صفرية في هذه الفترة.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+        <tfoot>
+          <tr>
+            <td colspan="6">الإجمالي</td>
+            <td class="mono">{{ report.kpis.pos }}</td>
+            <td class="mono">{{ report.kpis.bills }}</td>
+            <td class="mono">{{ report.kpis.total }}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+{% elif not error and not submitted %}
+  <p class="welcome-empty" role="status">اختر الفترة والفرع والمجموعة ثم اضغط «عرض» (الفترة القصوى 31 يوماً؛ أسبوع لكل الفروع يستغرق نحو 10 ثوانٍ).</p>
+{% endif %}
+{% endblock %}

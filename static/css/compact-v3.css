@@ -1,0 +1,166 @@
+/* ضغط صفحة تحليل المبيعات: عناوين بلا أسطر فرعية، هوامش وبطاقات أصغر */
+@layer app-components {
+  html body.theme-navy .page.sales-overview-dash .sales-ov-sub:not(#fx),
+  html body.theme-navy .page.sales-overview-dash .dash-head-copy p:not(#fx),
+  html body.theme-navy .page.sales-overview-dash .sales-groups-status:not(#fx) { display: none !important; }
+
+  html body.theme-navy .page.sales-overview-dash .dash-head:not(#fx) { min-height: 0 !important; padding: .35rem .8rem !important; margin-bottom: .5rem !important; }
+  html body.theme-navy .page.sales-overview-dash .dash-head h2:not(#fx) { font-size: 1.25rem !important; margin: 0 !important; }
+
+  html body.theme-navy .page.sales-overview-dash .dash-kpi-label:not(#fx) { min-height: 1.7rem !important; padding-block: .1rem !important; font-size: .74rem !important; }
+  html body.theme-navy .page.sales-overview-dash .dash-kpi-value:not(#fx) { padding: .25rem .5rem !important; font-size: 1.05rem !important; line-height: 1.25 !important; }
+
+
+  html body.theme-navy .page.sales-overview-dash .dash-panel > .dash-panel-head:not(#fx) { min-height: 0 !important; padding: .45rem .9rem !important; margin-bottom: .4rem !important; border-radius: 12px 0 0 0 !important; }
+  html body.theme-navy .page.sales-overview-dash .dash-panel > .dash-panel-head:not(#fx)::before { inset: 4px !important; }
+  html body.theme-navy .page.sales-overview-dash .dash-panel > .dash-panel-head h3:not(#fx) { font-size: 1rem !important; margin: 0 !important; }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-returns > .dash-panel-head h3:not(#fx),
+  html body.theme-navy .page.sales-overview-dash .sales-ov-users > .dash-panel-head h3:not(#fx) { font-size: 1rem !important; }
+
+  html body.theme-navy .page.sales-overview-dash .sales-table :is(th, td):not(#fx) { padding: .3rem .4rem !important; font-size: .82rem !important; }
+  html body.theme-navy .page.sales-overview-dash :is(.sales-ov-grid, .sales-ov-bottom, .sales-ov-items-row, .sales-ov-kpis):not(#fx) { gap: .5rem !important; }
+
+  /* بطاقات مربعة بنفس التصميم الأصلي (ترويسة ملوّنة + أيقونة داكنة + ▲)، 5 في الصف وبحجم ثابت */
+  html body.theme-navy .page.sales-overview-dash .sales-ov-board:not(#fx) {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); justify-content: start; gap: .5rem; margin: 0 0 .8rem;
+  }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-board > .sales-ov-kpis:not(#fx) { display: contents !important; }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis > .dash-kpi-card:not(#fx) {
+    aspect-ratio: auto !important; height: 150px !important; container-type: size; grid-column: auto !important;
+  }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis .dash-kpi-label:not(#fx) {
+    flex: 0 0 auto; flex-wrap: nowrap !important; flex-direction: row !important; justify-content: center !important; text-align: center; min-height: 2.6rem !important; padding: .25rem .5rem !important; gap: .35rem !important;
+    font-size: clamp(.66rem, 7.5cqw, .85rem) !important; line-height: 1.2 !important;
+  }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis .dash-kpi-ico:not(#fx) { width: 1.6rem !important; height: 1.6rem !important; }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis .dash-kpi-ico svg:not(#fx) { width: 1.15rem !important; height: 1.15rem !important; }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis > .dash-kpi-card:not(#fx)::before { content: none !important; display: none !important; }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis .dash-kpi-value:not(#fx) {
+    flex: 1 1 auto; display: flex !important; align-items: center; justify-content: center !important; text-align: center;
+    min-width: 0; padding: 0 .4rem !important; overflow-wrap: anywhere; line-height: 1.15 !important;
+    font-size: clamp(.7rem, 10cqw, 1.3rem) !important; font-variant-numeric: tabular-nums;
+  }
+  html body.theme-navy .page.sales-overview-dash .sales-ov-kpis .dash-kpi-hint:not(#fx) {
+    display: block !important; flex: 0 0 auto; margin: 0 .35rem .4rem !important; max-width: calc(100% - .7rem) !important; padding: .15rem .3rem !important;
+    text-align: center; white-space: normal !important; font-size: clamp(.56rem, 6cqw, .7rem) !important; line-height: 1.3 !important;
+  }
+  html body.theme-navy .page.sales-overview-dash :is(.dash-head, .sales-ov-filter):not(#fx) { margin-inline: 0 !important; }
+
+  /* الفلتر: شريط واحد بسيط — من / إلى / الفرع / المجموعة / عرض */
+  html body.theme-navy .page.sales-overview-dash form.sales-ov-filter:not(#fx) {
+    display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: center; align-content: flex-start; height: auto !important; min-height: 0 !important; gap: .5rem .9rem !important; margin: 0 0 .8rem !important; padding: .4rem .7rem !important;
+    background: #fff !important; border: 1.5px solid #231f20 !important; border-radius: 10px !important; box-shadow: none !important;
+  }
+  html body.theme-navy .page.sales-overview-dash form.sales-ov-filter:not(#fx)::before,
+  html body.theme-navy .page.sales-overview-dash form.sales-ov-filter:not(#fx)::after { content: none !important; display: none !important; }
+  html body.theme-navy .page.sales-overview-dash .fl-field:not(#fx) { display: flex !important; align-items: center !important; gap: .4rem; margin: 0 !important; flex: 1 1 11rem; min-width: 0; font-size: .8rem; font-weight: 700; color: #231f20; }
+  html body.theme-navy .page.sales-overview-dash .fl-field :is(input, select):not(#fx) {
+    height: 2rem !important; min-height: 0 !important; min-width: 0 !important; max-width: none !important; width: 100% !important; flex: 1 1 auto; padding: 0 .5rem !important;
+    font-size: .8rem !important; border: 1px solid #c9d2e0 !important; border-radius: 6px !important; background: #fff !important; color: #231f20;
+  }
+  html body.theme-navy .page.sales-overview-dash .fl-go:not(#fx) {
+    height: 2rem; padding: 0 1.4rem; border: 1.5px solid #231f20; border-radius: 6px; background: #ffc30e; color: #231f20; font: inherit; font-size: .85rem; font-weight: 800; cursor: pointer;
+  }
+  html body.theme-navy .page.sales-overview-dash .fl-go:not(#fx):hover { background: #ffb400; }
+
+  /* ===== نفس الفكرة في كل صفحات التحليل: عناوين بلا تفاصيل، بطاقات 150×150، فلتر بصف واحد بسيط ===== */
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.dash-head-copy p, .dash-panel-head p, .dash-panel-head .sales-ov-sub):not(#fx) { display: none !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .dash-head:not(#fx) { min-height: 0 !important; padding: .35rem .8rem !important; margin-bottom: .5rem !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .dash-head h2:not(#fx) { font-size: 1.25rem !important; margin: 0 !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .dash-panel > .dash-panel-head:not(#fx) { min-height: 0 !important; padding: .45rem .9rem !important; margin-bottom: .4rem !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .dash-panel > .dash-panel-head:not(#fx)::before { inset: 4px !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .dash-panel > .dash-panel-head :is(h2, h3):not(#fx) { font-size: 1rem !important; margin: 0 !important; }
+
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis):not(#fx) { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 2rem) / 5)), 1fr)) !important; justify-content: start; gap: .5rem !important; margin: 0 0 .8rem !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) > :is(.dash-kpi-card, .up-kpi, .lm-kpi):not(#fx) { height: 150px !important; width: auto !important; container-type: size; grid-column: auto !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) > :is(.dash-kpi-card, .up-kpi, .lm-kpi):not(#fx)::before { content: none !important; display: none !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label):not(#fx) {
+    flex: 0 0 auto; flex-wrap: nowrap !important; flex-direction: row !important; justify-content: center !important; align-items: center !important; text-align: center;
+    min-height: 2.6rem !important; padding: .25rem .5rem !important; gap: .35rem !important; font-size: clamp(.66rem, 7.5cqw, .85rem) !important; line-height: 1.2 !important;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico):not(#fx) { width: 1.6rem !important; height: 1.6rem !important; flex: none; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico) svg:not(#fx) { width: 1.15rem !important; height: 1.15rem !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) :is(.dash-kpi-value, .up-kpi-value, .lm-kpi-value):not(#fx) {
+    flex: 1 1 auto; display: flex !important; align-items: center; justify-content: center !important; text-align: center; min-width: 0;
+    padding: 0 .4rem !important; overflow-wrap: anywhere; line-height: 1.15 !important; font-size: clamp(.7rem, 10cqw, 1.3rem) !important; font-variant-numeric: tabular-nums;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis) :is(.dash-kpi-hint, .up-kpi-hint, .lm-kpi-hint):not(#fx) {
+    display: block !important; flex: 0 0 auto; margin: 0 .35rem .4rem !important; max-width: calc(100% - .7rem) !important; padding: .15rem .3rem !important;
+    text-align: center; white-space: normal !important; font-size: clamp(.56rem, 6cqw, .7rem) !important; line-height: 1.3 !important;
+  }
+
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter):not(.sales-ov-filter):not(#fx) {
+    display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: end; align-content: flex-start; height: auto !important; min-height: 0 !important;
+    gap: .5rem .9rem !important; margin: 0 0 .8rem !important; padding: .5rem .7rem !important;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter):not(.sales-ov-filter):not(#fx) .field:not(#fx) { display: flex !important; flex-direction: row !important; align-items: center !important; gap: .4rem; margin: 0 !important; min-width: 0; flex: 1 1 10rem; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter):not(.sales-ov-filter):not(#fx) label:not(#fx) { margin: 0 !important; font-size: .8rem !important; white-space: nowrap; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter):not(.sales-ov-filter):not(#fx) :is(input:not([type=checkbox], [type=radio]), select):not(#fx) {
+    height: 2rem !important; min-height: 0 !important; padding-block: 0 !important; font-size: .8rem !important; border-width: 1px !important; border-radius: 6px !important;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter):not(.sales-ov-filter):not(#fx) :is(button, .btn-primary, .btn-secondary, [type=submit]):not(#fx) { height: 2rem !important; min-height: 0 !important; padding-block: 0 !important; font-size: .85rem !important; }
+
+  /* ===== بقية أصناف البطاقات (مخازن/موردون/مخزون) بنفس تصميم بطاقات المبيعات ===== */
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.inv-top, .wh-out-kpi-grid, .wh-exp-kpi-grid, .vpc-kpi-grid, .wqc-kpi-grid):not(#fx) { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 2rem) / 5)), 1fr)) !important; justify-content: start; gap: .5rem !important; margin: 0 0 .8rem !important; }
+
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):not(#fx) {
+    --hdr: #f7941e; display: flex !important; flex-direction: column !important; justify-content: flex-start !important; box-sizing: border-box; height: 150px !important; width: auto !important; min-width: 0 !important;
+    padding: 0 !important; gap: 0 !important; background: #fff !important; border: 1.5px solid #231f20 !important; border-radius: 12px !important; box-shadow: none !important;
+    overflow: hidden !important; container-type: size; color: #231f20 !important; grid-column: auto !important;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+2):not(#fx) { --hdr: #fbab18; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+3):not(#fx) { --hdr: #ffc30e; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+4):not(#fx) { --hdr: #ffda00; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):not(#fx)::before, html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):not(#fx)::after { content: none !important; display: none !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx) {
+    display: flex !important; flex: 0 0 auto; flex-wrap: nowrap !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; text-align: center;
+    box-sizing: border-box; width: 100%; min-height: 2.6rem !important; padding: .25rem .5rem !important; gap: .35rem !important; margin: 0 !important;
+    background: var(--hdr) !important; color: #231f20 !important; font-size: clamp(.66rem, 7.5cqw, .85rem) !important; font-weight: 700 !important; line-height: 1.2 !important;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx) { display: grid !important; place-items: center; flex: none; width: 1.6rem !important; height: 1.6rem !important; border-radius: 4px !important; background: #231f20 !important; color: #fff !important; border: 0 !important; box-shadow: none !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico) svg:not(#fx) { width: 1.15rem !important; height: 1.15rem !important; stroke: #fff !important; fill: none !important; stroke-width: 1.8; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-value, .wh-exp-kpi > strong, .vpc-kpi > strong):not(#fx) {
+    flex: 1 1 auto; display: flex !important; align-items: center; justify-content: center !important; text-align: center; min-width: 0; margin: 0 !important; padding: 0 .4rem !important;
+    overflow-wrap: anywhere; line-height: 1.15 !important; font-size: clamp(.7rem, 10cqw, 1.3rem) !important; font-weight: 800 !important; color: #231f20 !important; font-variant-numeric: tabular-nums;
+  }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-hint, .wh-exp-kpi > small, .vpc-kpi > small):not(#fx) {
+    display: block !important; flex: 0 0 auto; margin: 0 .35rem .4rem !important; padding: .15rem .3rem !important; text-align: center; white-space: normal !important;
+    font-size: clamp(.56rem, 6cqw, .7rem) !important; line-height: 1.3 !important; border-radius: 6px; background: #fff4d6 !important; color: #5b4a14 !important;
+  }
+
+  /* المخزون: بطاقات الأعلى (اسم + قيمة) وبطاقة النطاق */
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-top .inv-hl-name:not(#fx) { padding: .2rem .4rem 0 !important; font-size: clamp(.7rem, 8.5cqw, .9rem) !important; text-align: center; line-height: 1.2; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-top .dash-kpi-value:not(#fx) { flex: 0 0 auto !important; padding-bottom: .1rem !important; font-size: clamp(.7rem, 8.5cqw, 1rem) !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-top .inv-hl-name + .dash-kpi-value:not(#fx) { flex: 1 1 auto !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-top .inv-summary-scope:not(#fx) { align-items: center; justify-content: center; padding: .5rem !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-top .inv-summary-scope-main:not(#fx) { flex-direction: column !important; align-items: center !important; gap: .4rem !important; text-align: center; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-top .inv-summary-scope-title:not(#fx) { font-size: .9rem !important; line-height: 1.25; }
+
+  /* إزالة الهوامش الجانبية والعلوية: المحتوى يملأ العرض المتاح (بجوار الشريط الجانبي على الشاشات الكبيرة فقط) */
+  html body.theme-navy .page.has-sidebar.sales-dash:not(.welcome-dash):not(.users-dash):not(#fx) {
+    width: calc(100% - 1rem) !important; max-width: none !important; margin-inline: .5rem !important; padding-top: 3.6rem !important; /* مساحة لزرّي القائمة والتحديث العائمين */
+  }
+  @media (min-width: 901px) {
+    html body.theme-navy .page.has-sidebar.sales-dash:not(.welcome-dash):not(.users-dash):not(#fx) {
+      padding-top: .4rem !important; width: calc(100% - var(--sidebar-w) - 1rem) !important; margin-inline-start: calc(var(--sidebar-w) + .5rem) !important; margin-inline-end: .5rem !important;
+    }
+  }
+
+  /* المشتريات حسب المجموعات: سطر واحد لكل مجموعة — الاسم، ثم الشريط بنسبته، ثم المبلغ */
+  .purchase-groups-panel .rb-board { padding: .5rem 1rem .6rem; }
+  .purchase-groups-panel .rb-list { gap: .55rem; }
+  .purchase-groups-panel .rb-row { grid-template-columns: 9rem minmax(0, 1fr) 9.5rem !important; align-items: center; gap: .8rem !important; }
+  .purchase-groups-panel .rb-row .rb-details { display: contents; }
+  .purchase-groups-panel .rb-row .rb-name { grid-column: 1; grid-row: 1; font-size: .88rem; }
+  .purchase-groups-panel .rb-row .rb-bar-col { grid-column: 2; grid-row: 1; grid-template-columns: 1fr 3.4rem; align-items: center; gap: .5rem; }
+  .purchase-groups-panel .rb-row .rb-bar-col .rb-pct { order: 2; font-size: .78rem; width: 3.4rem; text-align: center; }
+  .purchase-groups-panel .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; font-size: .85rem; font-weight: 800; color: #231f20; white-space: nowrap; }
+  .purchase-groups-panel .rb-list.is-scroll { overflow-y: auto; overscroll-behavior: contain; cursor: grab; scrollbar-width: thin; scrollbar-color: #fdab5c transparent; padding-inline-end: .3rem; touch-action: pan-y; user-select: none; }
+  .purchase-groups-panel .rb-list.is-scroll.is-dragging { cursor: grabbing; }
+  .purchase-items-panel .rb-row { grid-template-columns: 16rem minmax(0, 1fr) 9.5rem !important; }
+  .purchase-items-panel .rb-row .rb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+  /* كل الجداول في كل الصفحات: محتوى الخلايا وعناوين الأعمدة في الوسط */
+  html body.theme-navy .page table :is(th, td):not(#fx) { text-align: center !important; }
+  html body.theme-navy .page table :is(th, td) :is(.money, .money-value):not(#fx) { justify-content: center; }
+}

@@ -45,7 +45,7 @@
         <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
         </span>
-        التكلفة
+        تكلفة المبيعات
       </span>
       <strong class="dash-kpi-value mono">{{ statement.kpis.cogs_display }}</strong>
       <span class="dash-kpi-hint">{{ statement.kpis.cogs_pct_display }} من الإيراد</span>
@@ -65,7 +65,7 @@
         <span class="dash-kpi-ico income-kpi-ico-margin" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg>
         </span>
-        هامش إجمالي
+        هامش مجمل الربح
       </span>
       <strong class="dash-kpi-value mono">{{ statement.kpis.gross_margin_pct_display }}</strong>
       <span class="dash-kpi-hint mono">{{ statement.kpis.gross_profit_display }}</span>
@@ -92,7 +92,7 @@
         <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg>
         </span>
-        مبيعات لم تُرحّل
+        مبيعات غير مرحّلة
       </span>
       <strong class="dash-kpi-value mono">{{ u.amount_display }}</strong>
       <span class="dash-kpi-hint">{{ u.bills_display }} فاتورة{% if u.returns %} · {{ u.returns_display }} مرتجع{% endif %} · نقاط بيع {{ u.pos_amount_display }} + آجل {{ u.bill_amount_display }}</span>
@@ -102,7 +102,7 @@
         <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
         </span>
-        تكلفتها التقديرية
+        التكلفة التقديرية
       </span>
       <strong class="dash-kpi-value mono">{{ u.cost_display }}</strong>
       <span class="dash-kpi-hint">بمتوسط التكلفة الحالي</span>
@@ -112,7 +112,7 @@
         <span class="dash-kpi-ico income-kpi-ico-margin" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg>
         </span>
-        هامشها التقديري
+        هامش الربح التقديري
       </span>
       <strong class="dash-kpi-value mono">{{ u.margin_pct_display }}</strong>
       <span class="dash-kpi-hint mono">{{ u.gross_display }}</span>

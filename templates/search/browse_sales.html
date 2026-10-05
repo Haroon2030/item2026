@@ -9,7 +9,6 @@
 <section class="dash-head" aria-label="تحليل المبيعات">
   <div class="dash-head-copy">
     <h2>تحليل المبيعات</h2>
-    <p>أرقام صافية بعد المرتجع · مبيعات أونكس للفترة · نقاط البيع · الآجل · المجموعات</p>
   </div>
   {% if dashboard %}
   <div class="dash-head-actions">
@@ -32,23 +31,24 @@
   {% if dashboard.scope_label and dashboard.scope_label != "كل الفروع والمجموعات" %}
     <p class="sales-ov-scope">النطاق: {{ dashboard.scope_label }}</p>
   {% endif %}
+  <div class="sales-ov-board">
   <section class="sales-ov-kpis" aria-label="ملخص نقاط البيع">
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total sales-ov-grand">
-      <span class="dash-kpi-label">
+      <span class="dash-kpi-label" title="المبيعات قبل خصم المرتجعات — الصافي بعد المرتجع في السطر السفلي">
         <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
           <svg viewBox="0 0 48 48"><rect x="5" y="8" width="33" height="31" rx="3"/><path d="M5 15h33M9.5 11.5h.01M13 11.5h.01M16.5 11.5h.01"/><rect x="9.5" y="19" width="8" height="7"/><path d="M21 21h12M21 25h8M10 33h14"/><path d="M31.5 42l-4.2.9.9-4.2L38.5 28.4a2.2 2.2 0 0 1 3.1 3.1z"/></svg>
         </span>
-        إجمالي المبيعات (شامل المرتجعات)
+        إجمالي المبيعات
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.combined_gross %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.combined_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.combined_sales }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-pos">
-      <span class="dash-kpi-label">
+      <span class="dash-kpi-label" title="مبيعات نقاط البيع قبل خصم المرتجعات">
         <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
           <svg viewBox="0 0 48 48"><rect x="4.5" y="7" width="39" height="26" rx="4"/><path d="M16 41.5h16M24 33v8.5"/><path d="M13 14h3.2l2.6 9.5h10.4l2.2-7.5H17.4"/><circle cx="20.5" cy="27" r="1.3"/><circle cx="28" cy="27" r="1.3"/></svg>
         </span>
-        مبيعات نقاط البيع (شامل المرتجعات)
+        مبيعات نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_gross_before_returns %}</strong>
       <span class="dash-kpi-hint mono" title="شامل الضريبة · بعد خصم مرتجعات {{ dashboard.kpis.pos_returns }} — قبل الخصم {{ dashboard.kpis.pos_gross_before_returns }} (يطابق تقرير أونكس)">{{ dashboard.kpis.pos_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.pos_sales }}</span>
@@ -58,27 +58,27 @@
         <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
           <svg viewBox="0 0 48 48"><rect x="6" y="7" width="36" height="34" rx="3"/><path d="M6 14.500h36M11 10.800h.01M15 10.800h.01M19 10.800h.01"/><path d="M24 20v12M19 27.500l5 5 5-5M17 37h14"/></svg>
         </span>
-        مرتجع نقاط البيع
+        مرتجعات نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_returns %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.pos_return_bills }} فاتورة مرتجع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns dash-kpi-glass-wholesale-returns">
-      <span class="dash-kpi-label">
+      <span class="dash-kpi-label" title="مرتجعات نظام المبيعات (آجل + نقدي)">
         <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
           <svg viewBox="0 0 48 48"><path d="M24 6l18 6-18 6-18-6zM6 12v22l18 8 18-8V12M24 18v24M6 12l7-4.500M42 12l-7-4.500"/></svg>
         </span>
-        مرتجع نظام المبيعات (آجل + نقدي)
+        مرتجعات نظام المبيعات
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_returns %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_return_bills }} فاتورة مرتجع</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-wholesale">
-      <span class="dash-kpi-label">
+      <span class="dash-kpi-label" title="مبيعات الجملة (الآجل) قبل خصم المرتجعات">
         <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
           <svg viewBox="0 0 48 48"><rect x="7" y="7" width="34" height="34" rx="1.5"/><path d="M13 16h9M13 22h20M13 28h13M13 34h9"/></svg>
         </span>
-        إجمالي مبيعات الجملة (شامل المرتجعات)
+        مبيعات الجملة
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.wholesale_gross %}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.kpis.wholesale_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.wholesale_sales }}</span>
@@ -91,7 +91,7 @@
         <span class="dash-kpi-ico dash-kpi-ico-visit" aria-hidden="true">
           <svg viewBox="0 0 48 48"><circle cx="16" cy="15.500" r="6"/><path d="M5 38.500c0-8.500 4.600-12.500 11-12.500s11 4 11 12.500z"/><circle cx="31.500" cy="14.500" r="5.500"/><path d="M29 26.300c8-1 14 2.200 14.500 12.200H31"/></svg>
         </span>
-        أكثر فرع زيارة
+        أعلى الفروع فواتيراً
       </span>
       <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_visit_branch.code }}">{{ dashboard.ranks.top_visit_branch.name }}</strong>
       <span class="dash-kpi-hint mono">{{ dashboard.ranks.top_visit_branch.value_display }} فاتورة · {{ dashboard.ranks.top_visit_branch.hint }}</span>
@@ -101,52 +101,35 @@
         <span class="dash-kpi-ico dash-kpi-ico-branches" aria-hidden="true">
           <svg viewBox="0 0 48 48"><path d="M9 8.500h30l2.400 7H6.600z"/><path d="M6.600 15.500c1 2.600 3.400 2.600 4.400 0 1 2.600 3.400 2.600 4.400 0 1 2.600 3.400 2.600 4.400 0 1 2.600 3.400 2.600 4.400 0 1 2.600 3.400 2.600 4.400 0 1 2.600 3.400 2.600 4.400 0"/><path d="M10 20.500V41h28V20.500"/><rect x="14" y="25" width="12" height="9" rx="1"/><path d="M30.500 25H36v16h-5.500z"/></svg>
         </span>
-        أكثر فرع مبيعات
+        أعلى الفروع مبيعاً
       </span>
       <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_sales_branch.code }}">{{ dashboard.ranks.top_sales_branch.name }}</strong>
       <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_sales_branch.value_display != "—" %}{% money dashboard.ranks.top_sales_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_sales_branch.hint }}</span>
     </article>
-    <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns dash-kpi-ranked">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
-          <svg viewBox="0 0 48 48"><rect x="6" y="7" width="36" height="34" rx="3"/><path d="M6 14.500h36M11 10.800h.01M15 10.800h.01M19 10.800h.01"/><path d="M24 20v12M19 27.500l5 5 5-5M17 37h14"/></svg>
-        </span>
-        أكثر فرع إرجاع
-      </span>
-      <strong class="dash-kpi-value" title="{{ dashboard.ranks.top_return_branch.code }}">{{ dashboard.ranks.top_return_branch.name }}</strong>
-      <span class="dash-kpi-hint mono">{% if dashboard.ranks.top_return_branch.value_display != "—" %}{% money dashboard.ranks.top_return_branch.value_display %}{% else %}—{% endif %} · {{ dashboard.ranks.top_return_branch.hint }}</span>
-    </article>
   </section>
+  </div>
 {% endif %}
 
-<form method="get" action="{% url 'browse_sales' %}" class="sales-ov-filter dash-panel-glass" role="search">
-  <div class="field">
-    <label for="sales-from">من</label>
-    <input id="sales-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required>
-  </div>
-  <div class="field">
-    <label for="sales-to">إلى</label>
-    <input id="sales-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required>
-  </div>
-  <div class="field">
-    <label for="sales-branch">الفرع</label>
+<form method="get" action="{% url 'browse_sales' %}" class="sales-ov-filter" role="search">
+  <label class="fl-field" for="sales-from"><span>من</span><input id="sales-from" type="date" name="date_from" value="{{ date_from|default:default_from }}" required></label>
+  <label class="fl-field" for="sales-to"><span>إلى</span><input id="sales-to" type="date" name="date_to" value="{{ date_to|default:default_to }}" required></label>
+  <label class="fl-field" for="sales-branch"><span>الفرع</span>
     <select id="sales-branch" name="branch">
       <option value="">كل الفروع</option>
       {% for b in branches %}
         <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
       {% endfor %}
     </select>
-  </div>
-  <div class="field">
-    <label for="sales-group">المجموعة</label>
+  </label>
+  <label class="fl-field" for="sales-group"><span>المجموعة</span>
     <select id="sales-group" name="group">
       <option value="">كل المجموعات</option>
       {% for g in groups %}
         <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
       {% endfor %}
     </select>
-  </div>
-  <button type="submit" class="btn-primary">تحليل المبيعات</button>
+  </label>
+  <button type="submit" class="fl-go">عرض</button>
 </form>
 
 {% if dashboard %}
@@ -155,7 +138,6 @@
       <div class="dash-panel-head">
         <div>
           <h3>مبيعات نقاط البيع</h3>
-          <p class="sales-ov-sub">صافي بعد المرتجع · مرجع الفترة لنقاط البيع</p>
         </div>
         <span class="result-pill">{{ dashboard.pos.branches|length }}</span>
       </div>
@@ -207,7 +189,6 @@
       <div class="dash-panel-head">
         <div>
           <h3>مبيعات نظام المبيعات</h3>
-          <p class="sales-ov-sub">آجل (4/8) + نقدي فواتير يزيد عن نقاط البيع فقط · بلا دمج نقدي POS</p>
         </div>
         <span class="result-pill">{{ dashboard.wholesale.branches|length }}</span>
       </div>
@@ -336,7 +317,6 @@
           </span>
           <div>
             <h3>الفروع الأكثر مرتجعاً</h3>
-            <p class="sales-ov-sub">نسبة المرتجع من مبيعات الفرع (مبيعات + مرتجع) · إجمالي {% money dashboard.top_returns.total_display %}</p>
           </div>
           <span class="result-pill">{{ dashboard.top_returns.count }}</span>
         </div>

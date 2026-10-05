@@ -42,7 +42,7 @@
         <span class="dash-kpi-ico vt-ico-vendors" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </span>
-        الأصناف
+        عدد الأصناف
       </span>
       <strong class="dash-kpi-value mono">{{ item_detail.kpis.item_count_display }}</strong>
       <span class="dash-kpi-hint">{{ item_detail.vendor_code }}</span>
@@ -52,7 +52,7 @@
         <span class="dash-kpi-ico vt-ico-recv" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
         </span>
-        وارد كرتون
+        الوارد بالكرتون
       </span>
       <strong class="dash-kpi-value mono">{{ item_detail.kpis.recv_qty_display }}</strong>
       <span class="dash-kpi-hint">صافي توريد المورد</span>
@@ -62,7 +62,7 @@
         <span class="dash-kpi-ico vt-ico-sold" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
         </span>
-        مباع كرتون
+        المباع بالكرتون
       </span>
       <strong class="dash-kpi-value mono">{{ item_detail.kpis.sold_qty_display }}</strong>
       <span class="dash-kpi-hint">منسوب لتوريد المورد</span>
@@ -72,7 +72,7 @@
         <span class="dash-kpi-ico vt-ico-turn" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
         </span>
-        الدوران
+        معدل الدوران
       </span>
       <strong class="dash-kpi-value mono">{{ item_detail.kpis.turnover_display }}</strong>
       <span class="dash-kpi-hint">مباع ÷ وارد</span>
@@ -82,7 +82,7 @@
         <span class="dash-kpi-ico vt-ico-costadj" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
         </span>
-        خصم تكليف
+        أصناف بتسوية تكاليف
       </span>
       <strong class="dash-kpi-value mono">{{ item_detail.kpis.cost_adj_count_display|default:"0" }}</strong>
       <span class="dash-kpi-hint">أصناف عليها تسوية تكاليف</span>
@@ -221,7 +221,7 @@
         <span class="dash-kpi-ico vt-ico-vendors" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </span>
-        الموردون
+        عدد الموردين
       </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.vendor_count_display }}</strong>
       <span class="dash-kpi-hint">{{ report.period_label }}</span>
@@ -231,7 +231,7 @@
         <span class="dash-kpi-ico vt-ico-recv" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
         </span>
-        وارد كرتون
+        الوارد بالكرتون
       </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.recv_qty_display }}</strong>
       <span class="dash-kpi-hint">صافي الشراء − المرتجع</span>
@@ -241,7 +241,7 @@
         <span class="dash-kpi-ico vt-ico-sold" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
         </span>
-        مباع كرتون
+        المباع بالكرتون
       </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.sold_qty_display }}</strong>
       <span class="dash-kpi-hint">منسوب لتوريد الفترة</span>
@@ -251,7 +251,7 @@
         <span class="dash-kpi-ico vt-ico-turn" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
         </span>
-        متوسط الدوران
+        متوسط معدل الدوران
       </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.turnover_display }}</strong>
       <span class="dash-kpi-hint">مباع ÷ وارد</span>
@@ -271,7 +271,7 @@
         <span class="dash-kpi-ico vt-ico-settle" aria-hidden="true">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.2 2.2 4.8-5"/></svg>
         </span>
-        يستحق سداد
+        موردون مستحقو السداد
       </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.settle_count }}</strong>
       <span class="dash-kpi-hint">≥ {{ report.thresholds.settle|floatformat:0 }}%</span>
@@ -281,7 +281,7 @@
         <span class="dash-kpi-ico vt-ico-hold" aria-hidden="true">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
         </span>
-        لا يستحق
+        موردون غير مستحقين
       </span>
       <strong class="dash-kpi-value mono">{{ report.kpis.hold_count }}</strong>
       <span class="dash-kpi-hint">&lt; {{ report.thresholds.partial|floatformat:0 }}% · جزئي {{ report.kpis.partial_count }}</span>

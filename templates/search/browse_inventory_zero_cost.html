@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}مخزون بتكلفة صفرية{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash izc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="مخزون بتكلفة صفرية">
+  <div class="dash-head-copy">
+    <h2>أصناف لها رصيد وتكلفتها صفر</h2>
+    <p class="sales-ov-sub">رصيد يُقيَّم بصفر فينقص قيمة المخزون ويُشوّه الهامش</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_inventory_zero_cost' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="izc-branch">الفرع</label>
+    <select id="izc-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="izc-wh">المخزن</label>
+    <select id="izc-wh" name="warehouse">
+      <option value="">كل المخازن</option>
+      {% for w in warehouses %}
+        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.code }} - {{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="izc-group">المجموعة</label>
+    <select id="izc-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <section class="purchase-kpis pr-return-kpis" aria-label="مؤشرات المخزون بتكلفة صفرية">
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label"><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4"/></svg></span>عدد الأصناف</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.items }}</strong>
+      <span class="dash-kpi-hint">{{ report.kpis.rows }} صف رصيد (صنف × مخزن)</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label"><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/></svg></span>عدد المخازن</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.warehouses }}</strong>
+      <span class="dash-kpi-hint">في {{ report.kpis.branches }} فرع</span>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass purchase-kpi">
+      <span class="dash-kpi-label"><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.500l2.500 2.500L16 9.500"/></svg></span>تكلفة متاحة للنقل</span>
+      <strong class="dash-kpi-value mono">{{ report.kpis.fixable }}</strong>
+      <span class="dash-kpi-hint">لها تكلفة أولية أو في بطاقة الصنف</span>
+    </article>
+  </section>
+
+  <section class="dash-panel dash-panel-glass" aria-label="الأصناف ذات الرصيد والتكلفة الصفرية">
+    <div class="dash-panel-head">
+      <div>
+        <h3>الأصناف</h3>
+        <p class="sales-ov-sub">
+          مرتبة حسب الفرع ثم المخزن ثم الكمية{% if report.truncated %} · عُرض أول {{ report.limit }} صفاً من {{ report.total_rows }}{% endif %}
+        </p>
+        <p class="sales-ov-sub">الكمية = الرصيد الدفتري · التكلفة = متوسط تكلفة المخزن (وإلا التكلفة الأولية) وهي صفر · يُستثنى الخدمي والمخزن المعطّل.</p>
+      </div>
+      <span class="result-pill">{{ report.rows|length }} صف</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table sales-table" aria-label="أصناف لها رصيد وتكلفتها صفر">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>رقم الصنف</th>
+            <th>اسم الصنف</th>
+            <th>المجموعة</th>
+            <th>الفرع</th>
+            <th>المخزن</th>
+            <th>الوحدة</th>
+            <th>الكمية</th>
+            <th>التكلفة الأولية</th>
+            <th>تكلفة البطاقة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td class="mono">{{ r.code }}</td>
+            <td class="tc-name">{{ r.name }}</td>
+            <td>{{ r.group }}</td>
+            <td>{{ r.branch }}</td>
+            <td>{{ r.warehouse_code }} - {{ r.warehouse }}</td>
+            <td>{{ r.unit }}</td>
+            <td class="mono">{{ r.qty_display }}</td>
+            <td class="mono">{{ r.primary_display }}</td>
+            <td class="mono">{{ r.card_display }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="10">لا توجد أصناف برصيد وتكلفة صفرية ضمن هذه الفلاتر.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+  (function () {
+    var branch = document.getElementById("izc-branch");
+    var wh = document.getElementById("izc-wh");
+    if (!branch || !wh) return;
+    function sync() {
+      var b = branch.value;
+      Array.prototype.forEach.call(wh.options, function (o) {
+        if (!o.value) return;
+        var show = !b || o.getAttribute("data-branch") === b;
+        o.hidden = !show;
+        o.disabled = !show;
+      });
+      if (wh.selectedOptions[0] && wh.selectedOptions[0].disabled) wh.value = "";
+    }
+    branch.addEventListener("change", sync);
+    sync();
+  })();
+</script>
+{% endblock %}

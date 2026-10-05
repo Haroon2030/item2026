@@ -14,6 +14,7 @@ urlpatterns = [
     path('browse/', views.browse_groups, name='browse_groups'),
     path('inventory/', views.browse_inventory, name='browse_inventory'),
     path('inventory/unsold/', views.browse_unsold, name='browse_unsold'),
+    path('inventory/zero-cost/', views.browse_inventory_zero_cost, name='browse_inventory_zero_cost'),
     path('inventory/last-movement/', views.browse_last_movement, name='browse_last_movement'),
     path('inventory/last-movement/api/', views.browse_last_movement_api, name='browse_last_movement_api'),
     path('inventory/last-movement/purchases/', views.browse_last_purchases_api, name='browse_last_purchases_api'),
@@ -124,6 +125,7 @@ urlpatterns = [
     ),
     path('suppliers/', views.browse_suppliers, name='browse_suppliers'),
     path('sales/search/', views.sales_search, name='sales_search'),
+    path('sales/zero-cost/', views.browse_sales_zero_cost, name='browse_sales_zero_cost'),
     path('sales/performance/', views.browse_performance, name='browse_performance'),
     path(
         'sales/no-supply/',

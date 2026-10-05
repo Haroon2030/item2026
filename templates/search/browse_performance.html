@@ -161,7 +161,7 @@
           <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
           </span>
-          مبيعات أ
+          مبيعات الفترة أ
         </span>
         <strong class="dash-kpi-value mono">{% money insights.kpis.sales %}</strong>
         <span class="dash-kpi-hint mono {% if insights.kpis.sales_delta is not None and insights.kpis.sales_delta < 0 %}is-down{% elif insights.kpis.sales_delta is not None and insights.kpis.sales_delta > 0 %}is-up{% endif %}">
@@ -173,7 +173,7 @@
           <span class="dash-kpi-ico dash-kpi-ico-wholesale" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
           </span>
-          فواتير أ
+          فواتير الفترة أ
         </span>
         <strong class="dash-kpi-value mono">{{ insights.kpis.invoices }}</strong>
         <span class="dash-kpi-hint mono {% if insights.kpis.invoices_delta is not None and insights.kpis.invoices_delta < 0 %}is-down{% elif insights.kpis.invoices_delta is not None and insights.kpis.invoices_delta > 0 %}is-up{% endif %}">{{ insights.kpis.invoices_delta_display }} vs ب</span>
@@ -183,7 +183,7 @@
           <span class="dash-kpi-ico dash-kpi-ico-returns" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.2v5.2h5.2"/></svg>
           </span>
-          مرتجع أ
+          مرتجعات الفترة أ
         </span>
         <strong class="dash-kpi-value mono">{% money insights.kpis.returns %}</strong>
         <span class="dash-kpi-hint mono {% if insights.kpis.returns_delta is not None and insights.kpis.returns_delta < 0 %}is-down{% elif insights.kpis.returns_delta is not None and insights.kpis.returns_delta > 0 %}is-up{% endif %}">{{ insights.kpis.returns_delta_display }} vs ب</span>
@@ -203,7 +203,7 @@
           <span class="dash-kpi-ico dash-kpi-ico-pos" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M3 6h2l2.4 10.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.5L20.5 9H7"/><circle cx="10" cy="20" r="1.1"/><circle cx="17" cy="20" r="1.1"/></svg>
           </span>
-          متوسط السلة
+          متوسط الفاتورة
         </span>
         <strong class="dash-kpi-value mono">{% money insights.kpis.avg_basket %}</strong>
         <span class="dash-kpi-hint mono {% if insights.kpis.avg_basket_delta is not None and insights.kpis.avg_basket_delta < 0 %}is-down{% elif insights.kpis.avg_basket_delta is not None and insights.kpis.avg_basket_delta > 0 %}is-up{% endif %}">{{ insights.kpis.avg_basket_delta_display }} vs ب</span>
@@ -213,7 +213,7 @@
           <span class="dash-kpi-ico dash-kpi-ico-sellers" aria-hidden="true">
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M8 13h3M8 16h5"/></svg>
           </span>
-          صفوف المقارنة
+          عدد صفوف المقارنة
         </span>
         <strong class="dash-kpi-value mono">{{ insights.compare_table|length }}</strong>
         <span class="dash-kpi-hint">{{ insights.scope_label }}</span>
