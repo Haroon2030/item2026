@@ -1979,6 +1979,62 @@ class PurchaseControlTests(TestCase):
         self.assertContains(ok, 'value="8053"')
         self.assertContains(bad, 'أرقاماً فقط')
 
+    def test_match_session_picks_live_session_and_handles_ended(self):
+        import datetime as dt
+
+        from search.oracle_purchase_control import match_sessions_for_rows
+
+        T = lambda h, m: dt.datetime(2026, 10, 3, h, m)
+        events = [
+            {'T': T(8, 19), 'TYP': 1, 'TERM': 'ALRASHEED=', 'SID': 356, 'AUD': 1001},
+            {'T': T(8, 44), 'TYP': 0, 'TERM': 'ALRASHEED=', 'SID': 356, 'AUD': 1001},   # خروج
+            {'T': T(8, 45), 'TYP': 1, 'TERM': 'ALRASHEED=', 'SID': 445, 'AUD': 1002},
+            {'T': T(8, 26), 'TYP': 1, 'TERM': 'DESKTOP-O6C87I8=', 'SID': 989, 'AUD': 1003},
+        ]
+        live = {(445, 1002): {'OSUSER': 'user27', 'MACHINE': 'RASHEED\APPHQ\x00', 'LOGON_TIME': T(8, 45)}}
+        rows = [
+            {'AD_DATE': T(11, 45), 'TERMINAL': 'ALRASHEED'},        # جلسة 445 حيّة
+            {'AD_DATE': T(8, 30), 'TERMINAL': 'ALRASHEED'},         # جلسة 356 قبل خروجها: انتهت (غير حيّة)
+            {'AD_DATE': T(9, 52), 'TERMINAL': 'DESKTOP-O6C87I8'},   # جلسة 989 غير حيّة الآن
+            {'AD_DATE': T(7, 0), 'TERMINAL': 'ALRASHEED'},          # قبل أي دخول
+            {'AD_DATE': T(12, 0), 'TERMINAL': 'ANOTHER'},           # جهاز لا دخول له
+            {'AD_DATE': None, 'TERMINAL': 'ALRASHEED'},
+        ]
+        out = match_sessions_for_rows(rows, events, live)
+        self.assertEqual(out[0], {'state': 'live', 'osuser': 'user27', 'server': 'APPHQ'})
+        self.assertEqual(out[1]['state'], 'ended')
+        self.assertEqual(out[2]['state'], 'ended')
+        self.assertEqual([o['state'] for o in out[3:]], ['none', 'none', 'none'])
+
+    def test_live_session_started_after_invoice_is_not_used(self):
+        import datetime as dt
+
+        from search.oracle_purchase_control import match_sessions_for_rows
+
+        events = [{'T': dt.datetime(2026, 10, 3, 8, 0), 'TYP': 1, 'TERM': 'HP=', 'SID': 5, 'AUD': 9}]
+        live = {(5, 9): {'OSUSER': 'user1', 'MACHINE': 'X\S', 'LOGON_TIME': dt.datetime(2026, 10, 4, 9, 0)}}
+        out = match_sessions_for_rows([{'AD_DATE': dt.datetime(2026, 10, 3, 10, 0), 'TERMINAL': 'HP'}], events, live)
+        self.assertEqual(out[0]['state'], 'ended')   # SID أُعيد استخدامه لجلسة أحدث
+
+    def test_session_sql_bind_names_valid_and_read_only(self):
+        import re
+        from datetime import datetime
+
+        from search import oracle_purchase_control as pc
+
+        captured = []
+        with patch.object(pc, '_fetch_all', lambda sql, params=None: captured.append((sql, dict(params or {}))) or []):
+            pc._fetch_login_events('814', datetime(2026, 10, 1), datetime(2026, 10, 3))
+            pc._fetch_live_sessions([1, 2, 3])
+        reserved = {'uid', 'user', 'date', 'level', 'rowid', 'rownum', 'sysdate', 'null', 'number'}
+        self.assertEqual(len(captured), 2)
+        for sql, params in captured:
+            names = set(re.findall(r':([A-Za-z_][A-Za-z0-9_]*)', sql))
+            self.assertFalse(names & reserved)
+            self.assertLessEqual(names, set(params))
+            self.assertTrue(sql.lstrip().upper().startswith('SELECT'))
+        self.assertNotIn('PASSWORD', ' '.join(c[0].upper() for c in captured))
+
     def test_screens_require_login_and_render(self):
         for name in ('browse_purchase_control', 'browse_purchase_control_details'):
             self.assertEqual(self.client.get(reverse(name)).status_code, 302)

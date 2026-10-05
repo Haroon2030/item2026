@@ -275,6 +275,110 @@ def _fetch_detail(
     return rows, (totals[0] if totals else {})
 
 
+# ——— جلسة Windows الريموت وقت إضافة الفاتورة (قراءة لحظية فقط، لا تخزين) ———
+#
+# سجل دخول أونكس IAS_USR_LGN_HSTRY يحفظ لكل دخول رقم جلسة Oracle (SESSION_SID/SESSION_AUDSID)
+# واسم جهاز العميل، وV$SESSION يعرض مستخدم Windows (OSUSER) والخادم (MACHINE) للجلسات الحيّة فقط.
+# فنربط الفاتورة بآخر دخول لمستخدمها على جهازها قبل وقت إضافتها، ثم نقرأ الجلسة إن كانت حيّة.
+
+SESSION_LOOKBACK_DAYS = 7
+SESSION_MAX_IDS = 300
+
+
+def _norm_term(value: Any) -> str:
+    return str(value or "").replace("\x00", "").strip().rstrip("=").strip().upper()
+
+
+def _fetch_login_events(user_id: str, t_from, t_to) -> list[dict]:
+    return _fetch_all(
+        f"""
+        SELECT LGN_OUT_DATE AS T, LGN_TYP AS TYP, TRMNL_NM AS TERM,
+               SESSION_SID AS SID, SESSION_AUDSID AS AUD
+        FROM {_schema()}.IAS_USR_LGN_HSTRY
+        WHERE U_ID = :p_user AND LGN_OUT_DATE >= :t0 AND LGN_OUT_DATE <= :t1
+        ORDER BY LGN_OUT_DATE
+        """,
+        {"p_user": int(user_id), "t0": t_from, "t1": t_to},
+    )
+
+
+def _fetch_live_sessions(audsids: list[int]) -> dict[tuple, dict]:
+    """جلسات Oracle الحيّة الآن لمعرّفات محددة: (SID, AUDSID) ← مستخدم Windows والخادم."""
+    ids = sorted({int(a) for a in audsids if a is not None})[:SESSION_MAX_IDS]
+    if not ids:
+        return {}
+    params = {f"a{i}": v for i, v in enumerate(ids)}
+    rows = _fetch_all(
+        f"""
+        SELECT SID, AUDSID, OSUSER, MACHINE, LOGON_TIME
+        FROM V$SESSION
+        WHERE TYPE = 'USER' AND AUDSID IN ({", ".join(":" + k for k in params)})
+        """,
+        params,
+    )
+    return {(r["SID"], r["AUDSID"]): r for r in rows}
+
+
+def match_session(added_at, terminal: Any, logouts: dict, logins: list[dict], live: dict) -> dict:
+    """جلسة المستخدم وقت إضافة الفاتورة.
+
+    state: live = الجلسة حيّة ومعروف مستخدم Windows · ended = وُجد دخول لكن الجلسة انتهت ·
+    none = لا دخول معروف لهذا الجهاز قبل الوقت."""
+    if not added_at:
+        return {"state": "none"}
+    term = _norm_term(terminal)
+    pick = None
+    for e in logins:  # مرتبة زمنياً
+        t = e.get("T")
+        if not t or t > added_at or _norm_term(e.get("TERM")) != term:
+            continue
+        key = (e.get("SID"), e.get("AUD"))
+        if any(t <= x <= added_at for x in logouts.get(key, ())):
+            continue  # أُغلقت هذه الجلسة قبل الفاتورة
+        pick = e
+    if pick is None:
+        return {"state": "none"}
+    lv = live.get((pick.get("SID"), pick.get("AUD")))
+    started = lv.get("LOGON_TIME") if lv else None
+    if not lv or (started and started > added_at):
+        return {"state": "ended"}
+    machine = str(lv.get("MACHINE") or "").replace("\x00", "").strip()
+    return {
+        "state": "live",
+        "osuser": str(lv.get("OSUSER") or "").strip(),
+        "server": machine.rsplit("\\", 1)[-1] or machine,
+    }
+
+
+def match_sessions_for_rows(rows: list[dict], events: list[dict], live: dict) -> list[dict]:
+    logins = [e for e in events if _int(e.get("TYP")) == 1]
+    logouts: dict[tuple, list] = {}
+    for e in events:
+        if _int(e.get("TYP")) == 0 and e.get("T"):
+            logouts.setdefault((e.get("SID"), e.get("AUD")), []).append(e["T"])
+    return [
+        match_session(r.get("AD_DATE"), r.get("TERMINAL"), logouts, logins, live)
+        for r in rows
+    ]
+
+
+def _resolve_sessions(rows: list[dict], user_id: str) -> list[dict]:
+    """ربط كل صف بجلسته. أي فشل في قراءة الجلسات لا يُسقط الشاشة (يعود «غير معروف»)."""
+    blank = [{"state": "none"} for _ in rows]
+    times = [r["AD_DATE"] for r in rows if r.get("AD_DATE")]
+    if not user_id or not times:
+        return blank
+    try:
+        events = _fetch_login_events(
+            user_id, min(times) - timedelta(days=SESSION_LOOKBACK_DAYS), max(times)
+        )
+        live = _fetch_live_sessions([e.get("AUD") for e in events if _int(e.get("TYP")) == 1])
+        return match_sessions_for_rows(rows, events, live)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("session resolve failed: %s", exc)
+        return blank
+
+
 def assemble_details(
     rows: list[dict],
     totals: dict,
@@ -284,9 +388,11 @@ def assemble_details(
     user_names: dict[str, str],
     warehouse_names: dict[str, str],
     limit: int,
+    sessions: list[dict] | None = None,
 ) -> dict[str, Any]:
     invoices = []
-    for r in rows:
+    for idx, r in enumerate(rows):
+        sess = (sessions[idx] if sessions and idx < len(sessions) else None) or {"state": "none"}
         d = r.get("BILL_DATE")
         branch = _norm_brn_code(r.get("BRANCH_CODE"))
         wh = str(r.get("W_CODE") or "").strip()
@@ -304,6 +410,9 @@ def assemble_details(
                 "warehouse": warehouse_names.get(wh) or wh or "-",
                 "amount_display": _money(r.get("AMT")),
                 "posted": bool(_int(r.get("POSTED"))),
+                "session_state": sess["state"],
+                "session_user": sess.get("osuser", ""),
+                "session_server": sess.get("server", ""),
             }
         )
     total_n = _int(totals.get("N"))
@@ -356,11 +465,13 @@ def build_purchase_control_details(
         limit=lim,
     )
     user_names = _user_names()
+    sessions = _resolve_sessions(rows, uid)
     report = assemble_details(
         rows,
         totals,
         kind=kind,
         branch_names=_branch_names(),
+        sessions=sessions,
         user_names=user_names,
         warehouse_names=_warehouse_names(),
         limit=lim,

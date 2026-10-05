@@ -38,6 +38,7 @@
           {{ report.count }} فاتورة · {{ report.amount }}
           {% if report.truncated %} · عُرض أحدث {{ report.limit }} فقط{% endif %}
         </p>
+        <p class="sales-ov-sub">«مستخدم Windows» و«الخادم الطرفي» يُقرآن لحظياً من جلسات Oracle الحيّة ولا يُخزَّن شيء؛ الجلسة المنتهية تظهر «انتهت الجلسة».</p>
       </div>
       <span class="result-pill">{{ report.invoices|length }} / {{ report.count }}</span>
     </div>
@@ -51,6 +52,8 @@
             <th>المورد</th>
             <th>المدخل</th>
             <th>الجهاز</th>
+            <th>مستخدم Windows</th>
+            <th>الخادم الطرفي</th>
             <th>وقت الإضافة</th>
             <th>الفرع</th>
             <th>المخزن</th>
@@ -67,6 +70,8 @@
             <td>{{ r.vendor }}</td>
             <td>{{ r.user }}</td>
             <td class="mono">{{ r.terminal }}</td>
+            <td class="mono">{% if r.session_state == 'live' %}{{ r.session_user }}{% elif r.session_state == 'ended' %}<span class="pctl-muted">انتهت الجلسة</span>{% else %}—{% endif %}</td>
+            <td class="mono">{% if r.session_state == 'live' %}{{ r.session_server }}{% else %}—{% endif %}</td>
             <td class="mono">{{ r.added_at }}</td>
             <td>{{ r.branch }}</td>
             <td>{{ r.warehouse }}</td>
@@ -74,7 +79,7 @@
             <td>{% if r.posted %}مرحّلة{% else %}غير مرحّلة{% endif %}</td>
           </tr>
           {% empty %}
-          <tr><td colspan="11">لا توجد فواتير.</td></tr>
+          <tr><td colspan="13">لا توجد فواتير.</td></tr>
           {% endfor %}
         </tbody>
       </table>
