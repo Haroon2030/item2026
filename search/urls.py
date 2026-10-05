@@ -165,6 +165,8 @@ urlpatterns = [
         name='browse_wh_no_transfer',
     ),
     path('sync-barcodes/', views.sync_barcodes, name='sync_barcodes'),
+    path('settings/connection/', user_views.connection_settings, name='connection_settings'),
+    path('settings/connection/test/', user_views.connection_test, name='connection_test'),
     path('users/', user_views.user_list, name='user_list'),
     path('users/activity/', user_views.user_activity, name='user_activity'),
     path('users/add/', user_views.user_create, name='user_create'),

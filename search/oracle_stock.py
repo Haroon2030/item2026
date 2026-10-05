@@ -406,8 +406,7 @@ def _groups_sql_mode() -> str:
 
 
 def use_oracle_stock() -> bool:
-    source = (getattr(settings, "STOCK_QTY_SOURCE", "api") or "api").strip().lower()
-    return oracle_enabled() and source == "oracle"
+    return oracle_enabled()
 
 
 def _cfg() -> dict:
@@ -474,7 +473,7 @@ def _oracle_dsn() -> tuple[str, str, str]:
     service = str(cfg.get("SERVICE_NAME") or "").strip()
     sid = str(cfg.get("SID") or "").strip()
     if not (user and password and host and (service or sid)):
-        raise OracleStockError("إعدادات أوراكل غير مكتملة.")
+        raise OracleStockError("إعدادات أوراكل غير مكتملة — أضفها من شاشة «إعدادات الربط».")
     _init_thick_client()
     opts = _connect_kwargs()
     tcp_timeout = int(opts["tcp_connect_timeout"])
@@ -688,9 +687,9 @@ def _release_conn(conn) -> None:
 def _schema() -> str:
     schema = str(_cfg().get("SCHEMA") or "").strip()
     if not schema:
-        raise OracleStockError("ORACLE_SCHEMA مطلوب.")
+        raise OracleStockError("مخطط أوراكل (Schema) غير مضبوط — أضفه من شاشة «إعدادات الربط».")
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_$#]*", schema):
-        raise OracleStockError("ORACLE_SCHEMA غير صالح.")
+        raise OracleStockError("مخطط أوراكل (Schema) غير صالح.")
     return schema
 
 

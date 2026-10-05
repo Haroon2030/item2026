@@ -77,7 +77,7 @@ class UserNavPermission(models.Model):
 
 
 class ItemBarcode(models.Model):
-    """ربط الباركود برقم الصنف من GetAllItems."""
+    """ربط الباركود برقم الصنف (من أوراكل)."""
 
     barcode = models.CharField('الباركود', max_length=128, db_index=True)
     item_code = models.CharField('رقم الصنف', max_length=64, db_index=True)
@@ -97,7 +97,7 @@ class ItemBarcode(models.Model):
 
 
 class ItemGroup(models.Model):
-    """مجموعات الأصناف من GetAllGroupDet (G_CODE)."""
+    """مجموعات الأصناف من أوراكل (G_CODE)."""
 
     g_code = models.CharField('رمز المجموعة', max_length=64, unique=True)
     g_name = models.CharField('اسم المجموعة', max_length=255, blank=True, default='')
@@ -109,3 +109,29 @@ class ItemGroup(models.Model):
 
     def __str__(self) -> str:
         return f'{self.g_code} — {self.g_name}'
+
+
+class ConnectionSetting(models.Model):
+    """إعدادات الربط بقاعدة أوراكل للعميل + المخازن. صف واحد فقط (pk=1).
+
+    كل بيانات الربط تُدخل من شاشة «إعدادات الربط» وتُحفظ هنا (لا شيء منها في الكود).
+    كلمة سر أوراكل تُحفظ مشفّرة (انظر runtime_config).
+    """
+
+    oracle_host = models.CharField('خادم أوراكل', max_length=200, blank=True, default='')
+    oracle_port = models.PositiveIntegerField('المنفذ', default=1521)
+    oracle_service_name = models.CharField('Service Name', max_length=100, blank=True, default='')
+    oracle_user = models.CharField('مستخدم أوراكل', max_length=100, blank=True, default='')
+    oracle_password_enc = models.TextField('كلمة السر (مشفّرة)', blank=True, default='')
+    oracle_schema = models.CharField('المخطط (Schema)', max_length=60, blank=True, default='')
+    default_warehouse = models.CharField('المخزن الافتراضي', max_length=20, blank=True, default='')
+    compare_warehouses = models.CharField('مخازن المقارنة', max_length=300, blank=True, default='')
+    warehouses_text = models.TextField('قائمة المخازن (كود=اسم)', blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'إعدادات الربط'
+        verbose_name_plural = 'إعدادات الربط'
+
+    def __str__(self) -> str:
+        return f'ربط {self.oracle_host or "—"}/{self.oracle_schema or "—"}'

@@ -145,6 +145,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'search.middleware.RuntimeConfigMiddleware',
     'search.middleware.NavPermissionMiddleware',
     # بعد الجلسة/CSRF حتى لا تُقرأ جسم POST قبل التحقق
     'search.middleware.SqlInjectionGuardMiddleware',
@@ -332,86 +333,34 @@ SEARCH_QUERY_MAX_LEN = int(_env('SEARCH_QUERY_MAX_LEN', '128') or '128')
 SYNC_SECRET = _env('SYNC_SECRET', default='')
 
 # ---------------------------------------------------------------------------
-# إعدادات الربط مع نظام الأصناف عبر API
+# المخازن (تُملأ من شاشة «إعدادات الربط» — لا قيم ثابتة هنا)
 # ---------------------------------------------------------------------------
-EXTERNAL_API = {
-    'BASE_URL': _env(
-        'ONYX_BASE_URL',
-        'http://alrhead.dyndns.ws:8090/Service/OnyxService.svc',
-    ),
-    'SEARCH_PATH': '/GetAllPrice',
-    'METHOD': 'GET',
-    'QUERY_PARAM': 'i_code',
-    'TIMEOUT': int(_env('ONYX_TIMEOUT', '60') or '60'),
-    'QTY_TIMEOUT': int(_env('ONYX_QTY_TIMEOUT', '45') or '45'),
-    'COMPARE_TIMEOUT': int(_env('ONYX_COMPARE_TIMEOUT', '8') or '8'),
-    'COMPARE_CACHE_TTL': int(_env('ONYX_COMPARE_CACHE_TTL', '1800') or '1800'),
-    'RETRIES': int(_env('ONYX_RETRIES', '1') or '1'),
-    'ITEMS_TIMEOUT': int(_env('ONYX_ITEMS_TIMEOUT', '180') or '180'),
-    'ITEMS_PARAMS': {
-        'year': int(_env('ONYX_YEAR', '2026') or '2026'),
-        'active': 1,
-    },
-    'EXTRA_PARAMS': {
-        'year': int(_env('ONYX_YEAR', '2026') or '2026'),
-        'active': 1,
-        'lev_no': _env('ONYX_LEV_NO', '1'),
-        'price_w_code': _env('ONYX_DEFAULT_WAREHOUSE', '60'),
-    },
-    'WAREHOUSES': [
-        {'code': '60', 'name': 'مخزن 60'},
-        {'code': '1201', 'name': 'مخزن 1201'},
-        {'code': '800', 'name': 'مخزن 800'},
-        {'code': '1801', 'name': 'مخزن 1801'},
-        {'code': '1901', 'name': 'مخزن 1901'},
-        {'code': '2001', 'name': 'مخزن 2001'},
-        {'code': '30', 'name': 'مخزن 30'},
-        {'code': '1', 'name': 'مخزن 1'},
-    ],
-    'DEFAULT_WAREHOUSE': _env('ONYX_DEFAULT_WAREHOUSE', '60'),
-    # مخازن مقارنة السعر/التكلفة في بحث الأصناف
-    'COMPARE_WAREHOUSES': [
-        c.strip()
-        for c in (_env('ONYX_COMPARE_WAREHOUSES', '1201,1,30,1901,2001,1801,60,701') or '').split(',')
-        if c.strip()
-    ],
-    'API_KEY': _env('ONYX_API_KEY', ''),
-    'API_KEY_HEADER': _env('ONYX_API_KEY_HEADER', 'Authorization'),
-    'API_KEY_PREFIX': _env('ONYX_API_KEY_PREFIX', 'Bearer'),
-    'RESULTS_PATH': '',
-    'ALLOWED_HOSTS': _env_list(
-        'ONYX_ALLOWED_HOSTS',
-        default=['alrhead.dyndns.ws'],
-    ),
-    'FIELD_MAP': {
-        'code': 'I_CODE',
-        'name': 'I_NAME',
-        'barcode': 'BARCODE',
-        'price': 'I_PRICE',
-        'unit': 'ITM_UNT',
-        'quantity': 'AVL_QTY',
-        'avg_cost': 'I_CWTAVG',
-    },
+ERP_CONFIG = {
+    'WAREHOUSES': [],
+    'DEFAULT_WAREHOUSE': '',
+    'COMPARE_WAREHOUSES': [],
+    'COMPARE_CACHE_TTL': int(_env('COMPARE_CACHE_TTL', '1800') or '1800'),
 }
 
 # ---------------------------------------------------------------------------
-# أوراكل أونكس — قراءة فقط (SELECT) للموجود الحقيقي
+# أوراكل أونكس — قراءة فقط (SELECT). بيانات الاتصال تُضاف من شاشة «إعدادات الربط»؛
+# هنا فقط ضبط الأداء (مهل/مجمّع الاتصالات).
 # ---------------------------------------------------------------------------
 ORACLE = {
-    'ENABLED': _env_bool('ORACLE_ENABLED', default=False),
-    'HOST': _env('ORACLE_HOST', ''),
-    'PORT': int(_env('ORACLE_PORT', '1521') or '1521'),
-    'SERVICE_NAME': _env('ORACLE_SERVICE_NAME', ''),
-    'SID': _env('ORACLE_SID', ''),
-    'USER': _env('ORACLE_USER', ''),
-    'PASSWORD': _env('ORACLE_PASSWORD', ''),
-    'SCHEMA': _env('ORACLE_SCHEMA', ''),
+    'ENABLED': False,
+    'HOST': '',
+    'PORT': 1521,
+    'SERVICE_NAME': '',
+    'SID': '',
+    'USER': '',
+    'PASSWORD': '',
+    'SCHEMA': '',
     'CLIENT_LIB_DIR': _env('ORACLE_CLIENT_LIB_DIR', ''),
     # مهلة فتح TCP بالثواني — قصيرة حتى لا يعلّق الواجهة عند انقطاع VPN
     'TCP_CONNECT_TIMEOUT': int(_env('ORACLE_TCP_CONNECT_TIMEOUT', '30') or '30'),
     'RETRY_COUNT': int(_env('ORACLE_RETRY_COUNT', '3') or '3'),
     'RETRY_DELAY': int(_env('ORACLE_RETRY_DELAY', '2') or '2'),
-    # دقائق: فحص الاتصالات الخاملة في المجمع
+    # دقائق: فحص الاتصالات الخاملة في المجمّع
     'POOL_EXPIRE_TIME': int(_env('ORACLE_POOL_EXPIRE_TIME', '4') or '4'),
     # سقف اتصالات المجمّع (تحليل المخزون يحتاج عدة جلسات متوازية)
     'POOL_MAX': int(_env('ORACLE_POOL_MAX', '12') or '12'),
@@ -422,8 +371,6 @@ ORACLE = {
     # ثوانٍ: استعلام أبطأ من هذا يُسجَّل تحذيراً في السجل
     'SLOW_QUERY_SECONDS': float(_env('ORACLE_SLOW_QUERY_SECONDS', '5') or '5'),
 }
-# oracle = موجود من IAS_ITM_WCODE | api = Avl_Qty من الويب سيرفس
-STOCK_QTY_SOURCE = (_env('STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
 # مبيعات المجموعات: light = أسرع عبر WAN | full = مسح DTL دقيق (بطيء وقد يعلّق السنة)
 GROUPS_SQL_MODE = (_env('GROUPS_SQL_MODE', 'light') or 'light').strip().lower()
 

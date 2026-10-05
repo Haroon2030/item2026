@@ -351,3 +351,112 @@ def user_permissions(request, user_id: int):
             'has_saved': perm is not None,
         },
     )
+
+
+# ——— شاشة الربط (أوراكل + المخازن) ———
+_CONN_TEXT_FIELDS = (
+    'oracle_host', 'oracle_service_name', 'oracle_user', 'oracle_schema',
+    'default_warehouse', 'compare_warehouses', 'warehouses_text',
+)
+
+
+def _conn_form_values(row):
+    values = {f: (getattr(row, f, '') if row else '') for f in _CONN_TEXT_FIELDS}
+    values['oracle_port'] = (row.oracle_port if row else 1521) or 1521
+    values['has_password'] = bool(row and row.oracle_password_enc)
+    return values
+
+
+def _conn_cfg_from_post(post, row):
+    """يبني قاموس اتصال أوراكل من نموذج الشاشة؛ كلمة السر الفارغة = المحفوظة."""
+    from . import runtime_config
+
+    pwd = post.get('oracle_password') or ''
+    if not pwd and row is not None:
+        pwd = runtime_config.decrypt_secret(row.oracle_password_enc)
+    try:
+        port = int((post.get('oracle_port') or '1521').strip() or 1521)
+    except ValueError:
+        port = 1521
+    return {
+        'HOST': (post.get('oracle_host') or '').strip(),
+        'PORT': port,
+        'SERVICE_NAME': (post.get('oracle_service_name') or '').strip(),
+        'USER': (post.get('oracle_user') or '').strip(),
+        'PASSWORD': pwd,
+        'SCHEMA': (post.get('oracle_schema') or '').strip(),
+    }
+
+
+@login_required
+@user_passes_test(_is_staff)
+@require_http_methods(['GET', 'POST'])
+def connection_settings(request):
+    import re
+
+    from django.core.cache import cache
+
+    from . import runtime_config
+    from .models import ConnectionSetting
+
+    row = runtime_config.get_row()
+    if request.method == 'POST':
+        errors = []
+        cfg = _conn_cfg_from_post(request.POST, row)
+        if not (cfg['HOST'] and cfg['USER'] and cfg['SERVICE_NAME'] and cfg['SCHEMA']):
+            errors.append('أكمل خادم أوراكل والمستخدم وService Name والمخطط.')
+        if not cfg['PASSWORD']:
+            errors.append('كلمة سر أوراكل مطلوبة.')
+        if cfg['SCHEMA'] and not re.fullmatch(r'[A-Za-z][A-Za-z0-9_$#]*', cfg['SCHEMA']):
+            errors.append('اسم المخطط (Schema) غير صالح.')
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            def _identity(o):
+                return (o.oracle_host, o.oracle_port, o.oracle_service_name, o.oracle_schema)
+
+            before = _identity(row) if row else None
+            obj = row or ConnectionSetting(pk=1)
+            for f in _CONN_TEXT_FIELDS:
+                setattr(obj, f, (request.POST.get(f) or '').strip())
+            obj.oracle_port = cfg['PORT']
+            new_pwd = request.POST.get('oracle_password') or ''
+            if new_pwd:
+                obj.oracle_password_enc = runtime_config.encrypt_secret(new_pwd)
+            obj.save()
+            runtime_config.refresh(force=True)
+            if before != _identity(obj):
+                # بيانات الكاش تخص العميل السابق (شهور المجموعات، مقارنات…)
+                try:
+                    cache.clear()
+                except Exception:  # noqa: BLE001
+                    pass
+                messages.success(
+                    request,
+                    'تم الحفظ وتطبيق الربط فوراً. إن كان العميل مختلفاً فأعد مزامنة الباركودات.',
+                )
+            else:
+                messages.success(request, 'تم الحفظ وتطبيق الربط فوراً.')
+            return redirect('connection_settings')
+
+    values = _conn_form_values(row)
+    if request.method == 'POST':  # أعد عرض ما أُدخل عند وجود خطأ
+        values.update({f: (request.POST.get(f) or '').strip() for f in _CONN_TEXT_FIELDS})
+    return render(
+        request,
+        'search/connection_settings.html',
+        {'v': values, 'saved': row is not None, 'updated_at': row.updated_at if row else None},
+    )
+
+
+@login_required
+@user_passes_test(_is_staff)
+@require_POST
+def connection_test(request):
+    from django.http import JsonResponse
+
+    from . import runtime_config
+
+    row = runtime_config.get_row()
+    return JsonResponse(runtime_config.test_oracle(_conn_cfg_from_post(request.POST, row)))

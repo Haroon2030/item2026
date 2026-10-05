@@ -9,6 +9,26 @@ from search.models import UserActivitySession, UserNavPermission, UserProfile
 from search.validators import contains_sql_injection, sanitize_search_query, ValidationError
 
 
+
+class OracleSchemaMixin:
+    """الاختبارات لا تعتمد على إعدادات الربط الحقيقية: مخطط وهمي لبناء SQL."""
+
+    @classmethod
+    def setUpClass(cls):
+        from unittest import mock
+
+        from django.conf import settings as dj_settings
+
+        from search import runtime_config
+
+        # الـ middleware قد يعيد تطبيق الإعدادات أثناء الصف: نثبّت المخطط في لقطة القيم الأصلية أيضاً
+        for target in (dj_settings.ORACLE, runtime_config._snapshot_defaults()['ORACLE']):
+            patcher = mock.patch.dict(target, {'SCHEMA': 'IAS_TEST'})
+            patcher.start()
+            cls.addClassCleanup(patcher.stop)
+        super().setUpClass()
+
+
 class SqlInjectionProtectionTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -443,7 +463,7 @@ class VendorTurnoverCostAdjTests(TestCase):
         self.assertEqual(hit['cost_adj_cost_display'], '')
 
 
-class CostAdjustmentsTests(TestCase):
+class CostAdjustmentsTests(OracleSchemaMixin, TestCase):
     @patch('search.oracle_cost_adjustments.oracle_enabled', return_value=True)
     @patch('search.oracle_cost_adjustments._fetch_all')
     def test_shapes_rows_with_account_and_item(self, fetch_all, _enabled):
@@ -846,7 +866,7 @@ class BelowCostPricesTests(TestCase):
         self.assertNotIn('11.59', table)
 
 
-class TransferRequestCompareTests(TestCase):
+class TransferRequestCompareTests(OracleSchemaMixin, TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
             username='trcmp',
@@ -929,7 +949,7 @@ class TransferRequestCompareTests(TestCase):
         self.assertNotIn('333', by_item)
 
 
-class MainWarehouseForBranchTests(TestCase):
+class MainWarehouseForBranchTests(OracleSchemaMixin, TestCase):
     @patch('search.oracle_tr_compare.oracle_enabled', return_value=True)
     @patch('search.oracle_tr_compare._fetch_all')
     def test_sky_picks_warehouse_60(self, fetch_all, _enabled):
@@ -1288,7 +1308,7 @@ class IncomeExpenseMixDonutTests(TestCase):
         self.assertEqual(other['amount'], 200.0)
 
 
-class AssetsExecutiveReportTests(TestCase):
+class AssetsExecutiveReportTests(OracleSchemaMixin, TestCase):
     def test_depr_ratio_and_structure(self):
         from search.oracle_assets import _build_asset_structure, _share_display
 
@@ -1905,7 +1925,7 @@ class IncomeUnpostedCardTests(TestCase):
         self.assertNotContains(response, 'فروع لم تُرحّل')
 
 
-class PurchaseControlTests(TestCase):
+class PurchaseControlTests(OracleSchemaMixin, TestCase):
     """رقابة فواتير الشراء: التجميع (بدون أوراكل) والصلاحيات."""
 
     def test_assemble_report_counts_cash_credit_user_device(self):
@@ -2102,7 +2122,7 @@ class PurchaseControlTests(TestCase):
             self.assertLessEqual(names, set(params), names - set(params))
 
 
-class ZeroCostSalesTests(TestCase):
+class ZeroCostSalesTests(OracleSchemaMixin, TestCase):
     """أصناف تُباع بتكلفة صفرية: الدمج (بدون أوراكل) والصلاحيات."""
 
     def test_assemble_merges_pos_and_bills_per_item(self):
@@ -2173,7 +2193,7 @@ class ZeroCostSalesTests(TestCase):
                 build_zero_cost_sales('2026-01-01', '2026-10-01')
 
 
-class ZeroCostStockTests(TestCase):
+class ZeroCostStockTests(OracleSchemaMixin, TestCase):
     """مخزون بتكلفة صفرية: التجهيز (بدون أوراكل) والصلاحيات والاستعلام."""
 
     def test_assemble_report_rows_and_kpis(self):
@@ -2228,3 +2248,62 @@ class ZeroCostStockTests(TestCase):
         with patch('search.oracle_stock.oracle_enabled', return_value=False):
             response = self.client.get(url)
         self.assertContains(response, 'أصناف لها رصيد وتكلفتها صفر')
+
+
+class ConnectionSettingsTests(TestCase):
+    def setUp(self):
+        from search import runtime_config
+
+        self.rc = runtime_config
+        self.rc._snapshot_defaults()
+        self.addCleanup(lambda: (self.rc.apply_row(None)))
+        User = get_user_model()
+        self.admin = User.objects.create_user('conn_admin', password='x-Test-123', is_staff=True)
+        self.plain = User.objects.create_user('conn_plain', password='x-Test-123')
+
+    def test_staff_only(self):
+        self.client.force_login(self.plain)
+        self.assertEqual(self.client.get(reverse('connection_settings')).status_code, 302)
+
+    def test_save_overrides_settings_and_encrypts_password(self):
+        from django.conf import settings
+        from search.models import ConnectionSetting
+
+        self.client.force_login(self.admin)
+        r = self.client.post(reverse('connection_settings'), {
+            'oracle_host': '10.1.2.3', 'oracle_port': '1522',
+            'oracle_service_name': 'XE', 'oracle_user': 'ro', 'oracle_password': 'Pa$$w0rd',
+            'oracle_schema': 'IAS20262', 'default_warehouse': '5',
+            'compare_warehouses': '5, 7', 'warehouses_text': '5=الرئيسي\n7=الفرع',
+        })
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(settings.ORACLE['ENABLED'])
+        self.assertEqual(settings.ORACLE['HOST'], '10.1.2.3')
+        self.assertEqual(settings.ORACLE['PORT'], 1522)
+        self.assertEqual(settings.ORACLE['SCHEMA'], 'IAS20262')
+        self.assertEqual(settings.ORACLE['PASSWORD'], 'Pa$$w0rd')
+        self.assertEqual(settings.ERP_CONFIG['DEFAULT_WAREHOUSE'], '5')
+        self.assertEqual(settings.ERP_CONFIG['COMPARE_WAREHOUSES'], ['5', '7'])
+        self.assertEqual(settings.ERP_CONFIG['WAREHOUSES'][1], {'code': '7', 'name': 'الفرع'})
+        row = ConnectionSetting.objects.get(pk=1)
+        self.assertNotIn('Pa$$w0rd', row.oracle_password_enc)
+        # كلمة سر فارغة عند إعادة الحفظ = الإبقاء على المحفوظة
+        self.client.post(reverse('connection_settings'), {
+            'oracle_host': '10.1.2.4', 'oracle_port': '1522', 'oracle_service_name': 'XE',
+            'oracle_user': 'ro', 'oracle_password': '', 'oracle_schema': 'IAS20262',
+        })
+        self.assertEqual(settings.ORACLE['HOST'], '10.1.2.4')
+        self.assertEqual(settings.ORACLE['PASSWORD'], 'Pa$$w0rd')
+
+    def test_invalid_schema_rejected(self):
+        from search.models import ConnectionSetting
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse('connection_settings'), {
+            'oracle_host': 'h', 'oracle_schema': 'X; DROP TABLE', 'oracle_port': '1521',
+        })
+        self.assertFalse(ConnectionSetting.objects.exists())
+
+    def test_page_renders(self):
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(reverse('connection_settings')), 'إعدادات الربط')

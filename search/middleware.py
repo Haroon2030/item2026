@@ -167,6 +167,19 @@ class RateLimitMiddleware:
 
         return self.get_response(request)
 
+class RuntimeConfigMiddleware:
+    """يطبّق إعدادات الربط المحفوظة في قاعدة البيانات (تتجاوز .env) على هذا العامل."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from . import runtime_config
+
+        runtime_config.refresh()
+        return self.get_response(request)
+
+
 class NavPermissionMiddleware:
     """يمنع فتح شاشات غير مسموحة حسب صلاحيات الأقسام."""
 

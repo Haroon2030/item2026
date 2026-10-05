@@ -115,7 +115,7 @@ def resolve_warehouse(raw: str | None, warehouses: list[dict], default: str) -> 
         return selected
     if default in allowed:
         return default
-    return next(iter(allowed), '60')
+    return next(iter(allowed), '')
 
 
 def resolve_group(raw: str | None, groups: list[dict], *, required: bool = False) -> str:

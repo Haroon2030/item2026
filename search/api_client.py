@@ -1,5 +1,5 @@
 """
-عميل API نظام أونكس: الأسعار + مزامنة الأصناف/الباركود.
+جلب الأسعار والكميات ومزامنة الأصناف/الباركود — كله من أوراكل.
 """
 
 from __future__ import annotations
@@ -11,13 +11,10 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-import requests
 from django.conf import settings
 from django.db import transaction
-from django.utils import timezone
 
 logger = logging.getLogger(__name__)
-_thread_local = threading.local()
 
 
 class ApiClientError(Exception):
@@ -35,87 +32,6 @@ def _normalize_text(value: Any) -> str:
             continue
         cleaned.append(ch)
     return ''.join(cleaned).strip()
-
-
-def _base_url() -> str:
-    """يرجع رابط الأساس بعد التحقق من المضيف المسموح (حماية من SSRF)."""
-    from urllib.parse import urlparse
-
-    cfg = settings.EXTERNAL_API
-    base_url = (cfg.get('BASE_URL') or '').rstrip('/')
-    if not base_url:
-        raise ApiClientError('لم يتم ضبط رابط الـ API في EXTERNAL_API.')
-
-    parsed = urlparse(base_url)
-    if parsed.scheme not in {'http', 'https'}:
-        raise ApiClientError('بروتوكول رابط الـ API غير مسموح.')
-    host = (parsed.hostname or '').lower()
-    allowed = {h.lower() for h in (cfg.get('ALLOWED_HOSTS') or []) if h}
-    if allowed and host not in allowed:
-        raise ApiClientError('مضيف الـ API غير مدرج في القائمة المسموحة.')
-    return base_url
-
-
-def _safe_url(path: str) -> str:
-    """يبني رابطًا داخل نفس المضيف المسموح فقط."""
-    base = _base_url()
-    if not path.startswith('/'):
-        path = '/' + path
-    # منع الخروج عن المسار الأساسي عبر ../ أو روابط مطلقة
-    if '://' in path or '..' in path:
-        raise ApiClientError('مسار API غير صالح.')
-    return f'{base}{path}'
-
-
-def _headers() -> dict[str, str]:
-    cfg = settings.EXTERNAL_API
-    headers = {'Accept': 'application/json'}
-    api_key = cfg.get('API_KEY') or ''
-    if api_key:
-        header_name = cfg.get('API_KEY_HEADER') or 'Authorization'
-        prefix = (cfg.get('API_KEY_PREFIX') or '').strip()
-        headers[header_name] = f'{prefix} {api_key}'.strip() if prefix else api_key
-    return headers
-
-
-def _request_get(url: str, params: dict, timeout: int | None = None, retries: int | None = None) -> requests.Response:
-    """GET مع إعادة محاولة عند البطء أو انقطاع الشبكة."""
-    cfg = settings.EXTERNAL_API
-    timeout = timeout if timeout is not None else cfg.get('TIMEOUT', 90)
-    retries = int(cfg.get('RETRIES', 2) if retries is None else retries)
-    last_exc: Exception | None = None
-
-    for attempt in range(retries + 1):
-        try:
-            response = requests.get(url, params=params, headers=_headers(), timeout=timeout)
-            response.raise_for_status()
-            return response
-        except requests.Timeout as exc:
-            last_exc = exc
-            logger.warning('API timeout attempt %s/%s url=%s', attempt + 1, retries + 1, url)
-        except requests.RequestException as exc:
-            last_exc = exc
-            logger.warning('API error attempt %s/%s url=%s err=%s', attempt + 1, retries + 1, url, exc)
-
-        if attempt < retries:
-            time.sleep(1.5 * (attempt + 1))
-
-    if isinstance(last_exc, requests.Timeout):
-        raise ApiClientError(
-            'انتهت مهلة الاتصال بالنظام. الشبكة بطيئة أو الخدمة مشغولة — أعد المحاولة.'
-        ) from last_exc
-    raise ApiClientError(f'فشل الاتصال بالنظام: {last_exc}') from last_exc
-
-
-def _dig(data: Any, path: str) -> Any:
-    if not path:
-        return data
-    current = data
-    for key in path.split('.'):
-        if not isinstance(current, dict) or key not in current:
-            return None
-        current = current[key]
-    return current
 
 
 def _normalize_item(raw: dict, field_map: dict) -> dict:
@@ -150,150 +66,26 @@ def _is_valid_item(raw: dict) -> bool:
     return bool(raw.get('I_CODE') or raw.get('I_NAME'))
 
 
-def search_prices_by_code(
-    item_code: str,
-    price_w_code: str | None = None,
-    *,
-    timeout: int | None = None,
-    retries: int | None = None,
-    fast: bool = False,
-) -> list[dict]:
-    """جلب أسعار صنف عبر GetAllPrice باستخدام رقم الصنف والمخزن."""
-    cfg = settings.EXTERNAL_API
-    url = _safe_url(cfg.get('SEARCH_PATH', '/GetAllPrice'))
-    query_param = cfg.get('QUERY_PARAM') or 'i_code'
-
-    params = dict(cfg.get('EXTRA_PARAMS') or {})
-    params[query_param] = item_code
-    if price_w_code:
-        params['price_w_code'] = price_w_code
-
-    req_timeout = timeout if timeout is not None else cfg.get('TIMEOUT', 60)
-    if fast:
-        session = _stock_session()
-        response = session.get(url, params=params, headers=_headers(), timeout=req_timeout)
-        response.raise_for_status()
-    else:
-        response = _request_get(url, params, timeout=req_timeout, retries=retries)
+def search_prices_by_code(item_code: str, price_w_code: str | None = None, **_kwargs) -> list[dict]:
+    """أسعار صنف (رقم أو باركود) لكل وحدة في مخزن — من أوراكل."""
+    from .oracle_catalog import fetch_item_prices
+    from .oracle_stock import OracleStockError
 
     try:
-        payload = response.json()
-    except ValueError as exc:
-        raise ApiClientError('الاستجابة ليست JSON صالحًا.') from exc
-
-    results = _dig(payload, cfg.get('RESULTS_PATH') or '')
-    if results is None:
-        raise ApiClientError('تعذّر قراءة النتائج من الاستجابة.')
-    if isinstance(results, dict):
-        results = [results]
-    if not isinstance(results, list):
-        raise ApiClientError('شكل نتائج الـ API غير متوقع (ليست قائمة).')
-
-    if len(results) == 1 and isinstance(results[0], dict) and results[0].get('errorDisc'):
-        raise ApiClientError(f"خطأ من النظام: {results[0].get('errorDisc')}")
-
-    field_map = cfg.get('FIELD_MAP') or {}
-    return [
-        _normalize_item(item, field_map)
-        for item in results
-        if _is_valid_item(item)
-    ]
+        return fetch_item_prices(item_code, price_w_code)
+    except OracleStockError as exc:
+        raise ApiClientError(str(exc)) from exc
 
 
-def fetch_qty_by_code(
-    item_code: str,
-    w_code: str | None = None,
-    timeout: int | None = None,
-    *,
-    fast: bool = False,
-) -> list[dict]:
-    """جلب الكمية المتاحة عبر GetItemQtyCost."""
-    cfg = settings.EXTERNAL_API
-    url = _safe_url('/GetItemQtyCost')
-    params = {
-        'year': (cfg.get('EXTRA_PARAMS') or {}).get('year', 2026),
-        'active': (cfg.get('EXTRA_PARAMS') or {}).get('active', 1),
-        'i_code': item_code,
-        'w_code': w_code or cfg.get('DEFAULT_WAREHOUSE') or '60',
-    }
-
-    req_timeout = timeout if timeout is not None else cfg.get('QTY_TIMEOUT', 45)
-    if fast:
-        session = _stock_session()
-        response = session.get(url, params=params, headers=_headers(), timeout=req_timeout)
-        response.raise_for_status()
-    else:
-        response = _request_get(url, params, timeout=req_timeout)
+def fetch_qty_by_code(item_code: str, w_code: str | None = None, **_kwargs) -> list[dict]:
+    """رصيد الصنف ومتوسط تكلفته في مخزن — من أوراكل."""
+    from .oracle_catalog import fetch_item_qty
+    from .oracle_stock import OracleStockError
 
     try:
-        payload = response.json()
-    except ValueError as exc:
-        raise ApiClientError('استجابة الكمية ليست JSON صالحًا.') from exc
-
-    if not isinstance(payload, list):
-        return []
-
-    rows = []
-    for raw in payload:
-        if not isinstance(raw, dict):
-            continue
-        if raw.get('errorId') not in (None, '', 0, '0'):
-            continue
-        if raw.get('errorDisc'):
-            continue
-        code = str(
-            raw.get('Item_code')
-            or raw.get('I_CODE')
-            or raw.get('item_code')
-            or ''
-        ).strip()
-        if not code:
-            continue
-        qty_val = raw.get('Avl_Qty')
-        if qty_val is None:
-            qty_val = raw.get('AVL_QTY')
-        if qty_val is None:
-            qty_val = raw.get('avl_qty')
-        unit = str(
-            raw.get('itm_unt')
-            or raw.get('ITM_UNT')
-            or raw.get('Itm_Unt')
-            or ''
-        ).strip()
-        avg_cost = raw.get('I_CWTAVG')
-        if avg_cost in (None, ''):
-            avg_cost = raw.get('i_cwtavg')
-        if avg_cost in (None, ''):
-            avg_cost = raw.get('I_cost')
-        if avg_cost in (None, ''):
-            avg_cost = raw.get('I_COST')
-        rows.append(
-            {
-                'code': code,
-                'name': str(raw.get('Item_ar_name') or raw.get('I_NAME') or '').strip(),
-                'unit': unit,
-                'quantity': str(qty_val).strip() if qty_val is not None else '',
-                'avg_cost': str(avg_cost).strip() if avg_cost not in (None, '') else '',
-                'cost': str(avg_cost).strip() if avg_cost not in (None, '') else '',
-                'barcode': str(raw.get('Barcode') or raw.get('BARCODE') or '').strip(),
-            }
-        )
-    return rows
-
-
-def _stock_session() -> requests.Session:
-    session = getattr(_thread_local, 'stock_session', None)
-    if session is None:
-        session = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=48,
-            pool_maxsize=48,
-            max_retries=0,
-        )
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-        _thread_local.stock_session = session
-    return session
+        return fetch_item_qty(item_code, w_code)
+    except OracleStockError as exc:
+        raise ApiClientError(str(exc)) from exc
 
 
 def get_unit_meta(item_code: str) -> dict[str, dict]:
@@ -566,7 +358,7 @@ def search_item_details(item_code: str, warehouse: str | None = None) -> list[di
             logger.warning('Quantity fetch failed, showing prices only: %s', exc)
             qtys = []
 
-    # إن كان البحث باركود: GetAllPrice يعيد I_CODE الحقيقي بينما GetItemQtyCost يحتاج رقم الصنف
+    # إن كان البحث باركود: الأسعار تعيد رقم الصنف الحقيقي بينما الكمية تحتاج رقم الصنف
     resolved = ''
     if prices:
         resolved = str(prices[0].get('code') or '').strip()
@@ -623,14 +415,12 @@ def compare_item_across_warehouses(
 
     from .oracle_stock import fetch_item_compare_from_oracle, oracle_session
 
-    cfg = settings.EXTERNAL_API
+    cfg = settings.ERP_CONFIG
     codes = [
         str(c).strip()
         for c in (warehouses or cfg.get('COMPARE_WAREHOUSES') or [])
         if str(c).strip()
     ]
-    if not codes:
-        codes = ['1201', '1', '30', '1901', '2001', '1801', '60', '701']
     names = {str(k).strip(): str(v).strip() for k, v in (warehouse_names or {}).items()}
     queried = str(item_code or '').strip()
     if not queried or not codes:
@@ -729,52 +519,31 @@ def compare_item_across_warehouses(
     return out
 
 
-def fetch_all_items(*, g_code: str | None = None, subg_code: str | None = None) -> list[dict]:
-    """جلب الأصناف من GetAllItems، مع تصفية اختيارية بالمجموعة/الفرعية."""
-    cfg = settings.EXTERNAL_API
-    url = _safe_url('/GetAllItems')
-    timeout = cfg.get('ITEMS_TIMEOUT', 180)
-    params = dict(cfg.get('ITEMS_PARAMS') or {'year': 2026, 'active': 1})
-    if g_code:
-        params['g_code'] = str(g_code).strip()
-    if subg_code:
-        params['subg_code'] = str(subg_code).strip()
-
-    response = _request_get(url, params, timeout=timeout)
+def fetch_all_items() -> list[dict]:
+    """كل وحدات/باركودات الأصناف النشطة من أوراكل."""
+    from .oracle_catalog import fetch_catalog_rows
+    from .oracle_stock import OracleStockError
 
     try:
-        payload = response.json()
-    except ValueError as exc:
-        raise ApiClientError('استجابة GetAllItems ليست JSON صالحًا.') from exc
-
-    if not isinstance(payload, list):
-        raise ApiClientError('شكل GetAllItems غير متوقع.')
-    return payload
+        return fetch_catalog_rows()
+    except OracleStockError as exc:
+        raise ApiClientError(str(exc)) from exc
 
 
 def fetch_all_groups() -> list[dict]:
-    """جلب مجموعات الأصناف من GetAllGroupDet."""
-    cfg = settings.EXTERNAL_API
-    url = _safe_url('/GetAllGroupDet')
-    timeout = cfg.get('TIMEOUT', 60)
-    params = {
-        'year': (cfg.get('EXTRA_PARAMS') or {}).get('year', 2026),
-        'active': (cfg.get('EXTRA_PARAMS') or {}).get('active', 1),
-    }
-    response = _request_get(url, params, timeout=timeout)
+    """مجموعات الأصناف من أوراكل."""
+    from .oracle_catalog import fetch_group_rows
+    from .oracle_stock import OracleStockError
+
     try:
-        payload = response.json()
-    except ValueError as exc:
-        raise ApiClientError('استجابة GetAllGroupDet ليست JSON صالحًا.') from exc
-    if not isinstance(payload, list):
-        raise ApiClientError('شكل GetAllGroupDet غير متوقع.')
-    return payload
+        return fetch_group_rows()
+    except OracleStockError as exc:
+        raise ApiClientError(str(exc)) from exc
 
 
 def sync_barcode_index() -> int:
     """
-    مزامنة الباركود/العبوات/رمز المجموعة من GetAllItems
-    وأسماء المجموعات من GetAllGroupDet.
+    مزامنة الباركود/العبوات/رمز المجموعة وأسماء المجموعات من أوراكل.
 
     الصفوف تُحفظ كما في المصدر (بما فيها التكرار واختلاف شكل الأحرف).
     """
@@ -901,7 +670,7 @@ def list_groups() -> list[dict]:
 
 def lookup_by_group(g_code: str) -> list[dict]:
     """
-    أصناف المجموعة من الفهرس المحلي السريع (مزامنة GetAllItems).
+    أصناف المجموعة من الفهرس المحلي السريع (مزامنة من أوراكل).
     صف واحد لكل رقم صنف — بدون جلب حي ثقيل عند كل تصفح.
     """
     from .models import ItemBarcode
@@ -936,9 +705,9 @@ def lookup_by_group(g_code: str) -> list[dict]:
 def _pick_pricing_summary(prices: list[dict], qtys: list[dict]) -> dict:
     """
     ملخص للعرض والحساب:
-    - الكمية والتكلفة دائماً من نفس صف GetItemQtyCost.
+    - الكمية والتكلفة دائماً من نفس صف رصيد المخزن (IAS_ITM_WCODE).
     - عند تعدّد الوحدات: اختر أعلى كمية موجبة (لا أول صف صفري).
-    - السعر من GetAllPrice لنفس الوحدة إن وُجد (للعرض فقط).
+    - السعر من IAS_ITEM_PRICE لنفس الوحدة إن وُجد (للعرض فقط).
     """
     stock: dict | None = None
     best_qty = float('-inf')
@@ -995,40 +764,20 @@ _BULK_PRICE_TTL = 600  # ثوانٍ — بعدها نحاول التحديث ل�
 
 def _bulk_price_map(warehouse: str) -> dict[str, list[dict]]:
     """
-    خريطة أسعار المخزن كاملة بطلب GetAllPrice واحد (بدون i_code).
-    ترجع: رقم الصنف → قائمة {unit, price}.
-
-    النظام الخارجي متقلب (يرجع أحياناً صفر سجلات أو يرفض الاتصال)،
-    لذا لا نخزّن نتيجة فارغة أبداً، ونرجع آخر نسخة ناجحة عند الفشل.
+    خريطة أسعار المخزن كاملة من أوراكل.
+    ترجع: رقم الصنف → قائمة {unit, price}. تُخزَّن مؤقتاً، وعند الفشل تُرجع آخر نسخة ناجحة.
     """
+    from .oracle_catalog import fetch_price_map
+
     now = time.time()
     with _bulk_price_lock:
         cached = _bulk_price_cache.get(warehouse)
         if cached and now - cached[0] < _BULK_PRICE_TTL:
             return cached[1]
 
-    cfg = settings.EXTERNAL_API
-    url = _safe_url(cfg.get('SEARCH_PATH', '/GetAllPrice'))
-    params = dict(cfg.get('EXTRA_PARAMS') or {})
-    params['price_w_code'] = warehouse
-
     price_map: dict[str, list[dict]] = {}
     try:
-        response = _request_get(url, params, timeout=120, retries=1)
-        payload = response.json()
-        if isinstance(payload, list):
-            for raw in payload:
-                if not isinstance(raw, dict):
-                    continue
-                code = str(raw.get('I_CODE') or '').strip()
-                if not code:
-                    continue
-                price_map.setdefault(code, []).append(
-                    {
-                        'unit': str(raw.get('ITM_UNT') or '').strip(),
-                        'price': str(raw.get('I_PRICE') or '').strip(),
-                    }
-                )
+        price_map = fetch_price_map(warehouse)
     except Exception as exc:  # noqa: BLE001
         logger.warning('Bulk price fetch failed: %s', exc)
 
@@ -1036,362 +785,8 @@ def _bulk_price_map(warehouse: str) -> dict[str, list[dict]]:
         if price_map:
             _bulk_price_cache[warehouse] = (time.time(), price_map)
             return price_map
-        # فشل أو استجابة فارغة: أرجع آخر نسخة ناجحة إن وُجدت (حتى لو قديمة)
         cached = _bulk_price_cache.get(warehouse)
         return cached[1] if cached else {}
-
-
-_warehouse_stock_lock = threading.Lock()
-# warehouse -> (monotonic_ts, stock_map, source)
-_warehouse_stock_cache: dict[str, tuple[float, dict[str, dict], str]] = {}
-_WAREHOUSE_STOCK_TTL = 900.0
-# بعد فشل الجلب الجماعي: لا نعيد المحاولة الثقيلة فوراً
-_bulk_stock_fail_until: dict[str, float] = {}
-_BULK_STOCK_FAIL_TTL = 1800.0
-# قاطع دائرة: عند انقطاع DNS/الاتصال لا نعيد آلاف الطلبات الفاشلة
-_stock_circuit_lock = threading.Lock()
-_stock_circuit_open_until = 0.0
-_stock_circuit_fails = 0
-_STOCK_CIRCUIT_THRESHOLD = 8
-_STOCK_CIRCUIT_COOLDOWN = 90.0
-
-
-def _stock_circuit_is_open() -> bool:
-    return time.monotonic() < _stock_circuit_open_until
-
-
-def _stock_circuit_reset() -> None:
-    global _stock_circuit_fails, _stock_circuit_open_until
-    with _stock_circuit_lock:
-        _stock_circuit_fails = 0
-        _stock_circuit_open_until = 0.0
-
-
-def _stock_circuit_note_success() -> None:
-    global _stock_circuit_fails
-    with _stock_circuit_lock:
-        _stock_circuit_fails = 0
-
-
-def _stock_circuit_note_failure(exc: BaseException | None = None) -> None:
-    """يفتح القاطع عند أعطال شبكة قاسية متكررة."""
-    global _stock_circuit_fails, _stock_circuit_open_until
-    msg = str(exc or '').lower()
-    hard = any(
-        token in msg
-        for token in (
-            'nameresolutionerror',
-            'getaddrinfo failed',
-            'failed to resolve',
-            'connection refused',
-            'connection aborted',
-            'connection reset',
-            'max retries exceeded',
-            'timed out',
-            'timeout',
-        )
-    )
-    if not hard and exc is not None:
-        return
-    with _stock_circuit_lock:
-        _stock_circuit_fails += 1
-        if _stock_circuit_fails >= _STOCK_CIRCUIT_THRESHOLD:
-            _stock_circuit_open_until = time.monotonic() + _STOCK_CIRCUIT_COOLDOWN
-            _stock_circuit_fails = 0
-            logger.warning(
-                'Stock circuit OPEN for %.0fs — pausing qty fetches',
-                _STOCK_CIRCUIT_COOLDOWN,
-            )
-
-
-def _stock_row_from_item_payload(raw: dict) -> dict | None:
-    """صف رصيد موحّد من استجابة Item (GetItemQtyCost / GetItemQtyPrice)."""
-    if not isinstance(raw, dict):
-        return None
-    if raw.get('errorId') not in (None, '', 0, '0') and raw.get('errorDisc'):
-        return None
-    if raw.get('errorDisc') and not (
-        raw.get('Item_code') or raw.get('I_CODE') or raw.get('item_code')
-    ):
-        return None
-    code = str(
-        raw.get('Item_code') or raw.get('I_CODE') or raw.get('item_code') or raw.get('i_code') or ''
-    ).strip()
-    if not code:
-        return None
-    qty_val = raw.get('Avl_Qty')
-    if qty_val is None:
-        qty_val = raw.get('AVL_QTY')
-    if qty_val is None:
-        qty_val = raw.get('avl_qty')
-    if qty_val is None:
-        qty_val = raw.get('qty')
-    unit = str(
-        raw.get('itm_unt') or raw.get('ITM_UNT') or raw.get('Itm_Unt') or ''
-    ).strip()
-    avg_cost = raw.get('I_CWTAVG')
-    if avg_cost in (None, ''):
-        avg_cost = raw.get('i_cwtavg')
-    if avg_cost in (None, ''):
-        avg_cost = raw.get('I_cost')
-    if avg_cost in (None, ''):
-        avg_cost = raw.get('I_COST')
-    return {
-        'code': code,
-        'name': str(raw.get('Item_ar_name') or raw.get('I_NAME') or raw.get('i_a_name') or '').strip(),
-        'unit': unit,
-        'quantity': str(qty_val).strip() if qty_val is not None else '',
-        'avg_cost': str(avg_cost).strip() if avg_cost not in (None, '') else '',
-        'cost': str(avg_cost).strip() if avg_cost not in (None, '') else '',
-        'barcode': str(raw.get('Barcode') or raw.get('BARCODE') or '').strip(),
-    }
-
-
-def _try_bulk_warehouse_stock(warehouse: str) -> tuple[dict[str, dict], str]:
-    """
-    محاولة الجلب الجماعي الرسمي لمخزن واحد.
-    على نشر أونكس الحالي: GetItemQtyPrice / GetAllQty / getallqtybywarehouse
-    غالباً ترجع فارغة أو 400 — نحتفظ بالمحاولة لتفعيلها عند إصلاح الخدمة.
-    """
-    cfg = settings.EXTERNAL_API
-    year = (cfg.get('EXTRA_PARAMS') or {}).get('year', 2026)
-    active = (cfg.get('EXTRA_PARAMS') or {}).get('active', 1)
-    lev = (cfg.get('EXTRA_PARAMS') or {}).get('lev_no', 1)
-    wh = str(warehouse or '').strip()
-    out: dict[str, dict] = {}
-
-    # 1) GetItemQtyPrice — عقد جماعي (warehouse + price_level) يعيد ArrayOfItem مع Avl_Qty/I_cost
-    try:
-        url = _safe_url('/GetItemQtyPrice')
-        params = {
-            'year': year,
-            'active': active,
-            'warehouse': int(wh) if wh.isdigit() else wh,
-            'price_level': int(lev) if str(lev).isdigit() else lev,
-        }
-        response = _request_get(url, params, timeout=120, retries=0)
-        payload = response.json()
-        if isinstance(payload, list) and payload:
-            # تجاهل صف خطأ أوراكل الوحيد
-            if len(payload) == 1 and isinstance(payload[0], dict) and payload[0].get('errorDisc'):
-                logger.info('GetItemQtyPrice unavailable: %s', payload[0].get('errorDisc'))
-            else:
-                for raw in payload:
-                    row = _stock_row_from_item_payload(raw)
-                    if not row:
-                        continue
-                    # فضّل أول صف فيه كمية رقمية
-                    prev = out.get(row['code'])
-                    if prev is None or (
-                        _to_float(prev.get('quantity')) is None
-                        and _to_float(row.get('quantity')) is not None
-                    ):
-                        out[row['code']] = row
-                if out:
-                    return out, 'GetItemQtyPrice'
-    except Exception as exc:  # noqa: BLE001
-        logger.info('GetItemQtyPrice bulk skipped: %s', exc)
-
-    # 2) GetAllQty / getallqtybywarehouse — كمية فقط (بدون تكلفة) عبر rep_code
-    # غير كافية وحدها لإجمالي التكلفة؛ نتخطاها إن لم تُرجع بيانات.
-    for path in ('/GetAllQty', '/getallqtybywarehouse'):
-        try:
-            url = _safe_url(path)
-            params = {'year': year, 'active': active, 'rep_code': wh}
-            response = requests.get(url, params=params, headers=_headers(), timeout=60)
-            if response.status_code != 200:
-                continue
-            payload = response.json()
-            if not isinstance(payload, list) or not payload:
-                continue
-            qty_only = 0
-            for raw in payload:
-                if not isinstance(raw, dict):
-                    continue
-                code = str(raw.get('i_code') or raw.get('I_CODE') or '').strip()
-                if not code:
-                    continue
-                if raw.get('w_code') not in (None, '', wh, int(wh) if wh.isdigit() else wh):
-                    # إن وُجد w_code صفّي، اقتصر على المخزن المطلوب
-                    if str(raw.get('w_code')) != wh:
-                        continue
-                out[code] = {
-                    'code': code,
-                    'name': '',
-                    'unit': str(raw.get('itm_unt') or '').strip(),
-                    'quantity': str(raw.get('qty') or '').strip(),
-                    'avg_cost': '',
-                    'cost': '',
-                    'barcode': '',
-                }
-                qty_only += 1
-            if qty_only:
-                logger.info('%s returned %s qty rows (no cost) — not used alone for valuation', path, qty_only)
-                out.clear()
-        except Exception as exc:  # noqa: BLE001
-            logger.info('%s bulk skipped: %s', path, exc)
-
-    return {}, ''
-
-
-def fetch_warehouse_stock(
-    warehouse: str | None = None,
-    item_codes: list[str] | None = None,
-    *,
-    max_workers: int = 20,
-) -> dict[str, dict]:
-    """
-    خريطة رصيد المخزن: رقم صنف → {quantity, avg_cost, unit, name, ...}.
-
-    - استجابة ناجحة فارغة من GetItemQtyCost = كمية 0.
-    - فشل الشبكة يُعاد مرة واحدة فقط؛ ما يبقى يُعلَّم _fetch_failed.
-    - يعتمد كاش Django بقوة لتسريع التصفح المتكرر.
-    """
-    from django.core.cache import cache as django_cache
-
-    wh = str(warehouse or (settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60')).strip()
-    codes = [str(c or '').strip() for c in (item_codes or []) if str(c or '').strip()]
-    codes = list(dict.fromkeys(codes))
-    partial_reuse: dict[str, dict] = {}
-
-    def _zero_row(code: str) -> dict:
-        return {
-            'code': code,
-            'name': '',
-            'unit': '',
-            'quantity': '0',
-            'avg_cost': '',
-            'cost': '',
-            'barcode': '',
-            '_confirmed_empty': True,
-        }
-
-    with _warehouse_stock_lock:
-        cached = _warehouse_stock_cache.get(wh)
-        if cached and (time.monotonic() - cached[0]) < _WAREHOUSE_STOCK_TTL:
-            stock_map = cached[1]
-            src = cached[2]
-            if src.startswith('bulk:'):
-                if not codes:
-                    return dict(stock_map)
-                # الخريطة الجماعية كاملة للمخزن: الناقص = كمية 0
-                return {c: stock_map[c] if c in stock_map else _zero_row(c) for c in codes}
-            if src.startswith('partial:') and codes:
-                hit = {c: stock_map[c] for c in codes if c in stock_map}
-                if len(hit) == len(codes):
-                    return hit
-                codes = [c for c in codes if c not in hit]
-                partial_reuse = hit
-
-    # لا تُعِد تجربة الجماعي إن فشل مؤخراً (يوفر ثوانٍ في كل تصفح)
-    now_m = time.monotonic()
-    skip_bulk = _bulk_stock_fail_until.get(wh, 0) > now_m
-    if not skip_bulk:
-        bulk_map, bulk_src = _try_bulk_warehouse_stock(wh)
-        if bulk_map:
-            with _warehouse_stock_lock:
-                _warehouse_stock_cache[wh] = (time.monotonic(), bulk_map, f'bulk:{bulk_src}')
-            if not codes and not partial_reuse:
-                return dict(bulk_map)
-            if codes:
-                return {
-                    **partial_reuse,
-                    **{c: bulk_map[c] if c in bulk_map else _zero_row(c) for c in codes},
-                }
-        else:
-            _bulk_stock_fail_until[wh] = now_m + _BULK_STOCK_FAIL_TTL
-
-    partial = dict(partial_reuse)
-    if not codes:
-        return partial
-
-    CACHE_EMPTY = '__EMPTY__'
-    stock_map: dict[str, dict] = dict(partial)
-    failed: set[str] = set()
-
-    def _from_qtys(code: str, qtys: list[dict]) -> dict:
-        summary = _pick_pricing_summary([], qtys)
-        return {
-            'code': code,
-            'name': str((qtys[0] or {}).get('name') or ''),
-            'unit': summary.get('unit') or '',
-            'quantity': summary.get('quantity') or '0',
-            'avg_cost': summary.get('avg_cost') or '',
-            'cost': summary.get('avg_cost') or '',
-            'barcode': str((qtys[0] or {}).get('barcode') or ''),
-        }
-
-    def _fetch_one(code: str, *, timeout: int, fast: bool) -> tuple[str, dict | None, str]:
-        if _stock_circuit_is_open():
-            return code, None, 'fail'
-        cache_key = f'qtycost:v5:{wh}:{code}'
-        cached_q = django_cache.get(cache_key)
-        if cached_q == CACHE_EMPTY:
-            return code, _zero_row(code), 'empty'
-        if isinstance(cached_q, list) and cached_q:
-            return code, _from_qtys(code, cached_q), 'ok'
-        try:
-            qtys = fetch_qty_by_code(code, wh, timeout=timeout, fast=fast)
-        except Exception as exc:  # noqa: BLE001
-            _stock_circuit_note_failure(exc)
-            logger.warning('Warehouse stock fetch failed for %s: %s', code, exc)
-            return code, None, 'fail'
-        _stock_circuit_note_success()
-        if not qtys:
-            # فارغ مؤكد من استجابة ناجحة — كاش متوسط (لا 30 دقيقة حتى لا تتجمد أخطاء عابرة)
-            django_cache.set(cache_key, CACHE_EMPTY, 1800)
-            return code, _zero_row(code), 'empty'
-        django_cache.set(cache_key, qtys, 1800)
-        return code, _from_qtys(code, qtys), 'ok'
-
-    pending = list(codes)
-    rounds = [
-        (max(20, max_workers), 8, True),
-        (10, 20, False),
-    ]
-    for round_i, (workers_n, timeout, fast) in enumerate(rounds):
-        if not pending:
-            break
-        if round_i > 0 and _stock_circuit_is_open():
-            # لا نعيد محاولة آلاف الأصناف والشبكة مقطوعة
-            failed = set(pending)
-            break
-        batch = list(pending)
-        pending = []
-        workers = max(1, min(workers_n, len(batch)))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futs = [pool.submit(_fetch_one, c, timeout=timeout, fast=fast) for c in batch]
-            for fut in futs:
-                code, row, status = fut.result()
-                if status == 'fail':
-                    pending.append(code)
-                    continue
-                if row:
-                    stock_map[code] = row
-        failed = set(pending)
-        # إن فشل أكثر من نصف الدفعة سريعاً → أوقف الجولة التالية
-        if batch and len(failed) >= max(20, int(0.8 * len(batch))) and _stock_circuit_is_open():
-            break
-
-    for code in failed:
-        stock_map[code] = {
-            'code': code,
-            'name': '',
-            'unit': '',
-            'quantity': '',
-            'avg_cost': '',
-            'cost': '',
-            'barcode': '',
-            '_fetch_failed': True,
-        }
-
-    with _warehouse_stock_lock:
-        prev = _warehouse_stock_cache.get(wh)
-        merged = dict(prev[1]) if prev and prev[2].startswith('partial:') else {}
-        merged.update(stock_map)
-        _warehouse_stock_cache[wh] = (time.monotonic(), merged, 'partial:qtycost')
-
-    return stock_map
 
 
 def enrich_group_browse(
@@ -1403,10 +798,9 @@ def enrich_group_browse(
 ) -> tuple[list[dict], dict[str, int]]:
     """
     تصفح المجموعة:
-    - إن STOCK_QTY_SOURCE=oracle: كمية/تكلفة من أوراكل (IAS_ITM_WCODE) قراءة فقط
+    - كمية/تكلفة من أوراكل (IAS_ITM_WCODE) قراءة فقط
       وتشمل غير النشط إن كان له رصيد
-    - وإلا: GetItemQtyCost (Avl_Qty بعد التخصيم)
-    - أسعار العرض من GetAllPrice عند توفرها
+    - أسعار العرض من IAS_ITEM_PRICE عند توفرها
     - يعيد فقط الأصناف بكمية > 0 مع عدّادات الاكتمال
     """
     empty_counts = {
@@ -1415,12 +809,12 @@ def enrich_group_browse(
         'zero_count': 0,
         'fetch_failed': 0,
         'complete': True,
-        'qty_source': 'api',
+        'qty_source': 'oracle',
     }
     if not items and not group_code:
         return [], empty_counts
 
-    wh = warehouse or (settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60')
+    wh = warehouse or (settings.ERP_CONFIG.get('DEFAULT_WAREHOUSE') or '')
     by_code = {
         str(it.get('code') or '').strip(): dict(it)
         for it in items
@@ -1516,105 +910,11 @@ def enrich_group_browse(
                 'qty_source': 'oracle',
             }
         except OracleStockError as exc:
-            logger.warning('Oracle group stock failed, fallback to API: %s', exc)
+            logger.warning('Oracle group stock failed: %s', exc)
         except Exception as exc:  # noqa: BLE001
-            logger.warning('Oracle group stock error, fallback to API: %s', exc)
+            logger.warning('Oracle group stock error: %s', exc)
 
-    if not unique_codes:
-        return [], empty_counts
-
-    _stock_circuit_reset()
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        fut_prices = pool.submit(_load_prices)
-        fut_stock = pool.submit(fetch_warehouse_stock, wh, unique_codes, max_workers=max_workers)
-        price_map = fut_prices.result()
-        stock_map = fut_stock.result()
-
-    failed_codes = [
-        c
-        for c in unique_codes
-        if (not stock_map.get(c))
-        or stock_map[c].get('_fetch_failed')
-        or _to_float(stock_map[c].get('quantity')) is None
-    ]
-    if failed_codes:
-        _stock_circuit_reset()
-        stock_map.update(
-            fetch_warehouse_stock(wh, failed_codes, max_workers=min(8, max_workers))
-        )
-
-    pack_map: dict[str, dict] = {}
-    try:
-        from .oracle_stock import fetch_item_max_pack_map, use_oracle_stock
-
-        if use_oracle_stock():
-            pack_map = fetch_item_max_pack_map(unique_codes) or {}
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('Max pack map skipped during browse enrich: %s', exc)
-
-    stocked = []
-    zero_count = 0
-    fetch_failed = 0
-
-    for code, base in by_code.items():
-        stock = stock_map.get(code)
-        if not stock or stock.get('_fetch_failed'):
-            fetch_failed += 1
-            continue
-        qty = _to_float(stock.get('quantity'))
-        if qty is None:
-            fetch_failed += 1
-            continue
-        if qty <= 0:
-            zero_count += 1
-            continue
-
-        prices = price_map.get(code) or []
-        summary = _pick_pricing_summary(prices, [stock])
-        row = dict(base)
-        if summary.get('unit') and not row.get('unit'):
-            row['unit'] = summary['unit']
-        row['price'] = summary.get('price', '') or ''
-        row['avg_cost'] = summary.get('avg_cost', '') or ''
-        row['quantity'] = summary.get('quantity', '') or stock.get('quantity') or ''
-        if summary.get('unit'):
-            row['pricing_unit'] = summary['unit']
-        if stock.get('name') and not row.get('name'):
-            row['name'] = stock['name']
-
-        # عرض أكبر عبوة بدل الحبة — التكلفة تبقى كما من المخزون (لا ضرب × P_SIZE)
-        pack_info = pack_map.get(code) or {}
-        try:
-            max_psz = float(pack_info.get('pack') or 0)
-        except (TypeError, ValueError):
-            max_psz = 0.0
-        max_unit = str(pack_info.get('unit') or '').strip()
-        qf = _to_float(row.get('quantity'))
-        row['stock_qty'] = str(row.get('quantity') or '').strip()
-        if max_psz > 1 and max_unit and qf is not None and qf > 0:
-            stock_unit = str(row.get('pricing_unit') or row.get('unit') or '').strip()
-            if stock_unit != max_unit:
-                pack_qty = qf / max_psz
-                row['quantity'] = f'{pack_qty:.6f}'.rstrip('0').rstrip('.') or '0'
-                pack_price = ''
-                for prow in prices:
-                    if str(prow.get('unit') or '').strip() == max_unit:
-                        pack_price = str(prow.get('price') or '').strip()
-                        break
-                if pack_price:
-                    row['price'] = pack_price
-                row['unit'] = max_unit
-                row['pricing_unit'] = max_unit
-        stocked.append(row)
-
-    return stocked, {
-        'catalog_count': len(unique_codes),
-        'stocked_count': len(stocked),
-        'zero_count': zero_count,
-        'fetch_failed': fetch_failed,
-        'complete': fetch_failed == 0,
-        'qty_source': 'api',
-    }
+    return [], {**empty_counts, 'fetch_failed': len(unique_codes), 'complete': False, 'qty_source': 'oracle'}
 
 
 def compute_inventory_stock_cost(items: list[dict]) -> dict:

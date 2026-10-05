@@ -33,8 +33,33 @@ _CACHE_TTL = 7200
 _CACHE_VER = "v11"
 _PAGE_SIZE = 80
 _NAME_BATCH = 80
-_STOCK_WAREHOUSES = (60, 1, 1201, 1901, 1801, 2001, 701, 800, 30)
-_WH_LABEL = "60، 1، 1201، 1901، 1801، 2001، 701، 800، 30"
+
+
+def _stock_warehouses() -> tuple[int, ...]:
+    """مخازن التحليل = المخازن المضافة في شاشة «إعدادات الربط» (القائمة + مخازن المقارنة)."""
+    from django.conf import settings
+
+    cfg = settings.ERP_CONFIG or {}
+    raw = [w.get("code") for w in (cfg.get("WAREHOUSES") or [])]
+    raw += list(cfg.get("COMPARE_WAREHOUSES") or [])
+    out: list[int] = []
+    for code in raw:
+        text = str(code or "").strip()
+        if text.isdigit() and int(text) not in out:
+            out.append(int(text))
+    if not out:
+        # لم تُضبط مخازن في شاشة الربط: استخدم كل مخازن أوراكل الفعّالة
+        from .oracle_stock import fetch_warehouse_options
+
+        for opt in fetch_warehouse_options():
+            text = str(opt.get("code") or "").strip()
+            if text.isdigit() and int(text) not in out:
+                out.append(int(text))
+    return tuple(out)
+
+
+def _wh_label() -> str:
+    return "، ".join(str(c) for c in _stock_warehouses())
 _EXCLUDED_GCODE = (46,)  # مجموعة التغليف
 _EXCLUDED_ICODES = (
     "0479",
@@ -99,7 +124,7 @@ def _item_code(value: Any) -> str:
 
 
 def _wh_in_sql(codes: list[int] | tuple[int, ...] | None = None) -> str:
-    return ", ".join(str(int(code)) for code in (codes or _STOCK_WAREHOUSES))
+    return ", ".join(str(int(code)) for code in (codes or _stock_warehouses()))
 
 
 def _pair_key(warehouse: Any, item: Any) -> tuple[str, str]:
@@ -133,7 +158,7 @@ def _warehouse_meta() -> dict[str, dict[str, str]]:
             "branch": branch,
             "branch_name": names.get(branch) or branch or "—",
         }
-    for code in _STOCK_WAREHOUSES:
+    for code in _stock_warehouses():
         warehouse = str(int(code))
         out.setdefault(
             warehouse,
@@ -148,12 +173,12 @@ def _warehouse_meta() -> dict[str, dict[str, str]]:
 
 def _warehouses_for_branch(branch: str) -> list[int]:
     if not branch:
-        return list(_STOCK_WAREHOUSES)
+        return list(_stock_warehouses())
     wanted = _wh_code(branch)
     meta = _warehouse_meta()
     matched = [
         int(code)
-        for code in _STOCK_WAREHOUSES
+        for code in _stock_warehouses()
         if meta.get(str(int(code)), {}).get("branch") == wanted
     ]
     return matched
@@ -264,7 +289,7 @@ def _sold_jobs(d_from, d_to) -> tuple[str, list]:
     cache_key = f"unsold:sold:{_CACHE_VER}:{d_from}:{d_to}"
     pos = _pos_owner()
     schema = _schema()
-    warehouses = list(_STOCK_WAREHOUSES)
+    warehouses = list(_stock_warehouses())
     slices = _pos_slices(d_from, dates["d_to_excl"])
 
     def _job_bill():
@@ -585,7 +610,7 @@ def build_unsold_report(
     result = {
         "period_label": f"{d_from.isoformat()} → {d_to.isoformat()}",
         "page_size": _PAGE_SIZE,
-        "wh_label": _WH_LABEL,
+        "wh_label": _wh_label(),
         "q": query,
         "kpis": {
             "item_count": len(item_codes),

@@ -355,7 +355,7 @@ def _warehouses() -> list[dict]:
             'branch_code': str(w.get('branch_code') or '').strip(),
             'branch_name': str(w.get('branch_name') or '').strip(),
         }
-        for w in (settings.EXTERNAL_API.get('WAREHOUSES') or [])
+        for w in (settings.ERP_CONFIG.get('WAREHOUSES') or [])
         if str(w.get('code') or '').strip()
     ]
     try:
@@ -598,7 +598,7 @@ def _enrich_prices_with_match(prices: list[dict], items: list[dict], query: str)
     for row in prices or []:
         item = dict(row)
         unit = str(item.get('unit') or '').strip()
-        # فضّل باركود الفهرس المحلي لكل وحدة (أدق من GetAllPrice)
+        # فضّل باركود الفهرس المحلي لكل وحدة (أدق)
         barcode = barcode_by_unit.get(unit, '') or str(item.get('barcode') or '').strip()
         item['barcode'] = barcode
         if matched_unit:
@@ -731,7 +731,7 @@ def item_search(request):
             vendor_item_count = fetch_vendor_item_count(selected_vendor)
         except Exception:  # noqa: BLE001
             vendor_item_count = 0
-    default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
+    default_wh = settings.ERP_CONFIG.get('DEFAULT_WAREHOUSE') or ''
     warehouse_compare: list[dict] = []
     sales_bundle: dict | None = None
     sales_turnover: dict | None = None
@@ -778,7 +778,7 @@ def item_search(request):
     except ValidationError as exc:
         query = (raw_query or '').strip()[:64]
         warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else (
-            warehouses[0]['code'] if warehouses else '60'
+            warehouses[0]['code'] if warehouses else ''
         )
         date_from, date_to = month_start, today
         searched = bool(query)
@@ -820,7 +820,7 @@ def item_search(request):
 
     detail_wh = warehouse
     if detail_wh not in {w['code'] for w in warehouses}:
-        detail_wh = next((w['code'] for w in warehouses), '60')
+        detail_wh = next((w['code'] for w in warehouses), '')
 
     if query:
         searched = True
@@ -1175,14 +1175,12 @@ def item_vendor_item_count(request):
 
 def _compare_warehouse_codes(warehouses: list[dict]) -> list[str]:
     """قائمة مخازن المقارنة من الإعدادات مع الإبقاء على الموجود فعلياً."""
-    cfg = settings.EXTERNAL_API or {}
+    cfg = settings.ERP_CONFIG or {}
     raw = [
         str(c).strip()
         for c in (cfg.get('COMPARE_WAREHOUSES') or [])
         if str(c).strip()
     ]
-    if not raw:
-        raw = ['1201', '1', '30', '1901', '2001', '1801', '60', '701']
     known = {str(w.get('code') or '').strip() for w in warehouses}
     if known:
         filtered = [c for c in raw if c in known]
@@ -1208,7 +1206,7 @@ def sales_search(request):
     match_type = ''
     sales_bundle: dict | None = None
     warehouses = _warehouses()
-    default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
+    default_wh = settings.ERP_CONFIG.get('DEFAULT_WAREHOUSE') or ''
     scope_raw = str(request.GET.get('scope') or 'one').strip().lower()
     raw_wh = str(request.GET.get('warehouse') or '').strip()
     compare_mode = scope_raw in ('compare', 'all') or raw_wh == 'all'
@@ -1231,7 +1229,7 @@ def sales_search(request):
         )
     except ValidationError as exc:
         query = (raw_query or '').strip()[:64]
-        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else '60'
+        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else ''
         from datetime import date as date_cls
 
         today = date_cls.today()
@@ -1397,8 +1395,7 @@ def _priced_items_for_group(
     """
     مسار التصفح الدقيق: أصناف بكمية > 0 + كاش فقط عند اكتمال الجلب.
     """
-    qty_src = (getattr(settings, 'STOCK_QTY_SOURCE', 'api') or 'api').strip().lower()
-    cache_key = f'browse_stocked:v16:{qty_src}:{warehouse}:{group_code}:{len(all_items)}'
+    cache_key = f'browse_stocked:v17:oracle:{warehouse}:{group_code}:{len(all_items)}'
     cached = cache.get(cache_key)
     if isinstance(cached, dict) and 'stocked' in cached and cached.get('counts', {}).get('complete'):
         return cached['stocked'], cached.get('counts') or {}, ''
@@ -1429,7 +1426,7 @@ def _priced_items_for_group(
                 'الإجمالي أدناه غير معتمد حتى يكتمل الجلب. أعد التحميل.'
             )
         elif all_items and counts.get('stocked_count', 0) == 0 and counts.get('zero_count', 0) == 0:
-            error = 'نظام أونكس لا يستجيب حالياً — الكميات غير متاحة مؤقتاً. أعد المحاولة بعد قليل.'
+            error = 'أوراكل لا يستجيب حالياً — الكميات غير متاحة مؤقتاً. أعد المحاولة بعد قليل.'
     except Exception as exc:  # noqa: BLE001
         error = f'تعذّر جلب الكميات: {exc}'
     return stocked, counts, error
@@ -1440,7 +1437,7 @@ def _priced_items_for_group(
 def browse_groups(request):
     """اختيار مجموعة ومخزن ثم عرض أصناف المجموعة (بكمية فقط)."""
     warehouses = _warehouses()
-    default_wh = settings.EXTERNAL_API.get('DEFAULT_WAREHOUSE') or '60'
+    default_wh = settings.ERP_CONFIG.get('DEFAULT_WAREHOUSE') or ''
     groups = list_groups()
     items = []
     page_obj = None
@@ -1486,7 +1483,7 @@ def browse_groups(request):
         submitted = 'group' in request.GET
         group_code = resolve_group(request.GET.get('group'), groups, required=submitted)
     except ValidationError as exc:
-        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else '60'
+        warehouse = default_wh if default_wh in {w['code'] for w in warehouses} else ''
         group_code = (request.GET.get('group') or '').strip()[:64]
         return render(
             request,

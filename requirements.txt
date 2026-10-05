@@ -4,3 +4,4 @@ gunicorn>=22.0.0
 whitenoise>=6.6.0
 PyMySQL>=1.1.0
 oracledb>=2.0.0
+cryptography>=42.0.0

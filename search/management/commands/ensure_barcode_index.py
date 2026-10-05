@@ -20,7 +20,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'الفهرس جاهز ({count} سجل) — لا حاجة للمزامنة.'))
             return
 
-        self.stdout.write('الفهرس فارغ — بدء مزامنة GetAllItems…')
+        self.stdout.write('الفهرس فارغ — بدء مزامنة الأصناف من أوراكل…')
         try:
             synced = sync_barcode_index()
         except ApiClientError as exc:

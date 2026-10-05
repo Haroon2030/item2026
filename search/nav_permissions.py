@@ -32,6 +32,8 @@ STAFF_ONLY: frozenset[str] = frozenset(
         "user_delete",
         "user_activity",
         "user_permissions",
+        "connection_settings",
+        "connection_test",
         # قسم «الرقابة»: للمدير فقط ولا يُمنح لأي دور (لا يظهر في نموذج الصلاحيات)
         "browse_purchase_control",
         "browse_purchase_control_details",

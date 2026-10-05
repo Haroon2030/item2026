@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}إعدادات الربط — منصة التحليل{% endblock %}
+{% block page_class %}sales-dash users-dash conn-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<section class="users-page conn-page" aria-label="إعدادات الربط">
+  <section class="dash-head users-dash-head" aria-label="عنوان الصفحة">
+    <div class="dash-head-copy">
+      <h2>إعدادات الربط</h2>
+      <p>بيانات الاتصال بقاعدة أوراكل للعميل. تُحفظ هنا وتُطبَّق فوراً — لتغيير العميل عدّل هذه الحقول فقط.</p>
+    </div>
+    <div class="users-head-actions">
+      <span class="result-pill users-count-pill">
+        {% if saved %}محفوظ · {{ updated_at|date:"Y-m-d H:i" }}{% else %}غير مضبوط بعد{% endif %}
+      </span>
+    </div>
+  </section>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-ok{% else %}alert-warn{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" id="conn-form" class="conn-form" autocomplete="off">
+    {% csrf_token %}
+
+    <article class="dash-panel-glass conn-card">
+      <h3>أوراكل</h3>
+      <div class="conn-grid">
+        <div class="field conn-span2">
+          <label for="oracle_host">الخادم</label>
+          <input type="text" id="oracle_host" name="oracle_host" dir="ltr" value="{{ v.oracle_host }}" placeholder="10.0.0.5 أو host.example.com">
+        </div>
+        <div class="field">
+          <label for="oracle_port">المنفذ</label>
+          <input type="number" id="oracle_port" name="oracle_port" dir="ltr" value="{{ v.oracle_port }}" min="1" max="65535">
+        </div>
+        <div class="field">
+          <label for="oracle_service_name">Service Name</label>
+          <input type="text" id="oracle_service_name" name="oracle_service_name" dir="ltr" value="{{ v.oracle_service_name }}" placeholder="ORCL">
+        </div>
+        <div class="field">
+          <label for="oracle_user">المستخدم</label>
+          <input type="text" id="oracle_user" name="oracle_user" dir="ltr" value="{{ v.oracle_user }}" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="oracle_password">كلمة السر</label>
+          <input type="password" id="oracle_password" name="oracle_password" dir="ltr" value="" autocomplete="new-password"
+                 placeholder="{% if v.has_password %}•••••••• محفوظة{% endif %}">
+        </div>
+        <div class="field">
+          <label for="oracle_schema">المخطط (Schema)</label>
+          <input type="text" id="oracle_schema" name="oracle_schema" dir="ltr" value="{{ v.oracle_schema }}">
+        </div>
+      </div>
+      <div class="conn-actions">
+        <button type="button" class="sales-view-btn" id="conn-test-oracle">اختبار الاتصال</button>
+        <span class="conn-result" id="conn-result-oracle" role="status"></span>
+      </div>
+    </article>
+
+    <article class="dash-panel-glass conn-card">
+      <h3>المخازن</h3>
+      <div class="conn-grid">
+        <div class="field">
+          <label for="default_warehouse">المخزن الافتراضي</label>
+          <input type="text" id="default_warehouse" name="default_warehouse" dir="ltr" value="{{ v.default_warehouse }}">
+        </div>
+        <div class="field">
+          <label for="compare_warehouses">مخازن المقارنة <small>(أكواد بفاصلة)</small></label>
+          <input type="text" id="compare_warehouses" name="compare_warehouses" dir="ltr" value="{{ v.compare_warehouses }}">
+        </div>
+        <div class="field conn-span2">
+          <label for="warehouses_text">قائمة المخازن <small>(سطر لكل مخزن: كود=اسم)</small></label>
+          <textarea id="warehouses_text" name="warehouses_text" rows="4" dir="auto" placeholder="60=مخزن الرياض">{{ v.warehouses_text }}</textarea>
+        </div>
+      </div>
+    </article>
+
+    <div class="conn-actions">
+      <button type="submit" class="btn-primary">حفظ وتطبيق</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+  .conn-form { max-width: 760px; }
+  .conn-card { padding: .8rem 1rem; margin-bottom: .8rem; }
+  .conn-card h3 { margin: 0 0 .5rem; font-size: .95rem; }
+  .conn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem .8rem; }
+  .conn-grid .field { margin: 0; }
+  .conn-grid label { font-size: .8rem; margin-bottom: .2rem; display: block; }
+  .conn-grid input, .conn-grid textarea { width: 100%; min-height: 0; padding: .4rem .6rem; font-size: .88rem; }
+  .conn-span2 { grid-column: 1 / -1; }
+  .conn-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .6rem; }
+  .conn-result { font-size: .82rem; }
+  .conn-result.is-ok { color: #1b7a3a; }
+  .conn-result.is-bad { color: #b3261e; }
+  @media (max-width: 560px) { .conn-grid { grid-template-columns: 1fr; } }
+</style>
+<script>
+(function () {
+  var form = document.getElementById("conn-form");
+  function run(target, btn, out) {
+    var fd = new FormData(form);
+    fd.set("target", target);
+    btn.disabled = true;
+    out.className = "conn-result";
+    out.textContent = "جارٍ الاختبار…";
+    fetch("{% url 'connection_test' %}", {
+      method: "POST", body: fd, credentials: "same-origin",
+      headers: { "X-CSRFToken": fd.get("csrfmiddlewaretoken"), "X-Requested-With": "XMLHttpRequest" }
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      var msg;
+      if (!d.ok) { msg = d.error || "فشل الاتصال."; }
+      else {
+        msg = "تم الاتصال بنجاح.";
+        if (d.schema_ok === true) msg += " المخطط صالح.";
+        if (d.schema_ok === false) { d.ok = false; msg += " المخطط غير صالح: " + (d.schema_error || ""); }
+        if (d.schemas && d.schemas.length) msg += " مخططات متاحة: " + d.schemas.join("، ");
+      }
+      out.textContent = msg;
+      out.classList.add(d.ok ? "is-ok" : "is-bad");
+    }).catch(function () {
+      out.textContent = "تعذّر تنفيذ الاختبار.";
+      out.classList.add("is-bad");
+    }).finally(function () { btn.disabled = false; });
+  }
+  document.getElementById("conn-test-oracle").addEventListener("click", function () {
+    run("oracle", this, document.getElementById("conn-result-oracle"));
+  });
+})();
+</script>
+{% endblock %}
