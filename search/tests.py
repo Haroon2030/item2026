@@ -2265,6 +2265,25 @@ class ConnectionSettingsTests(TestCase):
         self.client.force_login(self.plain)
         self.assertEqual(self.client.get(reverse('connection_settings')).status_code, 302)
 
+    def test_hidden_from_non_admin_roles(self):
+        """لا تظهر ولا تُفتح لأي دور غير مدير النظام (حتى الرئيس التنفيذي/المالك)."""
+        from search.nav_permissions import ALL_SCREEN_KEYS, STAFF_ONLY
+
+        for name in ('connection_settings', 'connection_test'):
+            self.assertIn(name, STAFF_ONLY)
+            self.assertNotIn(name, ALL_SCREEN_KEYS)
+        User = get_user_model()
+        for i, role in enumerate(('رئيس تنفيذي', 'مالك', 'مدير عمليات')):
+            user = User.objects.create_user(f'role_user_{i}', password='x-Test-123')
+            UserProfile.objects.create(user=user, display_name=role, phone=f'05100000{i:02d}', role_name=role)
+            self.client.force_login(user)
+            self.assertEqual(self.client.get(reverse('connection_settings')).status_code, 302)
+            self.assertEqual(self.client.post(reverse('connection_test'), {}).status_code, 302)
+            home = self.client.get(reverse('home'))
+            self.assertNotContains(home, reverse('connection_settings'))
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(reverse('home')), reverse('connection_settings'))
+
     def test_save_overrides_settings_and_encrypts_password(self):
         from django.conf import settings
         from search.models import ConnectionSetting
