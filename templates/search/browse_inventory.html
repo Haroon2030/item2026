@@ -30,17 +30,6 @@
 
 {% if insights %}
   <section class="inv-top" aria-label="ملخص المخزون">
-    <article class="dash-kpi-card dash-kpi-glass inv-summary-scope">
-      <div class="inv-summary-scope-main">
-        <span class="dash-kpi-ico inv-kpi-ico-rows" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        </span>
-        <div class="inv-summary-scope-text">
-          <span class="inv-summary-scope-label">نطاق التحليل</span>
-          <strong class="inv-summary-scope-title" title="{{ insights.note }}">{{ insights.scope_label }}</strong>
-        </div>
-      </div>
-    </article>
     <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-hl-wh">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico inv-kpi-ico-qty" aria-hidden="true">

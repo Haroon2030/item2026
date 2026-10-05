@@ -69,6 +69,41 @@
     }
   }
 
+  // أول VISIBLE صفوف ظاهرة والباقي بالتمرير: عجلة الماوس أو سحب المؤشر لأعلى/لأسفل
+  function fitScroll(list, visible) {
+    var rows = list.children;
+    list.style.maxHeight = "";
+    if (rows.length <= visible) return;
+    var top = list.getBoundingClientRect().top;
+    var last = rows[visible - 1].getBoundingClientRect().bottom;
+    list.style.maxHeight = Math.ceil(last - top) + "px";
+  }
+
+  function bindDrag(list) {
+    if (list.dataset.dragInit === "1") return;
+    list.dataset.dragInit = "1";
+    var start = null;
+    list.addEventListener("pointerdown", function (e) {
+      if (e.button !== 0 || e.pointerType === "touch") return;
+      start = { y: e.clientY, top: list.scrollTop, moved: false };
+    });
+    list.addEventListener("pointermove", function (e) {
+      if (!start) return;
+      var dy = e.clientY - start.y;
+      if (!start.moved && Math.abs(dy) < 4) return;
+      if (!start.moved) {
+        start.moved = true;
+        list.classList.add("is-dragging");
+        try { list.setPointerCapture(e.pointerId); } catch (err) { /* لا التقاط */ }
+      }
+      list.scrollTop = start.top - dy;
+      e.preventDefault();
+    });
+    function end() { start = null; list.classList.remove("is-dragging"); }
+    list.addEventListener("pointerup", end);
+    list.addEventListener("pointercancel", end);
+  }
+
   function render(data, elapsedMs) {
     var body = document.getElementById("sales-users-chart");
     var foot = document.getElementById("sales-users-total");
@@ -103,40 +138,28 @@
       max = Math.max(max, Number(row.sales_total) || 0);
     });
 
-    var VISIBLE = 6;
+    var VISIBLE = 10;
     var html = "";
     rows.forEach(function (row, i) {
       var rank = row.rank || i + 1;
       var pct = max > 0 ? Math.max(3, ((Number(row.sales_total) || 0) / max) * 100) : 0;
       html +=
-        '<li class="rb-row' + (i >= VISIBLE ? " is-extra" : "") + '" title="' +
-        esc(row.user_name) + " #" + esc(row.user_code) + " · متوسط السلة " + esc(row.avg_basket_display) + '">' +
+        '<li class="rb-row" title="' +
+        esc(row.user_name) + " #" + esc(row.user_code) + " · " + esc(row.invoice_count_display) + " فاتورة · متوسط السلة " + esc(row.avg_basket_display) + '">' +
         '<div class="rb-bar-col">' +
         '<span class="rb-pct mono">' + esc(row.share_display) + "</span>" +
         '<span class="rb-track" aria-hidden="true"><span class="rb-fill" style="width:' + pct.toFixed(1) + '%"></span></span>' +
         "</div>" +
         '<div class="rb-details">' +
         '<span class="rb-name"><span class="rb-rank mono">' + rank + "</span>" + esc(row.user_name) + "</span>" +
-        '<span class="rb-meta mono">' + moneyHtml(row.sales_total_display) + " · " + esc(row.invoice_count_display) + " فاتورة</span>" +
+        '<span class="rb-meta mono">' + moneyHtml(row.sales_total_display) + "</span>" +
         "</div></li>";
     });
-    var board = document.getElementById("sales-users-board");
-    var oldBtn = board && board.querySelector(".rb-more");
-    if (oldBtn) oldBtn.remove();
-    if (board) board.classList.remove("is-open");
-    if (body) body.innerHTML = html;
-    if (board && body && rows.length > VISIBLE) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "rb-more";
-      btn.setAttribute("aria-expanded", "false");
-      btn.innerHTML = '<span class="rb-more-text">عرض المزيد</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
-      btn.addEventListener("click", function () {
-        var open = board.classList.toggle("is-open");
-        btn.setAttribute("aria-expanded", open ? "true" : "false");
-        btn.querySelector(".rb-more-text").textContent = open ? "عرض أقل" : "عرض المزيد";
-      });
-      body.insertAdjacentElement("afterend", btn);
+    if (body) {
+      body.innerHTML = html;
+      body.classList.add("is-scroll");
+      fitScroll(body, VISIBLE);
+      bindDrag(body);
     }
     if (totInv) totInv.textContent = (totals.invoice_count_display || "0") + " فاتورة";
     if (totSales) totSales.innerHTML = moneyHtml(totals.sales_total_display || "0.00");

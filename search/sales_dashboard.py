@@ -459,15 +459,15 @@ def _sales_system_excluding_pos(
     return out
 
 
-def _top_return_branches(pos_branches: list[dict], *, limit: int = 12) -> dict[str, Any]:
-    """أعلى فروع مرتجعاً — النسبة = مرتجع الفرع ÷ (مبيعاته + مرتجعه)."""
+def _top_return_branches(pos_branches: list[dict], *, limit: int = 100) -> dict[str, Any]:
+    """كل فرع يبيع بنقاط البيع في الفترة (حتى بلا مرتجع) — النسبة = مرتجع الفرع ÷ (مبيعاته + مرتجعه)."""
     chart_rows: list[dict] = []
     for row in pos_branches or []:
         amount = round(float(row.get("return_total") or 0), 2)
-        if amount <= 0:
-            continue
         sales_net = round(float(row.get("sales_total") or 0), 2)
         gross = round(float(row.get("gross_total") or 0), 2)
+        if amount <= 0 and sales_net <= 0 and gross <= 0:
+            continue  # فرع بلا أي حركة بيع في الفترة
         if gross <= 0:
             # صافي المبيعات + المرتجع = إجمالي حركة الفرع قبل خصم المرتجع
             gross = round(max(sales_net, 0.0) + amount, 2)
@@ -494,7 +494,7 @@ def _top_return_branches(pos_branches: list[dict], *, limit: int = 12) -> dict[s
             str(r.get("name") or ""),
         )
     )
-    lim = max(1, min(int(limit or 12), 20))
+    lim = max(1, int(limit or 100))
     chart_rows = chart_rows[:lim]
     total = round(sum(float(r.get("amount") or 0) for r in chart_rows), 2)
     return {
