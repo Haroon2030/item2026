@@ -1,5 +1,5 @@
 /* الصفحة الرئيسية — لوحة مبيعات اليوم في الأعلى وأقسام المنصة تحتها */
-html body.welcome-body:not(#fx) { background: #f6f6f2 !important; }
+html body.welcome-body:not(#fx) { background: #f4f2ec !important; }
 html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 
 .hv-stage {
@@ -30,7 +30,7 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 .hv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; padding-top: 1.2rem; border-top: 1.5px solid rgba(23, 20, 15, .2); }
 .hv-kpi { display: flex; align-items: center; gap: .65rem; min-width: 0; }
 .hv-kpi-ico { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--hv-ink); }
-.hv-kpi-ico svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: #ffc21a; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hv-kpi-ico svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .hv-kpi small { display: block; color: #4a3a08; font: 600 .8rem/1.4 var(--hv-font); }
 .hv-kpi b { display: block; font: 700 1.15rem/1.4 var(--hv-font); font-variant-numeric: tabular-nums; }
 .hv-kpi-bad b { color: #a3261b; }

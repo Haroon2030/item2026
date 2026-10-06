@@ -176,7 +176,7 @@
             <thead>
               <tr>
                 <th>المخزن</th>
-                <th>الفرع</th>
+                <th class="inv-col-text">الفرع</th>
                 <th>أصناف</th>
                 <th class="inv-col-qty" title="الكمية بعد خصم غير المرحّل">الكمية</th>
                 <th class="inv-col-cost" title="القيمة بالتكلفة بعد الترحيل">القيمة</th>
@@ -186,8 +186,8 @@
             <tbody>
               {% for row in insights.by_warehouse %}
                 <tr>
-                  <td class="inv-cell-clip" title="{{ row.name }} #{{ row.code }}">{{ row.name }}</td>
-                  <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
+                  <td class="inv-cell-clip" title="{{ row.name }} #{{ row.code }}"><span class="inv-wh-no mono">{{ row.code }}</span></td>
+                  <td class="inv-cell-clip inv-col-text" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
                   <td class="mono">{{ row.item_count_display }}</td>
                   <td class="mono inv-col-qty">{{ row.qty_display }}</td>
                   <td class="mono inv-col-cost">{{ row.stock_value_display }}</td>

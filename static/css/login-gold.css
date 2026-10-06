@@ -1,5 +1,5 @@
 /* تسجيل الدخول — ثيم أصفر / أسود / كريمي */
-html body.login-body:not(#fx) { background: radial-gradient(ellipse 60% 45% at 0% 0%, rgba(242,200,17,.35), transparent 60%), linear-gradient(180deg, #FDF6D8, #FFFBE6) !important; color: #111 !important; }
+html body.login-body:not(#fx) { background: #f4f2ec !important; color: #111 !important; }
 html body.login-body .login-welcome:not(#fx) { background: #111 !important; color: #FDF6D8 !important; border: 0 !important; }
 html body.login-body .login-welcome-scrim:not(#fx) { background: linear-gradient(180deg, rgba(17,17,17,.55) 0%, rgba(17,17,17,.82) 55%, #111 100%) !important; }
 html body.login-body .login-welcome-media img:not(#fx) { opacity: .5 !important; filter: grayscale(1) contrast(1.1) !important; mix-blend-mode: luminosity !important; }

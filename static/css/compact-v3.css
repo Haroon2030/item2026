@@ -190,7 +190,7 @@
   /* مؤشر التحميل أثناء الانتقال بين الصفحات */
   .nav-loading {
     position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity .2s ease;
-    background: radial-gradient(circle at 50% 42%, rgb(255 255 255 / .82) 0%, rgb(255 244 204 / .72) 45%, rgb(255 214 102 / .55) 100%);
+    background: rgb(255 255 255 / .8);
     backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
   }
   .nav-loading.is-on { opacity: 1; pointer-events: auto; cursor: progress; }
@@ -280,4 +280,156 @@ html body.theme-navy .page .inv-waste-bar-track:not(#fx) { grid-area: track; dis
 html body.theme-navy .page .inv-waste-bar-track > i:not(#fx) { display: block; height: 100%; border-radius: inherit; background: #fbab5a; }
 html body.theme-navy .page .inv-waste-bar-meta:not(#fx) { grid-area: meta; font-size: .75rem; color: #666; font-weight: 500; }
 @media (max-width: 900px) { html body.theme-navy .page .inv-waste-bars:not(#fx) { grid-template-columns: 1fr; } }
+
+/* سجل الأصول: ترويسة داكنة بنص أبيض واضح (كانت خلفية باهتة مع نص أبيض فلا تُقرأ)، ويُميَّز عمود التكلفة والإهلاك والدفترية بخط ملوّن سفلي */
+html body.theme-navy.theme-navy .page.page .assets-table thead th:not(#fx):not(#fx2) {
+  background: #231f20 !important; background-color: #231f20 !important; color: #fff !important; -webkit-text-fill-color: #fff !important;
+  font-weight: 700 !important; text-shadow: none !important; box-shadow: none !important; border-bottom: 3px solid transparent !important;
+}
+html body.theme-navy.theme-navy .page.page .assets-table thead th:not(#fx):not(#fx2)::after { background: #231f20 !important; }
+html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-cost:not(#fx):not(#fx2) { border-bottom-color: #4ade80 !important; }
+html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-depr:not(#fx):not(#fx2) { border-bottom-color: #fb923c !important; }
+html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-book:not(#fx):not(#fx2) { border-bottom-color: #a78bfa !important; }
+
+/* أعلى الأصول تكلفة: لوحة ألوان واحدة (حبر + ذهبي) بدل حواف عشوائية وشريط متدرج أصفر→بنفسجي */
+html body.theme-navy .page.page .assets-top-row:not(#fx):not(#fx2) { background: #fff !important; border-color: #e3e1d8 !important; box-shadow: inset 3px 0 0 #f9a11b !important; }
+html body.theme-navy .page.page .assets-top-row:nth-child(n):not(#fx):not(#fx2) { box-shadow: inset 3px 0 0 #f9a11b !important; }
+html body.theme-navy .page.page .assets-top-rank:not(#fx):not(#fx2) { background: #231f20 !important; color: #ffc21a !important; }
+html body.theme-navy .page.page .assets-top-amt:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-top-amt .money:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-top-amt .money-value:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-top-amt .sar-symbol:not(#fx):not(#fx2) { color: #17140f !important; }
+html body.theme-navy .page.page .assets-top-meta:not(#fx):not(#fx2) { color: #5b564b !important; }
+html body.theme-navy .page.page .assets-top-book:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-top-book .money:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-top-book .money-value:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-top-book .sar-symbol:not(#fx):not(#fx2) { color: #5b564b !important; }
+html body.theme-navy .page.page .assets-top-track:not(#fx):not(#fx2) { background: #ece9df !important; }
+html body.theme-navy .page.page .assets-top-fill:not(#fx):not(#fx2) { background: #f9a11b !important; }
+
+/* توزيع القيمة الدفترية: نفس لوحة الحبر والذهبي بدل الأخضر */
+html body.theme-navy .page.page .assets-branch-vchart .income-vpct:not(#fx):not(#fx2) { background: #231f20 !important; color: #ffc21a !important; border-color: transparent !important; }
+html body.theme-navy .page.page .assets-branch-vchart .income-vfill:not(#fx):not(#fx2) { background: #f9a11b !important; }
+html body.theme-navy .page.page .assets-branch-vchart .income-vtrack:not(#fx):not(#fx2) { background: #ece9df !important; }
+html body.theme-navy .page.page .assets-branch-vchart .income-vmeta:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .money:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .money-value:not(#fx):not(#fx2),
+html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .sar-symbol:not(#fx):not(#fx2) { color: #17140f !important; }
+
+/* أسماء وقيم مفاتيح الرسوم الدائرية في الأصول: ألوان نص واحدة بدل الزيتوني والرمادي المزرق الباهت */
+html body.theme-navy .page.assets-dash .income-exp-callout-kicker:not(#fx):not(#fx2) { color: #5b564b !important; }
+html body.theme-navy .page.assets-dash .income-comp-callout-name:not(#fx):not(#fx2) { color: #17140f !important; }
+html body.theme-navy .page.assets-dash .income-comp-callout-meta:not(#fx):not(#fx2) { color: #17140f !important; }
+html body.theme-navy .page.assets-dash .income-comp-callout-sub:not(#fx):not(#fx2) { color: #5b564b !important; }
+
+/* بطاقات المؤشرات في كل الصفحات: أيقونة البطاقة عند حافة الترويسة (بدل أن تتوسّط مع العنوان) والعنوان في الوسط */
+html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx):not(#fx2) { position: relative; justify-content: center !important; padding-inline: 3rem .5rem !important; text-align: center; white-space: normal !important; line-height: 1.25; }
+html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx):not(#fx2) { position: absolute; inset-inline-start: .5rem; top: 50%; transform: translateY(-50%); margin: 0; }
+
+/* خلفية الصفحات: لون واحد هادئ (#f4f2ec) بدل التدرج الأصفر الكريمي */
+html body.theme-navy:not(#fx):not(#fx2) { background: #f4f2ec !important; background-image: none !important; }
+
+/* شريط عنوان الصفحة: لون واحد بدل التدرج بين لونين */
+html body.theme-navy .page .dash-head:not(#fx):not(#fx2) { background: #ffe9b0 !important; background-image: none !important; }
+
+/* رأس بطاقات المؤشرات: لون واحد لكل البطاقات (نفس لون رأس اللوحات) بدل تدرّج برتقالي/أصفر بين بطاقة وأخرى */
+html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx):not(#fx2) { background: #fdb51c !important; background-image: none !important; }
+
+/* أيقونة بطاقة المؤشر: مربع أسود برمز أبيض */
+html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx):not(#fx2) {
+  background: #231f20 !important; border: 0 !important; border-radius: 9px !important; color: #fff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 12px 2px rgba(255, 255, 255, .85), 0 0 22px 4px rgba(255, 194, 26, .65) !important;
+  animation: kpi-ico-glow 2.8s ease-in-out infinite;
+  width: 2.3rem !important; height: 2.3rem !important; inset-inline-start: .4rem;
+}
+html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico) svg:not(#fx):not(#fx2) {
+  width: 1.45rem !important; height: 1.45rem !important; stroke: #fff !important; color: #fff !important; fill: none; stroke-width: 2.2;
+}}
+
+@keyframes kpi-ico-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.18) drop-shadow(0 0 5px rgba(255, 255, 255, .9)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx):not(#fx2) { animation: none; }
+}
+
+@layer app-components {
+/* أيقونات مؤشرات لوحة مبيعات اليوم في الصفحة الرئيسية: أبيض */
+html body.theme-navy .hv-kpi-ico svg:not(#fx):not(#fx2) { stroke: #fff !important; color: #fff !important; }
+
+@layer app-components {
+/* جداول المخزون: تتكيّف مع عرض اللوحة فتظهر كل الأعمدة (الاسم يلتف بدل أن يدفع الأعمدة خارج الإطار) */
+html body.theme-navy .page .inv-table-compact:not(#fx):not(#fx2) { width: 100% !important; min-width: 0 !important; table-layout: auto; }
+html body.theme-navy .page .inv-table-compact :is(th, td):not(#fx):not(#fx2) { padding-inline: .35rem !important; }
+html body.theme-navy .page .inv-table-compact td.inv-cell-clip:not(#fx):not(#fx2) {
+  white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere; line-height: 1.3; min-width: 6.5rem;
+}
+
+/* أعمدة الأرقام تضيق على قدر محتواها ليأخذ عمود الاسم كل المساحة المتبقية */
+html body.theme-navy .page .inv-table-compact :is(th, td):not(:first-child):not(.inv-col-text):not(#fx):not(#fx2) { width: 1% !important; min-width: 0 !important; white-space: nowrap; }
+html body.theme-navy .page .inv-table-compact :is(th, td):first-child:not(#fx):not(#fx2) { width: auto !important; }
+
+/* عمود نصّي (اسم الفرع) يأخذ مساحته؛ ورقم المخزن شارة صغيرة بجانب الاسم */
+html body.theme-navy .page .inv-table-compact .inv-col-text:not(#fx):not(#fx2) { width: auto !important; min-width: 5.5rem !important; white-space: normal !important; }
+html body.theme-navy .page .inv-wh-no:not(#fx):not(#fx2) {
+  display: inline-block; min-width: 1.6rem; margin-inline-end: .3rem; padding: 0 .3rem; border-radius: 5px;
+  background: #231f20 !important; color: #ffc21a !important; -webkit-text-fill-color: #ffc21a !important; font-size: .72rem; font-weight: 700; line-height: 1.5; text-align: center;
+}
+
+/* ===== شاشتا المستخدمين ونشاط المستخدمين: تخطيط مضغوط واحترافي ===== */
+html body.theme-navy .page.users-dash .users-page:not(#fx):not(#fx2) { display: grid; gap: .55rem; }
+html body.theme-navy .page.users-dash .dash-head:not(#fx):not(#fx2) { margin: 0 !important; padding: .45rem .8rem !important; min-height: 0 !important; align-items: center !important; }
+html body.theme-navy .page.users-dash .dash-head h2:not(#fx):not(#fx2) { font-size: 1.25rem !important; margin: 0 !important; }
+html body.theme-navy .page.users-dash .dash-head p:not(#fx):not(#fx2) { margin: .1rem 0 0 !important; font-size: .82rem !important; font-weight: 500 !important; }
+html body.theme-navy .page.users-dash .users-head-actions:not(#fx):not(#fx2) { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+
+/* شريط الفلتر: صف واحد أفقي بدل تكديس الحقول */
+html body.theme-navy .page.users-dash form.activity-filter:not(#fx):not(#fx2) {
+  display: flex !important; flex-wrap: wrap; align-items: flex-end; gap: .5rem .7rem; margin: 0 !important; padding: .5rem .7rem !important;
+}
+html body.theme-navy .page.users-dash form.activity-filter .field:not(#fx):not(#fx2) { flex: 1 1 9rem; min-width: 8rem; margin: 0 !important; display: grid; gap: .15rem; }
+html body.theme-navy .page.users-dash form.activity-filter .field.pr-q-field:not(#fx):not(#fx2) { flex: 2 1 14rem; }
+html body.theme-navy .page.users-dash form.activity-filter label:not(#fx):not(#fx2) { margin: 0 !important; font-size: .74rem !important; font-weight: 700 !important; color: #5b564b !important; }
+html body.theme-navy .page.users-dash form.activity-filter :is(input, select):not(#fx):not(#fx2) { height: 34px; min-height: 0 !important; padding: 0 .55rem !important; font-size: .85rem !important; width: 100%; box-sizing: border-box; }
+html body.theme-navy .page.users-dash form.activity-filter button:not(#fx):not(#fx2) { height: 34px; min-height: 0 !important; padding: 0 1.1rem !important; flex: none; }
+
+/* اللوحة والجدول */
+html body.theme-navy .page.users-dash .users-table-panel:not(#fx):not(#fx2) { margin: 0 !important; }
+html body.theme-navy .page.users-dash .users-table-panel > .dash-panel-head:not(#fx):not(#fx2) { min-height: 0 !important; padding: .35rem .7rem !important; }
+html body.theme-navy .page.users-dash .users-table-panel .dash-panel-head h3:not(#fx):not(#fx2) { font-size: 1rem !important; margin: 0 !important; }
+html body.theme-navy .page.users-dash .users-table:not(#fx):not(#fx2) { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .82rem; }
+html body.theme-navy .page.users-dash .users-table thead th:not(#fx):not(#fx2) { background: #231f20 !important; color: #fff !important; -webkit-text-fill-color: #fff !important; padding: .35rem .5rem !important; font-size: .78rem !important; font-weight: 700 !important; white-space: nowrap; text-align: center; }
+html body.theme-navy .page.users-dash .users-table tbody td:not(#fx):not(#fx2) { padding: .28rem .5rem !important; border-bottom: 1px solid #ece9df; vertical-align: middle; line-height: 1.3; }
+html body.theme-navy .page.users-dash .users-table tbody tr:nth-child(even) td:not(#fx):not(#fx2) { background-color: rgba(253, 181, 28, .07); }
+html body.theme-navy .page.users-dash .users-table tbody tr:hover td:not(#fx):not(#fx2) { background-color: rgba(253, 181, 28, .2); }
+html body.theme-navy .page.users-dash .users-col-num:not(#fx):not(#fx2) { width: 2.2rem; text-align: center; }
+html body.theme-navy .page.users-dash .users-name-cell:not(#fx):not(#fx2) { display: flex; align-items: center; gap: .45rem; }
+html body.theme-navy .page.users-dash .users-avatar:not(#fx):not(#fx2) { width: 1.6rem !important; height: 1.6rem !important; flex: none; }
+html body.theme-navy .page.users-dash .users-avatar svg:not(#fx):not(#fx2) { width: .95rem !important; height: .95rem !important; }
+html body.theme-navy .page.users-dash .users-name:not(#fx):not(#fx2) { font-size: .85rem !important; font-weight: 700 !important; }
+html body.theme-navy .page.users-dash .users-table .actions-cell:not(#fx):not(#fx2) { white-space: nowrap; }
+html body.theme-navy .page.users-dash .users-table .actions-cell :is(button, a):not(#fx):not(#fx2) { padding: .15rem .55rem !important; font-size: .75rem !important; min-height: 0 !important; height: auto !important; }
+
+/* جدول النشاط: الاسم والرقم على سطر واحد، والأعمدة الأخرى بقدر محتواها ليأخذ المستخدم المساحة الباقية */
+html body.theme-navy .page.users-dash .activity-user-copy:not(#fx):not(#fx2) { display: flex !important; flex-direction: row !important; align-items: baseline; gap: .6rem; min-width: 0; }
+html body.theme-navy .page.users-dash .activity-phone:not(#fx):not(#fx2) { font-size: .75rem !important; color: #5b564b !important; }
+html body.theme-navy .page.users-dash .activity-table :is(th, td):not(.users-col-name):not(#fx):not(#fx2) { width: 1% !important; white-space: nowrap; }
+html body.theme-navy .page.users-dash .activity-table :is(th, td).users-col-name:not(#fx):not(#fx2) { width: auto !important; }
+html body.theme-navy .page.users-dash .activity-table tbody td:not(#fx):not(#fx2) { text-align: center; }
+html body.theme-navy .page.users-dash .activity-table tbody td.users-col-name:not(#fx):not(#fx2) { text-align: start; }
+
+html body.theme-navy .page.users-dash .users-table tbody :is(tr, td):not(#fx):not(#fx2) { height: auto !important; min-height: 0 !important; }
+html body.theme-navy .page.users-dash .users-table .users-name-cell:not(#fx):not(#fx2) { height: auto !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; }
+
+/* جدول النشاط: رقم المستخدم فقط مع الرمز داخل شارة سوداء */
+html body.theme-navy .page.users-dash .activity-table .activity-phone:not(#fx):not(#fx2) { display: none !important; }
+html body.theme-navy .page.users-dash .activity-table td.users-col-name:not(#fx):not(#fx2) { text-align: center; }
+html body.theme-navy .page.users-dash .activity-table .users-name-cell:not(#fx):not(#fx2) {
+  display: inline-flex !important; align-items: center; gap: .35rem; padding: .12rem .6rem .12rem .45rem !important;
+  background: #231f20 !important; border-radius: 8px; min-width: 3.2rem; justify-content: center;
+}
+html body.theme-navy .page.users-dash .activity-table .users-avatar:not(#fx):not(#fx2) { width: 1.2rem !important; height: 1.2rem !important; background: transparent !important; border: 0 !important; color: #ffc21a !important; }
+html body.theme-navy .page.users-dash .activity-table .users-avatar svg:not(#fx):not(#fx2) { width: 1rem !important; height: 1rem !important; stroke: #ffc21a !important; color: #ffc21a !important; }
+html body.theme-navy .page.users-dash .activity-table .users-name:not(#fx):not(#fx2) { color: #fff !important; -webkit-text-fill-color: #fff !important; font-size: .85rem !important; font-weight: 700 !important; }
 }

@@ -132,7 +132,7 @@
     white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
     overflow-wrap: anywhere; line-height: 1.3; min-width: 0; flex: 1 1 auto;
   }
-  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:not(#fx) { gap: .55rem !important; font-size: .875rem !important; }
+  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:not(#fx) { gap: .55rem !important; font-size: 1rem !important; }
 }
 
 @layer app-components {
@@ -146,7 +146,7 @@ html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-grou
   display: flex !important; align-items: center !important; box-sizing: border-box !important;
   width: 100% !important; min-height: 40px !important; height: auto !important; margin: 0 !important;
   padding: 0 12px !important; gap: 12px !important; border-radius: 10px !important;
-  font-size: .875rem !important; font-weight: 600 !important; line-height: 1.3 !important;
+  font-size: 1rem !important; font-weight: 600 !important; line-height: 1.3 !important;
 }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link > .sidebar-ico:not(#fx),
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle > .sidebar-ico:not(#fx) {
@@ -203,9 +203,9 @@ html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-su
 /* تمييز المستويات: القسم الرئيسي أبيض وسميك، والفرعي أخفت وأصغر ومزاح أعمق مع نقطة على الخط */
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:not(#fx):not(#fx2) {
   position: relative !important; padding-inline-start: 42px !important;
-  font-size: .8rem !important; font-weight: 400 !important; color: #b4b8bf !important;
+  font-size: .9rem !important; font-weight: 700 !important; color: #b4b8bf !important;
 }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink > span:not(#fx):not(#fx2) { color: #b4b8bf !important; font-weight: 400 !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink > span:not(#fx):not(#fx2) { color: #b4b8bf !important; font-weight: 700 !important; }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover > span:not(#fx):not(#fx2) { color: #fff !important; }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink::after {
   content: "" !important; position: absolute; inset-inline-start: -3.5px; top: 50%; width: 6px; height: 6px; margin-top: -3px;

@@ -425,7 +425,8 @@ def build_inventory_insights(
         },
         "by_warehouse": by_warehouse[:80],
         "by_group": by_group[:80],
-        "by_branch": by_branch[:40],
+        # فروع حصتها 0.0% لا تُعرض في الجدول (الإجماليات تبقى محسوبة على كل الفروع)
+        "by_branch": [r for r in by_branch[:40] if str(r.get("share_display") or "").strip() not in ("0.0%", "0%")],
         "group_sales_rank": group_sales_rank,
         "sales_period_label": sales_period_label,
         "stagnant": stagnant,
