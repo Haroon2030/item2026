@@ -34,7 +34,7 @@ from .oracle_stock import (
 
 logger = logging.getLogger(__name__)
 
-_INCOME_CACHE_TTL = 1800
+_INCOME_CACHE_TTL = 2400  # 40 دقيقة
 _LOOKUP_TTL = 1800
 
 

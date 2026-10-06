@@ -43,6 +43,7 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 .hv-logo svg { width: 2.4rem; height: 2.4rem; }
 .hv-brand-name { margin: 0; font: 700 1.6rem/1.2 var(--hv-font); }
 .hv-greet { margin: 0; color: var(--hv-muted); font: 400 .95rem/1.5 var(--hv-font); }
+.hv-line { margin: .35rem 0 0; max-width: 17rem; color: var(--hv-muted); font: 400 .85rem/1.6 var(--hv-font); }
 .hv-role { display: inline-block; margin-top: .2rem; padding: .15rem .8rem; border-radius: 999px; background: var(--hv-gold); color: var(--hv-ink); font: 700 .85rem/1.6 var(--hv-font); }
 
 /* الأقسام */
@@ -109,3 +110,4 @@ html body.welcome-body .hv-card:not(#fx) { background: #fff !important; color: #
 html body.welcome-body .hv-card strong:not(#fx) { color: #17140f !important; -webkit-text-fill-color: #17140f !important; background: none !important; }
 html body.welcome-body .hv-card small:not(#fx) { color: #5b564b !important; -webkit-text-fill-color: #5b564b !important; }
 html body.welcome-body .hv-title:not(#fx) { color: #17140f !important; -webkit-text-fill-color: #17140f !important; background: none !important; }
+html body.welcome-body .hv-brand .hv-line:not(#fx) { color: #cfc8b6 !important; -webkit-text-fill-color: #cfc8b6 !important; }

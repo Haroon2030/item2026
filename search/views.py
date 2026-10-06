@@ -253,9 +253,26 @@ def _welcome_user_context(user) -> dict:
             name_html,
         )
 
+    short_line = {
+        'مدير مبيعات': 'تابع صافي المبيعات والفروع أولاً بأول.',
+        'مدير مشتريات': 'تابع التوريد ودوران الموردين وطلبات الشراء.',
+        'مدير تسعيرة': 'راجع حد الربح والأصناف غير المسعّرة.',
+        'مدير مخازن': 'تابع الأرصدة والأصناف الراكدة في المخازن.',
+        'مدير مستودع': 'تابع التحويلات وحركة المستودعات.',
+        'مدير عمليات': 'نظرة على المخزون والمشتريات والمستودعات.',
+    }
+    if has_full_app_access(user) or role_name in EXECUTIVE_ROLE_NAMES:
+        welcome_line = 'ملخص تنفيذي للمبيعات والدخل والأداء لدعم قرارك.'
+    else:
+        welcome_line = short_line.get(role_name, 'الأقسام المتاحة لك ظاهرة أدناه.')
+    salute = 'صباح الخير' if timezone.localtime().hour < 12 else 'مساء الخير'
+    welcome_greet = salute if display_name.isdigit() else f'{salute} يا {display_name}'
+
     return {
         'display_name': display_name,
         'role_name': role_name,
+        'welcome_greet': welcome_greet,
+        'welcome_line': welcome_line,
         'is_staff': bool(user.is_staff),
         'welcome_kicker': kicker,
         'welcome_subtitle': subtitle,
@@ -275,6 +292,8 @@ def home(request):
             'display_name': ctx['display_name'],
             'role_name': ctx['role_name'],
             'is_staff_user': ctx['is_staff'],
+            'welcome_greet': ctx['welcome_greet'],
+            'welcome_line': ctx['welcome_line'],
             'welcome_kicker': ctx['welcome_kicker'],
             'welcome_subtitle': ctx['welcome_subtitle'],
             'welcome_cards': ctx['welcome_cards'],
