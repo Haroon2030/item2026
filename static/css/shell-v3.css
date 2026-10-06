@@ -132,5 +132,105 @@
     white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
     overflow-wrap: anywhere; line-height: 1.3; min-width: 0; flex: 1 1 auto;
   }
-  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:not(#fx) { gap: .55rem !important; font-size: .88rem !important; }
+  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:not(#fx) { gap: .55rem !important; font-size: .875rem !important; }
+}
+
+@layer app-components {
+/* ===== الشريط الجانبي: شبكة تقنية موحّدة =====
+   كل صف: ارتفاع 40 · حشوة 12 · أيقونة 20 في عمود ثابت · سهم 16 في آخر الصف · مسافة 12 */
+html body.theme-navy aside.sidebar .sidebar-nav:not(#fx) { padding: 6px 4px 8px 8px !important; gap: 4px !important; }
+html body.theme-navy aside.sidebar .sidebar-zone:not(#fx) { gap: 2px !important; }
+html body.theme-navy aside.sidebar .sidebar-section-label:not(#fx) { padding: 14px 12px 6px !important; font-size: .72rem !important; font-weight: 600 !important; letter-spacing: 0 !important; opacity: .7; }
+
+html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-group-toggle):not(.sidebar-sublink):not(#fx) {
+  display: flex !important; align-items: center !important; box-sizing: border-box !important;
+  width: 100% !important; min-height: 40px !important; height: auto !important; margin: 0 !important;
+  padding: 0 12px !important; gap: 12px !important; border-radius: 10px !important;
+  font-size: .875rem !important; font-weight: 600 !important; line-height: 1.3 !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link > .sidebar-ico:not(#fx),
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle > .sidebar-ico:not(#fx) {
+  flex: none !important; width: 20px !important; height: 20px !important; margin: 0 !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-chevron:not(#fx) { flex: none !important; width: 16px !important; height: 16px !important; margin: 0 !important; margin-inline-start: auto !important; }
+
+/* الصف النشط: تعبئة ذهبية مسطّحة بنفس عرض بقية الصفوف (بدون بروز) */
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle):not(#fx) {
+  background: #f9a11b !important; border-radius: 10px !important; box-shadow: none !important; transform: none !important;
+}
+
+/* الروابط الفرعية: إزاحة ثابتة 32px تحت أيقونة القسم */
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-sublink:not(#fx) {
+  min-height: 36px !important; padding: 0 12px !important; padding-inline-start: 44px !important; gap: 10px !important;
+  border-radius: 8px !important; font-size: .82rem !important; font-weight: 500 !important;
+}
+
+/* التذييل: المستخدم والخروج بنفس الإيقاع */
+html body.theme-navy aside.sidebar .btn-logout:not(#fx) {
+  min-height: 40px !important; padding: 0 12px !important; gap: 12px !important; border-radius: 10px !important;
+  font-size: .875rem !important; font-weight: 700 !important; width: 100% !important; margin: 0 !important;
+}
+
+/* تسطيح اللوح اللامع: لون واحد، بدون طبقة داخلية، نفس عرض وزوايا بقية الصفوف */
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle):not(#fx):not(#fx2),
+html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx):not(#fx2) {
+  min-height: 40px !important; border-radius: 10px !important; background: #f9a11b !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle):not(.sidebar-sublink):not(#fx):not(#fx2)::before,
+html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx):not(#fx2)::before { content: none !important; display: none !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active .sidebar-ico:not(#fx):not(#fx2),
+html body.theme-navy aside.sidebar .sidebar-foot .btn-logout .sidebar-ico:not(#fx):not(#fx2) { width: 20px !important; height: 20px !important; stroke-width: 1.8; }
+html body.theme-navy aside.sidebar .sidebar-nav:not(#fx):not(#fx2) { padding-inline-start: 8px !important; padding-inline-end: 18px !important; }
+html body.theme-navy aside.sidebar .sidebar-foot:not(#fx):not(#fx2) { padding-inline-start: 8px !important; padding-inline-end: 30px !important; }
+html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx):not(#fx2) { gap: 12px !important; padding: 0 12px !important; }
+
+/* القائمة الفرعية: خط المحور على منتصف أيقونة القسم، ونص الفرعي يبدأ من نفس نقطة نص القسم */
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items:not(#fx):not(#fx2) {
+  margin: 2px 0 6px !important; margin-inline-start: 21px !important; padding: 0 !important;
+  border-inline-start: 1px solid rgba(255, 255, 255, .16) !important; gap: 2px !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:not(#fx):not(#fx2) {
+  min-height: 36px !important; margin: 0 !important; padding: 6px 12px 6px 10px !important; padding-inline-start: 22px !important;
+  border-radius: 8px !important; font-size: .82rem !important; font-weight: 500 !important; line-height: 1.35 !important;
+  text-align: start !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover:not(#fx):not(#fx2) { background: rgba(255, 255, 255, .08) !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2) {
+  background: #f9a11b !important; border-radius: 8px !important; min-height: 36px !important; padding-block: 6px !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2)::before { content: none !important; display: none !important; }
+
+/* تمييز المستويات: القسم الرئيسي أبيض وسميك، والفرعي أخفت وأصغر ومزاح أعمق مع نقطة على الخط */
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:not(#fx):not(#fx2) {
+  position: relative !important; padding-inline-start: 42px !important;
+  font-size: .8rem !important; font-weight: 400 !important; color: #b4b8bf !important;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink > span:not(#fx):not(#fx2) { color: #b4b8bf !important; font-weight: 400 !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover > span:not(#fx):not(#fx2) { color: #fff !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink::after {
+  content: "" !important; position: absolute; inset-inline-start: -3.5px; top: 50%; width: 6px; height: 6px; margin-top: -3px;
+  border-radius: 50%; background: #5d626a; box-shadow: 0 0 0 3px #050708;
+}
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover::after { background: #f9a11b; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2)::after { background: #f9a11b; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active > span:not(#fx):not(#fx2) { color: #17140f !important; font-weight: 700 !important; }
+/* القسم المفتوح: عنوانه يتلوّن بالذهبي ليبيّن أن ما تحته تابع له */
+html body.theme-navy aside.sidebar .sidebar-group.is-open > .sidebar-group-toggle > span:not(#fx):not(#fx2) { color: #ffc21a !important; }
+html body.theme-navy aside.sidebar .sidebar-group.is-open > .sidebar-group-toggle .sidebar-ico:not(#fx):not(#fx2) { color: #ffc21a !important; }
+
+/* زرّا رأس الشريط (تحديث / طيّ): أزرار أيقونية مربعة بنفس لغة الصفوف */
+html body.theme-navy aside.sidebar .sidebar-brand-tools:not(#fx):not(#fx2) { gap: 6px !important; }
+html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close):not(#fx):not(#fx2) {
+  width: 32px !important; height: 32px !important; border-radius: 10px !important;
+  background: rgba(255, 255, 255, .06) !important; border: 1px solid rgba(255, 255, 255, .12) !important;
+  color: #d9dce1 !important; box-shadow: none !important; place-items: center !important;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close) svg:not(#fx):not(#fx2) {
+  width: 16px !important; height: 16px !important; stroke-width: 2 !important; color: inherit !important;
+}
+html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close):hover:not(#fx):not(#fx2),
+html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close):focus-visible:not(#fx):not(#fx2) {
+  background: #f9a11b !important; border-color: #f9a11b !important; color: #17140f !important; outline: none !important;
+}
 }

@@ -1844,7 +1844,7 @@ def fetch_inventory_wastage(
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
     cache_key = (
-        f"inv:wastage:v3:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"inv:wastage:v4:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{wh}:{gcode}:{brn}"
     )
     cached = _sales_cache_get(cache_key)
@@ -1979,7 +1979,36 @@ def fetch_inventory_wastage(
             "share_display": "0%",
         }
 
+    by_branch: dict[str, dict[str, Any]] = {}
+    for row in out_rows:
+        code = row["branch_code"]
+        item = by_branch.setdefault(
+            code,
+            {"code": code, "name": row["branch_name"], "waste_value": 0.0, "qty_total": 0.0, "doc_count": 0},
+        )
+        item["waste_value"] += row["waste_value"]
+        item["qty_total"] += row["qty_total"]
+        item["doc_count"] += row["doc_count"]
+    branches: list[dict[str, Any]] = []
+    for item in sorted(by_branch.values(), key=lambda x: x["waste_value"], reverse=True):
+        value = round(float(item["waste_value"]), 2)
+        qty = round(float(item["qty_total"]), 2)
+        share = (value / total_value * 100.0) if total_value else 0.0
+        branches.append(
+            {
+                "code": item["code"],
+                "name": item["name"],
+                "waste_value": value,
+                "waste_value_display": _fmt_inv_money(value),
+                "qty_display": _fmt_inv_qty(qty),
+                "doc_count": item["doc_count"],
+                "share_pct": round(share, 1),
+                "share_display": f"{share:.1f}%",
+            }
+        )
+
     result = {
+        "branches": branches,
         "rows": out_rows[:15],
         "count": len(out_rows),
         "doc_count": sum(r["doc_count"] for r in out_rows),

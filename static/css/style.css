@@ -5626,7 +5626,7 @@ html[dir="rtl"] .seller-fill {
 
   .sidebar {
     /* force full drawer width on mobile even if desktop was collapsed */
-    width: 248px;
+    width: min(290px, 88vw);
     transform: translateX(-110%);
     transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     box-shadow: none;

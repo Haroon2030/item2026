@@ -29,6 +29,7 @@
 {% endif %}
 
 {% if insights %}
+  <div class="inv-cards">
   <section class="inv-top" aria-label="ملخص المخزون">
     <article class="dash-kpi-card dash-kpi-glass inv-kpi-card inv-hl-wh">
       <span class="dash-kpi-label">
@@ -107,6 +108,7 @@
       <span class="dash-kpi-hint">ضمن الفلتر</span>
     </article>
   </section>
+  </div>
 {% endif %}
 
 <form method="get" action="{% url 'browse_inventory' %}" class="perf-filter dash-panel-glass inv-filter" role="search" id="inv-filter-form">
@@ -431,45 +433,20 @@
             <span class="mono">{{ insights.wastage.top_group.share_display }} من التوالف</span>
           </div>
         </article>
-        <div class="table-wrap inv-table-scroll">
-          <table class="data-table sales-table perf-compare-table inv-table-compact" aria-label="التوالف حسب الفرع والمجموعة">
-            <thead>
-              <tr>
-                <th>الفرع</th>
-                <th>المجموعة</th>
-                <th class="mono">المستندات</th>
-                <th class="mono">الكمية</th>
-                <th class="mono inv-wastage-value">التكلفة</th>
-                <th class="mono inv-wastage-share">الحصة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in insights.wastage.rows %}
-                <tr>
-                  <td class="inv-cell-clip" title="{{ row.branch_name }}">{{ row.branch_name }}</td>
-                  <td class="inv-cell-clip" title="{{ row.group_name }}">{{ row.group_name }}</td>
-                  <td class="mono">{{ row.doc_count }}</td>
-                  <td class="mono">{{ row.qty_display }}</td>
-                  <td class="mono inv-wastage-value">{% money row.waste_value_display %}</td>
-                  <td class="mono inv-wastage-share">{{ row.share_display }}</td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="6" class="sales-empty">لا توجد توالف ضمن الفلتر منذ بداية السنة.</td></tr>
-              {% endfor %}
-            </tbody>
-            {% if insights.wastage.rows %}
-              <tfoot>
-                <tr class="sales-grand-row">
-                  <td colspan="2">الإجمالي</td>
-                  <td class="mono">{{ insights.wastage.doc_count }}</td>
-                  <td class="mono">{{ insights.wastage.qty_display }}</td>
-                  <td class="mono inv-wastage-value">{% money insights.wastage.waste_value_display %}</td>
-                  <td class="mono inv-wastage-share">100%</td>
-                </tr>
-              </tfoot>
-            {% endif %}
-          </table>
-        </div>
+        {% if insights.wastage.branches %}
+        <ul class="inv-waste-bars" aria-label="التوالف حسب الفرع">
+          {% for b in insights.wastage.branches %}
+          <li class="inv-waste-bar">
+            <span class="inv-waste-bar-pct mono">{{ b.share_display }}</span>
+            <span class="inv-waste-bar-name" title="{{ b.name }}">{{ b.name }}</span>
+            <span class="inv-waste-bar-track" role="img" aria-label="{{ b.name }} {{ b.share_display }}"><i style="width: {{ b.share_pct|stringformat:".1f" }}%"></i></span>
+            <span class="inv-waste-bar-meta mono">{% money b.waste_value_display %} · {{ b.doc_count }} مستند</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="sales-empty">لا توجد توالف ضمن الفلتر منذ بداية السنة.</p>
+        {% endif %}
       </section>
     </div>
 

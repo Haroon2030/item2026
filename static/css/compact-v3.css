@@ -250,3 +250,34 @@
     html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):active, html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):hover, html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):active::before, html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):hover::before { transform: none; }
   }
 }
+
+@layer app-components {
+/* تحليل المخزون: البطاقات السبع تتتابع في شبكة واحدة؛ يكتمل الصف الأول ثم يكمل الباقي تحته */
+html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-cards:not(#fx) { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 2rem) / 5)), 1fr)) !important; justify-content: start; gap: .5rem !important; margin: 0 0 .8rem !important; }
+html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-cards > :is(.inv-top, .inv-kpi-grid):not(#fx):not(#fx2) { display: contents !important; }
+html body.theme-navy.theme-navy.theme-navy .page.page .inv-cards > :is(.inv-top, .inv-kpi-grid):not(#fx):not(#fx2) { display: contents !important; }
+html body.theme-navy.theme-navy.theme-navy .page.page .inv-cards:not(#fx):not(#fx2) { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 2rem) / 5)), 1fr)) !important; gap: .5rem !important; margin: 0 0 .8rem !important; }
+
+/* تحليل المخزون: صفّ اللوحات الخمس متوازن (لوحتان بجانب لوحتين، والتوالف بعرض كامل) بدل عمود طويل وعمود قصير */
+@media (min-width: 1100px) {
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-charts-row:not(#fx):not(#fx2) {
+    display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; grid-auto-rows: auto !important; gap: .6rem !important; align-items: stretch !important;
+  }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-charts-row > :is(.inv-branch-stagnant-stack, .inv-rank-stack):not(#fx):not(#fx2) { display: contents !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(1):not(#fx):not(#fx2) { grid-area: 1 / 1 !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(2):not(#fx):not(#fx2) { grid-area: 2 / 1 !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(3):not(#fx):not(#fx2) { grid-area: 3 / 1 / 4 / 3 !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-rank-stack > :nth-child(1):not(#fx):not(#fx2) { grid-area: 1 / 2 !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-rank-stack > :nth-child(2):not(#fx):not(#fx2) { grid-area: 2 / 2 !important; }
+}
+
+/* التوالف: أشرطة نسب لكل فرع (بدل الجدول) على عمودين */
+html body.theme-navy .page .inv-waste-bars:not(#fx) { list-style: none; margin: 0; padding: .6rem .9rem .9rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem 2rem; }
+html body.theme-navy .page .inv-waste-bar:not(#fx) { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name pct" "track track" "meta meta"; gap: .25rem .6rem; align-items: baseline; min-width: 0; }
+html body.theme-navy .page .inv-waste-bar-name:not(#fx) { grid-area: name; font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body.theme-navy .page .inv-waste-bar-pct:not(#fx) { grid-area: pct; font-weight: 700; font-size: .85rem; color: #555; }
+html body.theme-navy .page .inv-waste-bar-track:not(#fx) { grid-area: track; display: block; height: 8px; border-radius: 999px; background: #4a4a4a; overflow: hidden; }
+html body.theme-navy .page .inv-waste-bar-track > i:not(#fx) { display: block; height: 100%; border-radius: inherit; background: #fbab5a; }
+html body.theme-navy .page .inv-waste-bar-meta:not(#fx) { grid-area: meta; font-size: .75rem; color: #666; font-weight: 500; }
+@media (max-width: 900px) { html body.theme-navy .page .inv-waste-bars:not(#fx) { grid-template-columns: 1fr; } }
+}
