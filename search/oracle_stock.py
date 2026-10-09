@@ -3615,16 +3615,19 @@ def fetch_group_return_totals(
     branch_code: str = "",
     group_code: str = "",
     limit: int = 40,
+    by_branch: bool = False,
 ) -> list[dict]:
-    """مجموعات مرتبة حسب قيمة المرتجع — SELECT فقط."""
+    """مجموعات مرتبة حسب قيمة المرتجع — SELECT فقط.
+
+    by_branch=True: صف لكل (مجموعة، فرع) باستعلام واحد بدل استعلام لكل فرع (يحمل branch_code)."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
     lim = max(1, min(int(limit or 40), 200))
     cache_key = (
-        f"sales:ret_groups:v3:{system}:{_as_date(date_from).isoformat()}:"
-        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
+        f"sales:ret_groups:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:b{int(bool(by_branch))}"
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -3633,6 +3636,8 @@ def fetch_group_return_totals(
     conf = _system_conf(system)
     params: dict = _date_params(date_from, date_to)
     schema = _schema()
+    br_sel_y = "y.BRN_NO AS BRN_NO," if by_branch else ""
+    br_grp_y = ", y.BRN_NO" if by_branch else ""
     group_names = {
         str(g.get("code") or "").strip(): str(g.get("name") or "").strip()
         for g in fetch_sales_group_options()
@@ -3657,6 +3662,7 @@ def fetch_group_return_totals(
             SELECT * FROM (
               SELECT
                   y.GROUP_CODE AS GROUP_CODE,
+                  {br_sel_y}
                   COUNT(*) AS RETURN_COUNT,
                   ROUND(SUM(y.RET_QTY), 2) AS RET_QTY,
                   ROUND(SUM(y.RET_NET), 2) AS RET_NET,
@@ -3684,7 +3690,7 @@ def fetch_group_return_totals(
                     {group_filter}
                   GROUP BY NVL(TO_CHAR(i.G_CODE), '(بلا)'), m.RT_BILL_NO, m.BRN_NO
               ) y
-              GROUP BY y.GROUP_CODE
+              GROUP BY y.GROUP_CODE{br_grp_y}
               ORDER BY SUM(y.RET_NET + y.RET_VAT) DESC
             ) WHERE ROWNUM <= :lim
             """,
@@ -3700,6 +3706,7 @@ def fetch_group_return_totals(
             SELECT * FROM (
               SELECT
                   y.GROUP_CODE AS GROUP_CODE,
+                  {br_sel_y}
                   COUNT(*) AS RETURN_COUNT,
                   ROUND(SUM(y.RET_QTY), 2) AS RET_QTY,
                   ROUND(SUM(y.RET_NET), 2) AS RET_NET,
@@ -3708,6 +3715,7 @@ def fetch_group_return_totals(
                   SELECT
                       NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
                       r.RT_BILL_SER AS RT_BILL_SER,
+                      r.BRN_NO AS BRN_NO,
                       SUM(NVL(d.I_QTY, 0)) AS RET_QTY,
                       SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS RET_NET,
                       SUM(NVL(d.VAT_AMT, 0)) AS RET_VAT
@@ -3726,9 +3734,9 @@ def fetch_group_return_totals(
                   LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
                   WHERE 1 = 1
                     {group_filter}
-                  GROUP BY NVL(TO_CHAR(i.G_CODE), '(بلا)'), r.RT_BILL_SER
+                  GROUP BY NVL(TO_CHAR(i.G_CODE), '(بلا)'), r.RT_BILL_SER, r.BRN_NO
               ) y
-              GROUP BY y.GROUP_CODE
+              GROUP BY y.GROUP_CODE{br_grp_y}
               ORDER BY SUM(y.RET_NET + y.RET_VAT) DESC
             ) WHERE ROWNUM <= :lim
             """,
@@ -3745,6 +3753,7 @@ def fetch_group_return_totals(
             continue
         out.append(
             {
+                "branch_code": _norm_brn_code(row.get("BRN_NO")) if by_branch else "",
                 "group_code": code,
                 "group_name": group_names.get(code) or code,
                 "return_count": int(row.get("RETURN_COUNT") or 0),
@@ -3756,7 +3765,7 @@ def fetch_group_return_totals(
                 "invoice_count": int(row.get("RETURN_COUNT") or 0),
             }
         )
-    out.sort(key=lambda r: (-r["return_total"], r["group_code"]))
+    out.sort(key=lambda r: (-r["return_total"], r["group_code"], r["branch_code"]))
     out = out[:lim]
     _sales_cache_set(cache_key, out, date_from=date_from, date_to=date_to)
     return out
@@ -5534,6 +5543,162 @@ def _pick_richer_group_rows(
     return primary
 
 
+def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
+    """كل المجموعات × الفروع (نقاط البيع) بمسح واحد — نفس صيغة استعلام المجموعة الواحدة بلا فلتر المجموعة.
+
+    كلفة المسح (بنود الفواتير) واحدة سواء جلبنا مجموعة أو كلها؛ فيُخزَّن الشهر كله مرة
+    وتُقرأ منه أي مجموعة لاحقًا فورًا."""
+    pos = _pos_owner()
+    schema = _schema()
+    params: dict = _date_params(date_from, date_to)
+    hung_m = _hung_ok("m")
+    sales_rows = _fetch_all(
+        f"""
+        SELECT
+            NVL(TO_CHAR(x.G_CODE), '(بلا)') AS GROUP_CODE,
+            TO_CHAR(x.BRN_NO) AS BRANCH_CODE,
+            COUNT(*) AS INVOICE_COUNT,
+            ROUND(SUM(x.QTY_TOTAL), 2) AS QTY_TOTAL,
+            ROUND(SUM(x.NET_TOTAL), 2) AS NET_TOTAL,
+            ROUND(SUM(x.VAT_TOTAL), 2) AS VAT_TOTAL
+        FROM (
+            SELECT
+                i.G_CODE,
+                m.BRN_NO,
+                m.BILL_NO,
+                NVL(m.BILL_SRL, 0) AS BILL_SRL,
+                SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+                SUM({_pos_dtl_net_sql("d")}) AS NET_TOTAL,
+                SUM(0) AS VAT_TOTAL
+            FROM {pos}.IAS_POS_BILL_DTL d
+            JOIN {pos}.IAS_POS_BILL_MST m
+              ON m.BILL_NO = d.BILL_NO
+             AND m.BRN_NO = d.BRN_NO
+             AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+            LEFT JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+              AND {hung_m}
+              AND d.I_CODE IS NOT NULL
+            GROUP BY i.G_CODE, m.BRN_NO, m.BILL_NO, NVL(m.BILL_SRL, 0)
+        ) x
+        GROUP BY NVL(TO_CHAR(x.G_CODE), '(بلا)'), x.BRN_NO
+        """,
+        params,
+    )
+    return _assemble_group_rows(sales_rows, {}, by_branch=True)
+
+
+def _single_flight(res_key: str, compute, *, date_from=None, date_to=None, wait: float = 240.0):
+    """استعلام ثقيل يتكرر من طلبات متزامنة: أولها يحسب، والبقية تنتظر نتيجته من الكاش.
+
+    تعتمد على كاش مشترك بين العمليات (FileBasedCache). لو انتهت المهلة أو سقط القائد
+    يحسب المنتظِر بنفسه حتى لا يبقى بلا نتيجة."""
+    import time as _time
+
+    hit = cache.get(res_key)
+    if hit is not None:
+        return hit
+    flight = f"{res_key}:flight"
+    try:
+        leader = cache.add(flight, 1, int(wait) + 60)
+    except Exception:  # noqa: BLE001
+        leader = True
+    if leader:
+        try:
+            rows = compute()
+            _sales_cache_set(
+                res_key, rows, date_from=date_from, date_to=date_to, keep_stale=False
+            )
+            return rows
+        finally:
+            try:
+                cache.delete(flight)
+            except Exception:  # noqa: BLE001
+                pass
+    deadline = _time.monotonic() + wait
+    while _time.monotonic() < deadline:
+        _time.sleep(1.0)
+        hit = cache.get(res_key)
+        if hit is not None:
+            return hit
+        if cache.get(flight) is None:
+            break  # القائد انتهى دون نتيجة (خطأ) — احسب بنفسك
+    return compute()
+
+
+# مسح واحد في الخلفية في كل مرة (لا تزاحم أوراكل بمسوح متوازية)
+_WARM_SEM = threading.Semaphore(1)
+
+
+def _warm_pos_all_groups_by_branch(date_from, date_to, key: str) -> None:
+    """يحسب كل المجموعات × الفروع للفترة في الخلفية ويخزّنها، فتصير أي مجموعة أخرى فورية.
+
+    لا يُستدعى إلا بعد أن تُعرض نتيجة المجموعة المطلوبة للمستخدم، ويمنع تكراره قفلٌ بالكاش."""
+    lock_key = f"{key}:warming"
+    try:
+        if not cache.add(lock_key, 1, 900):
+            return
+    except Exception:  # noqa: BLE001
+        return
+
+    def _run() -> None:
+        try:
+            with _WARM_SEM:
+                if cache.get(key) is None:
+                    with oracle_session():
+                        rows = _fetch_pos_all_groups_by_branch(date_from, date_to)
+                    _sales_cache_set(
+                        key, rows, date_from=date_from, date_to=date_to, keep_stale=False
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("POS all-groups warm failed: %s", exc)
+        finally:
+            try:
+                cache.delete(lock_key)
+            except Exception:  # noqa: BLE001
+                pass
+
+    threading.Thread(target=_run, name="pos-all-groups-warm", daemon=True).start()
+
+
+def _fetch_pos_one_group_by_branch_months(
+    date_from, date_to, group_code: str, branch_code: str = ""
+) -> list[dict]:
+    """مجموعة واحدة × فروع (نقاط البيع).
+
+    - إن وُجدت لقطة «كل المجموعات» للفترة في الكاش → تُقرأ منها فورًا.
+    - وإلا استعلام المجموعة وحدها (الأسرع في أول مرة)، ثم يُحسب كل المجموعات في الخلفية
+      للفترة نفسها، فاختيار أي مجموعة أخرى على هذه الفترة يصير فوريًا.
+    كلفة المسح (بنود الفواتير) شبه ثابتة وتقسيم الفترة إلى أشهر متوازية يزاحم أوراكل فيبطّئ."""
+    brn = _norm_brn_code(branch_code) if str(branch_code or "").strip() else ""
+    gcode = str(group_code or "").strip()
+    key = (
+        f"sales:pos_all_groups_br:v2:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}"
+    )
+    rows = cache.get(key)
+    if rows is not None:
+        picked = [
+            r
+            for r in rows
+            if str(r.get("group_code") or "").strip() == gcode
+            and (not brn or _norm_brn_code(r.get("branch_code")) == brn)
+        ]
+        return _merge_group_total_parts([picked], by_branch=True)
+    result = _single_flight(
+        f"sales:pos_group_br:v1:{_as_date(date_from).isoformat()}:"
+        f"{_as_date(date_to).isoformat()}:{brn}:{gcode}",
+        lambda: _fetch_pos_one_group_by_branch(
+            date_from, date_to, group_code=gcode, branch_code=brn
+        ),
+        date_from=date_from,
+        date_to=date_to,
+    )
+    # بعد أول نتيجة: كل المجموعات تُحسب في الخلفية للفترة نفسها (لا ترتبط بفرع)
+    _warm_pos_all_groups_by_branch(date_from, date_to, key)
+    return result
+
+
 def fetch_group_sales_totals(
     date_from,
     date_to,
@@ -5594,7 +5759,7 @@ def fetch_group_sales_totals(
                 except Exception:
                     pass
                 return hit
-        rows = _fetch_pos_one_group_by_branch(
+        rows = _fetch_pos_one_group_by_branch_months(
             date_from, date_to, group_code=gcode, branch_code=brn
         )
         try:

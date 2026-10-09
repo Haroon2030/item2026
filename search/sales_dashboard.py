@@ -1705,21 +1705,45 @@ def _group_system_rows(date_from, date_to, system: str, branch_code: str, group_
         oracle_session,
     )
 
+    from .oracle_stock import _system_conf
+
     brn = str(branch_code or "").strip()
     with oracle_session():
-        raw = fetch_group_sales_totals(
-            date_from, date_to, system=system, branch_code=brn, group_code=group_code,
-            by_branch=True, force_fast=True,
-        )
+        if _system_conf(system).get("source") == "pos":
+            raw = fetch_group_sales_totals(
+                date_from, date_to, system=system, branch_code=brn, group_code=group_code,
+                by_branch=True, force_fast=True,
+            )
+        else:
+            # الجملة وأونيكس: كل المجموعات × الفروع (أسرع من مجموعة واحدة ومخزّن شهريًا لكل المجموعات)
+            # ثم تصفية المجموعة هنا — الأرقام مطابقة لاستعلام المجموعة وحدها
+            gsel = str(group_code or "").strip()
+            raw = [
+                r
+                for r in (
+                    fetch_group_sales_totals(
+                        date_from, date_to, system=system, branch_code=brn, group_code="",
+                        by_branch=True, force_fast=True,
+                    )
+                    or []
+                )
+                if str(r.get("group_code") or "").strip() == gsel
+            ]
+        # مرتجعات كل الفروع باستعلام واحد مجمّع حسب الفرع (بدل استعلام لكل فرع)
+        ret_by_branch: dict[str, list[dict]] = {}
+        if raw:
+            try:
+                for x in fetch_group_return_totals(
+                    date_from, date_to, system=system, branch_code=brn, group_code=group_code,
+                    limit=200, by_branch=True,
+                ):
+                    ret_by_branch.setdefault(_norm_brn_code(x.get("branch_code")), []).append(x)
+            except Exception:  # noqa: BLE001
+                ret_by_branch = {}
         out: list[dict] = []
         for r in raw or []:
             code = _norm_brn_code(r.get("branch_code"))
-            try:
-                rets = fetch_group_return_totals(
-                    date_from, date_to, system=system, branch_code=code, group_code=group_code
-                )
-            except Exception:  # noqa: BLE001
-                rets = []
+            rets = ret_by_branch.get(code, [])
             ret_total = round(sum(float(x.get("return_total") or 0) for x in rets), 2)
             ret_count = sum(int(x.get("return_count") or 0) for x in rets)
             gross = round(float(r.get("gross_total") or r.get("sales_total") or 0), 2)

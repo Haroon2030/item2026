@@ -295,3 +295,20 @@ html body.theme-navy .page .gm-clear:hover { background: #4A7FB5; }
 
 /* تسميات الفترات الطويلة (تاريخ من–إلى) تلتف بدل أن تتداخل مع الأشرطة */
 html body.theme-navy .page .sales-growth .sg-month { white-space: normal; line-height: 1.25; font-size: 0.74rem; }
+
+/* وضع المجموعة أثناء الحساب: هياكل بطاقات + شريط تقدّم بدل مربع نص فارغ */
+html body.theme-navy .page .gm-loading { display: grid; gap: .7rem; justify-items: stretch; text-align: center; }
+html body.theme-navy .page .gm-loading .gm-skel { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: .7rem; }
+html body.theme-navy .page .gm-loading .gm-skel-card { display: grid; gap: .5rem; padding: .7rem; border: 1px solid #E3E8EF; border-radius: 10px; background: #FFFFFF; }
+html body.theme-navy .page .gm-loading .gm-skel-card i { height: .9rem; width: 60%; border-radius: 6px; background: #D5E5F5; }
+html body.theme-navy .page .gm-loading .gm-skel-card b { height: 1.5rem; width: 85%; border-radius: 6px; background: #E4EDF7; }
+html body.theme-navy .page .gm-loading .gm-skel-card u { height: .7rem; width: 45%; border-radius: 6px; background: #EEF3F9; text-decoration: none; }
+html body.theme-navy .page .gm-loading .gm-skel-card i, html body.theme-navy .page .gm-loading .gm-skel-card b, html body.theme-navy .page .gm-loading .gm-skel-card u {
+  background-image: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.75) 50%, rgba(255,255,255,0) 100%); background-size: 200% 100%; animation: gm-shimmer 1.4s linear infinite;
+}
+html body.theme-navy .page .gm-loading .gm-msg { color: #1F2A37; font-weight: 800; font-size: 1rem; }
+html body.theme-navy .page .gm-loading .gm-bar { display: block; height: .5rem; border-radius: 999px; background: #E3E8EF; overflow: hidden; }
+html body.theme-navy .page .gm-loading .gm-bar i { display: block; height: 100%; border-radius: inherit; background: #4A7FB5; transition: width .9s ease; }
+html body.theme-navy .page .gm-loading .gm-hint { color: #3B4A5C; font-weight: 600; font-size: .82rem; }
+@keyframes gm-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { html body.theme-navy .page .gm-loading .gm-skel-card * { animation: none !important; } }

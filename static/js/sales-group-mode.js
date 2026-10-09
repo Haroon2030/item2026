@@ -26,12 +26,24 @@
       .replace(/>/g, "&gt;");
   }
 
-  function setLoadingText(text, isError, url) {
-    Array.prototype.forEach.call(document.querySelectorAll("[data-gm-loading]"), function (p) {
+  var SKEL = new Array(7).join('<span class="gm-skel-card"><i></i><b></b><u></u></span>');
+
+  // أثناء الحساب: هياكل بطاقات متحركة + شريط تقدّم بدل مربع نص فارغ، وفي الخطأ رسالة وزر إعادة
+  function setLoadingText(text, isError, url, sec) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-gm-loading]"), function (p, idx) {
       p.className = "gm-loading" + (isError ? " is-error" : "");
-      p.innerHTML = esc(text) + (isError ? ' <button type="button" class="gm-retry">إعادة المحاولة</button>' : "");
-      var btn = p.querySelector(".gm-retry");
-      if (btn) btn.addEventListener("click", function () { load(url); });
+      if (isError) {
+        p.innerHTML = esc(text) + ' <button type="button" class="gm-retry">إعادة المحاولة</button>';
+        var btn = p.querySelector(".gm-retry");
+        if (btn) btn.addEventListener("click", function () { load(url); });
+        return;
+      }
+      var pct = Math.min(94, Math.round(100 * (1 - Math.exp(-(sec || 0) / 40))));
+      p.innerHTML =
+        (idx === 0 ? '<span class="gm-skel" aria-hidden="true">' + SKEL + "</span>" : "") +
+        '<span class="gm-msg">' + esc(text) + "</span>" +
+        '<span class="gm-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>' +
+        '<span class="gm-hint">أول مرة تُحسب أرقام كل المجموعات معًا ثم تُحفظ، فاختيار أي مجموعة بعدها يظهر فورًا.</span>';
     });
   }
 
@@ -51,10 +63,10 @@
   function load(url) {
     var started = Date.now();
     var base = "جاري حساب أرقام المجموعة";
-    setLoadingText(base + "…", false, url);
+    setLoadingText(base + "…", false, url, 0);
     var tick = setInterval(function () {
       var sec = Math.round((Date.now() - started) / 1000);
-      setLoadingText(base + " — " + sec + "ث (أول مرة قد تستغرق دقيقة أو أكثر ثم تُحفظ)", false, url);
+      setLoadingText(base + " — " + sec + " ث", false, url, sec);
     }, 1000);
 
     var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
