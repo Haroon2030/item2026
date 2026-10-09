@@ -174,12 +174,12 @@
     document.querySelectorAll('.print-report-head, .print-report-foot').forEach(function (el) { el.remove(); });
   }
 
-  function addReportFrame(tables) {
+  function addReportFrame(tables, panelEl) {
     removeReportFrame();
     var main = document.querySelector('main') || document.body;
     var pageTitle = txt(main.querySelector('.dash-head h2, .dash-head h1, h1, h2')) || document.title;
     var first = tables && tables[0];
-    var panel = first && first.closest('.dash-panel, .up-sheet, .lm-sheet, .vt-sheet, .wqc-sheet, section');
+    var panel = panelEl || (first && first.closest('.dash-panel, .up-sheet, .lm-sheet, .vt-sheet, .wqc-sheet, section'));
     var sub = txt(panel && panel.querySelector('.dash-panel-head h3, .up-sheet-head h2, .up-sheet-head h3, h3, h2'));
     if (sub === pageTitle) sub = '';
     var rows = 0;
@@ -223,7 +223,7 @@
       }
       markTables(tables);
     }
-    addReportFrame(panel ? collectTables(panel) : tables);
+    addReportFrame(panel ? collectTables(panel) : tables, panel || null);
     document.querySelectorAll(
       '.table-wrap, [class*="-scroll"], #lm-wrap'
     ).forEach(function (el) {

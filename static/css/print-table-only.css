@@ -46,6 +46,10 @@
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     html body.fit-printing.fit-table-only .is-print-target tbody tr:nth-child(even) td:not(#fx) { background: #F6F8FB !important; }
+    /* لوحات القوائم (نمو المبيعات…): كل البطاقات تظهر بلا تمرير داخلي، بلا أزرار تحكم، وكل بطاقة في صفحة واحدة */
+    html body.fit-printing.fit-table-only .is-print-target :is(.sg-list, .rb-list):not(#fx) { max-height: none !important; height: auto !important; overflow: visible !important; }
+    html body.fit-printing.fit-table-only .is-print-target :is(.sg-count, .sg-sort, .dash-pdf-btn, .js-fit-print, .sales-groups-status):not(#fx) { display: none !important; }
+    html body.fit-printing.fit-table-only .is-print-target .sg-card:not(#fx) { break-inside: avoid; page-break-inside: avoid; }
     html body.fit-printing.fit-table-only .is-print-target tfoot td:not(#fx) {
       background: #EEF3F9 !important; color: #1F2A37 !important; border: 1px solid #D5DCE6 !important; border-top: 2px solid #4A7FB5 !important;
       font-weight: 800 !important; font-size: 11px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;

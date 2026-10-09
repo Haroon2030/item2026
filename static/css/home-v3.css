@@ -54,26 +54,27 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
   position: relative; overflow: hidden;
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: .9rem; row-gap: .15rem; align-items: center;
   padding: 1.05rem 1.2rem; box-sizing: border-box;
-  background: #fff; border: 1px solid var(--hv-line); border-radius: 18px; text-decoration: none; color: var(--hv-ink);
+  background: #fff; border: 1.5px solid color-mix(in srgb, var(--hue) 45%, #E3E8EF); border-radius: 18px; text-decoration: none; color: var(--hv-ink);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--hue) 18%, transparent);
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 /* خط اللون على حافة البطاقة: لون كل قسم نفس لونه في الشريط الجانبي */
-.hv-card::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 4px; background: var(--hue); }
+.hv-card::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 7px; background: var(--hue); }
 .hv-card-head { display: contents; }
 .hv-k-sales { --hue: #4A7FB5; }
-.hv-k-perf { --hue: #fda4af; }
-.hv-k-purch { --hue: #EEF3F9; }
-.hv-k-inv { --hue: #F2B65C; }
+.hv-k-perf { --hue: #E57373; }
+.hv-k-purch { --hue: #8F87C4; }
+.hv-k-inv { --hue: #3A9BB0; }
 .hv-k-income { --hue: #5BB98C; }
-.hv-k-assets { --hue: #c4b5fd; }
-.hv-card:hover, .hv-card:focus-visible { border-color: var(--hv-ink); box-shadow: 0 10px 24px rgba(23, 20, 15, .08); outline: none; }
+.hv-k-assets { --hue: #6C9BD1; }
+.hv-card:hover, .hv-card:focus-visible { border-color: var(--hue); box-shadow: 0 12px 28px color-mix(in srgb, var(--hue) 34%, transparent); transform: translateY(-2px); outline: none; }
 .hv-card:focus-visible { outline: 3px solid var(--hv-gold); outline-offset: 3px; }
-.hv-ico { grid-row: 1 / 3; grid-column: 1; display: grid; place-items: center; width: 2.9rem; height: 2.9rem; border-radius: 13px; background: color-mix(in srgb, var(--hue) 32%, #fff); transition: background-color .15s ease; }
-.hv-ico svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: var(--hv-ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.hv-card strong { grid-row: 1; grid-column: 2; align-self: end; min-width: 0; font: 700 1.05rem/1.3 var(--hv-font); }
-.hv-card small { grid-row: 2; grid-column: 2; align-self: start; color: var(--hv-graphite); font: 400 .85rem/1.45 var(--hv-font); }
+.hv-ico { grid-row: 1 / 3; grid-column: 1; display: grid; place-items: center; width: 2.9rem; height: 2.9rem; border-radius: 13px; background: var(--hue); box-shadow: 0 4px 10px color-mix(in srgb, var(--hue) 40%, transparent); transition: background-color .15s ease; }
+.hv-ico svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: #FFFFFF; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hv-card strong { grid-row: 1; grid-column: 2; align-self: end; min-width: 0; font: 800 1.12rem/1.3 var(--hv-font); }
+.hv-card small { grid-row: 2; grid-column: 2; align-self: start; color: var(--hv-graphite); font: 600 .88rem/1.45 var(--hv-font); }
 .hv-go { grid-row: 1 / 3; grid-column: 3; width: 1.1rem; height: 1.1rem; fill: none; stroke: var(--hv-graphite); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s ease, stroke .15s ease; }
-.hv-card:hover .hv-ico, .hv-card:focus-visible .hv-ico { background: var(--hue); }
+.hv-card:hover .hv-ico, .hv-card:focus-visible .hv-ico { background: var(--hue); filter: brightness(.93); }
 .hv-card:hover .hv-go, .hv-card:focus-visible .hv-go { transform: translateX(-4px); stroke: var(--hv-ink); }
 
 .welcome-empty { margin: 1.5rem 0 0; color: var(--hv-graphite); font-weight: 600; text-align: center; }
@@ -96,18 +97,18 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 }
 
 /* حماية من قواعد الثيم العامة التي تفرض ألوان الروابط والعناوين */
-html body.welcome-body .hv-hero:not(#fx) { background: #FFFFFF !important; }
-html body.welcome-body .hv-today:not(#fx) { background: #F6F8FB !important; }
+html body.welcome-body .hv-hero:not(#fx) { background: #FFFFFF !important; border: 2px solid #4A7FB5 !important; box-shadow: 0 14px 34px rgba(74, 127, 181, .28) !important; }
+html body.welcome-body .hv-today:not(#fx) { background: linear-gradient(135deg, #3F6E9E 0%, #4A7FB5 55%, #6C9BD1 100%) !important; }
 html body.welcome-body .hv-today .hv-today-num:not(#fx),
-html body.welcome-body .hv-today .hv-kpi b:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
-html body.welcome-body .hv-today .hv-kpi-bad b:not(#fx) { color: #E57373 !important; -webkit-text-fill-color: #E57373 !important; }
+html body.welcome-body .hv-today .hv-kpi b:not(#fx) { color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; background: none !important; }
+html body.welcome-body .hv-today .hv-kpi-bad b:not(#fx) { color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; }
 html body.welcome-body .hv-today .hv-today-label:not(#fx),
-html body.welcome-body .hv-today .hv-kpi small:not(#fx) { color: #3B4A5C !important; -webkit-text-fill-color: #3B4A5C !important; }
+html body.welcome-body .hv-today .hv-kpi small:not(#fx) { color: #EAF2FA !important; -webkit-text-fill-color: #EAF2FA !important; }
 html body.welcome-body .hv-brand .hv-brand-name:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
 html body.welcome-body .hv-brand .hv-greet:not(#fx) { color: #6B7785 !important; -webkit-text-fill-color: #6B7785 !important; }
 html body.welcome-body .hv-hero .hv-role:not(#fx) { background: #4A7FB5 !important; color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; }
 html body.welcome-body .hv-card:not(#fx) { background: #fff !important; color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; }
 html body.welcome-body .hv-card strong:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
-html body.welcome-body .hv-card small:not(#fx) { color: #6B7785 !important; -webkit-text-fill-color: #6B7785 !important; }
+html body.welcome-body .hv-card small:not(#fx) { color: #3B4A5C !important; -webkit-text-fill-color: #3B4A5C !important; }
 html body.welcome-body .hv-title:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
 html body.welcome-body .hv-brand .hv-line:not(#fx) { color: #6B7785 !important; -webkit-text-fill-color: #6B7785 !important; }

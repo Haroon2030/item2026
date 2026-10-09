@@ -25,21 +25,26 @@ html body.lg-body .lg-page:not(#fx) { min-height: 100dvh; }
   justify-content: flex-end;
   gap: 1.5rem;
   padding: clamp(1.2rem, 3vw, 2.4rem) var(--lg-px) 0;
-  background: #4A7FB5;
+  background: linear-gradient(180deg, #3F6E9E 0%, #4A7FB5 100%);
   color: #fff;
   overflow: hidden;
   isolation: isolate;
 }
 .lg-hero-media { position: absolute; top: 0; inset-inline: 0; aspect-ratio: 647 / 426; z-index: -1; }
-.lg-hero-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lg-hero-media img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(1.1) brightness(1.15); }
+/* تلوين الصورة الداكنة بالأزرق ليتناسق مع الثيم، وتلاشٍ سفلي يصلها بخلفية الغلاف بلا حافة */
+.lg-hero-media::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(74,127,181,.55) 0%, rgba(74,127,181,.35) 55%, #4A7FB5 100%); mix-blend-mode: screen; }
+.lg-hero-media::before { content: ""; position: absolute; inset: auto 0 0 0; height: 35%; z-index: 1; pointer-events: none;
+  background: linear-gradient(180deg, rgba(74,127,181,0) 0%, #4A7FB5 100%); }
 
 .lg-badge {
   position: absolute; top: clamp(1rem, 2.6vw, 2rem); inset-inline-start: var(--lg-px);
   display: flex; align-items: center; gap: .55rem; margin: 0;
 }
 .lg-badge-text {
-  padding: .28rem .85rem .32rem; background: var(--lg-amber); color: #1a1205;
-  font: 700 .88rem/1.4 var(--lg-font); border-bottom: 2px solid #c96a00;
+  padding: .3rem .95rem .34rem; background: #FFFFFF; color: #2F5F91; border-radius: 8px;
+  font: 800 .88rem/1.4 var(--lg-font); box-shadow: 0 4px 14px rgba(31,42,55,.22);
 }
 .lg-badge-ico { display: block; width: 3.1rem; height: 3.1rem; filter: drop-shadow(0 4px 10px rgba(74,127,181,.35)); }
 .lg-badge-ico svg { width: 100%; height: 100%; display: block; }
@@ -52,25 +57,24 @@ html body.lg-body .lg-page:not(#fx) { min-height: 100dvh; }
 }
 .lg-logo svg { width: 3.1rem; height: 3.1rem; }
 .lg-brand { margin: 0; font: 800 clamp(2rem, 2.9vw, 2.9rem)/1.1 var(--lg-font); color: #fff; }
-.lg-sub { margin: .15rem 0 0; color: var(--lg-orange); font: 700 .95rem/1.4 var(--lg-font); }
-.lg-lead { margin: .2rem 0 0; max-width: 40rem; color: #ececec; font: 400 clamp(.85rem, 1.15vw, 1rem)/1.75 var(--lg-font); }
+.lg-sub { margin: .15rem 0 0; color: #EAF2FA; font: 700 .95rem/1.4 var(--lg-font); }
+.lg-lead { margin: .2rem 0 0; max-width: 40rem; color: #FFFFFF; font: 600 clamp(.85rem, 1.15vw, 1rem)/1.75 var(--lg-font); text-shadow: 0 1px 6px rgba(31,42,55,.35); }
 
 .lg-pills { display: flex; flex-wrap: wrap; gap: .9rem; list-style: none; margin: .7rem 0 0; padding: 0; }
 .lg-pills li {
-  padding: .42rem 1rem; color: #1a1205; font: 500 .85rem/1.4 var(--lg-font);
-  border: 2px solid #4A7FB5; border-radius: 5px;
-  /* وجه لامع علوي ثم تدرّج برتقالي سفلي، بألوان الزر في التصميم */
-  background: linear-gradient(180deg, #fef8ec 0%, #fde5c3 22%, #4A7FB5 40%, #4A7FB5 47%, #4A7FB5 58%, #4A7FB5 100%);
-  box-shadow: 0 0 7px rgba(74,127,181,.5);
+  padding: .42rem 1rem; color: #2F5F91; font: 700 .85rem/1.4 var(--lg-font);
+  border: 0; border-radius: 999px;
+  background: #FFFFFF;
+  box-shadow: 0 3px 10px rgba(31,42,55,.22);
 }
 
 .lg-chart { display: block; width: calc(100% + 2 * var(--lg-px)); max-width: none; height: auto; margin: .6rem calc(-1 * var(--lg-px)) 0; }
-.lg-chart-grid line { stroke: #3d3f41; stroke-width: 2; }
-.lg-chart-line { fill: none; stroke: #4b4d4f; stroke-width: 2.2; stroke-linejoin: round; }
-.lg-chart-tick { stroke: #6a6a6a; stroke-width: 2; }
-.lg-chart-base { stroke: #4b4d4f; stroke-width: 2.4; }
-.lg-chart-dots circle { fill: #6b6d6f; }
-.lg-chart-months text { fill: #66686a; font: 500 13px "Montserrat", var(--lg-font); text-anchor: middle; }
+.lg-chart-grid line { stroke: rgba(255,255,255,.28); stroke-width: 2; }
+.lg-chart-line { fill: none; stroke: #FFFFFF; stroke-width: 2.2; stroke-linejoin: round; }
+.lg-chart-tick { stroke: rgba(255,255,255,.55); stroke-width: 2; }
+.lg-chart-base { stroke: #FFFFFF; stroke-width: 2.4; }
+.lg-chart-dots circle { fill: #FFFFFF; }
+.lg-chart-months text { fill: #EAF2FA; font: 500 13px "Montserrat", var(--lg-font); text-anchor: middle; }
 
 /* ---------- جانب النموذج ---------- */
 .lg-panel { display: grid; place-items: center; padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem); background: #fff; }
@@ -78,43 +82,44 @@ html body.lg-body .lg-page:not(#fx) { min-height: 100dvh; }
   position: relative; width: min(100%, 33rem);
   padding: 1.7rem clamp(1.4rem, 9vw, 4.9rem) 3rem;
   border-radius: 2.2rem;
-  background: linear-gradient(90deg, #EEF3F9 0%, #EEF3F9 38%, #F6F8FB 57%, #F6F8FB 75%, #F6F8FB 94%, #fffffc 100%);
-  box-shadow: 0 12px 34px rgba(120,80,0,.12);
+  background: #FFFFFF;
+  border: 2px solid #4A7FB5; border-top: 8px solid #4A7FB5;
+  box-shadow: 0 18px 44px rgba(74,127,181,.32);
   font-family: var(--lg-font);
 }
 .lg-avatar {
   display: grid; place-items: center; width: 4.9rem; height: 4.9rem; border-radius: 50%;
-  margin: 0 auto 1.7rem; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.08);
+  margin: 0 auto 1.7rem; background: #4A7FB5; box-shadow: 0 6px 18px rgba(74,127,181,.4);
 }
-.lg-avatar svg { width: 2.9rem; height: 2.9rem; fill: none; stroke: #9b9b9b; stroke-width: 1.3; stroke-linejoin: round; }
+.lg-avatar svg { width: 2.9rem; height: 2.9rem; fill: none; stroke: #FFFFFF; stroke-width: 1.5; stroke-linejoin: round; }
 
 .lg-card-head { margin-bottom: 2.2rem; }
-.lg-title { margin: 0; font: 600 1.05rem/1.4 var(--lg-font); color: #14110a; }
-.lg-tagline { margin: .15rem 0 0; font: 400 .72rem/1.5 var(--lg-font); color: #26221b; }
+.lg-title { margin: 0; font: 800 1.3rem/1.4 var(--lg-font); color: #4A7FB5; }
+.lg-tagline { margin: .15rem 0 0; font: 600 .82rem/1.5 var(--lg-font); color: #3B4A5C; }
 
 .lg-form { display: grid; gap: 1.2rem; }
-.lg-field label { display: block; margin-bottom: .55rem; font: 400 1.05rem/1.4 var(--lg-font); color: #312d2d; }
+.lg-field label { display: block; margin-bottom: .55rem; font: 700 1.05rem/1.4 var(--lg-font); color: #1F2A37; }
 .lg-input { position: relative; }
 .lg-input svg {
   position: absolute; top: 50%; inset-inline-end: 1.1rem; transform: translateY(-50%);
-  width: 1.4rem; height: 1.4rem; fill: #555655; stroke: none; pointer-events: none;
+  width: 1.4rem; height: 1.4rem; fill: #4A7FB5; stroke: none; pointer-events: none;
 }
 .lg-input input {
   width: 100%; height: 2.95rem; box-sizing: border-box;
   padding: 0 3.4rem 0 clamp(1rem, 19%, 4.9rem); direction: ltr; text-align: left;
-  border: 1px solid #59544f; border-radius: .9rem; background: #fff; color: #14110a;
+  border: 1.5px solid #4A7FB5; border-radius: .9rem; background: #fff; color: #1F2A37;
   font: 400 .85rem "Montserrat", var(--lg-font); letter-spacing: .02em;
 }
-.lg-input input::placeholder { color: #999a99; opacity: 1; }
+.lg-input input::placeholder { color: #6B7785; opacity: 1; }
 .lg-input input:focus-visible { outline: 3px solid #4A7FB5; outline-offset: 2px; }
 
 .lg-submit {
   justify-self: center; display: inline-flex; align-items: center; justify-content: center; gap: 1.1rem;
   width: min(100%, 16.2rem); height: 3.05rem; margin-top: 1.1rem; cursor: pointer;
-  border: 3px solid #4A7FB5; border-radius: .6rem; color: #14110a;
-  background: linear-gradient(180deg, #4A7FB5 0%, #4A7FB5 20%, #4A7FB5 45%, #4A7FB5 62%, #4A7FB5 100%);
+  border: 0; border-radius: .6rem; color: #FFFFFF;
+  background: linear-gradient(180deg, #5A8EC4 0%, #4A7FB5 55%, #3F6E9E 100%);
   font: 700 1.05rem var(--lg-font);
-  box-shadow: 0 4px 12px rgba(74,127,181,.28);
+  box-shadow: 0 8px 20px rgba(74,127,181,.45);
   transition: transform .15s ease, box-shadow .15s ease;
 }
 .lg-submit svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; }

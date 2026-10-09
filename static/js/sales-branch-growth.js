@@ -154,11 +154,12 @@
           var d = Math.round((Date.parse(per.to) - Date.parse(per.from)) / 86400000) + 1;
           len = d === 1 ? "يوم واحد" : d + " أيام";
         }
+        var curLabel = (data.labels && data.labels[0]) || "";
         caption =
-          "الفترة المختارة (" + esc(per.from) + " ← " + esc(per.to) + ") تُقارَن بالفترات السابقة بنفس " +
-          (mode === "days" ? "عدد الأيام" + (len ? " (" + len + ")" : "") : "عدد الأشهر") +
+          "الفترة المختارة: " + esc(curLabel) + (len ? " (" + len + ")" : "") + " — " +
+          (mode === "days" ? "تُقارَن بنفس التواريخ من الأشهر السابقة" : "تُقارَن بالفترات السابقة لها بنفس عدد الأشهر") +
           " · كل " + noun + " يُقارَن بنفسه (أطول عمود = أعلى فترة)";
-        countLabel = "عدد الفترات";
+        countLabel = mode === "days" ? "عدد الأشهر" : "عدد الفترات";
       } else {
         caption =
           "من 1 إلى " + esc(data.days) + " من كل شهر · كل " + noun + " يُقارَن بنفسه (أطول عمود = أعلى شهر)";
@@ -200,7 +201,7 @@
       return (
         '<span class="sg-chip is-' + esc(r.direction) + '">' +
         '<b class="mono"><bdi dir="ltr">' + arrow + " " + esc(r.growth_display) + "</bdi></b>" +
-        "<small>عن " + esc(against) + "</small></span>"
+        "<small>" + (state.mode === "days" ? "عن الشهر السابق" : state.mode === "months" ? "عن الفترة السابقة" : "عن " + esc(against)) + "</small></span>"
       );
     }
 

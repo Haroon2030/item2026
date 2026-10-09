@@ -356,7 +356,11 @@ html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .w
 
 @layer app-components {
 /* أيقونات مؤشرات لوحة مبيعات اليوم في الصفحة الرئيسية: أبيض */
-html body.theme-navy .hv-kpi-ico svg:not(#fx):not(#fx2) { stroke: #fff !important; color: #fff !important; }
+/* مؤشرات بطاقة اليوم على خلفية زرقاء: دائرة بيضاء بأيقونة زرقاء؛ المرتجعات دائرة حمراء بأيقونة بيضاء */
+html body.theme-navy .hv-today .hv-kpi-ico:not(#fx):not(#fx2) { background: #FFFFFF !important; }
+html body.theme-navy .hv-today .hv-kpi-ico svg:not(#fx):not(#fx2) { stroke: #3F6E9E !important; color: #3F6E9E !important; }
+html body.theme-navy .hv-today .hv-kpi-bad .hv-kpi-ico:not(#fx):not(#fx2) { background: #E57373 !important; }
+html body.theme-navy .hv-today .hv-kpi-bad .hv-kpi-ico svg:not(#fx):not(#fx2) { stroke: #FFFFFF !important; color: #FFFFFF !important; }
 }
 
 @layer app-components {

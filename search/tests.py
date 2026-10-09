@@ -2197,7 +2197,10 @@ class PurchaseControlTests(OracleSchemaMixin, TestCase):
 
         from search import sales_dashboard as sd
 
-        self.assertEqual(sd._span_label(date(2026, 10, 1), date(2026, 10, 8)), '1–8 اكتوبر 2026')
+        self.assertEqual(sd._span_label(date(2026, 10, 1), date(2026, 10, 8)), 'من 1 إلى 8 اكتوبر 2026')
+        self.assertEqual(sd._span_label(date(2026, 10, 1), date(2026, 10, 8), 2026), 'من 1 إلى 8 اكتوبر')
+        self.assertEqual(sd._span_label(date(2026, 10, 7), date(2026, 10, 7), 2026), '7 اكتوبر')
+        self.assertEqual(sd._span_label(date(2025, 12, 1), date(2025, 12, 31), 2026), 'من 1 إلى 31 ديسمبر 2025')
 
         windows = sd._growth_windows(date(2026, 3, 31), 3)
         self.assertEqual(
@@ -2215,15 +2218,25 @@ class PurchaseControlTests(OracleSchemaMixin, TestCase):
         self.assertEqual(sd._growth_windows(date(2026, 1, 15), 2)[1][0], date(2025, 12, 1))
 
         # أي فترة مختارة تُقارَن بالفترات السابقة بنفس طولها
-        # يوم واحد → الأيام السابقة
+        # يوم واحد → نفس اليوم من الأشهر السابقة
         self.assertEqual(
             sd._growth_windows(date(2026, 9, 12), 3, date(2026, 9, 12)),
-            [(date(2026, 9, 12), date(2026, 9, 12)), (date(2026, 9, 11), date(2026, 9, 11)), (date(2026, 9, 10), date(2026, 9, 10))],
+            [(date(2026, 9, 12), date(2026, 9, 12)), (date(2026, 8, 12), date(2026, 8, 12)), (date(2026, 7, 12), date(2026, 7, 12))],
         )
-        # عدة أيام (5 أيام) → فترات سابقة من 5 أيام تتتابع عبر حدود الأشهر
+        # عدة أيام (3–7 اكتوبر) → نفس التواريخ من الأشهر السابقة (3–7 سبتمبر ثم 3–7 اغسطس)
         self.assertEqual(
-            sd._growth_windows(date(2026, 9, 14), 3, date(2026, 9, 10)),
-            [(date(2026, 9, 10), date(2026, 9, 14)), (date(2026, 9, 5), date(2026, 9, 9)), (date(2026, 8, 31), date(2026, 9, 4))],
+            sd._growth_windows(date(2026, 10, 7), 3, date(2026, 10, 3)),
+            [(date(2026, 10, 3), date(2026, 10, 7)), (date(2026, 9, 3), date(2026, 9, 7)), (date(2026, 8, 3), date(2026, 8, 7))],
+        )
+        # فترة تعبر شهرين (28 سبتمبر – 2 اكتوبر) → تُزاح كلها شهراً للخلف
+        self.assertEqual(
+            sd._growth_windows(date(2026, 10, 2), 2, date(2026, 9, 28)),
+            [(date(2026, 9, 28), date(2026, 10, 2)), (date(2026, 8, 28), date(2026, 9, 2))],
+        )
+        # يوم 31 يُقصّ لآخر يوم في الشهر الأقصر
+        self.assertEqual(
+            sd._growth_windows(date(2026, 3, 31), 2, date(2026, 3, 31)),
+            [(date(2026, 3, 31), date(2026, 3, 31)), (date(2026, 2, 28), date(2026, 2, 28))],
         )
         # شهر كامل → أشهر كاملة سابقة (أغسطس 31 يوماً)
         self.assertEqual(
@@ -2244,7 +2257,7 @@ class PurchaseControlTests(OracleSchemaMixin, TestCase):
         self.assertEqual(sd._growth_mode(date(2026, 9, 10), date(2026, 9, 14)), 'days')
         self.assertEqual(sd._growth_mode(None, date(2026, 9, 14)), 'month')
         # تسمية فترة تعبر شهرين
-        self.assertEqual(sd._span_label(date(2026, 8, 28), date(2026, 9, 5)), '28 اغسطس – 5 سبتمبر 2026')
+        self.assertEqual(sd._span_label(date(2026, 8, 28), date(2026, 9, 5), 2026), 'من 28 اغسطس إلى 5 سبتمبر')
 
         windows = sd._growth_windows(date(2026, 10, 8), 3)
         data = sd.assemble_branch_growth(
@@ -2275,7 +2288,7 @@ class PurchaseControlTests(OracleSchemaMixin, TestCase):
         self.assertEqual(data['months'], 3)
         self.assertEqual(data['days'], 8)
         self.assertEqual([m['name'] for m in m1], ['اكتوبر', 'سبتمبر', 'اغسطس'])
-        self.assertEqual(data['labels'][0], '1–8 اكتوبر 2026')
+        self.assertEqual(data['labels'][0], 'من 1 إلى 8 اكتوبر')
 
         # نمو المجموعات: نفس الدالة بمفاتيح مختلفة ودون تطبيع رقم الفرع
         gdata = sd.assemble_branch_growth(

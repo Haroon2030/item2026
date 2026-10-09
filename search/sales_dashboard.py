@@ -1251,16 +1251,20 @@ _AR_MONTHS = (
 )
 
 
-def _span_label(d_from, d_to) -> str:
-    """«1–8 اكتوبر 2026» داخل الشهر الواحد، و«28 سبتمبر – 4 اكتوبر 2026» عبر شهرين."""
+def _span_label(d_from, d_to, ref_year=None) -> str:
+    """تسمية فترة بكلمات واضحة لا تتبدّل أرقامها في السياق العربي:
+
+    «7 اكتوبر» (يوم) · «من 3 إلى 7 اكتوبر» · «من 28 سبتمبر إلى 2 اكتوبر».
+    السنة تُذكر فقط إن اختلفت عن ref_year (أو دائماً إن لم تُمرَّر)."""
     month_to = _AR_MONTHS[d_to.month - 1]
+    year = "" if ref_year is not None and d_to.year == ref_year else f" {d_to.year}"
     if (d_from.year, d_from.month) == (d_to.year, d_to.month):
         if d_from.day == d_to.day:
-            return f"{d_to.day} {month_to} {d_to.year}"
-        return f"{d_from.day}–{d_to.day} {month_to} {d_to.year}"
+            return f"{d_to.day} {month_to}{year}"
+        return f"من {d_from.day} إلى {d_to.day} {month_to}{year}"
     month_from = _AR_MONTHS[d_from.month - 1]
     year_from = "" if d_from.year == d_to.year else f" {d_from.year}"
-    return f"{d_from.day} {month_from}{year_from} – {d_to.day} {month_to} {d_to.year}"
+    return f"من {d_from.day} {month_from}{year_from} إلى {d_to.day} {month_to}{year}"
 
 
 GROWTH_MIN_MONTHS = 2
@@ -1272,7 +1276,7 @@ def _growth_mode(date_from, date_to) -> str:
 
     - «month»: من أول الشهر إلى يوم فيه (شهر كامل أو حتى اليوم) → نفس الأيام من الأشهر السابقة.
     - «months»: من أول شهر وتمتد عبر أشهر → كل فترة تُقارَن بالفترات السابقة بنفس عدد الأشهر.
-    - «days»: أي فترة تبدأ في منتصف الشهر (يوم أو عدة أيام) → الفترات السابقة بنفس عدد الأيام.
+    - «days»: أي فترة تبدأ في منتصف الشهر (يوم أو عدة أيام) → نفس التواريخ من الأشهر السابقة.
     بلا تاريخ بداية: «month» (السلوك القديم)."""
     from datetime import date
 
@@ -1303,7 +1307,7 @@ def _add_months(d, k: int):
 
 def _growth_windows(date_to, months: int, date_from=None) -> list[tuple]:
     """نوافذ المقارنة من الأحدث للأقدم؛ أولها الفترة المختارة نفسها (انظر _growth_mode)."""
-    from datetime import date, timedelta
+    from datetime import date
 
     from .oracle_stock import _as_date
 
@@ -1311,12 +1315,9 @@ def _growth_windows(date_to, months: int, date_from=None) -> list[tuple]:
     end = min(_as_date(date_to), date.today())
     mode = _growth_mode(date_from, date_to)
     if mode == "days":
+        # يوم أو عدة أيام: نفس التواريخ من الأشهر السابقة (3–7 أكتوبر ← 3–7 سبتمبر ← 3–7 اغسطس…)
         start = _as_date(date_from)
-        length = (end - start).days + 1
-        return [
-            (start - timedelta(days=k * length), end - timedelta(days=k * length))
-            for k in range(n)
-        ]
+        return [(_add_months(start, -k), _add_months(end, -k)) for k in range(n)]
     if mode == "months":
         start = _as_date(date_from)
         span = (end.year - start.year) * 12 + (end.month - start.month) + 1
@@ -1420,7 +1421,8 @@ def assemble_branch_growth(
     """نمو مبيعات كل فرع عبر عدة أشهر (الأحدث أولاً). دالة نقية قابلة للاختبار.
 
     period_rows[k] = إجماليات الفروع للنافذة windows[k]. النمو الرئيسي للصف = الشهر الأحدث عن الذي يليه."""
-    labels = [_span_label(f, t) for f, t in windows]
+    ref_year = windows[0][1].year if windows else None
+    labels = [_span_label(f, t, ref_year) for f, t in windows]
     base_year = windows[0][0].year if windows else 0
     names = [
         _AR_MONTHS[f.month - 1] + ("" if f.year == base_year else f" {f.year}")
