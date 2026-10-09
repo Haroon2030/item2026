@@ -142,11 +142,15 @@
       var mode = data.mode || "month";
       state.mode = mode;
       // تسميات الفترات (تاريخ) أطول من اسم الشهر: نوسّع عمودها حتى لا تتداخل مع الأشرطة
-      if (mode === "month") panel.style.removeProperty("--sg-cols");
+      if (mode === "month" || mode === "months") panel.style.removeProperty("--sg-cols");
       else panel.style.setProperty("--sg-cols", "clamp(7.6rem, 24%, 10.5rem) minmax(0, 1fr) 6.2rem 4.4rem");
       var caption;
       var countLabel = "عدد الأشهر";
-      if (mode === "days" || mode === "months") {
+      if (mode === "months") {
+        // عدة أشهر مختارة: كل شهر من الفترة المختارة فقط، بلا سنوات أو فترات سابقة
+        caption = "مبيعات كل شهر خلال الفترة المختارة فقط · كل " + noun + " يُقارَن بنفسه (أطول عمود = أعلى شهر)";
+        btns = "";
+      } else if (mode === "days") {
         // أي فترة مختارة (يوم / عدة أيام / عدة أشهر) تُقارَن بالفترات السابقة بنفس طولها
         var per = data.period || {};
         var len = "";
@@ -164,7 +168,7 @@
         caption =
           "من 1 إلى " + esc(data.days) + " من كل شهر · كل " + noun + " يُقارَن بنفسه (أطول عمود = أعلى شهر)";
       }
-      var countBox =
+      var countBox = mode === "months" ? "" :
         '<div class="sg-count" role="group" aria-label="' + countLabel + '"><span class="sg-count-label">' + countLabel +
         "</span>" + btns + "</div>";
       box.innerHTML = '<p class="sg-caption">' + caption + "</p>" + sorts + countBox;
@@ -201,7 +205,7 @@
       return (
         '<span class="sg-chip is-' + esc(r.direction) + '">' +
         '<b class="mono"><bdi dir="ltr">' + arrow + " " + esc(r.growth_display) + "</bdi></b>" +
-        "<small>" + (state.mode === "days" ? "عن الشهر السابق" : state.mode === "months" ? "عن الفترة السابقة" : "عن " + esc(against)) + "</small></span>"
+        "<small>" + (state.mode === "days" || state.mode === "months" ? "عن الشهر السابق" : "عن " + esc(against)) + "</small></span>"
       );
     }
 

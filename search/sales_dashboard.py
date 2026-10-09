@@ -1319,11 +1319,17 @@ def _growth_windows(date_to, months: int, date_from=None) -> list[tuple]:
         start = _as_date(date_from)
         return [(_add_months(start, -k), _add_months(end, -k)) for k in range(n)]
     if mode == "months":
+        # كل شهر داخل الفترة المختارة فقط (الأحدث أولاً) — بلا فترات من سنوات سابقة
+        from calendar import monthrange
+
         start = _as_date(date_from)
-        span = (end.year - start.year) * 12 + (end.month - start.month) + 1
-        return [
-            (_add_months(start, -k * span), _add_months(end, -k * span)) for k in range(n)
-        ]
+        span = min((end.year - start.year) * 12 + (end.month - start.month) + 1, GROWTH_MAX_MONTHS)
+        out = []
+        for k in range(span):
+            first = _add_months(end.replace(day=1), -k)
+            last = first.replace(day=monthrange(first.year, first.month)[1])
+            out.append((max(first, start), min(last, end)))
+        return out
     # month: كل شهر من أوله حتى نفس رقم اليوم (يُقصّ لآخر يوم في الشهر)
     from calendar import monthrange
 
@@ -1484,7 +1490,7 @@ def _with_period(payload: dict[str, Any], windows: list[tuple], date_from, date_
             "to": windows[0][1].isoformat(),
             "mode": mode,
         }
-    if mode != "month" and windows:
+    if mode == "days" and windows:
         labels = payload.get("labels") or []
 
         def rename(series):

@@ -2251,7 +2251,7 @@ class PurchaseControlTests(OracleSchemaMixin, TestCase):
         # فترة عدة أشهر (1/7 إلى 1/9) → فترات سابقة بنفس عدد الأشهر
         self.assertEqual(
             sd._growth_windows(date(2026, 9, 1), 2, date(2026, 7, 1)),
-            [(date(2026, 7, 1), date(2026, 9, 1)), (date(2026, 4, 1), date(2026, 6, 1))],
+            [(date(2026, 9, 1), date(2026, 9, 1)), (date(2026, 8, 1), date(2026, 8, 31)), (date(2026, 7, 1), date(2026, 7, 31))],
         )
         self.assertEqual(sd._growth_mode(date(2026, 7, 1), date(2026, 9, 1)), 'months')
         self.assertEqual(sd._growth_mode(date(2026, 9, 10), date(2026, 9, 14)), 'days')
