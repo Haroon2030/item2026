@@ -11,6 +11,9 @@
   var PDF_ICON =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>';
 
+  /* الجداول العريضة أفقية؛ لوحات القوائم (بطاقات النمو…) رأسية تُقرأ من الأعلى للأسفل */
+  var printOrientation = 'landscape';
+
   function ensureLandscapeStyle() {
     var el = document.getElementById(STYLE_ID);
     if (!el) {
@@ -19,7 +22,7 @@
       document.head.appendChild(el);
     }
     el.textContent =
-      '@media print { @page { size: A4 landscape; margin: 8mm 8mm 14mm 8mm; ' +
+      '@media print { @page { size: A4 ' + printOrientation + '; margin: 8mm 8mm 14mm 8mm; ' +
       '@bottom-left { content: "صفحة " counter(page) " من " counter(pages); font: 9px Tahoma, sans-serif; color: #6B7785; } } }';
   }
 
@@ -191,6 +194,9 @@
     (tables || []).forEach(function (t) {
       var cols = t.querySelectorAll('thead tr:last-child th').length;
       t.setAttribute('data-prt-cols', String(cols));
+      var firstTh = t.querySelector('thead tr:last-child th');
+      var ft = firstTh ? (firstTh.textContent || '').trim() : '';
+      if (ft === '#' || ft === 'م' || ft === 'ر') t.setAttribute('data-prt-idx', '1');
     });
     var info = ['عدد السجلات: ' + rows].concat(filterSummary());
     var esc = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
@@ -210,11 +216,12 @@
   }
 
   function prepare(tables, panel) {
+    printOrientation = panel ? 'portrait' : 'landscape';
     ensureLandscapeStyle();
     clearPrintTargets();
     clearTableFit();
     document.body.classList.add('fit-printing');
-    document.body.classList.add('print-landscape');
+    document.body.classList.add(panel ? 'print-portrait' : 'print-landscape');
     if (panel) {
       markPanel(panel);
     } else {
@@ -413,6 +420,7 @@
     restorePrintTheme();
     document.body.classList.remove('fit-printing');
     document.body.classList.remove('print-landscape');
+    document.body.classList.remove('print-portrait');
     document.body.classList.remove('fit-table-only');
     document.body.removeAttribute('data-print-scope');
     clearPrintTargets();

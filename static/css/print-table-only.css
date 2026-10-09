@@ -46,6 +46,36 @@
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     html body.fit-printing.fit-table-only .is-print-target tbody tr:nth-child(even) td:not(#fx) { background: #F6F8FB !important; }
+    /* حاويات اللوحة (flex/grid بارتفاع ثابت وoverflow) لا تنقسم بين الصفحات فتترك صفحة فارغة: تصير كتلًا عادية */
+    html body.fit-printing.fit-table-only .is-print-ancestor:not(#fx),
+    html body.fit-printing.fit-table-only .is-print-target:not(#fx) {
+      display: block !important; height: auto !important; min-height: 0 !important; max-height: none !important;
+      overflow: visible !important; position: static !important; contain: none !important; transform: none !important;
+    }
+    /* اللوحة الطويلة تنقسم بين الصفحات (بدون صفحة فارغة)، وتملأ عرض الصفحة بلا هوامش الشريط الجانبي */
+    html body.fit-printing.fit-table-only .is-print-ancestor:not(#fx),
+    html body.fit-printing.fit-table-only .is-print-target:not(#fx) {
+      break-inside: auto !important; page-break-inside: auto !important;
+      width: 100% !important; max-width: none !important; margin: 0 !important; padding-inline: 0 !important;
+      float: none !important; grid-column: auto !important; background: transparent !important; border: 0 !important; box-shadow: none !important;
+    }
+    html body.fit-printing.fit-table-only .is-print-target :is(.rb-board, .sales-growth-board, .sg-lines):not(#fx) { break-inside: auto !important; display: block !important; height: auto !important; overflow: visible !important; }
+    /* حاوية الصفحة تحتفظ بهامش الشريط الجانبي (يمين) فتضيّق المحتوى المطبوع: نلغيه بخصوصية أعلى */
+    html body.fit-printing.fit-table-only .page.has-sidebar:not(#fx):not(#fx2):not(#fx3),
+    html body.fit-printing.fit-table-only main:not(#fx):not(#fx2):not(#fx3) {
+      margin: 0 !important; padding: 0 !important; width: 100% !important; max-width: none !important;
+      margin-inline: 0 !important; padding-inline: 0 !important; inset: auto !important;
+    }
+    /* بطاقات النمو عمودان لتقليل عدد الصفحات */
+    html body.fit-printing.fit-table-only .is-print-target :is(.sg-list, .rb-list):not(#fx) { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 10px; padding: 0 !important; list-style: none; }
+    html body.fit-printing.fit-table-only .is-print-target.sales-growth:not(#fx) { --sg-cols: 7.4rem minmax(0, 1fr) 4.4rem 3.1rem !important; }
+    html body.fit-printing.fit-table-only .is-print-target .sg-card:not(#fx) { min-width: 0 !important; box-sizing: border-box; }
+    html body.fit-printing.fit-table-only .is-print-target .sg-card :is(.sg-amt, .sg-pct, .sg-month):not(#fx) { min-width: 0; font-size: 0.7rem !important; }
+    html body.fit-printing.fit-table-only .is-print-target .sg-card:not(#fx) { margin: 0 !important; }
+    /* صف الإجمالي يُطبع مرة واحدة في نهاية الجدول لا أسفل كل صفحة */
+    html body.fit-printing.fit-table-only .is-print-target tfoot:not(#fx) { display: table-row-group !important; }
+    html body.fit-printing.fit-table-only .is-print-target tfoot td:not(#fx),
+    html body.fit-printing.fit-table-only .is-print-target thead th:not(#fx) { position: static !important; }
     /* لوحات القوائم (نمو المبيعات…): كل البطاقات تظهر بلا تمرير داخلي، بلا أزرار تحكم، وكل بطاقة في صفحة واحدة */
     html body.fit-printing.fit-table-only .is-print-target :is(.sg-list, .rb-list):not(#fx) { max-height: none !important; height: auto !important; overflow: visible !important; }
     html body.fit-printing.fit-table-only .is-print-target :is(.sg-count, .sg-sort, .dash-pdf-btn, .js-fit-print, .sales-groups-status):not(#fx) { display: none !important; }
@@ -58,8 +88,11 @@
     html body.fit-printing.fit-table-only .is-print-target:not(#fx),
     html body.fit-printing.fit-table-only .is-print-target .table-wrap:not(#fx) { width: 100% !important; max-width: none !important; overflow: visible !important; border-radius: 0 !important; }
     html body.fit-printing.fit-table-only .is-print-target table:not(#fx) {
-      width: 100% !important; min-width: 0 !important; max-width: none !important; table-layout: auto !important; zoom: 1 !important; margin: 0 !important;
+      width: 100% !important; min-width: 0 !important; max-width: none !important; table-layout: fixed !important; zoom: 1 !important; margin: 0 !important;
     }
+    html body.fit-printing.fit-table-only .is-print-target table:not(#fx) :is(th, td):not(:first-child) { width: auto !important; min-width: 0 !important; max-width: none !important; }
+    /* الأعمدة متساوية العرض تقريبًا (لا يبتلع عمود الاسم الصفحة)، وعمود الترقيم # ضيّق */
+    html body.fit-printing.fit-table-only .is-print-target table[data-prt-idx]:not(#fx) :is(th, td):first-child { width: 2.6rem !important; }
     html body.fit-printing.fit-table-only .is-print-target th:not(#fx),
     html body.fit-printing.fit-table-only .is-print-target td:not(#fx) { white-space: normal !important; overflow-wrap: break-word; word-break: normal; }
     html body.fit-printing.fit-table-only .is-print-target table[data-prt-cols="11"]:not(#fx) :is(th, td),
