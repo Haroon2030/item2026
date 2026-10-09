@@ -19,7 +19,8 @@
       document.head.appendChild(el);
     }
     el.textContent =
-      '@media print { @page { size: A4 landscape; margin: 6mm; } }';
+      '@media print { @page { size: A4 landscape; margin: 8mm 8mm 14mm 8mm; ' +
+      '@bottom-left { content: "صفحة " counter(page) " من " counter(pages); font: 9px Tahoma, sans-serif; color: #6B7785; } } }';
   }
 
   function clearPrintTargets() {
@@ -146,6 +147,68 @@
     document.body.classList.remove('fit-measuring');
   }
 
+
+  /* ترويسة وتذييل التقرير الرسمي (تظهر في الطباعة فقط) */
+  function txt(el) { return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+
+  function filterSummary() {
+    var out = [];
+    var main = document.querySelector('main') || document.body;
+    main.querySelectorAll('form select, form input[type="text"], form input[type="date"], form input[type="month"], form input[type="search"]').forEach(function (f) {
+      if (f.closest('[hidden]') || f.type === 'hidden') return;
+      var val = f.tagName === 'SELECT' ? txt(f.options[f.selectedIndex]) : (f.value || '').trim();
+      if (!val || val.length > 28) return;
+      var lab = f.id ? main.querySelector('label[for="' + f.id + '"]') : null;
+      if (!lab) {
+        var wrap = f.closest('.fl-field, .field');
+        lab = wrap ? wrap.querySelector('label') : null;
+      }
+      var name = txt(lab);
+      if (!name) return;
+      out.push(name.replace(/[:：]\s*$/, '') + ': ' + val);
+    });
+    return out.slice(0, 8);
+  }
+
+  function removeReportFrame() {
+    document.querySelectorAll('.print-report-head, .print-report-foot').forEach(function (el) { el.remove(); });
+  }
+
+  function addReportFrame(tables) {
+    removeReportFrame();
+    var main = document.querySelector('main') || document.body;
+    var pageTitle = txt(main.querySelector('.dash-head h2, .dash-head h1, h1, h2')) || document.title;
+    var first = tables && tables[0];
+    var panel = first && first.closest('.dash-panel, .up-sheet, .lm-sheet, .vt-sheet, .wqc-sheet, section');
+    var sub = txt(panel && panel.querySelector('.dash-panel-head h3, .up-sheet-head h2, .up-sheet-head h3, h3, h2'));
+    if (sub === pageTitle) sub = '';
+    var rows = 0;
+    (tables || []).forEach(function (t) { rows += t.querySelectorAll('tbody tr').length; });
+    var user = txt(document.querySelector('.sidebar-user-name'));
+    var now = new Date();
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var stamp = now.getFullYear() + '/' + pad(now.getMonth() + 1) + '/' + pad(now.getDate()) + '  ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    (tables || []).forEach(function (t) {
+      var cols = t.querySelectorAll('thead tr:last-child th').length;
+      t.setAttribute('data-prt-cols', String(cols));
+    });
+    var info = ['عدد السجلات: ' + rows].concat(filterSummary());
+    var esc = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var head = document.createElement('div');
+    head.className = 'print-report-head';
+    head.innerHTML =
+      '<div class="prh-top"><div><h1 class="prh-title">' + esc(sub || pageTitle) + '</h1>' +
+      (sub ? '<p class="prh-sub">' + esc(pageTitle) + '</p>' : '') + '</div>' +
+      '<div class="prh-org"><b>منصة التحليل</b><span>تاريخ الإصدار: ' + stamp + '</span>' +
+      (user ? '<span>أصدره: ' + esc(user) + '</span>' : '') + '</div></div>' +
+      '';
+    main.insertBefore(head, main.firstChild);
+    var foot = document.createElement('div');
+    foot.className = 'print-report-foot';
+    foot.textContent = 'تقرير صادر من منصة التحليل — للاستخدام الداخلي';
+    document.body.appendChild(foot);
+  }
+
   function prepare(tables, panel) {
     ensureLandscapeStyle();
     clearPrintTargets();
@@ -160,6 +223,7 @@
       }
       markTables(tables);
     }
+    addReportFrame(panel ? collectTables(panel) : tables);
     document.querySelectorAll(
       '.table-wrap, [class*="-scroll"], #lm-wrap'
     ).forEach(function (el) {
@@ -256,6 +320,7 @@
   }
 
   function themeElement(el) {
+    if (el.closest && el.closest('.print-report-head, .print-report-foot, table')) return;
     var cs = window.getComputedStyle(el);
     if (cs.display === 'none') return;
     var store = [];
@@ -300,6 +365,8 @@
   }
 
   function applyPrintTheme() {
+    /* الواجهة كلها فاتحة الآن: لا تحويل لألوان الطباعة حتى تظهر الألوان الحقيقية كما على الشاشة */
+    return;
     if (themedOn || !document.body.classList.contains('theme-navy')) return;
     themedOn = true;
     var root = document.querySelector('main') || document.body;
@@ -342,6 +409,7 @@
   }
 
   function cleanup() {
+    removeReportFrame();
     restorePrintTheme();
     document.body.classList.remove('fit-printing');
     document.body.classList.remove('print-landscape');
@@ -395,6 +463,14 @@
 
   function boot() {
     ensurePanelPdfButtons();
+    /* لوحات تُحمَّل جداولها لاحقًا (بعد «عرض» أو من API): نضيف لها زر PDF بالقالب نفسه */
+    if (window.MutationObserver) {
+      var timer = null;
+      new MutationObserver(function () {
+        if (timer) return;
+        timer = window.setTimeout(function () { timer = null; ensurePanelPdfButtons(); }, 400);
+      }).observe(document.querySelector('main') || document.body, { childList: true, subtree: true });
+    }
   }
 
   document.addEventListener('click', onClick);

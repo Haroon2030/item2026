@@ -14,12 +14,12 @@
   if (!raw.length) return;
 
   var SCREEN = {
-    text: "#111111", muted: "#5b5532", warn: "#9a6700", grid: "rgba(17,17,17,0.12)",
-    zero: "rgba(17,17,17,0.6)", pos: "#15803d", neg: "#be123c", hatch: "rgba(255,255,255,0.6)", band: "rgba(242,200,17,0.12)"
+    text: "#1F2A37", muted: "#6B7785", warn: "#F2B65C", grid: "#E3E8EF",
+    zero: "#6B7785", pos: "#5BB98C", neg: "#E57373", hatch: "rgba(255,255,255,0.6)", band: "rgba(74,127,181,0.12)"
   };
   var PRINT = {
-    text: "#111827", muted: "#4b5563", warn: "#b45309", grid: "rgba(17,24,39,0.12)",
-    zero: "rgba(17,24,39,0.6)", pos: "#15803d", neg: "#e11d48", hatch: "rgba(255,255,255,0.6)", band: "rgba(17,24,39,0.05)"
+    text: "#1F2A37", muted: "#6B7785", warn: "#b45309", grid: "#E3E8EF",
+    zero: "rgba(17,24,39,0.6)", pos: "#5BB98C", neg: "#E57373", hatch: "rgba(255,255,255,0.6)", band: "rgba(17,24,39,0.05)"
   };
 
   var rows = raw
@@ -43,86 +43,87 @@
     return (v < 0 ? "-" : "") + s;
   }
 
+  function shortName(r) {
+    var n = String(r.name || "").replace(/^\s*(ال)?صندوق\s*/, "").trim() || String(r.no);
+    return n.length > 18 ? n.slice(0, 17) + "…" : n;
+  }
+
   function option(c) {
+    var maxV = Math.max.apply(null, rows.map(function (r) { return r.bal; }).concat([0]));
+    var minV = Math.min.apply(null, rows.map(function (r) { return r.bal; }).concat([0]));
+    var yMin = minV < -maxV * 0.02 ? minV * 1.45 : 0;
     return {
       animation: false,
       textStyle: { fontFamily: '"IBM Plex Sans Arabic", Tahoma, sans-serif' },
-      grid: { left: 70, right: 210, top: 6, bottom: 26, containLabel: false },
+      grid: { left: 14, right: 20, top: 34, bottom: 120, containLabel: false },
       tooltip: {
         trigger: "item",
         confine: true,
-        backgroundColor: "#111111",
-        borderColor: "#F2C811",
-        textStyle: { color: "#FDF6D8", fontSize: 13 },
+        backgroundColor: "#FFFFFF",
+        borderColor: "#E3E8EF",
+        extraCssText: "box-shadow:0 4px 14px rgba(31,42,55,.12);border-radius:8px;",
+        textStyle: { color: "#1F2A37", fontSize: 13 },
         formatter: function (p) {
           var r = rows[p.dataIndex];
           return "<b>" + r.name + "</b><br/>صندوق " + r.no + "<br/>" + r.disp + "<br/>" + (r.ok ? "مطابق" : "غير مطابق");
         }
       },
       xAxis: {
+        type: "category",
+        inverse: true,
+        data: rows.map(shortName),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { show: false }
+      },
+      yAxis: {
         type: "value",
+        position: "right",
+        min: yMin,
+        max: maxV * 1.15,
         splitNumber: 4,
-        max: Math.max.apply(null, rows.map(function (r) { return r.bal; }).concat([0])) * 1.5,
-        min: Math.min.apply(null, rows.map(function (r) { return r.bal; }).concat([0])) * 1.5,
-        axisLabel: { color: c.muted, fontSize: 11.5, formatter: compact },
+        axisLabel: { show: false },
         axisLine: { show: false },
         axisTick: { show: false },
         splitLine: { lineStyle: { color: c.grid } }
       },
-      yAxis: {
-        type: "category",
-        inverse: true,
-        position: "right",
-        data: rows.map(function (r) { return r.name; }),
-        axisLine: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: true, lineStyle: { color: c.grid, type: "dashed" } },
-        splitArea: { show: true, areaStyle: { color: [c.band, "rgba(0,0,0,0)"] } },
-        axisLabel: {
-          align: "right",
-          margin: 14,
-          formatter: function (value, idx) {
-            var r = rows[idx];
-            return "{n|" + value + "  ·  " + r.no + "}";
-          },
-          rich: {
-            n: { color: c.text, fontSize: 13, fontWeight: 700, width: 190, overflow: "truncate", ellipsis: "…", align: "right" }
-          }
-        }
-      },
+      graphic: rows.map(function (r, i) {
+        var W = chart.getWidth() || host.clientWidth;
+        var gx = 14, gw = W - 14 - 20, n = rows.length;
+        var x = gx + gw * (1 - (i + 0.5) / n);
+        var y = (chart.getHeight() || 460) - 120 + 10;
+        return {
+          type: "text",
+          x: x,
+          y: y,
+          rotation: Math.PI / 2,
+          silent: true,
+          style: { text: shortName(r), fill: c.text, font: "600 12px 'IBM Plex Sans Arabic', Tahoma, sans-serif", textAlign: "left", textVerticalAlign: "middle" }
+        };
+      }),
       series: [
         {
           type: "bar",
-          barWidth: 16,
+          barWidth: 26,
+          barGap: "-100%",
           label: {
             show: true,
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: 700,
             color: c.text,
-            formatter: function (p) { return "‪" + rows[p.dataIndex].disp + "‬"; },
-            position: "right"
+            formatter: function (p) { return compact(rows[p.dataIndex].bal); },
+            position: "top"
           },
-          markLine: {
-            silent: true,
-            symbol: "none",
-            label: { show: false },
-            lineStyle: { color: c.zero, width: 1.5, type: "solid" },
-            data: [{ xAxis: 0 }]
-          },
+          markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: c.zero, width: 1 }, data: [{ yAxis: 0 }] },
           data: rows.map(function (r) {
-            var col = r.bal < 0 ? c.neg : c.pos;
             var it = {
               value: r.bal,
-              itemStyle: {
-                color: col,
-                borderRadius: r.bal < 0 ? [4, 0, 0, 4] : [0, 4, 4, 0]
-              },
-              label: r.bal < 0 ? { position: "left", align: "left" } : { position: "right", align: "right" }
+              itemStyle: { color: r.bal < 0 ? c.neg : c.pos, borderRadius: r.bal < 0 ? [0, 0, 5, 5] : [5, 5, 0, 0] },
+              label: { position: "top" }
             };
             if (!r.ok) {
-              it.itemStyle.decal = {
-                symbol: "rect", rotation: Math.PI / 4, dashArrayX: [1, 0], dashArrayY: [3, 5], color: c.hatch
-              };
+              it.itemStyle.borderColor = c.warn;
+              it.itemStyle.borderWidth = 2;
             }
             return it;
           })
@@ -131,15 +132,22 @@
     };
   }
 
-  host.style.height = rows.length * 32 + 40 + "px";
-  chart.resize();
+  function sizeChart() {
+    var wrap = host.parentElement;
+    var w = Math.max(wrap ? wrap.clientWidth : 0, rows.length * 58 + 80);
+    host.style.width = w + "px";
+    host.style.height = "460px";
+    chart.resize();
+  }
+
+  sizeChart();
   chart.setOption(option(SCREEN));
   host.setAttribute(
     "aria-label",
     "أرصدة الصناديق الأعلى: " + rows.slice(0, 3).map(function (r) { return r.name + " " + r.disp; }).join("، ")
   );
 
-  window.addEventListener("resize", function () { chart.resize(); });
+  window.addEventListener("resize", sizeChart);
   window.addEventListener("beforeprint", function () { chart.setOption(option(PRINT)); chart.resize(); });
   window.addEventListener("afterprint", function () { chart.setOption(option(SCREEN)); chart.resize(); });
 })();

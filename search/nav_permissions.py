@@ -37,6 +37,13 @@ STAFF_ONLY: frozenset[str] = frozenset(
         # قسم «الرقابة»: للمدير فقط ولا يُمنح لأي دور (لا يظهر في نموذج الصلاحيات)
         "browse_purchase_control",
         "browse_purchase_control_details",
+        "browse_transfer_control",
+        "browse_transfer_control_details",
+        "browse_issue_control",
+        "browse_issue_control_details",
+        "browse_purchase_pack_control",
+        "browse_purchase_pack_control_details",
+        "browse_employees_report",
     }
 )
 

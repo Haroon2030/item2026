@@ -24,13 +24,13 @@
 
   /* ---------------------------------------------------------------- 0 --- */
   :root {
-    --ac-gold: #F2C811;
-    --ac-ink: #111;
+    --ac-gold: #4A7FB5;
+    --ac-ink: #1F2A37;
     --ac-muted: #51647F;
     --ac-ok: #166534;
     --ac-warn: #854D0E;
     --ac-danger: #9F1239;
-    --ac-cream: #FDF6D8;
+    --ac-cream: #F6F8FB;
     --ac-ease: cubic-bezier(0.23, 1, 0.32, 1);
   }
 
@@ -55,14 +55,14 @@
 
   /* عمود الاسم: ذهبي */
   td.tc-name {
-    background: linear-gradient(180deg, #FCEAA0 0%, #F8DB6A 100%) !important;
+    background: linear-gradient(180deg, #DCE8F4 0%, #C9DBEE 100%) !important;
     color: var(--ac-ink) !important;
     font-weight: 800;
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 0 rgb(120 90 0 / 0.18);
   }
   tr:hover > td.tc-name,
   tr.is-selected > td.tc-name {
-    background: linear-gradient(180deg, #F8DB6A 0%, #F0CB45 100%) !important;
+    background: linear-gradient(180deg, #C9DBEE 0%, #B9D0E8 100%) !important;
   }
 
   /* الأرقام وعناوينها في الوسط */
@@ -102,7 +102,7 @@
   .wnt-period-sep { color: #5B678A !important; }
   .inv-summary-scope-label,
   .inv-summary-scope-title,
-  .tb-b-code { color: #0E7490 !important; }
+  .tb-b-code { color: #26805A !important; }
   .pr-compare-chip.is-today,
   .pr-compare-chip-muted { color: var(--ac-ok) !important; }
   .pr-compare-meta-label,
@@ -115,20 +115,20 @@
   /* تحليل الأداء: بطاقات الأفضل/التراجع/المرتجع وبطاقة الصحة بخلفيات فاتحة */
   .perf-meta-card.perf-meta-best   { background: #ECFDF3 !important; border-color: #86D6A4 !important; box-shadow: none !important; }
   .perf-meta-card.perf-meta-drop   { background: #FFF1F2 !important; border-color: #F0A9B6 !important; box-shadow: none !important; }
-  .perf-meta-card.perf-meta-return { background: #FFF6E0 !important; border-color: #EBC46A !important; box-shadow: none !important; }
+  .perf-meta-card.perf-meta-return { background: #F6F8FB !important; border-color: #4A7FB5 !important; box-shadow: none !important; }
   .perf-meta-mark { box-shadow: none !important; }
   .perf-meta-label { color: #4A4A4A !important; }
   .perf-meta-best .perf-meta-name,   .perf-meta-best .perf-meta-value   { color: var(--ac-ok) !important; }
   .perf-meta-drop .perf-meta-name,   .perf-meta-drop .perf-meta-value   { color: var(--ac-danger) !important; }
   .perf-meta-return .perf-meta-name, .perf-meta-return .perf-meta-value { color: var(--ac-warn) !important; }
 
-  .perf-hero.perf-hero-good { background: linear-gradient(145deg, #DDF6E6, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
-  .perf-hero.perf-hero-ok   { background: linear-gradient(145deg, #DDF1F6, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
-  .perf-hero.perf-hero-warn { background: linear-gradient(145deg, #FFEBC8, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
-  .perf-hero.perf-hero-bad  { background: linear-gradient(145deg, #FFDCE2, #FFFBE6) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-good { background: linear-gradient(145deg, #DDF6E6, #F6F8FB) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-ok   { background: linear-gradient(145deg, #DDF1F6, #F6F8FB) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-warn { background: linear-gradient(145deg, #EEF3F9, #F6F8FB) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
+  .perf-hero.perf-hero-bad  { background: linear-gradient(145deg, #FFDCE2, #F6F8FB) !important; box-shadow: 0 12px 32px rgb(70 55 0 / 0.1) !important; }
   .perf-score-good .perf-score-ring { background: #ECFDF3 !important; box-shadow: none !important; }
   .perf-score-ok .perf-score-ring   { background: #ECF8FB !important; box-shadow: none !important; }
-  .perf-score-warn .perf-score-ring { background: #FFF6E0 !important; box-shadow: none !important; }
+  .perf-score-warn .perf-score-ring { background: #F6F8FB !important; box-shadow: none !important; }
   .perf-score-bad .perf-score-ring  { background: #FFF1F2 !important; box-shadow: none !important; }
 
   /* علامة الناقص تبقى يسار الرقم في صفحة RTL (‑100.0% لا 100.0%‑) */
@@ -143,9 +143,9 @@
    */
   .up-kpi,
   .sales-ov-kpis .dash-kpi-card {
-    --kpi-accent: #D9A800; --kpi-tint: #FBF0BD; --kpi-ink: #7A5A00;
+    --kpi-accent: #4A7FB5; --kpi-tint: #FBF0BD; --kpi-ink: #7A5A00;
     position: relative !important;
-    background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF2 100%) !important;
+    background: linear-gradient(180deg, #FFFFFF 0%, #F6F8FB 100%) !important;
     border: 1px solid rgb(17 17 17 / 0.1) !important;
     border-radius: 14px !important;
     box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 8px 22px rgb(80 62 0 / 0.09) !important;
@@ -339,11 +339,11 @@
   .sales-users-track { height: 0.75rem; border-radius: 999px; background: rgb(17 17 17 / 0.07); overflow: hidden; }
   .sales-users-bar {
     display: block; height: 100%; border-radius: 999px;
-    background: linear-gradient(270deg, #F2C811, #D9A800);
+    background: linear-gradient(270deg, #4A7FB5, #4A7FB5);
     transform-origin: right center;
     animation: sales-users-grow 0.6s ease-out both;
   }
-  .sales-users-row.is-top .sales-users-bar { background: linear-gradient(270deg, #F2C811, #B98A00); }
+  .sales-users-row.is-top .sales-users-bar { background: linear-gradient(270deg, #4A7FB5, #B98A00); }
   .sales-users-meta { display: flex; gap: 0.9rem; margin-top: 0.22rem; font-size: 0.72rem; font-weight: 600; color: var(--ac-muted) !important; }
   .sales-users-share { margin-inline-start: auto; font-weight: 800; color: var(--ac-warn) !important; }
   .sales-users-empty { padding: 1rem; text-align: center; color: #5B678A; font-weight: 600; }
@@ -420,7 +420,7 @@
   .lm-pop {
     position: fixed; z-index: 9999;
     min-width: 15rem; max-width: 22rem; max-height: 18rem; overflow: auto;
-    background: #FFFEF7;
+    background: #FFFFFF;
     border: 1px solid rgb(17 17 17 / 0.35);
     border-top: 3px solid var(--ac-gold);
     border-radius: 10px;
@@ -443,7 +443,7 @@
     min-width: 2rem; height: 2rem; padding: 0 0.6rem;
     border-radius: 8px;
     border: 1px solid rgb(17 17 17 / 0.2);
-    background: #FFFEF7;
+    background: #FFFFFF;
     color: var(--ac-ink);
     font: inherit; font-weight: 700; font-size: 0.8rem;
     cursor: pointer;
@@ -491,8 +491,8 @@ body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) t
 body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-sold    { background-color: rgb(249 115 22 / 0.15) !important; color: #c2410c !important; font-weight: 800; }
 body.theme-navy .page.lastmove-dash .lastmove-table tbody tr:not(.is-selected) td.lm-c-pct     { text-align: center; }
 .lm-pct { display: inline-block; min-width: 3.4rem; padding: 0.12rem 0.5rem; border-radius: 999px; font-weight: 800; }
-.lm-pct.is-zero { background: rgb(220 38 38 / 0.18); color: #b91c1c; }
-.lm-pct.is-low  { background: rgb(245 158 11 / 0.22); color: #b45309; }
+.lm-pct.is-zero { background: rgb(220 38 38 / 0.18); color: #C24545; }
+.lm-pct.is-low  { background: rgb(245 158 11 / 0.22); color: #B7791F; }
 .lm-pct.is-mid  { background: rgb(234 179 8 / 0.25); color: #854d0e; }
-.lm-pct.is-high { background: rgb(34 197 94 / 0.20); color: #15803d; }
+.lm-pct.is-high { background: rgb(34 197 94 / 0.20); color: #26805A; }
 

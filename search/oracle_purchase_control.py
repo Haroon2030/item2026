@@ -64,7 +64,7 @@ def _warehouse_names() -> dict[str, str]:
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Warehouse names unavailable: %s", exc)
-        return _django_lookup_set("warehouse_names:v1", {})
+        return {}  # لا يُخزَّن الفشل (كان يبقى {} في الكاش أسبوعاً)
     names = {
         str(r.get("W_CODE") or "").strip(): str(r.get("W_NAME") or "").strip()
         for r in rows

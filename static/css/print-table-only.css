@@ -6,8 +6,62 @@
    هذه القاعدة في نفس الطبقة وبخصوصية أعلى، فتُخفي كل ما عدا الجدول وأسلافه. */
 @layer app-components {
   @media print {
-    html body.fit-printing.fit-table-only .is-print-ancestor > *:not(.is-print-ancestor):not(.is-print-target):not(#fx) {
+    html body.fit-printing.fit-table-only .is-print-ancestor > *:not(.is-print-ancestor):not(.is-print-target):not(.print-report-head):not(#fx) {
       display: none !important;
     }
+  }
+}
+
+/* التقرير الرسمي: ترويسة + جدول موحّد + تذييل (التصميم في Figma: Report A4 Landscape) */
+.print-report-head { display: none; }
+.print-report-foot { display: none; }
+@layer app-components {
+  @media print {
+    html body.fit-printing:not(#fx), html body.fit-printing *:not(#fx) { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html body.fit-printing.fit-table-only .print-report-head:not(#fx) {
+      display: block !important; direction: rtl; margin: 0 0 10px; color: #1F2A37; font-family: "IBM Plex Sans Arabic", "Tajawal", Tahoma, sans-serif;
+    }
+    .print-report-head .prh-top { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 8px; border-bottom: 3px solid #4A7FB5; }
+    .print-report-head .prh-title { margin: 0; font-size: 24px; font-weight: 800; color: #4A7FB5; line-height: 1.25; }
+    .print-report-head .prh-sub { margin: 3px 0 0; font-size: 12px; color: #6B7785; font-weight: 600; }
+    .print-report-head .prh-org { text-align: left; direction: rtl; }
+    .print-report-head .prh-org b { display: block; font-size: 18px; font-weight: 800; color: #1F2A37; }
+    .print-report-head .prh-org span { display: block; font-size: 15px; font-weight: 700; color: #1F2A37; margin-top: 4px; }
+    .print-report-head .prh-info { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 8px; padding: 6px 12px; background: #F6F8FB; border: 1px solid #E3E8EF; border-radius: 6px; font-size: 11px; font-weight: 700; color: #1F2A37; }
+    html body.fit-printing.fit-table-only .print-report-foot:not(#fx) {
+      display: block !important; position: fixed; bottom: 0; right: 0; left: 0; padding-top: 4px; border-top: 1px solid #E3E8EF;
+      font-size: 9px; color: #6B7785; text-align: center; direction: rtl; background: #fff;
+    }
+    html body.fit-printing.fit-table-only .is-print-target table:not(#fx) { border-collapse: collapse !important; direction: rtl; }
+    html body.fit-printing.fit-table-only .is-print-target thead:not(#fx) { display: table-header-group !important; }
+    html body.fit-printing.fit-table-only .is-print-target tr:not(#fx) { break-inside: avoid; page-break-inside: avoid; }
+    html body.fit-printing.fit-table-only .is-print-target th:not(#fx) {
+      background: #4A7FB5 !important; color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; border: 1px solid #3F6E9E !important;
+      font-weight: 800 !important; font-size: 11px !important; padding: 5px 6px !important; text-align: center !important;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    html body.fit-printing.fit-table-only .is-print-target tbody td:not(#fx) {
+      background: #FFFFFF !important; color: #1F2A37 !important; border: 1px solid #D5DCE6 !important; box-shadow: none !important; filter: none !important;
+      font-weight: 600 !important; font-size: 11px !important; padding: 4px 6px !important; text-align: center;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    html body.fit-printing.fit-table-only .is-print-target tbody tr:nth-child(even) td:not(#fx) { background: #F6F8FB !important; }
+    html body.fit-printing.fit-table-only .is-print-target tfoot td:not(#fx) {
+      background: #EEF3F9 !important; color: #1F2A37 !important; border: 1px solid #D5DCE6 !important; border-top: 2px solid #4A7FB5 !important;
+      font-weight: 800 !important; font-size: 11px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+
+    html body.fit-printing.fit-table-only .is-print-target:not(#fx),
+    html body.fit-printing.fit-table-only .is-print-target .table-wrap:not(#fx) { width: 100% !important; max-width: none !important; overflow: visible !important; border-radius: 0 !important; }
+    html body.fit-printing.fit-table-only .is-print-target table:not(#fx) {
+      width: 100% !important; min-width: 0 !important; max-width: none !important; table-layout: auto !important; zoom: 1 !important; margin: 0 !important;
+    }
+    html body.fit-printing.fit-table-only .is-print-target th:not(#fx),
+    html body.fit-printing.fit-table-only .is-print-target td:not(#fx) { white-space: normal !important; overflow-wrap: break-word; word-break: normal; }
+    html body.fit-printing.fit-table-only .is-print-target table[data-prt-cols="11"]:not(#fx) :is(th, td),
+    html body.fit-printing.fit-table-only .is-print-target table[data-prt-cols="12"]:not(#fx) :is(th, td),
+    html body.fit-printing.fit-table-only .is-print-target table[data-prt-cols="13"]:not(#fx) :is(th, td),
+    html body.fit-printing.fit-table-only .is-print-target table[data-prt-cols="14"]:not(#fx) :is(th, td),
+    html body.fit-printing.fit-table-only .is-print-target table[data-prt-cols="15"]:not(#fx) :is(th, td) { font-size: 9.5px !important; padding: 3px 4px !important; }
   }
 }

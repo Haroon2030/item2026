@@ -2093,6 +2093,290 @@ class PurchaseControlTests(OracleSchemaMixin, TestCase):
             self.assertEqual(self.client.get(reverse('browse_purchase_control')).status_code, 200)
             self.assertContains(self.client.get(reverse('home')), 'رقابة فواتير الشراء')
 
+    def test_transfer_and_issue_control_screens_are_admin_only(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, STAFF_ONLY
+
+        cases = (
+            ('browse_transfer_control', 'رقابة التحويلات'),
+            ('browse_transfer_control_details', 'تفاصيل رقابة التحويلات'),
+            ('browse_issue_control', 'رقابة أوامر الصرف المخزني'),
+            ('browse_issue_control_details', 'تفاصيل رقابة أوامر الصرف المخزني'),
+        )
+        for name, _ in cases:
+            self.assertIn(name, STAFF_ONLY)
+            self.assertNotIn(name, ALL_SCREEN_KEYS)
+            self.assertEqual(self.client.get(reverse(name)).status_code, 302)
+        plain = get_user_model().objects.create_user('plain_ctl', password='x-Test-123')
+        admin = get_user_model().objects.create_user('ctl_admin3', password='x-Test-123', is_staff=True)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            self.client.force_login(plain)
+            for name, _ in cases:
+                self.assertEqual(self.client.get(reverse(name)).status_code, 302)
+            self.client.force_login(admin)
+            for name, title in cases:
+                self.assertContains(self.client.get(reverse(name)), title)
+            home = self.client.get(reverse('home'))
+            self.assertContains(home, 'رقابة التحويلات')
+            self.assertContains(home, 'رقابة أوامر الصرف المخزني')
+
+    def test_purchase_pack_control_screen_and_logic(self):
+        from search import oracle_purchase_pack_control as pk
+        from search.nav_permissions import ALL_SCREEN_KEYS, STAFF_ONLY
+
+        names = ('browse_purchase_pack_control', 'browse_purchase_pack_control_details')
+        for name in names:
+            self.assertIn(name, STAFF_ONLY)
+            self.assertNotIn(name, ALL_SCREEN_KEYS)
+            self.assertEqual(self.client.get(reverse(name)).status_code, 302)
+        admin = get_user_model().objects.create_user('pack_admin', password='x-Test-123', is_staff=True)
+        self.client.force_login(admin)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            self.assertContains(self.client.get(reverse(names[0])), 'رقابة اختلاف عبوة الشراء')
+            self.assertContains(self.client.get(reverse(names[1])), 'رقابة اختلاف عبوة الشراء')
+            self.assertContains(self.client.get(reverse('home')), 'رقابة اختلاف عبوة الشراء')
+
+        report = pk.assemble_report(
+            [{'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'PC1', 'LINES_N': 5, 'BILLS_N': 3, 'ITEMS_N': 2}],
+            branch_names={'1': 'فرع'},
+            user_names={'7': 'أحمد'},
+        )
+        self.assertEqual(report['totals'], {'lines': '5', 'bills': '3'})
+        self.assertEqual(report['control_rows'][0]['user'], 'أحمد')
+        with patch('search.oracle_purchase_pack_control.oracle_enabled', return_value=True):
+            with self.assertRaises(pk.OracleStockError):
+                pk.build_pack_control('2026-10-01', '2026-10-01', user_id='8 OR 1=1')
+        # \0640 يجب أن يصل إلى أوراكل حرفياً (لا يتحول إلى رمز ثماني في بايثون)
+        self.assertIn('UNISTR(\'\\0640\')', pk._UNIT_KEY)
+
+    def test_employees_report_screen_and_logic(self):
+        from datetime import date, datetime
+
+        from search import oracle_employees as emp
+        from search.nav_permissions import ALL_SCREEN_KEYS, STAFF_ONLY
+
+        self.assertIn('browse_employees_report', STAFF_ONLY)
+        self.assertNotIn('browse_employees_report', ALL_SCREEN_KEYS)
+        self.assertEqual(self.client.get(reverse('browse_employees_report')).status_code, 302)
+        plain = get_user_model().objects.create_user('plain_emp', password='x-Test-123')
+        admin = get_user_model().objects.create_user('emp_admin', password='x-Test-123', is_staff=True)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            self.client.force_login(plain)
+            self.assertEqual(self.client.get(reverse('browse_employees_report')).status_code, 302)
+            self.client.force_login(admin)
+            self.assertContains(self.client.get(reverse('browse_employees_report')), 'بيانات الموظفين')
+            self.assertContains(self.client.get(reverse('home')), 'بيانات الموظفين')
+
+        self.assertEqual(emp.parse_month('2026-09'), (date(2026, 9, 1), date(2026, 10, 1)))
+        self.assertEqual(emp.parse_month('2026-12'), (date(2026, 12, 1), date(2027, 1, 1)))
+        self.assertEqual(emp.previous_month(date(2026, 1, 15)), '2025-12')
+        for bad in ('', '2026-13', '2026-9', 'x'):
+            with self.assertRaises(emp.OracleStockError):
+                emp.parse_month(bad)
+        rows = emp.assemble_rows(
+            [{'EMP_NO': '5', 'EMP_NAME': ' علي   أحمد ', 'BRANCH_CODE': '2', 'CC_CODE': '101',
+              'CC_NAME': 'مركز الربوة', 'HRCHY_NAME': 'الكاشيرات', 'PARENT_NAME': 'سكاي مول',
+              'HIRE_DATE': datetime(2020, 9, 23), 'SALARY_AMT': 2700, 'SALARY_DATE': datetime(2026, 9, 19), 'PAY_METHOD': 'T'}],
+            branch_names={'2': 'فرع الربوة'},
+        )
+        self.assertEqual(rows[0]['name'], 'علي أحمد')
+        self.assertEqual((rows[0]['cc_code'], rows[0]['cc_name']), ('101', 'مركز الربوة'))
+        self.assertEqual((rows[0]['parent'], rows[0]['structure']), ('سكاي مول', 'الكاشيرات'))
+        self.assertEqual(rows[0]['hire_date'], '2020-09-23')
+        self.assertEqual((rows[0]['salary'], rows[0]['salary_date']), ('2,700.00', '2026-09-19'))
+        self.assertEqual((rows[0]['pay_key'], rows[0]['pay_method']), ('T', 'تحويل'))
+        none = emp.assemble_rows([{'EMP_NO': '6', 'PAY_METHOD': None}], branch_names={})
+        self.assertEqual(none[0]['pay_method'], 'غير محدد')
+        resp = emp.build_employees_excel({'month': '2026-09', 'count': '1', 'employees': rows})
+        body = resp.content.decode('utf-8')
+        self.assertIn('employees-2026-09.xls', resp['Content-Disposition'])
+        for text in ('رقم الموظف', 'الهيكل الرئيسي', 'آخر راتب أساسي', 'طريقة الصرف', 'تحويل', 'علي أحمد', 'سكاي مول', '2,700.00'):
+            self.assertIn(text, body)
+
+    def test_branch_growth_logic_and_endpoint(self):
+        from datetime import date
+
+        from search import sales_dashboard as sd
+
+        self.assertEqual(sd._span_label(date(2026, 10, 1), date(2026, 10, 8)), '1–8 اكتوبر 2026')
+
+        windows = sd._growth_windows(date(2026, 3, 31), 3)
+        self.assertEqual(
+            windows,
+            [
+                (date(2026, 3, 1), date(2026, 3, 31)),
+                (date(2026, 2, 1), date(2026, 2, 28)),  # فبراير 28 يوماً: يُقصّ اليوم
+                (date(2026, 1, 1), date(2026, 1, 31)),
+            ],
+        )
+        self.assertEqual(len(sd._growth_windows(date(2026, 10, 8), 20)), 12)  # سقف 12 شهراً
+        year = sd._growth_windows(date(2026, 10, 8), 12)
+        self.assertEqual((year[0][0], year[-1][0]), (date(2026, 10, 1), date(2025, 11, 1)))
+        self.assertEqual(len(sd._growth_windows(date(2026, 10, 8), 1)), 2)  # حدّ أدنى شهران
+        self.assertEqual(sd._growth_windows(date(2026, 1, 15), 2)[1][0], date(2025, 12, 1))
+
+        # أي فترة مختارة تُقارَن بالفترات السابقة بنفس طولها
+        # يوم واحد → الأيام السابقة
+        self.assertEqual(
+            sd._growth_windows(date(2026, 9, 12), 3, date(2026, 9, 12)),
+            [(date(2026, 9, 12), date(2026, 9, 12)), (date(2026, 9, 11), date(2026, 9, 11)), (date(2026, 9, 10), date(2026, 9, 10))],
+        )
+        # عدة أيام (5 أيام) → فترات سابقة من 5 أيام تتتابع عبر حدود الأشهر
+        self.assertEqual(
+            sd._growth_windows(date(2026, 9, 14), 3, date(2026, 9, 10)),
+            [(date(2026, 9, 10), date(2026, 9, 14)), (date(2026, 9, 5), date(2026, 9, 9)), (date(2026, 8, 31), date(2026, 9, 4))],
+        )
+        # شهر كامل → أشهر كاملة سابقة (أغسطس 31 يوماً)
+        self.assertEqual(
+            sd._growth_windows(date(2026, 9, 30), 2, date(2026, 9, 1)),
+            [(date(2026, 9, 1), date(2026, 9, 30)), (date(2026, 8, 1), date(2026, 8, 31))],
+        )
+        # من أول الشهر إلى يوم فيه → نفس الأيام من الأشهر السابقة
+        self.assertEqual(
+            sd._growth_windows(date(2026, 9, 15), 2, date(2026, 9, 1)),
+            [(date(2026, 9, 1), date(2026, 9, 15)), (date(2026, 8, 1), date(2026, 8, 15))],
+        )
+        # فترة عدة أشهر (1/7 إلى 1/9) → فترات سابقة بنفس عدد الأشهر
+        self.assertEqual(
+            sd._growth_windows(date(2026, 9, 1), 2, date(2026, 7, 1)),
+            [(date(2026, 7, 1), date(2026, 9, 1)), (date(2026, 4, 1), date(2026, 6, 1))],
+        )
+        self.assertEqual(sd._growth_mode(date(2026, 7, 1), date(2026, 9, 1)), 'months')
+        self.assertEqual(sd._growth_mode(date(2026, 9, 10), date(2026, 9, 14)), 'days')
+        self.assertEqual(sd._growth_mode(None, date(2026, 9, 14)), 'month')
+        # تسمية فترة تعبر شهرين
+        self.assertEqual(sd._span_label(date(2026, 8, 28), date(2026, 9, 5)), '28 اغسطس – 5 سبتمبر 2026')
+
+        windows = sd._growth_windows(date(2026, 10, 8), 3)
+        data = sd.assemble_branch_growth(
+            [
+                [
+                    {'branch_code': '1', 'branch_name': 'أ', 'sales_total': 120},
+                    {'branch_code': '2', 'branch_name': 'ب', 'sales_total': 80},
+                    {'branch_code': '3', 'branch_name': 'ج', 'sales_total': 50},
+                ],
+                [
+                    {'branch_code': '1', 'branch_name': 'أ', 'sales_total': 100},
+                    {'branch_code': '2', 'branch_name': 'ب', 'sales_total': 100},
+                ],
+                [{'branch_code': '1', 'branch_name': 'أ', 'sales_total': 80}],
+            ],
+            windows,
+        )
+        by = {r['branch_code']: r for r in data['rows']}
+        self.assertEqual((by['1']['growth_pct'], by['1']['direction']), (20.0, 'up'))
+        self.assertEqual((by['2']['growth_pct'], by['2']['direction']), (-20.0, 'down'))
+        self.assertEqual((by['3']['growth_pct'], by['3']['direction'], by['3']['growth_display']), (None, 'new', 'جديد'))
+        self.assertEqual([r['branch_code'] for r in data['rows']], ['1', '2', '3'])
+        m1 = by['1']['months']
+        self.assertEqual([m['display'] for m in m1], ['120', '100', '80'])
+        self.assertEqual([m['growth_display'] for m in m1], ['+20.0%', '+25.0%', ''])  # الأقدم بلا نسبة
+        self.assertEqual(by['2']['months'][1]['direction'], 'new')  # 100 بعد شهر بلا مبيعات
+        self.assertEqual(data['total']['growth_display'], '+25.0%')
+        self.assertEqual(data['months'], 3)
+        self.assertEqual(data['days'], 8)
+        self.assertEqual([m['name'] for m in m1], ['اكتوبر', 'سبتمبر', 'اغسطس'])
+        self.assertEqual(data['labels'][0], '1–8 اكتوبر 2026')
+
+        # نمو المجموعات: نفس الدالة بمفاتيح مختلفة ودون تطبيع رقم الفرع
+        gdata = sd.assemble_branch_growth(
+            [
+                [{'group_code': '04', 'group_name': 'الغذائية', 'sales_total': 150}],
+                [{'group_code': '04', 'group_name': 'الغذائية', 'sales_total': 100}],
+            ],
+            sd._growth_windows(date(2026, 10, 8), 2),
+            code_key='group_code',
+            name_key='group_name',
+            norm=lambda c: str(c or '').strip(),
+            total_label='كل المجموعات',
+        )
+        self.assertEqual(
+            (gdata['rows'][0]['code'], gdata['rows'][0]['name'], gdata['rows'][0]['growth_display']),
+            ('04', 'الغذائية', '+50.0%'),
+        )
+        self.assertEqual(gdata['total']['name'], 'كل المجموعات')
+
+        url = reverse('browse_sales_branch_growth_api')
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.assertEqual(self.client.get(reverse('browse_sales_group_growth_api')).status_code, 302)
+        user = get_user_model().objects.create_user('growth_user', password='x-Test-123')
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=False):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(response.json()['ok'])
+            gresponse = self.client.get(reverse('browse_sales_group_growth_api'))
+            self.assertEqual(gresponse.status_code, 400)
+            self.assertFalse(gresponse.json()['ok'])
+
+    def test_sales_group_mode_api_and_placeholder(self):
+        from datetime import date
+
+        from search import sales_dashboard as sd
+
+        url = reverse('browse_sales_group_mode_api')
+        self.assertEqual(self.client.get(url).status_code, 302)
+        user = get_user_model().objects.create_user('gm_user', password='x-Test-123')
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=True):
+            self.assertEqual(self.client.get(url, {'date_from': '2026-10-01', 'date_to': '2026-10-02'}).status_code, 400)
+
+        def row(code, name, sales, inv, ret=0.0):
+            return {
+                'branch_code': code, 'branch_name': name, 'invoice_count': inv, 'return_count': 1 if ret else 0,
+                'return_total': ret, 'net_invoice_count': inv, 'gross_total': sales + ret, 'net_total': sales,
+                'vat_total': 0.0, 'sales_total': sales, 'avg_basket': round(sales / inv, 2), 'group_name': 'الطازج',
+            }
+
+        pos = [row('6', 'سكاي مول', 900.0, 10, 50.0), row('7', 'الدمام', 300.0, 5)]
+        dashboard = sd._assemble_sales_branches_dashboard(
+            pos, [], [], date(2026, 10, 1), date(2026, 10, 2), group_code='26'
+        )
+        dashboard['group_name'] = 'الطازج'
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), patch(
+            'search.sales_dashboard.build_sales_branches_for_group', return_value=dashboard
+        ):
+            response = self.client.get(
+                url, {'date_from': '2026-10-01', 'date_to': '2026-10-02', 'group': '26'}
+            )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['group_name'], 'الطازج')
+        self.assertIn('dash-kpi-card', data['board_html'])
+        self.assertIn('900.00', data['tables_html'])
+        self.assertIn('sales-returns-data', data['returns_html'])
+
+        placeholder = sd.build_sales_branches_placeholder(
+            date(2026, 10, 1), date(2026, 10, 2), group_code='26'
+        )
+        self.assertEqual(placeholder['kpis']['pos_invoices'], '0')
+
+    def test_doc_control_assemble_and_validation(self):
+        from search import oracle_doc_control as dc
+
+        spec = dc.get_spec('transfers')
+        report = dc.assemble_report(
+            spec,
+            [
+                {'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'PC1', 'KIND_CODE': 'out', 'N': 3, 'POSTED_N': 2, 'AMT': 10},
+                {'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'PC1', 'KIND_CODE': 'in', 'N': 1, 'POSTED_N': 1, 'AMT': 5},
+                {'BRANCH_CODE': '1', 'USER_ID': '7', 'TERMINAL': 'PC1', 'KIND_CODE': 'zzz', 'N': 9, 'POSTED_N': 0, 'AMT': 99},
+            ],
+            branch_names={'1': 'فرع'},
+            user_names={'7': 'أحمد'},
+        )
+        row = report['control_rows'][0]
+        self.assertEqual([c['n'] for c in row['cells']], [3, 1])
+        self.assertEqual((row['total'], row['unposted']), (4, 1))
+        self.assertEqual(report['totals']['amount'], '15.00')
+        with patch('search.oracle_doc_control.oracle_enabled', return_value=True):
+            with self.assertRaises(dc.OracleStockError):
+                dc.build_control('transfers', '2026-10-01', '2026-10-01', user_id='8 OR 1=1')
+            with self.assertRaises(dc.OracleStockError):
+                dc.build_control_details('issues', '2026-10-01', '2026-10-01', kind='cash', user_id='1', terminal='HP')
+        with self.assertRaises(dc.OracleStockError):
+            dc.get_spec('nope')
+
     def test_detail_sql_bind_names_are_valid_oracle_identifiers(self):
         """أسماء المتغيرات يجب ألا تكون كلمات محجوزة (مثل :uid → ORA-01745) وكل متغير له قيمة."""
         import re

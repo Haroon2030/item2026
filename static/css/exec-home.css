@@ -1,10 +1,10 @@
 /* الصفحة الرئيسية — لوحة فنية تفاعلية · ثيم أصفر/أسود على كريمي */
 body.theme-navy .page.welcome-dash .ex-home {
-  --y: #F2C811; --k: #111111; --cream: #FDF6D8;
+  --y: #4A7FB5; --k: #1F2A37; --cream: #F6F8FB;
   position: relative; overflow: hidden; isolation: isolate;
   min-height: min(720px, calc(100vh - 48px)); margin: 0; padding: 0;
   border-radius: 20px; border: 2px solid var(--k);
-  background: radial-gradient(90% 90% at 50% 50%, #FFFBE6 0%, var(--cream) 75%);
+  background: radial-gradient(90% 90% at 50% 50%, #F6F8FB 0%, var(--cream) 75%);
   display: block;
 }
 .ex-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
@@ -12,17 +12,17 @@ body.theme-navy .page.welcome-dash .ex-home {
 .ex-aurora i { position: absolute; width: 44%; height: 44%; border-radius: 50%; background: var(--y); animation: ex-drift 18s ease-in-out infinite alternate; }
 .ex-aurora i:nth-child(1) { top: -12%; right: -8%; }
 .ex-aurora i:nth-child(2) { bottom: -16%; left: -8%; animation-delay: -6s; opacity: .7; }
-.ex-aurora i:nth-child(3) { background: #111; bottom: -20%; right: 30%; width: 22%; height: 22%; animation-delay: -11s; opacity: .12; }
+.ex-aurora i:nth-child(3) { background: #1F2A37; bottom: -20%; right: 30%; width: 22%; height: 22%; animation-delay: -11s; opacity: .12; }
 @keyframes ex-drift { to { transform: translate(8%, 10%) scale(1.15); } }
 
 .ex-center { position: absolute; z-index: 2; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: min(400px, 44%); pointer-events: none; }
 .ex-kicker { display: inline-block; margin: 0 0 10px; padding: 3px 14px; font-size: .88rem; font-weight: 700; color: var(--k); background: var(--y); }
 body.theme-navy .page .ex-home .ex-title {
-  -webkit-text-fill-color: #111 !important; color: #111 !important; margin: 0; font-size: clamp(2.2rem, 5vw, 3.6rem); font-weight: 800; line-height: 1.1; color: var(--k); }
+  -webkit-text-fill-color: #1F2A37 !important; color: #1F2A37 !important; margin: 0; font-size: clamp(2.2rem, 5vw, 3.6rem); font-weight: 800; line-height: 1.1; color: var(--k); }
 .ex-greet { margin: 10px 0 14px; font-size: 1.1rem; color: #3a3a3a; }
 .ex-greet span { color: var(--k); font-weight: 800; background: linear-gradient(transparent 55%, var(--y) 55%); }
 .ex-sub { margin: 0 0 14px; font-size: .88rem; line-height: 1.7; color: #3a3a3a; font-weight: 600; }
-.ex-sub .welcome-sub-role { color: #111; font-weight: 800; background: linear-gradient(transparent 55%, #F2C811 55%); }
+.ex-sub .welcome-sub-role { color: #1F2A37; font-weight: 800; background: linear-gradient(transparent 55%, #4A7FB5 55%); }
 .ex-sub .welcome-sub-name { font-weight: 800; }
 .ex-meta { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .ex-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 6px; font-size: .82rem; font-weight: 700; color: var(--y); background: var(--k); }
@@ -34,20 +34,20 @@ body.theme-navy .page .ex-home .ex-title {
 .ex-orbit { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .ex-node { position: absolute; top: 0; left: 0; width: 232px; margin: -44px 0 0 -116px; padding: 14px 16px 14px 12px; text-decoration: none; pointer-events: auto;
   display: flex; align-items: center; gap: 12px; text-align: right; border-radius: 14px; background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
-  border: 1px solid rgba(17,17,17,.12); border-right: 5px solid #F2C811;
+  border: 1px solid #E3E8EF; border-right: 5px solid #4A7FB5;
   box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 10px 26px rgba(70,55,0,.16), 0 2px 6px rgba(70,55,0,.1);
   will-change: transform; transition: box-shadow .25s, border-color .25s, background .25s; }
-.ex-node:hover, .ex-node:focus-visible { outline: none; background: #fff; border-color: #111; border-right-color: #111;
-  box-shadow: 0 16px 36px rgba(70,55,0,.28), 0 0 0 3px #F2C811; }
-.ex-ico { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; color: #F2C811; background: #111; transition: background .25s, color .25s; }
-.ex-node:hover .ex-ico, .ex-node:focus-visible .ex-ico { background: #F2C811; color: #111; }
+.ex-node:hover, .ex-node:focus-visible { outline: none; background: #fff; border-color: #1F2A37; border-right-color: #1F2A37;
+  box-shadow: 0 16px 36px rgba(70,55,0,.28), 0 0 0 3px #4A7FB5; }
+.ex-ico { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; color: #FFFFFF; background: #4A7FB5; transition: background .25s, color .25s; }
+.ex-node:hover .ex-ico, .ex-node:focus-visible .ex-ico { background: #3F6E9E; color: #FFFFFF; }
 .ex-ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .ex-body { display: grid; gap: 3px; flex: 1; min-width: 0; }
-body.theme-navy .page .ex-node strong { font-size: 1.05rem; font-weight: 800; color: #111 !important; line-height: 1.2; }
-.ex-node small { font-size: .76rem; line-height: 1.45; color: #5b5532; }
-.ex-go { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: rgba(17,17,17,.06); color: #111; transition: background .25s, transform .25s; }
+body.theme-navy .page .ex-node strong { font-size: 1.05rem; font-weight: 800; color: #1F2A37 !important; line-height: 1.2; }
+.ex-node small { font-size: .76rem; line-height: 1.45; color: #6B7785; }
+.ex-go { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: rgba(74,127,181,.10); color: #1F2A37; transition: background .25s, transform .25s; }
 .ex-go svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.ex-node:hover .ex-go, .ex-node:focus-visible .ex-go { background: #111; color: #F2C811; transform: translateX(-3px); }
+.ex-node:hover .ex-go, .ex-node:focus-visible .ex-go { background: #4A7FB5; color: #FFFFFF; transform: translateX(-3px); }
 
 /* جوال: شبكة بدل المدار */
 @media (max-width: 760px) {

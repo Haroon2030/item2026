@@ -1,0 +1,17 @@
+{% load money_fmt %}
+      <section class="dash-panel dash-panel-glass sales-ov-panel sales-ov-returns" aria-label="الفروع الأكثر مرتجعاً">
+        <div class="dash-panel-head">
+          <span class="rb-head-ico" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><path d="M24 7v24M14 22l10 10 10-10M9 40h30"/></svg>
+          </span>
+          <div>
+            <h3>الفروع الأكثر مرتجعاً</h3>
+          </div>
+          <span class="result-pill">{{ dashboard.top_returns.count }}</span>
+        </div>
+        {{ dashboard.top_returns.rows|json_script:"sales-returns-data" }}
+        <div id="sales-returns-board" class="rb-board" hidden></div>
+        <p id="sales-returns-empty" class="sales-empty"{% if dashboard.top_returns.rows %} hidden{% endif %}>
+          لا مرتجعات في الفترة.
+        </p>
+      </section>

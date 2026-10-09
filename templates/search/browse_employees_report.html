@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}بيانات الموظفين{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash pctl-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/purchase-control.css?v={{ app_client_version }}">
+{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="بيانات الموظفين">
+  <div class="dash-head-copy">
+    <h2>بيانات الموظفين</h2>
+    <p class="sales-ov-sub">الموظفون النشطون الذين لهم حركة أو قيد في الشهر المختار — بلا سلة المحذوفات</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_employees_report' %}" class="purchase-filter dash-panel-glass" role="search">
+  <div class="field">
+    <label for="emp-month">الشهر</label>
+    <input id="emp-month" type="month" name="month" value="{{ month }}" required>
+  </div>
+  <div class="field">
+    <label for="emp-branch">الفرع</label>
+    <select id="emp-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="emp-pay">طريقة صرف الراتب</label>
+    <select id="emp-pay" name="pay">
+      <option value="">الكل</option>
+      <option value="transfer" {% if selected_pay == 'transfer' %}selected{% endif %}>تحويل</option>
+      <option value="cash" {% if selected_pay == 'cash' %}selected{% endif %}>نقد</option>
+      <option value="unknown" {% if selected_pay == 'unknown' %}selected{% endif %}>غير محدد</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="emp-q">بحث بالاسم</label>
+    <input id="emp-q" type="search" placeholder="اكتب جزءاً من الاسم" autocomplete="off">
+  </div>
+  <button type="submit" class="btn-primary">عرض</button>
+</form>
+
+{% if report %}
+  <section class="dash-panel dash-panel-glass" aria-label="الموظفون">
+    <div class="dash-panel-head">
+      <div>
+        <h3>الموظفون — {{ report.month }}</h3>
+        <p class="sales-ov-sub">نشطون وعليهم قيد أو حركة في الشهر · تحويل {{ report.pay_counts.transfer }} · نقد {{ report.pay_counts.cash }}</p>
+      </div>
+      <div class="dash-head-actions">
+        <a class="btn-ghost" href="{% url 'browse_employees_report' %}?month={{ month|urlencode }}&amp;branch={{ selected_branch|urlencode }}&amp;pay={{ selected_pay|urlencode }}&amp;export=excel" title="تصدير الجدول إلى Excel">Excel</a>
+        <span class="result-pill"><span id="emp-shown">{{ report.count }}</span> / {{ report.count }}</span>
+      </div>
+    </div>
+    <div class="table-wrap pctl-wrap">
+      <table class="data-table sales-table pctl-fit" id="emp-table" aria-label="الموظفون">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>رقم الموظف</th>
+            <th>الاسم</th>
+            <th>الفرع</th>
+            <th>كود المركز</th>
+            <th>المركز</th>
+            <th>الهيكل الرئيسي</th>
+            <th>الهيكل</th>
+            <th>تاريخ التوظيف</th>
+            <th>آخر راتب أساسي</th>
+            <th>تاريخ آخر راتب</th>
+            <th>طريقة الصرف</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.employees %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td class="mono">{{ r.emp_no }}</td>
+            <td>{{ r.name }}</td>
+            <td>{{ r.branch }}</td>
+            <td class="mono">{{ r.cc_code }}</td>
+            <td>{{ r.cc_name }}</td>
+            <td>{{ r.parent }}</td>
+            <td>{{ r.structure }}</td>
+            <td class="mono">{{ r.hire_date }}</td>
+            <td class="mono">{{ r.salary }}</td>
+            <td class="mono">{{ r.salary_date }}</td>
+            <td>{{ r.pay_method }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="12">لا يوجد موظفون بحركة أو قيد في هذا الشهر.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% elif not error and not submitted %}
+  <p class="welcome-empty" role="status">اختر الشهر والفرع ثم اضغط «عرض».</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+  (function () {
+    var q = document.getElementById("emp-q");
+    var rows = document.querySelectorAll("#emp-table tbody tr");
+    var shown = document.getElementById("emp-shown");
+    if (!q || !rows.length) return;
+    q.addEventListener("input", function () {
+      var t = q.value.trim();
+      var n = 0;
+      Array.prototype.forEach.call(rows, function (tr) {
+        var ok = !t || tr.textContent.indexOf(t) !== -1;
+        tr.hidden = !ok;
+        if (ok) n++;
+      });
+      if (shown) shown.textContent = n.toLocaleString("en-US");
+    });
+  })();
+</script>
+{% endblock %}

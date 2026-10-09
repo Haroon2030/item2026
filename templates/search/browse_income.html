@@ -386,12 +386,12 @@
         </button>
       </div>
     </div>
-    <p class="income-rank-period">كل الصناديق ذات الرصيد (الصفرية غير معروضة) · مرتّبة من الأعلى رصيداً إلى الأدنى · مرّر للأسفل لرؤية الباقي</p>
+    <p class="income-rank-period">كل الصناديق ذات الرصيد (الصفرية غير معروضة) · مرتّبة من الأعلى رصيداً إلى الأدنى · مرّر يمينًا ويسارًا لرؤية الباقي</p>
     {% if statement.reconciliation.chart %}
       <div class="wf-legend cash-legend" aria-hidden="true">
-        <span><i class="wf-key" style="background:#37D26F"></i>رصيد موجب</span>
-        <span><i class="wf-key" style="background:#fb7185"></i>رصيد سالب</span>
-        <span><i class="wf-key cash-key-hatch"></i>مخطط = غير مطابق</span>
+        <span><i class="wf-key" style="background:#5BB98C"></i>رصيد موجب</span>
+        <span><i class="wf-key" style="background:#E57373"></i>رصيد سالب</span>
+        <span><i class="wf-key cash-key-hatch"></i>إطار كهرماني = غير مطابق</span>
       </div>
       <div class="cash-scroll"><div id="cash-balance-chart" class="exp-chart" role="img" aria-label="أرصدة الصناديق"></div></div>
       {{ statement.reconciliation.rows|json_script:"cash-balance-data" }}

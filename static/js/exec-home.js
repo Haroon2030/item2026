@@ -11,7 +11,7 @@
   var W = 0, H = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
   var mouse = { x: 0, y: 0, tx: 0, ty: 0, px: 0, py: 0, in: false };
   var parts = [], angle = 0, speed = 0.0016, hovered = false, last = 0;
-  var colors = ['#F2C811', '#111111', '#F2C811', '#111111', '#D9A900'];
+  var colors = ['#6C9BD1', '#7CC4B0', '#F2C57C', '#E8A0A0', '#A9A1D9'];
 
   function narrow() { return W < 760; }
   function resize() {
@@ -67,7 +67,7 @@
       nodes.forEach(function (el) {
         if (!el._p) return;
         var g = ctx.createLinearGradient(cx, cy, el._p.x, el._p.y);
-        g.addColorStop(0, 'rgba(242,200,17,0)'); g.addColorStop(1, '#111111');
+        g.addColorStop(0, 'rgba(74,127,181,0)'); g.addColorStop(1, '#1F2A37');
         ctx.globalAlpha = (el === document.activeElement || el.matches(':hover')) ? .9 : .28;
         ctx.strokeStyle = g; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(el._p.x, el._p.y); ctx.stroke(); ctx.globalAlpha = 1;
       });

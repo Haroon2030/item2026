@@ -3,44 +3,44 @@
 @layer app-components {
   /* اللوحة نفسها (باستثناء فلتر المخزن المضمّن داخل لوحة) */
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form):not(.wh-exp-src-filter, #fx) {
-    background: linear-gradient(to left, #f7941e, #ffc30e 55%, #ffda00) top / 100% .4rem no-repeat, #fff !important;
-    border: 1.5px solid #231f20 !important; border-radius: 12px !important; box-shadow: none !important;
-    padding-top: calc(.4rem + .8rem) !important; color: #231f20 !important;
+    background: linear-gradient(to left, #4A7FB5, #4A7FB5 55%, #4A7FB5) top / 100% .4rem no-repeat, #fff !important;
+    border: 1px solid #E3E8EF !important; border-radius: 12px !important; box-shadow: none !important;
+    padding-top: calc(.4rem + .8rem) !important; color: #1F2A37 !important;
     backdrop-filter: none !important;
   }
 
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) label:not(#fx) {
-    color: #231f20 !important; font-weight: 700 !important; font-size: .85rem !important;
+    color: #1F2A37 !important; font-weight: 700 !important; font-size: .85rem !important;
   }
 
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="hidden"], #fx) {
-    background-color: #fff !important; color: #231f20 !important; font-weight: 600 !important;
-    border: 1.5px solid #231f20 !important; border-radius: 8px !important; box-shadow: none !important;
+    background-color: #fff !important; color: #1F2A37 !important; font-weight: 600 !important;
+    border: 1px solid #E3E8EF !important; border-radius: 8px !important; box-shadow: none !important;
   }
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(input, select, textarea):focus:not(#fx) {
-    outline: 0 !important; border-color: #231f20 !important; box-shadow: 0 0 0 3px #ffda00 !important;
+    outline: 0 !important; border-color: #E3E8EF !important; box-shadow: 0 0 0 3px #4A7FB5 !important;
   }
 
   /* الزر الأساسي: أصفر بإطار أسود */
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(.btn-primary, button[type="submit"]):not(#fx) {
-    background: #ffc30e !important; color: #231f20 !important; font-weight: 800 !important;
-    border: 1.5px solid #231f20 !important; border-radius: 8px !important; box-shadow: none !important; text-shadow: none !important;
+    background: #4A7FB5 !important; color: #FFFFFF !important; font-weight: 800 !important;
+    border: 1px solid #E3E8EF !important; border-radius: 8px !important; box-shadow: none !important; text-shadow: none !important;
   }
-  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(.btn-primary, button[type="submit"]):hover:not(#fx) { background: #fbab18 !important; }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(.btn-primary, button[type="submit"]):hover:not(#fx) { background: #4A7FB5 !important; }
   /* الأزرار الثانوية: بيضاء بإطار أسود */
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(.btn-secondary, .btn-ghost, .btn-outline):not(#fx) {
-    background: #fff !important; color: #231f20 !important; border: 1.5px solid #231f20 !important; border-radius: 8px !important; box-shadow: none !important;
+    background: #fff !important; color: #1F2A37 !important; border: 1px solid #E3E8EF !important; border-radius: 8px !important; box-shadow: none !important;
   }
 
   /* مكوّنات مخصصة داخل الفلاتر: قائمة منسدلة مخصصة وزر الكاميرا */
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) :is(.inv-select-trigger, .btn-scan):not(#fx) {
-    background: #fff !important; color: #231f20 !important; font-weight: 600 !important;
-    border: 1.5px solid #231f20 !important; border-radius: 8px !important; box-shadow: none !important;
+    background: #fff !important; color: #1F2A37 !important; font-weight: 600 !important;
+    border: 1px solid #E3E8EF !important; border-radius: 8px !important; box-shadow: none !important;
   }
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) .inv-select-trigger:focus-visible:not(#fx),
-  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) .btn-scan:focus-visible:not(#fx) { outline: 0 !important; box-shadow: 0 0 0 3px #ffda00 !important; }
-  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) .btn-scan:not(#fx) { background: #ffc30e !important; }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) .btn-scan:focus-visible:not(#fx) { outline: 0 !important; box-shadow: 0 0 0 3px #4A7FB5 !important; }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) .btn-scan:not(#fx) { background: #4A7FB5 !important; }
   html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.pr-compare-filter, form.income-filter-bar, form.ss-toolbar, form.browse-form, form.wh-exp-src-filter) .inv-select-menu:not(#fx) {
-    background: #fff !important; border: 1.5px solid #231f20 !important; border-radius: 8px !important; box-shadow: 0 6px 18px rgba(35,31,32,.18) !important;
+    background: #fff !important; border: 1px solid #E3E8EF !important; border-radius: 8px !important; box-shadow: 0 6px 18px rgba(35,31,32,.18) !important;
   }
 }

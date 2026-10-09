@@ -13,24 +13,33 @@
   /* الأرقام القابلة للضغط */
   html body.theme-navy .page a.pctl-count:not(#fx) {
     display: inline-block; min-width: 2.2rem; padding: .1rem .5rem; border-radius: 6px;
-    border: 1.5px solid #231f20; background: #fff4d6; color: #231f20 !important;
+    border: 1px solid #E3E8EF; background: #FDF3E1; color: #1F2A37 !important;
     font-weight: 800; text-align: center; text-decoration: none;
   }
   html body.theme-navy .page a.pctl-count:hover:not(#fx),
   html body.theme-navy .page a.pctl-count:focus-visible:not(#fx) {
-    background: #ffc30e; outline: 0; box-shadow: 0 0 0 3px #ffda00;
+    background: #4A7FB5; outline: 0; box-shadow: 0 0 0 3px #4A7FB5;
   }
 
   /* زر الرجوع: ليس dash-pdf-btn لأن fit-print.js يربط ذلك الصنف بالطباعة */
   html body.theme-navy .page a.pctl-back:not(#fx) {
     display: inline-flex; align-items: center; gap: .4rem; padding: .45rem 1rem;
-    background: #ffc30e; color: #231f20 !important; border: 1.5px solid #231f20; border-radius: 8px;
+    background: #4A7FB5; color: #FFFFFF !important; border: 1px solid #E3E8EF; border-radius: 8px;
     font-weight: 800; font-size: .85rem; text-decoration: none; cursor: pointer;
   }
   html body.theme-navy .page a.pctl-back:hover:not(#fx),
-  html body.theme-navy .page a.pctl-back:focus-visible:not(#fx) { background: #fbab18; outline: 0; box-shadow: 0 0 0 3px #ffda00; }
+  html body.theme-navy .page a.pctl-back:focus-visible:not(#fx) { background: #4A7FB5; outline: 0; box-shadow: 0 0 0 3px #4A7FB5; }
   html body.theme-navy .page .pctl-muted:not(#fx) { color: #6b6b6b; font-weight: 600; }
   html body.theme-navy .page a.pctl-back svg:not(#fx) {
     width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* جدول يلائم عرض كل عمود نصَّه (بيانات الموظفين): بلا التفاف ولا تمديد، والتمرير أفقي عند الزيادة */
+  html body.theme-navy .page .pctl-wrap:not(#fx) { overflow-x: auto !important; }
+  html body.theme-navy .page table.pctl-fit:not(#fx) {
+    width: auto !important; min-width: 0 !important; table-layout: auto !important;
+  }
+  html body.theme-navy .page table.pctl-fit:not(#fx) th,
+  html body.theme-navy .page table.pctl-fit:not(#fx) td {
+    width: auto !important; white-space: nowrap !important;
   }
 }

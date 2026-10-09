@@ -1,0 +1,297 @@
+/* نمو مبيعات الفروع عبر عدة أشهر — بطاقة لكل فرع.
+   كل بطاقة: رأس فيه اسم الفرع وشارة نموه (أخضر/أحمر) وحافة ملوّنة على جنبها، وتحته سطر لكل شهر:
+   الشهر · حجم المبيعات (عمود بلون الشهر) · المبلغ · التغيّر عن الشهر الذي قبله.
+   بطاقة «كل الفروع» مظلّلة بالأزرق الفاتح لتتميّز عن الفروع. القائمة بارتفاع ثابت وتمرير داخلي. */
+
+html body.theme-navy .page .sales-growth {
+  --sg-up: #26805A;
+  --sg-up-bg: #E3F4EC;
+  --sg-down: #C24545;
+  --sg-down-bg: #FBE7E7;
+  --sg-flat: #6B7785;
+  --sg-flat-bg: #EEF3F9;
+  --sg-ink: #1F2A37;
+  --sg-cols: 5.4rem minmax(0, 1fr) 6.2rem 4.4rem;
+}
+
+/* ——— سطر التوضيح + عدد الأشهر ——— */
+html body.theme-navy .page .sales-growth .sg-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  padding: 0 0.1rem 0.45rem;
+}
+html body.theme-navy .page .sales-growth .sg-legend[hidden] { display: none; }
+html body.theme-navy .page .sales-growth .sg-caption { margin: 0; font-size: 0.76rem; font-weight: 600; color: var(--sg-flat); }
+html body.theme-navy .page .sales-growth .sg-count { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; font-size: 0.76rem; font-weight: 700; }
+html body.theme-navy .page .sales-growth .sg-count-label { margin-inline-end: 0.3rem; color: var(--sg-flat); font-weight: 600; }
+html body.theme-navy .page .sales-growth .sg-n {
+  appearance: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1px solid #E3E8EF;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--sg-ink);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+html body.theme-navy .page .sales-growth .sg-n:hover { background: #EEF3F9; }
+html body.theme-navy .page .sales-growth .sg-n.is-on { background: #4A7FB5; color: #FFFFFF; }
+html body.theme-navy .page .sales-growth .sg-n:focus-visible { outline: 3px solid #4A7FB5; outline-offset: 1px; }
+
+/* ——— ترويسة الأعمدة (تنطبق على سطور الأشهر داخل البطاقات) ——— */
+html body.theme-navy .page .sales-growth .sg-head {
+  display: grid;
+  grid-template-columns: var(--sg-cols);
+  column-gap: 0.5rem;
+  align-items: center;
+  /* يطابق إزاحة سطور البطاقة: حافة ملوّنة 5px + حشوة 0.75rem + حشوة القائمة */
+  padding: 0.35rem calc(0.75rem + 5px + 0.3rem) 0.35rem 0.75rem;
+  margin-bottom: 0.4rem;
+  border-radius: 6px;
+  background: #4A7FB5;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+html body.theme-navy .page .sales-growth .sg-head[hidden] { display: none; }
+html body.theme-navy .page .sales-growth .sg-head > span { color: #fff !important; }
+html body.theme-navy .page .sales-growth .sg-head > span:nth-child(3) { text-align: end; }
+html body.theme-navy .page .sales-growth .sg-head > span:nth-child(4) { text-align: center; }
+
+/* ——— القائمة: ارتفاع ثابت وتمرير داخلي ——— */
+html body.theme-navy .page .sales-growth .sg-list {
+  display: block;
+  max-height: 22rem;
+  margin: 0;
+  padding: 0 0 0 0.3rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #F2B65C transparent;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+html body.theme-navy .page .sales-growth .sg-list.is-dragging { cursor: grabbing; }
+html body.theme-navy .page .sales-growth .sg-list:focus-visible { outline: 3px solid #4A7FB5; outline-offset: 1px; }
+html body.theme-navy .page .sales-growth .sg-list[data-months="7"],
+html body.theme-navy .page .sales-growth .sg-list[data-months="8"],
+html body.theme-navy .page .sales-growth .sg-list[data-months="9"],
+html body.theme-navy .page .sales-growth .sg-list[data-months="10"],
+html body.theme-navy .page .sales-growth .sg-list[data-months="11"],
+html body.theme-navy .page .sales-growth .sg-list[data-months="12"] { max-height: 27rem; }
+
+/* ——— بطاقة الفرع ——— */
+html body.theme-navy .page .sales-growth .sg-card {
+  display: block;
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.75rem 0.55rem;
+  background: #fff;
+  border: 1px solid rgb(35 31 32 / 0.2);
+  border-inline-start: 5px solid var(--sg-flat);
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgb(35 31 32 / 0.06);
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+html body.theme-navy .page .sales-growth .sg-card:last-child { margin-bottom: 0; }
+html body.theme-navy .page .sales-growth .sg-card:hover { box-shadow: 0 3px 10px rgb(35 31 32 / 0.14); border-color: rgb(35 31 32 / 0.4); }
+html body.theme-navy .page .sales-growth .sg-card.is-up,
+html body.theme-navy .page .sales-growth .sg-card.is-new { border-inline-start-color: var(--sg-up); }
+html body.theme-navy .page .sales-growth .sg-card.is-down { border-inline-start-color: var(--sg-down); }
+
+html body.theme-navy .page .sales-growth .sg-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgb(35 31 32 / 0.14);
+}
+html body.theme-navy .page .sales-growth .sg-name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--sg-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html body.theme-navy .page .sales-growth .sg-name .rb-rank { min-width: 1.35rem; height: 1.35rem; font-size: 0.68rem; flex: none; }
+
+/* شارة نمو الفرع */
+html body.theme-navy .page .sales-growth .sg-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  flex: none;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  background: var(--sg-flat-bg);
+  color: var(--sg-flat);
+  white-space: nowrap;
+}
+html body.theme-navy .page .sales-growth .sg-chip b { font-size: 0.88rem; font-weight: 800; color: inherit !important; }
+html body.theme-navy .page .sales-growth .sg-chip small { font-size: 0.68rem; font-weight: 700; color: inherit !important; opacity: 0.85; }
+html body.theme-navy .page .sales-growth .sg-chip.is-up,
+html body.theme-navy .page .sales-growth .sg-chip.is-new { background: var(--sg-up-bg); color: var(--sg-up); }
+html body.theme-navy .page .sales-growth .sg-chip.is-down { background: var(--sg-down-bg); color: var(--sg-down); }
+
+/* ——— سطور الأشهر ——— */
+html body.theme-navy .page .sales-growth .sg-lines { display: grid; gap: 0.18rem; min-width: 0; }
+html body.theme-navy .page .sales-growth .sg-list[data-months="7"] .sg-lines,
+html body.theme-navy .page .sales-growth .sg-list[data-months="8"] .sg-lines,
+html body.theme-navy .page .sales-growth .sg-list[data-months="9"] .sg-lines,
+html body.theme-navy .page .sales-growth .sg-list[data-months="10"] .sg-lines,
+html body.theme-navy .page .sales-growth .sg-list[data-months="11"] .sg-lines,
+html body.theme-navy .page .sales-growth .sg-list[data-months="12"] .sg-lines { gap: 0.08rem; }
+html body.theme-navy .page .sales-growth .sg-line {
+  display: grid;
+  grid-template-columns: var(--sg-cols);
+  align-items: center;
+  column-gap: 0.5rem;
+  min-height: 1rem;
+}
+html body.theme-navy .page .sales-growth .sg-month {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #444;
+  white-space: nowrap;
+}
+html body.theme-navy .page .sales-growth .sg-line.is-current .sg-month { color: var(--sg-ink); font-weight: 800; }
+html body.theme-navy .page .sales-growth .sg-sw { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 2px; flex: none; }
+html body.theme-navy .page .sales-growth .sg-track { display: block; height: 0.46rem; background: #4A7FB5; direction: ltr; }
+html body.theme-navy .page .sales-growth .sg-list[data-months="7"] .sg-track,
+html body.theme-navy .page .sales-growth .sg-list[data-months="8"] .sg-track,
+html body.theme-navy .page .sales-growth .sg-list[data-months="9"] .sg-track,
+html body.theme-navy .page .sales-growth .sg-list[data-months="10"] .sg-track,
+html body.theme-navy .page .sales-growth .sg-list[data-months="11"] .sg-track,
+html body.theme-navy .page .sales-growth .sg-list[data-months="12"] .sg-track { height: 0.36rem; }
+html body.theme-navy .page .sales-growth .sg-fill { display: block; height: 100%; }
+html body.theme-navy .page .sales-growth .sg-amt { font-size: 0.72rem; font-weight: 600; text-align: end; color: #555; direction: ltr; }
+html body.theme-navy .page .sales-growth .sg-line.is-current .sg-amt { font-size: 0.82rem; font-weight: 800; color: var(--sg-ink); }
+html body.theme-navy .page .sales-growth .sg-amt .money { gap: 0.2em; }
+html body.theme-navy .page .sales-growth .sg-pct { font-size: 0.76rem; font-weight: 800; text-align: center; white-space: nowrap; color: var(--sg-flat); }
+html body.theme-navy .page .sales-growth .sg-line.is-up .sg-pct,
+html body.theme-navy .page .sales-growth .sg-line.is-new .sg-pct { color: var(--sg-up) !important; }
+html body.theme-navy .page .sales-growth .sg-line.is-down .sg-pct { color: var(--sg-down) !important; }
+html body.theme-navy .page .sales-growth .sg-line.is-flat .sg-pct,
+html body.theme-navy .page .sales-growth .sg-line.is-none .sg-pct { color: var(--sg-flat) !important; }
+
+/* ——— بطاقة «كل الفروع»: مظلّلة بالأزرق الفاتح لتتميّز عن بطاقات الفروع ——— */
+html body.theme-navy .page .sales-growth .sales-users-total { display: block; margin-top: 0.5rem; padding: 0; background: transparent; }
+html body.theme-navy .page .sales-growth .sales-users-total[hidden] { display: none; }
+html body.theme-navy .page .sales-growth .sales-users-total .sg-card { margin: 0; }
+html body.theme-navy .page .sales-growth .sg-card.is-total {
+  background: #EEF3F9;
+  border-color: #E3E8EF;
+  border-inline-start-color: #4A7FB5;
+  box-shadow: none;
+}
+html body.theme-navy .page .sales-growth .sg-card.is-total:hover { box-shadow: none; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-card-head { border-bottom-color: #E3E8EF; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-name { color: #1F2A37 !important; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-month { color: #6B7785; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-current .sg-month,
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-amt,
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-current .sg-amt { color: #1F2A37 !important; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-track { background: #D5E5F5; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-up .sg-pct,
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-new .sg-pct { color: #26805A !important; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-down .sg-pct { color: #E57373 !important; }
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-flat .sg-pct,
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-line.is-none .sg-pct { color: #6B7785 !important; }
+
+html body.theme-navy .page .sales-growth .sales-users-empty.is-error { color: var(--sg-down); }
+
+@media (max-width: 560px) {
+  html body.theme-navy .page .sales-growth { --sg-cols: 4.2rem minmax(0, 1fr) 5.2rem 3.8rem; }
+  html body.theme-navy .page .sales-growth .sg-head { display: none; }
+  html body.theme-navy .page .sales-growth .sg-card-head { flex-wrap: wrap; }
+}
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-amt .money,
+html body.theme-navy .page .sales-growth .sg-card.is-total .sg-amt .money-value { color: #1F2A37 !important; }
+html body.theme-navy .page .sales-growth .sg-head > span:nth-child(2) { text-align: center; }
+
+/* ترتيب المجموعات */
+html body.theme-navy .page .sales-growth .sg-sort { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; font-size: 0.76rem; font-weight: 700; }
+html body.theme-navy .page .sales-growth .sg-sort-btn {
+  appearance: none;
+  padding: 0 0.6rem;
+  height: 1.7rem;
+  border: 1px solid #E3E8EF;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--sg-ink);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+html body.theme-navy .page .sales-growth .sg-sort-btn:hover { background: #EEF3F9; }
+html body.theme-navy .page .sales-growth .sg-sort-btn.is-on { background: #4A7FB5; color: #FFFFFF; }
+html body.theme-navy .page .sales-growth .sg-sort-btn:focus-visible { outline: 3px solid #4A7FB5; outline-offset: 1px; }
+
+/* ——— وضع المجموعة في تحليل المبيعات ——— */
+html body.theme-navy .page .gm-slot { display: contents; }
+html body.theme-navy .page .gm-loading {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 1.6rem 1rem;
+  text-align: center;
+  font-weight: 700;
+  color: #6b6b6b;
+  background: #FFFFFF;
+  border: 2px dashed rgb(35 31 32 / 0.25);
+  border-radius: 8px;
+}
+html body.theme-navy .page .gm-loading.is-error { color: #C24545; border-color: #E57373; }
+html body.theme-navy .page .gm-retry {
+  margin-inline-start: 0.6rem;
+  padding: 0.25rem 0.8rem;
+  border: 1px solid #E3E8EF;
+  border-radius: 6px;
+  background: #4A7FB5;
+  color: #FFFFFF;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+html body.theme-navy .page .gm-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  background: #EEF3F9;
+  border: 1px solid #E3E8EF;
+  font-weight: 700;
+}
+html body.theme-navy .page .gm-scope strong { font-weight: 800; }
+html body.theme-navy .page .gm-clear {
+  margin-inline-start: auto;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid #E3E8EF;
+  border-radius: 6px;
+  background: #fff;
+  color: #1F2A37 !important;
+  font-weight: 800;
+  text-decoration: none;
+}
+html body.theme-navy .page .gm-clear:hover { background: #4A7FB5; }
+
+/* تسميات الفترات الطويلة (تاريخ من–إلى) تلتف بدل أن تتداخل مع الأشرطة */
+html body.theme-navy .page .sales-growth .sg-month { white-space: normal; line-height: 1.25; font-size: 0.74rem; }

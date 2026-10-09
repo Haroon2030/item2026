@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}تفاصيل رقابة اختلاف عبوة الشراء{% endblock %}
+{% block page_class %}sales-dash purchase-dash purchase-returns-dash pctl-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/purchase-control.css?v={{ app_client_version }}">
+{% endblock %}
+
+{% block content %}
+<section class="dash-head" aria-label="تفاصيل رقابة اختلاف عبوة الشراء">
+  <div class="dash-head-copy">
+    <h2>تفاصيل رقابة اختلاف عبوة الشراء</h2>
+    <p class="sales-ov-sub">{{ row.user }} · {{ row.terminal }}{% if row.branch %} · {{ row.branch }}{% endif %} · {{ date_from }} → {{ date_to }}</p>
+  </div>
+  <div class="dash-head-actions">
+    <a class="pctl-back" href="{{ back_url }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      رجوع للرقابة
+    </a>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+{% if report %}
+  <section class="dash-panel dash-panel-glass" aria-label="بنود مختلفة العبوة">
+    <div class="dash-panel-head">
+      <div>
+        <h3>بنود مختلفة العبوة</h3>
+        <p class="sales-ov-sub">
+          {{ report.count }} بند
+          {% if report.truncated %} · عُرض أحدث {{ report.limit }} فقط{% endif %}
+        </p>
+        <p class="sales-ov-sub">«مستخدم Windows» و«الخادم الطرفي» يُقرآن لحظياً من جلسات Oracle الحيّة ولا يُخزَّن شيء؛ الجلسة المنتهية تظهر «انتهت الجلسة».</p>
+      </div>
+      <span class="result-pill">{{ report.lines|length }} / {{ report.count }}</span>
+    </div>
+    <div class="table-wrap pctl-wrap">
+      <table class="data-table sales-table" aria-label="رقابة اختلاف عبوة الشراء">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الصنف</th>
+            <th>الوحدة/العبوة الآن</th>
+            <th>الفاتورة</th>
+            <th>الوحدة/العبوة السابقة</th>
+            <th>الفاتورة السابقة</th>
+            <th>المورد</th>
+            <th>المدخل</th>
+            <th>الجهاز</th>
+            <th>مستخدم Windows</th>
+            <th>الخادم الطرفي</th>
+            <th>وقت الإضافة</th>
+            <th>الفرع</th>
+            <th>المخزن</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.lines %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.item }} <span class="pctl-muted mono">{{ r.item_code }}</span></td>
+            <td class="mono"><strong>{{ r.unit }} · {{ r.pack }}</strong></td>
+            <td class="mono">{{ r.bill_no }} <span class="pctl-muted">{{ r.date }}</span></td>
+            <td class="mono">{{ r.prev_unit }} · {{ r.prev_pack }}</td>
+            <td class="mono">{{ r.prev_bill_no }} <span class="pctl-muted">{{ r.prev_date }}</span></td>
+            <td>{{ r.vendor }}</td>
+            <td>{{ r.user }}</td>
+            <td class="mono">{{ r.terminal }}</td>
+            <td class="mono">{% if r.session_state == 'live' %}{{ r.session_user }}{% elif r.session_state == 'ended' %}<span class="pctl-muted">انتهت الجلسة</span>{% else %}—{% endif %}</td>
+            <td class="mono">{% if r.session_state == 'live' %}{{ r.session_server }}{% else %}—{% endif %}</td>
+            <td class="mono">{{ r.added_at }}</td>
+            <td>{{ r.branch }}</td>
+            <td>{{ r.warehouse }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="14">لا توجد بنود.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

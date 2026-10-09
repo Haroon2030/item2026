@@ -49,19 +49,19 @@
   /* الفلتر: شريط واحد بسيط — من / إلى / الفرع / المجموعة / عرض */
   html body.theme-navy .page.sales-overview-dash form.sales-ov-filter:not(#fx) {
     display: flex !important; flex-direction: row !important; flex-wrap: wrap; align-items: center; align-content: flex-start; height: auto !important; min-height: 0 !important; gap: .5rem .9rem !important; margin: 0 0 .8rem !important; padding: .4rem .7rem !important;
-    background: #fff !important; border: 1.5px solid #231f20 !important; border-radius: 10px !important; box-shadow: none !important;
+    background: #fff !important; border: 1px solid #E3E8EF !important; border-radius: 10px !important; box-shadow: none !important;
   }
   html body.theme-navy .page.sales-overview-dash form.sales-ov-filter:not(#fx)::before,
   html body.theme-navy .page.sales-overview-dash form.sales-ov-filter:not(#fx)::after { content: none !important; display: none !important; }
-  html body.theme-navy .page.sales-overview-dash .fl-field:not(#fx) { display: flex !important; align-items: center !important; gap: .4rem; margin: 0 !important; flex: 1 1 11rem; min-width: 0; font-size: .8rem; font-weight: 700; color: #231f20; }
+  html body.theme-navy .page.sales-overview-dash .fl-field:not(#fx) { display: flex !important; align-items: center !important; gap: .4rem; margin: 0 !important; flex: 1 1 11rem; min-width: 0; font-size: .8rem; font-weight: 700; color: #1F2A37; }
   html body.theme-navy .page.sales-overview-dash .fl-field :is(input, select):not(#fx) {
     height: 2rem !important; min-height: 0 !important; min-width: 0 !important; max-width: none !important; width: 100% !important; flex: 1 1 auto; padding: 0 .5rem !important;
-    font-size: .8rem !important; border: 1px solid #c9d2e0 !important; border-radius: 6px !important; background: #fff !important; color: #231f20;
+    font-size: .8rem !important; border: 1px solid #c9d2e0 !important; border-radius: 6px !important; background: #fff !important; color: #1F2A37;
   }
   html body.theme-navy .page.sales-overview-dash .fl-go:not(#fx) {
-    height: 2rem; padding: 0 1.4rem; border: 1.5px solid #231f20; border-radius: 6px; background: #ffc30e; color: #231f20; font: inherit; font-size: .85rem; font-weight: 800; cursor: pointer;
+    height: 2rem; padding: 0 1.4rem; border: 1px solid #E3E8EF; border-radius: 6px; background: #4A7FB5; color: #FFFFFF; font: inherit; font-size: .85rem; font-weight: 800; cursor: pointer;
   }
-  html body.theme-navy .page.sales-overview-dash .fl-go:not(#fx):hover { background: #ffb400; }
+  html body.theme-navy .page.sales-overview-dash .fl-go:not(#fx):hover { background: #4A7FB5; }
 
   /* ===== نفس الفكرة في كل صفحات التحليل: عناوين بلا تفاصيل، بطاقات 150×150، فلتر بصف واحد بسيط ===== */
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.dash-head-copy p, .dash-panel-head p, .dash-panel-head .sales-ov-sub):not(#fx) { display: none !important; }
@@ -104,28 +104,28 @@
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.inv-top, .wh-out-kpi-grid, .wh-exp-kpi-grid, .vpc-kpi-grid, .wqc-kpi-grid):not(#fx) { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 2rem) / 5)), 1fr)) !important; justify-content: start; gap: .5rem !important; margin: 0 0 .8rem !important; }
 
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):not(#fx) {
-    --hdr: #f7941e; display: flex !important; flex-direction: column !important; justify-content: flex-start !important; box-sizing: border-box; height: 150px !important; width: auto !important; min-width: 0 !important;
-    padding: 0 !important; gap: 0 !important; background: #fff !important; border: 1.5px solid #231f20 !important; border-radius: 12px !important; box-shadow: none !important;
-    overflow: hidden !important; container-type: size; color: #231f20 !important; grid-column: auto !important;
+    --hdr: #4A7FB5; display: flex !important; flex-direction: column !important; justify-content: flex-start !important; box-sizing: border-box; height: 150px !important; width: auto !important; min-width: 0 !important;
+    padding: 0 !important; gap: 0 !important; background: #fff !important; border: 1px solid #E3E8EF !important; border-radius: 12px !important; box-shadow: none !important;
+    overflow: hidden !important; container-type: size; color: #1F2A37 !important; grid-column: auto !important;
   }
-  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+2):not(#fx) { --hdr: #fbab18; }
-  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+3):not(#fx) { --hdr: #ffc30e; }
-  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+4):not(#fx) { --hdr: #ffda00; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+2):not(#fx) { --hdr: #4A7FB5; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+3):not(#fx) { --hdr: #4A7FB5; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):nth-child(4n+4):not(#fx) { --hdr: #4A7FB5; }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):not(#fx)::before, html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi):not(#fx)::after { content: none !important; display: none !important; }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx) {
     display: flex !important; flex: 0 0 auto; flex-wrap: nowrap !important; flex-direction: row !important; align-items: center !important; justify-content: center !important; text-align: center;
     box-sizing: border-box; width: 100%; min-height: 2.6rem !important; padding: .25rem .5rem !important; gap: .35rem !important; margin: 0 !important;
-    background: var(--hdr) !important; color: #231f20 !important; font-size: clamp(.66rem, 7.5cqw, .85rem) !important; font-weight: 700 !important; line-height: 1.2 !important;
+    background: var(--hdr) !important; color: #1F2A37 !important; font-size: clamp(.66rem, 7.5cqw, .85rem) !important; font-weight: 700 !important; line-height: 1.2 !important;
   }
-  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx) { display: grid !important; place-items: center; flex: none; width: 1.6rem !important; height: 1.6rem !important; border-radius: 4px !important; background: #231f20 !important; color: #fff !important; border: 0 !important; box-shadow: none !important; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx) { display: grid !important; place-items: center; flex: none; width: 1.6rem !important; height: 1.6rem !important; border-radius: 4px !important; background: #4A7FB5 !important; color: #fff !important; border: 0 !important; box-shadow: none !important; }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico) svg:not(#fx) { width: 1.15rem !important; height: 1.15rem !important; stroke: #fff !important; fill: none !important; stroke-width: 1.8; }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-value, .wh-exp-kpi > strong, .vpc-kpi > strong):not(#fx) {
     flex: 1 1 auto; display: flex !important; align-items: center; justify-content: center !important; text-align: center; min-width: 0; margin: 0 !important; padding: 0 .4rem !important;
-    overflow-wrap: anywhere; line-height: 1.15 !important; font-size: clamp(.7rem, 10cqw, 1.3rem) !important; font-weight: 800 !important; color: #231f20 !important; font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere; line-height: 1.15 !important; font-size: clamp(.7rem, 10cqw, 1.3rem) !important; font-weight: 800 !important; color: #1F2A37 !important; font-variant-numeric: tabular-nums;
   }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) :is(.wh-out-kpi, .wh-exp-kpi, .vpc-kpi) :is(.wh-out-kpi-hint, .wh-exp-kpi > small, .vpc-kpi > small):not(#fx) {
     display: block !important; flex: 0 0 auto; margin: 0 .35rem .4rem !important; padding: .15rem .3rem !important; text-align: center; white-space: normal !important;
-    font-size: clamp(.56rem, 6cqw, .7rem) !important; line-height: 1.3 !important; border-radius: 6px; background: #fff4d6 !important; color: #5b4a14 !important;
+    font-size: clamp(.56rem, 6cqw, .7rem) !important; line-height: 1.3 !important; border-radius: 6px; background: #FDF3E1 !important; color: #5b4a14 !important;
   }
 
   /* المخزون: بطاقات الأعلى (اسم + قيمة) وبطاقة النطاق */
@@ -154,8 +154,8 @@
   .purchase-groups-panel .rb-row .rb-name { grid-column: 1; grid-row: 1; font-size: .88rem; }
   .purchase-groups-panel .rb-row .rb-bar-col { grid-column: 2; grid-row: 1; grid-template-columns: 1fr 3.4rem; align-items: center; gap: .5rem; }
   .purchase-groups-panel .rb-row .rb-bar-col .rb-pct { order: 2; font-size: .78rem; width: 3.4rem; text-align: center; }
-  .purchase-groups-panel .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; font-size: .85rem; font-weight: 800; color: #231f20; white-space: nowrap; }
-  .purchase-groups-panel .rb-list.is-scroll { overflow-y: auto; overscroll-behavior: contain; cursor: grab; scrollbar-width: thin; scrollbar-color: #fdab5c transparent; padding-inline-end: .3rem; touch-action: pan-y; user-select: none; }
+  .purchase-groups-panel .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; font-size: .85rem; font-weight: 800; color: #1F2A37; white-space: nowrap; }
+  .purchase-groups-panel .rb-list.is-scroll { overflow-y: auto; overscroll-behavior: contain; cursor: grab; scrollbar-width: thin; scrollbar-color: #F2B65C transparent; padding-inline-end: .3rem; touch-action: pan-y; user-select: none; }
   .purchase-groups-panel .rb-list.is-scroll.is-dragging { cursor: grabbing; }
   .purchase-items-panel .rb-row { grid-template-columns: 16rem minmax(0, 1fr) 9.5rem !important; }
   .purchase-items-panel .rb-row .rb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -172,19 +172,19 @@
   .sales-ov-returns .rb-row .rb-name { grid-column: 1; grid-row: 1; font-size: .88rem; }
   .sales-ov-returns .rb-row .rb-bar-col { grid-column: 2; grid-row: 1; grid-template-columns: 1fr 3.4rem; align-items: center; gap: .5rem; }
   .sales-ov-returns .rb-row .rb-bar-col .rb-pct { order: 2; font-size: .78rem; width: 3.4rem; text-align: center; }
-  .sales-ov-returns .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .8rem; font-weight: 800; color: #231f20; }
+  .sales-ov-returns .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .8rem; font-weight: 800; color: #1F2A37; }
 
   /* أكثر المستخدمين بيعاً: نفس السطر الواحد، أول 6 والباقي بالسحب */
   .sales-ov-users .rb-board { padding: .5rem 1rem .6rem; }
   .sales-ov-users .rb-list { gap: .55rem; }
-  .sales-ov-users .rb-list.is-scroll { overflow-y: auto; overscroll-behavior: contain; cursor: grab; scrollbar-width: thin; scrollbar-color: #fdab5c transparent; padding-inline-end: .3rem; touch-action: pan-y; user-select: none; }
+  .sales-ov-users .rb-list.is-scroll { overflow-y: auto; overscroll-behavior: contain; cursor: grab; scrollbar-width: thin; scrollbar-color: #F2B65C transparent; padding-inline-end: .3rem; touch-action: pan-y; user-select: none; }
   .sales-ov-users .rb-list.is-scroll.is-dragging { cursor: grabbing; }
   .sales-ov-users .rb-row { grid-template-columns: 13rem minmax(0, 1fr) 9.5rem !important; align-items: center; gap: .8rem !important; }
   .sales-ov-users .rb-row .rb-details { display: contents; }
   .sales-ov-users .rb-row .rb-name { grid-column: 1; grid-row: 1; font-size: .76rem; display: flex; align-items: center; gap: .4rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sales-ov-users .rb-row .rb-bar-col { grid-column: 2; grid-row: 1; grid-template-columns: 1fr 3.4rem; align-items: center; gap: .5rem; }
   .sales-ov-users .rb-row .rb-bar-col .rb-pct { order: 2; font-size: .78rem; width: 3.4rem; text-align: center; }
-  .sales-ov-users .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .8rem; font-weight: 800; color: #231f20; }
+  .sales-ov-users .rb-row .rb-meta { grid-column: 3; grid-row: 1; justify-self: stretch; text-align: center; min-width: 0; overflow: hidden; white-space: nowrap; font-size: .8rem; font-weight: 800; color: #1F2A37; }
   .sales-ov-users .rb-row .rb-rank { min-width: 1.25rem; height: 1.25rem; margin-inline-end: 0; font-size: .65rem; flex: none; }
 
   /* مؤشر التحميل أثناء الانتقال بين الصفحات */
@@ -194,31 +194,31 @@
     backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
   }
   .nav-loading.is-on { opacity: 1; pointer-events: auto; cursor: progress; }
-  .nav-loading-bar { position: absolute; inset: 0 0 auto 0; display: block; height: 3px; background: linear-gradient(90deg, #f7941e, #ffc30e, #f7941e); background-size: 200% 100%; animation: nav-loading-run 1.1s linear infinite; }
+  .nav-loading-bar { position: absolute; inset: 0 0 auto 0; display: block; height: 3px; background: linear-gradient(90deg, #4A7FB5, #4A7FB5, #4A7FB5); background-size: 200% 100%; animation: nav-loading-run 1.1s linear infinite; }
   .nav-loading-chip {
     position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: .85rem; min-width: 12rem; padding: 1.6rem 2.4rem 1.2rem; overflow: hidden;
-    background: #fff !important; color: #231f20 !important; border: 1.5px solid #231f20; border-radius: 14px; box-shadow: 0 5px 0 #231f20;
+    background: #fff !important; color: #1F2A37 !important; border: 1px solid #E3E8EF; border-radius: 14px; box-shadow: 0 5px 0 rgba(31,42,55,.10);
     font-family: inherit; font-size: 1.05rem; font-weight: 800; line-height: 1.2; white-space: nowrap;
     opacity: 0; transform: translateY(8px) scale(.96); transition: opacity .22s cubic-bezier(0.23, 1, 0.32, 1), transform .22s cubic-bezier(0.23, 1, 0.32, 1);
   }
   .nav-loading.is-on .nav-loading-chip { opacity: 1; transform: none; }
-  .nav-loading-chip::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 6px; background: linear-gradient(90deg, #f7941e, #ffc30e 55%, #ffda00); }
+  .nav-loading-chip::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 6px; background: linear-gradient(90deg, #4A7FB5, #4A7FB5 55%, #4A7FB5); }
   .nav-loading-cancel {
     position: absolute; top: .9rem; inset-inline-start: .6rem; display: grid; place-items: center; width: 1.7rem; height: 1.7rem; padding: 0; cursor: pointer;
-    background: #ffc30e; color: #231f20; border: 1.5px solid #231f20; border-radius: 50%; box-shadow: 0 2px 0 #231f20;
+    background: #4A7FB5; color: #FFFFFF; border: 1px solid #E3E8EF; border-radius: 50%; box-shadow: 0 2px 0 rgba(31,42,55,.10);
     transition: transform .14s cubic-bezier(0.23, 1, 0.32, 1), background-color .14s ease;
   }
   .nav-loading-cancel svg { width: .85rem; height: .85rem; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
   .nav-loading-cancel:active { transform: translateY(2px) scale(.94); }
-  .nav-loading-cancel:focus-visible { outline: 3px solid #231f20; outline-offset: 2px; }
-  @media (hover: hover) and (pointer: fine) { .nav-loading-cancel:hover { background: #ffb400; } }
-  .nav-loading-spin { width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 4px solid #ffe9a8; border-top-color: #f7941e; border-right-color: #ffc30e; animation: nav-loading-spin .75s linear infinite; }
+  .nav-loading-cancel:focus-visible { outline: 3px solid #4A7FB5; outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) { .nav-loading-cancel:hover { background: #4A7FB5; } }
+  .nav-loading-spin { width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 4px solid #EEF3F9; border-top-color: #4A7FB5; border-right-color: #4A7FB5; animation: nav-loading-spin .75s linear infinite; }
   .nav-loading-dots { display: inline-flex; gap: .18rem; margin-inline-start: .15rem; vertical-align: baseline; }
-  .nav-loading-dots i { width: .28rem; height: .28rem; border-radius: 50%; background: #f7941e; opacity: .25; animation: nav-loading-dot 1.2s ease-in-out infinite; }
+  .nav-loading-dots i { width: .28rem; height: .28rem; border-radius: 50%; background: #4A7FB5; opacity: .25; animation: nav-loading-dot 1.2s ease-in-out infinite; }
   .nav-loading-dots i:nth-child(2) { animation-delay: .2s; }
   .nav-loading-dots i:nth-child(3) { animation-delay: .4s; }
-  .nav-loading-track { position: relative; width: 100%; height: 4px; border-radius: 2px; background: #fff0c2; overflow: hidden; }
-  .nav-loading-track::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 2px; background: linear-gradient(90deg, #f7941e, #ffc30e); animation: nav-loading-slide 1.3s cubic-bezier(0.77, 0, 0.175, 1) infinite; }
+  .nav-loading-track { position: relative; width: 100%; height: 4px; border-radius: 2px; background: #F6F8FB; overflow: hidden; }
+  .nav-loading-track::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 2px; background: linear-gradient(90deg, #4A7FB5, #4A7FB5); animation: nav-loading-slide 1.3s cubic-bezier(0.77, 0, 0.175, 1) infinite; }
   @keyframes nav-loading-run { to { background-position: -200% 0; } }
   @keyframes nav-loading-spin { to { transform: rotate(360deg); } }
   @keyframes nav-loading-dot { 0%, 100% { opacity: .25; } 40% { opacity: 1; } }
@@ -229,7 +229,7 @@
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx) {
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     display: inline-flex !important; align-items: center; justify-content: center; gap: .5rem; height: 2rem; padding: 0 1.1rem !important; cursor: pointer;
-    background: #ffc30e !important; color: #231f20 !important; border: 1.5px solid #231f20 !important; border-radius: 8px !important; box-shadow: 0 2px 0 #231f20 !important;
+    background: #4A7FB5 !important; color: #FFFFFF !important; border: 1px solid #E3E8EF !important; border-radius: 8px !important; box-shadow: 0 2px 0 rgba(31,42,55,.10) !important;
     font-family: inherit; font-size: .85rem !important; font-weight: 800 !important; line-height: 1; white-space: nowrap;
     transition: transform .14s var(--ease-out), background-color .14s ease;
   }
@@ -240,9 +240,9 @@
   }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):active { transform: translateY(2px) scale(.97); }
   html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):active::before { transform: scale(.9); }
-  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):focus-visible { outline: 3px solid #231f20; outline-offset: 2px; }
+  html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):focus-visible { outline: 3px solid #4A7FB5; outline-offset: 2px; }
   @media (hover: hover) and (pointer: fine) {
-    html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):hover { background: #ffb400 !important; transform: translateY(-1px); }
+    html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):hover { background: #4A7FB5 !important; transform: translateY(-1px); }
     html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) form:is([role="search"], .dash-panel-glass, .income-filter-bar) :is(button[type="submit"], .fl-go):not(#fx):hover::before { transform: rotate(-10deg) scale(1.12); }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -276,69 +276,69 @@ html body.theme-navy .page .inv-waste-bars:not(#fx) { list-style: none; margin: 
 html body.theme-navy .page .inv-waste-bar:not(#fx) { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name pct" "track track" "meta meta"; gap: .25rem .6rem; align-items: baseline; min-width: 0; }
 html body.theme-navy .page .inv-waste-bar-name:not(#fx) { grid-area: name; font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html body.theme-navy .page .inv-waste-bar-pct:not(#fx) { grid-area: pct; font-weight: 700; font-size: .85rem; color: #555; }
-html body.theme-navy .page .inv-waste-bar-track:not(#fx) { grid-area: track; display: block; height: 8px; border-radius: 999px; background: #4a4a4a; overflow: hidden; }
-html body.theme-navy .page .inv-waste-bar-track > i:not(#fx) { display: block; height: 100%; border-radius: inherit; background: #fbab5a; }
+html body.theme-navy .page .inv-waste-bar-track:not(#fx) { grid-area: track; display: block; height: 8px; border-radius: 999px; background: #4A7FB5; overflow: hidden; }
+html body.theme-navy .page .inv-waste-bar-track > i:not(#fx) { display: block; height: 100%; border-radius: inherit; background: #F2B65C; }
 html body.theme-navy .page .inv-waste-bar-meta:not(#fx) { grid-area: meta; font-size: .75rem; color: #666; font-weight: 500; }
 @media (max-width: 900px) { html body.theme-navy .page .inv-waste-bars:not(#fx) { grid-template-columns: 1fr; } }
 
 /* سجل الأصول: ترويسة داكنة بنص أبيض واضح (كانت خلفية باهتة مع نص أبيض فلا تُقرأ)، ويُميَّز عمود التكلفة والإهلاك والدفترية بخط ملوّن سفلي */
 html body.theme-navy.theme-navy .page.page .assets-table thead th:not(#fx):not(#fx2) {
-  background: #231f20 !important; background-color: #231f20 !important; color: #fff !important; -webkit-text-fill-color: #fff !important;
+  background: #4A7FB5 !important; background-color: #4A7FB5 !important; color: #fff !important; -webkit-text-fill-color: #fff !important;
   font-weight: 700 !important; text-shadow: none !important; box-shadow: none !important; border-bottom: 3px solid transparent !important;
 }
-html body.theme-navy.theme-navy .page.page .assets-table thead th:not(#fx):not(#fx2)::after { background: #231f20 !important; }
+html body.theme-navy.theme-navy .page.page .assets-table thead th:not(#fx):not(#fx2)::after { background: #4A7FB5 !important; }
 html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-cost:not(#fx):not(#fx2) { border-bottom-color: #4ade80 !important; }
-html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-depr:not(#fx):not(#fx2) { border-bottom-color: #fb923c !important; }
+html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-depr:not(#fx):not(#fx2) { border-bottom-color: #4A7FB5 !important; }
 html body.theme-navy.theme-navy .page.page .assets-table thead th.assets-th-book:not(#fx):not(#fx2) { border-bottom-color: #a78bfa !important; }
 
 /* أعلى الأصول تكلفة: لوحة ألوان واحدة (حبر + ذهبي) بدل حواف عشوائية وشريط متدرج أصفر→بنفسجي */
-html body.theme-navy .page.page .assets-top-row:not(#fx):not(#fx2) { background: #fff !important; border-color: #e3e1d8 !important; box-shadow: inset 3px 0 0 #f9a11b !important; }
-html body.theme-navy .page.page .assets-top-row:nth-child(n):not(#fx):not(#fx2) { box-shadow: inset 3px 0 0 #f9a11b !important; }
-html body.theme-navy .page.page .assets-top-rank:not(#fx):not(#fx2) { background: #231f20 !important; color: #ffc21a !important; }
+html body.theme-navy .page.page .assets-top-row:not(#fx):not(#fx2) { background: #fff !important; border-color: #e3e1d8 !important; box-shadow: inset 3px 0 0 #4A7FB5 !important; }
+html body.theme-navy .page.page .assets-top-row:nth-child(n):not(#fx):not(#fx2) { box-shadow: inset 3px 0 0 #4A7FB5 !important; }
+html body.theme-navy .page.page .assets-top-rank:not(#fx):not(#fx2) { background: #4A7FB5 !important; color: #FFFFFF !important; }
 html body.theme-navy .page.page .assets-top-amt:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-top-amt .money:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-top-amt .money-value:not(#fx):not(#fx2),
-html body.theme-navy .page.page .assets-top-amt .sar-symbol:not(#fx):not(#fx2) { color: #17140f !important; }
+html body.theme-navy .page.page .assets-top-amt .sar-symbol:not(#fx):not(#fx2) { color: #1F2A37 !important; }
 html body.theme-navy .page.page .assets-top-meta:not(#fx):not(#fx2) { color: #5b564b !important; }
 html body.theme-navy .page.page .assets-top-book:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-top-book .money:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-top-book .money-value:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-top-book .sar-symbol:not(#fx):not(#fx2) { color: #5b564b !important; }
 html body.theme-navy .page.page .assets-top-track:not(#fx):not(#fx2) { background: #ece9df !important; }
-html body.theme-navy .page.page .assets-top-fill:not(#fx):not(#fx2) { background: #f9a11b !important; }
+html body.theme-navy .page.page .assets-top-fill:not(#fx):not(#fx2) { background: #4A7FB5 !important; }
 
 /* توزيع القيمة الدفترية: نفس لوحة الحبر والذهبي بدل الأخضر */
-html body.theme-navy .page.page .assets-branch-vchart .income-vpct:not(#fx):not(#fx2) { background: #231f20 !important; color: #ffc21a !important; border-color: transparent !important; }
-html body.theme-navy .page.page .assets-branch-vchart .income-vfill:not(#fx):not(#fx2) { background: #f9a11b !important; }
+html body.theme-navy .page.page .assets-branch-vchart .income-vpct:not(#fx):not(#fx2) { background: #4A7FB5 !important; color: #FFFFFF !important; border-color: transparent !important; }
+html body.theme-navy .page.page .assets-branch-vchart .income-vfill:not(#fx):not(#fx2) { background: #4A7FB5 !important; }
 html body.theme-navy .page.page .assets-branch-vchart .income-vtrack:not(#fx):not(#fx2) { background: #ece9df !important; }
 html body.theme-navy .page.page .assets-branch-vchart .income-vmeta:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .money:not(#fx):not(#fx2),
 html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .money-value:not(#fx):not(#fx2),
-html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .sar-symbol:not(#fx):not(#fx2) { color: #17140f !important; }
+html body.theme-navy .page.page .assets-branch-vchart .income-vmeta .sar-symbol:not(#fx):not(#fx2) { color: #1F2A37 !important; }
 
 /* أسماء وقيم مفاتيح الرسوم الدائرية في الأصول: ألوان نص واحدة بدل الزيتوني والرمادي المزرق الباهت */
 html body.theme-navy .page.assets-dash .income-exp-callout-kicker:not(#fx):not(#fx2) { color: #5b564b !important; }
-html body.theme-navy .page.assets-dash .income-comp-callout-name:not(#fx):not(#fx2) { color: #17140f !important; }
-html body.theme-navy .page.assets-dash .income-comp-callout-meta:not(#fx):not(#fx2) { color: #17140f !important; }
+html body.theme-navy .page.assets-dash .income-comp-callout-name:not(#fx):not(#fx2) { color: #1F2A37 !important; }
+html body.theme-navy .page.assets-dash .income-comp-callout-meta:not(#fx):not(#fx2) { color: #1F2A37 !important; }
 html body.theme-navy .page.assets-dash .income-comp-callout-sub:not(#fx):not(#fx2) { color: #5b564b !important; }
 
 /* بطاقات المؤشرات في كل الصفحات: أيقونة البطاقة عند حافة الترويسة (بدل أن تتوسّط مع العنوان) والعنوان في الوسط */
 html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx):not(#fx2) { position: relative; justify-content: center !important; padding-inline: 3rem .5rem !important; text-align: center; white-space: normal !important; line-height: 1.25; }
 html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx):not(#fx2) { position: absolute; inset-inline-start: .5rem; top: 50%; transform: translateY(-50%); margin: 0; }
 
-/* خلفية الصفحات: لون واحد هادئ (#f4f2ec) بدل التدرج الأصفر الكريمي */
-html body.theme-navy:not(#fx):not(#fx2) { background: #f4f2ec !important; background-image: none !important; }
+/* خلفية الصفحات: لون واحد هادئ (#F6F8FB) بدل التدرج الأصفر الكريمي */
+html body.theme-navy:not(#fx):not(#fx2) { background: #F6F8FB !important; background-image: none !important; }
 
 /* شريط عنوان الصفحة: لون واحد بدل التدرج بين لونين */
-html body.theme-navy .page .dash-head:not(#fx):not(#fx2) { background: #ffe9b0 !important; background-image: none !important; }
+html body.theme-navy .page .dash-head:not(#fx):not(#fx2) { background: #EEF3F9 !important; background-image: none !important; }
 
 /* رأس بطاقات المؤشرات: لون واحد لكل البطاقات (نفس لون رأس اللوحات) بدل تدرّج برتقالي/أصفر بين بطاقة وأخرى */
-html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx):not(#fx2) { background: #fdb51c !important; background-image: none !important; }
+html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label):not(#fx):not(#fx2) { background: #4A7FB5 !important; background-image: none !important; }
 
 /* أيقونة بطاقة المؤشر: مربع أسود برمز أبيض */
 html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .wh-exp-kpi, .vpc-kpi) > :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .wh-out-kpi-label, .wh-exp-kpi-label, .vpc-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .wh-out-kpi-ico, .wh-exp-kpi-ico, .vpc-kpi-ico):not(#fx):not(#fx2) {
-  background: #231f20 !important; border: 0 !important; border-radius: 9px !important; color: #fff !important;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 12px 2px rgba(255, 255, 255, .85), 0 0 22px 4px rgba(255, 194, 26, .65) !important;
+  background: #4A7FB5 !important; border: 0 !important; border-radius: 9px !important; color: #fff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 12px 2px rgba(255, 255, 255, .85), 0 0 22px 4px rgba(74,127,181,.65) !important;
   animation: kpi-ico-glow 2.8s ease-in-out infinite;
   width: 2.3rem !important; height: 2.3rem !important; inset-inline-start: .4rem;
 }
@@ -357,6 +357,7 @@ html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .wh-out-kpi, .w
 @layer app-components {
 /* أيقونات مؤشرات لوحة مبيعات اليوم في الصفحة الرئيسية: أبيض */
 html body.theme-navy .hv-kpi-ico svg:not(#fx):not(#fx2) { stroke: #fff !important; color: #fff !important; }
+}
 
 @layer app-components {
 /* جداول المخزون: تتكيّف مع عرض اللوحة فتظهر كل الأعمدة (الاسم يلتف بدل أن يدفع الأعمدة خارج الإطار) */
@@ -374,7 +375,7 @@ html body.theme-navy .page .inv-table-compact :is(th, td):first-child:not(#fx):n
 html body.theme-navy .page .inv-table-compact .inv-col-text:not(#fx):not(#fx2) { width: auto !important; min-width: 5.5rem !important; white-space: normal !important; }
 html body.theme-navy .page .inv-wh-no:not(#fx):not(#fx2) {
   display: inline-block; min-width: 1.6rem; margin-inline-end: .3rem; padding: 0 .3rem; border-radius: 5px;
-  background: #231f20 !important; color: #ffc21a !important; -webkit-text-fill-color: #ffc21a !important; font-size: .72rem; font-weight: 700; line-height: 1.5; text-align: center;
+  background: #4A7FB5 !important; color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; font-size: .72rem; font-weight: 700; line-height: 1.5; text-align: center;
 }
 
 /* ===== شاشتا المستخدمين ونشاط المستخدمين: تخطيط مضغوط واحترافي ===== */
@@ -399,10 +400,10 @@ html body.theme-navy .page.users-dash .users-table-panel:not(#fx):not(#fx2) { ma
 html body.theme-navy .page.users-dash .users-table-panel > .dash-panel-head:not(#fx):not(#fx2) { min-height: 0 !important; padding: .35rem .7rem !important; }
 html body.theme-navy .page.users-dash .users-table-panel .dash-panel-head h3:not(#fx):not(#fx2) { font-size: 1rem !important; margin: 0 !important; }
 html body.theme-navy .page.users-dash .users-table:not(#fx):not(#fx2) { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .82rem; }
-html body.theme-navy .page.users-dash .users-table thead th:not(#fx):not(#fx2) { background: #231f20 !important; color: #fff !important; -webkit-text-fill-color: #fff !important; padding: .35rem .5rem !important; font-size: .78rem !important; font-weight: 700 !important; white-space: nowrap; text-align: center; }
+html body.theme-navy .page.users-dash .users-table thead th:not(#fx):not(#fx2) { background: #4A7FB5 !important; color: #fff !important; -webkit-text-fill-color: #fff !important; padding: .35rem .5rem !important; font-size: .78rem !important; font-weight: 700 !important; white-space: nowrap; text-align: center; }
 html body.theme-navy .page.users-dash .users-table tbody td:not(#fx):not(#fx2) { padding: .28rem .5rem !important; border-bottom: 1px solid #ece9df; vertical-align: middle; line-height: 1.3; }
-html body.theme-navy .page.users-dash .users-table tbody tr:nth-child(even) td:not(#fx):not(#fx2) { background-color: rgba(253, 181, 28, .07); }
-html body.theme-navy .page.users-dash .users-table tbody tr:hover td:not(#fx):not(#fx2) { background-color: rgba(253, 181, 28, .2); }
+html body.theme-navy .page.users-dash .users-table tbody tr:nth-child(even) td:not(#fx):not(#fx2) { background-color: rgba(74,127,181,.07); }
+html body.theme-navy .page.users-dash .users-table tbody tr:hover td:not(#fx):not(#fx2) { background-color: rgba(74,127,181,.2); }
 html body.theme-navy .page.users-dash .users-col-num:not(#fx):not(#fx2) { width: 2.2rem; text-align: center; }
 html body.theme-navy .page.users-dash .users-name-cell:not(#fx):not(#fx2) { display: flex; align-items: center; gap: .45rem; }
 html body.theme-navy .page.users-dash .users-avatar:not(#fx):not(#fx2) { width: 1.6rem !important; height: 1.6rem !important; flex: none; }
@@ -427,9 +428,9 @@ html body.theme-navy .page.users-dash .activity-table .activity-phone:not(#fx):n
 html body.theme-navy .page.users-dash .activity-table td.users-col-name:not(#fx):not(#fx2) { text-align: center; }
 html body.theme-navy .page.users-dash .activity-table .users-name-cell:not(#fx):not(#fx2) {
   display: inline-flex !important; align-items: center; gap: .35rem; padding: .12rem .6rem .12rem .45rem !important;
-  background: #231f20 !important; border-radius: 8px; min-width: 3.2rem; justify-content: center;
+  background: #4A7FB5 !important; border-radius: 8px; min-width: 3.2rem; justify-content: center;
 }
-html body.theme-navy .page.users-dash .activity-table .users-avatar:not(#fx):not(#fx2) { width: 1.2rem !important; height: 1.2rem !important; background: transparent !important; border: 0 !important; color: #ffc21a !important; }
-html body.theme-navy .page.users-dash .activity-table .users-avatar svg:not(#fx):not(#fx2) { width: 1rem !important; height: 1rem !important; stroke: #ffc21a !important; color: #ffc21a !important; }
+html body.theme-navy .page.users-dash .activity-table .users-avatar:not(#fx):not(#fx2) { width: 1.2rem !important; height: 1.2rem !important; background: transparent !important; border: 0 !important; color: #4A7FB5 !important; }
+html body.theme-navy .page.users-dash .activity-table .users-avatar svg:not(#fx):not(#fx2) { width: 1rem !important; height: 1rem !important; stroke: #4A7FB5 !important; color: #4A7FB5 !important; }
 html body.theme-navy .page.users-dash .activity-table .users-name:not(#fx):not(#fx2) { color: #fff !important; -webkit-text-fill-color: #fff !important; font-size: .85rem !important; font-weight: 700 !important; }
 }

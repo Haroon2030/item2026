@@ -3181,7 +3181,8 @@ def _branch_names() -> dict[str, str]:
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Branch names unavailable: %s", exc)
-        return _django_lookup_set("branch_names:v2", {})
+        # لا يُخزَّن الفشل: كان {} يبقى في الكاش أسبوعاً فتظهر أرقام الفروع بدل أسمائها
+        return {}
     names: dict[str, str] = {}
     for row in rows:
         code = _norm_brn_code(row.get("BRN_NO"))
@@ -3193,6 +3194,8 @@ def _branch_names() -> dict[str, str]:
         while "  " in label:
             label = label.replace("  ", " ")
         names[code] = label
+    if not names:
+        return names  # جدول فارغ/فشل صامت: لا يُخزَّن
     return _django_lookup_set("branch_names:v2", names)
 
 

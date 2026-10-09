@@ -1801,6 +1801,7 @@ def browse_sales(request):
     today = date.today()
     error = ''
     dashboard = None
+    group_mode = False
     branches: list[dict] = []
     groups: list[dict] = []
     selected_branch = str(request.GET.get('branch') or '').strip()
@@ -1867,12 +1868,25 @@ def browse_sales(request):
                 if selected_group and selected_group not in group_codes:
                     selected_group = ''
 
-            dashboard = build_sales_branches(
-                date_from,
-                date_to,
-                branch_code=selected_branch,
-                group_code=selected_group,
-            )
+            if selected_group:
+                # وضع المجموعة: الصفحة تظهر فوراً بهيكل فارغ، والأرقام تصل من
+                # browse_sales_group_mode_api (استعلامات بنود ثقيلة تُحفظ).
+                from .sales_dashboard import build_sales_branches_placeholder
+
+                group_mode = True
+                dashboard = build_sales_branches_placeholder(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                )
+            else:
+                dashboard = build_sales_branches(
+                    date_from,
+                    date_to,
+                    branch_code=selected_branch,
+                    group_code=selected_group,
+                )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales failed: %s', exc)
         from .sales_dashboard import build_sales_branches_from_cache
@@ -1895,7 +1909,9 @@ def browse_sales(request):
     groups_api_url = ''
     groups_month_api_url = ''
     items_api_url = ''
-    users_api_url = ''
+    group_mode_api_url = ''
+    growth_api_url = ''
+    group_growth_api_url = ''
     groups_seed = None
     if dashboard is not None:
         qs = {
@@ -1919,7 +1935,12 @@ def browse_sales(request):
                 f"{groups_month_api_url}?{urlencode(month_qs)}"
             )
         items_api_url = f"{reverse('browse_sales_top_items_api')}?{urlencode(qs)}"
-        users_api_url = f"{reverse('browse_sales_top_users_api')}?{urlencode(qs)}"
+        growth_api_url = f"{reverse('browse_sales_branch_growth_api')}?{urlencode(qs)}"
+        group_growth_api_url = (
+            f"{reverse('browse_sales_group_growth_api')}?{urlencode(qs)}"
+        )
+        if group_mode:
+            group_mode_api_url = f"{reverse('browse_sales_group_mode_api')}?{urlencode(qs)}"
         # زرع فوري من الكاش — بلا حلقة شهور في الواجهة
         try:
             from .sales_dashboard import peek_sales_groups
@@ -1964,7 +1985,13 @@ def browse_sales(request):
             'groups_api_url': groups_api_url,
             'groups_month_api_url': groups_month_api_url,
             'items_api_url': items_api_url,
-            'users_api_url': users_api_url,
+            'growth_api_url': growth_api_url,
+            'group_growth_api_url': group_growth_api_url,
+            'group_mode': group_mode,
+            'group_mode_api_url': group_mode_api_url,
+            'selected_group_name': next(
+                (g.get('name') for g in groups if g.get('code') == selected_group), ''
+            ),
             'groups_seed': groups_seed,
         },
     )
@@ -2104,6 +2131,127 @@ def browse_sales_top_items_api(request):
         return JsonResponse({'ok': True, 'items': payload})
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_sales_top_items_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_branch_growth_api(request):
+    """نمو مبيعات الفروع: الشهر الجاري حتى تاريخ النهاية مقابل نفس الأيام من الشهر السابق."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_branch_growth
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        try:
+            months = int(request.GET.get('months') or 3)
+        except (TypeError, ValueError):
+            months = 3
+        payload = build_sales_branch_growth(
+            date_to,
+            branch_code=branch_code,
+            months=months,
+            group_code=str(request.GET.get('group') or '').strip(),
+            date_from=date_from,
+        )
+        return JsonResponse({'ok': True, 'growth': payload})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_branch_growth_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_group_growth_api(request):
+    """نمو مبيعات المجموعات عبر عدة أشهر بنفس عدد الأيام من كل شهر."""
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    try:
+        months = int(request.GET.get('months') or 3)
+    except (TypeError, ValueError):
+        months = 3
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_group_growth
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        payload = build_sales_group_growth(
+            date_to,
+            branch_code=branch_code,
+            months=months,
+            group_code=str(request.GET.get('group') or '').strip(),
+            date_from=date_from,
+        )
+        return JsonResponse({'ok': True, 'growth': payload})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_group_growth_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_sales_group_mode_api(request):
+    """أرقام تحليل المبيعات لمجموعة واحدة: بطاقات + جدولا الفروع + المرتجعات كأجزاء HTML جاهزة للاستبدال."""
+    from django.template.loader import render_to_string
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'),
+            request.GET.get('date_to'),
+        )
+    except ValidationError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+    branch_code = str(request.GET.get('branch') or '').strip()
+    group_code = str(request.GET.get('group') or '').strip()
+    if not group_code:
+        return JsonResponse({'ok': False, 'error': 'اختر مجموعة.'}, status=400)
+    try:
+        from .oracle_stock import oracle_enabled
+        from .sales_dashboard import build_sales_branches_for_group
+
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'}, status=400)
+        dashboard = build_sales_branches_for_group(
+            date_from, date_to, branch_code=branch_code, group_code=group_code
+        )
+        ctx = {
+            'dashboard': dashboard,
+            'selected_group': group_code,
+            'selected_group_name': dashboard.get('group_name') or group_code,
+        }
+        return JsonResponse(
+            {
+                'ok': True,
+                'group_name': ctx['selected_group_name'],
+                'board_html': render_to_string('search/_sales_board.html', ctx, request),
+                'tables_html': render_to_string('search/_sales_tables.html', ctx, request),
+                'returns_html': render_to_string('search/_sales_returns_panel.html', ctx, request),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_sales_group_mode_api failed: %s', exc)
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
 
@@ -6776,6 +6924,466 @@ def browse_purchase_control_details(request):
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
             'back_url': back_url,
+        },
+    )
+
+
+def _doc_control_screen(request, spec_key: str, url_name: str, details_url_name: str):
+    """شاشة رقابة عامة (تحويلات / أوامر صرف) بنفس منطق رقابة فواتير الشراء."""
+    from datetime import date
+
+    today = date.today()
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_user = str(request.GET.get('user') or '').strip()[:12]
+    report = None
+    error = ''
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    submitted = 'date_from' in request.GET
+    title = ''
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'), request.GET.get('date_to')
+        )
+    except ValidationError as exc:
+        date_from = date_to = today
+        error = str(exc)
+        submitted = False
+    if selected_user and not selected_user.isdigit():
+        error = error or 'رقم المستخدم يجب أن يكون أرقاماً فقط.'
+        selected_user = ''
+        submitted = False
+
+    try:
+        from .oracle_doc_control import SPECS, build_control
+        from .oracle_income import fetch_income_branches
+        from .oracle_purchase_control import MAX_DAYS
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        title = SPECS[spec_key]['title']
+        if not oracle_enabled():
+            error = error or 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                warehouses = fetch_warehouse_options(active_only=True)
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_warehouse not in {row['code'] for row in warehouses}:
+                    selected_warehouse = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                if submitted and not error:
+                    if (date_to - date_from).days >= MAX_DAYS:
+                        error = f'الفترة القصوى {MAX_DAYS} يوماً.'
+                    else:
+                        report = build_control(
+                            spec_key,
+                            date_from,
+                            date_to,
+                            branch_code=selected_branch,
+                            warehouse_code=selected_warehouse,
+                            group_code=selected_group,
+                            user_id=selected_user,
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('%s failed: %s', url_name, exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_doc_control.html',
+        {
+            'title': title,
+            'spec_key': spec_key,
+            'url_name': url_name,
+            'details_url_name': details_url_name,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'selected_user': selected_user,
+            'branches': branches,
+            'warehouses': warehouses,
+            'groups': groups,
+            'report': report,
+            'submitted': submitted,
+            'error': error,
+        },
+    )
+
+
+def _doc_control_details_screen(request, spec_key: str, url_name: str):
+    """تفاصيل مستندات مستخدم على جهاز من نوع واحد — تُفتح من شاشة الرقابة."""
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    kind = str(request.GET.get('kind') or '').strip()
+    user_id = str(request.GET.get('user') or '').strip()
+    terminal = str(request.GET.get('terminal') or '-').strip()[:60]
+    row_branch = str(request.GET.get('branch') or '').strip()
+    warehouse = str(request.GET.get('warehouse') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    report = None
+    error = ''
+    title = ''
+    row_info = {'user': user_id or '-', 'terminal': terminal or '-', 'branch': row_branch}
+
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'), request.GET.get('date_to')
+        )
+    except ValidationError as exc:
+        from datetime import date
+
+        date_from = date_to = date.today()
+        error = str(exc)
+
+    back_qs = {
+        'date_from': date_from.isoformat(),
+        'date_to': date_to.isoformat(),
+        'branch': str(request.GET.get('fbranch') or '').strip(),
+        'warehouse': warehouse,
+        'group': group,
+        'user': str(request.GET.get('fuser') or '').strip()[:12],
+    }
+    back_url = f"{reverse(url_name)}?{urlencode(back_qs)}"
+
+    if not error:
+        try:
+            from .oracle_doc_control import SPECS, build_control_details
+            from .oracle_stock import _branch_names, oracle_enabled, oracle_session
+
+            title = SPECS[spec_key]['title']
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+            else:
+                with oracle_session():
+                    report = build_control_details(
+                        spec_key,
+                        date_from,
+                        date_to,
+                        kind=kind,
+                        user_id=user_id,
+                        terminal=terminal,
+                        branch_code=row_branch,
+                        warehouse_code=warehouse,
+                        group_code=group,
+                    )
+                    row_info['branch'] = (
+                        _branch_names().get(row_branch) or row_branch or '-'
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('%s details failed: %s', url_name, exc)
+            error = f'تعذّر تحميل التفاصيل: {exc}'
+            report = None
+
+    if report:
+        row_info['user'] = report.get('user') or row_info['user']
+
+    return render(
+        request,
+        'search/browse_doc_control_details.html',
+        {
+            'title': title,
+            'report': report,
+            'error': error,
+            'row': row_info,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'back_url': back_url,
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_transfer_control(request):
+    """رقابة التحويلات المخزنية: صادر/وارد، ومن أدخلها ومن أي جهاز."""
+    return _doc_control_screen(
+        request, 'transfers', 'browse_transfer_control', 'browse_transfer_control_details'
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_transfer_control_details(request):
+    return _doc_control_details_screen(request, 'transfers', 'browse_transfer_control')
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_issue_control(request):
+    """رقابة أوامر الصرف المخزني: من أدخلها ومن أي جهاز."""
+    return _doc_control_screen(
+        request, 'issues', 'browse_issue_control', 'browse_issue_control_details'
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_issue_control_details(request):
+    return _doc_control_details_screen(request, 'issues', 'browse_issue_control')
+
+
+def _pack_control_parse(request):
+    """فلاتر التاريخ المشتركة بين شاشة رقابة اختلاف العبوة وتفاصيلها."""
+    from datetime import date
+
+    error = ''
+    try:
+        date_from, date_to = _parse_sales_dates(
+            request.GET.get('date_from'), request.GET.get('date_to')
+        )
+    except ValidationError as exc:
+        date_from = date_to = date.today()
+        error = str(exc)
+    return date_from, date_to, error
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_purchase_pack_control(request):
+    """رقابة اختلاف عبوة الشراء: نفس الصنف والوحدة أُدخل بعبوة تخالف الشراء السابق."""
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_warehouse = str(request.GET.get('warehouse') or '').strip()
+    selected_group = str(request.GET.get('group') or '').strip()
+    selected_user = str(request.GET.get('user') or '').strip()[:12]
+    report = None
+    branches: list[dict] = []
+    warehouses: list[dict] = []
+    groups: list[dict] = []
+    submitted = 'date_from' in request.GET
+    date_from, date_to, error = _pack_control_parse(request)
+    if error:
+        submitted = False
+    if selected_user and not selected_user.isdigit():
+        error = error or 'رقم المستخدم يجب أن يكون أرقاماً فقط.'
+        selected_user = ''
+        submitted = False
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_purchase_control import MAX_DAYS
+        from .oracle_purchase_pack_control import build_pack_control
+        from .oracle_stock import (
+            fetch_sales_group_options,
+            fetch_warehouse_options,
+            oracle_enabled,
+            oracle_session,
+        )
+
+        if not oracle_enabled():
+            error = error or 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                warehouses = fetch_warehouse_options(active_only=True)
+                groups = fetch_sales_group_options()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if selected_warehouse not in {row['code'] for row in warehouses}:
+                    selected_warehouse = ''
+                if selected_group not in {row['code'] for row in groups}:
+                    selected_group = ''
+                if submitted and not error:
+                    if (date_to - date_from).days >= MAX_DAYS:
+                        error = f'الفترة القصوى {MAX_DAYS} يوماً.'
+                    else:
+                        report = build_pack_control(
+                            date_from,
+                            date_to,
+                            branch_code=selected_branch,
+                            warehouse_code=selected_warehouse,
+                            group_code=selected_group,
+                            user_id=selected_user,
+                        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_purchase_pack_control failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_purchase_pack_control.html',
+        {
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'selected_branch': selected_branch,
+            'selected_warehouse': selected_warehouse,
+            'selected_group': selected_group,
+            'selected_user': selected_user,
+            'branches': branches,
+            'warehouses': warehouses,
+            'groups': groups,
+            'report': report,
+            'submitted': submitted,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_purchase_pack_control_details(request):
+    """بنود اختلاف العبوة لمستخدم على جهاز — تُفتح من شاشة الرقابة."""
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    user_id = str(request.GET.get('user') or '').strip()
+    terminal = str(request.GET.get('terminal') or '-').strip()[:60]
+    row_branch = str(request.GET.get('branch') or '').strip()
+    warehouse = str(request.GET.get('warehouse') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    report = None
+    row_info = {'user': user_id or '-', 'terminal': terminal or '-', 'branch': row_branch}
+    date_from, date_to, error = _pack_control_parse(request)
+
+    back_qs = {
+        'date_from': date_from.isoformat(),
+        'date_to': date_to.isoformat(),
+        'branch': str(request.GET.get('fbranch') or '').strip(),
+        'warehouse': warehouse,
+        'group': group,
+        'user': str(request.GET.get('fuser') or '').strip()[:12],
+    }
+    back_url = f"{reverse('browse_purchase_pack_control')}?{urlencode(back_qs)}"
+
+    if not error:
+        try:
+            from .oracle_purchase_pack_control import build_pack_control_details
+            from .oracle_stock import _branch_names, oracle_enabled, oracle_session
+
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+            else:
+                with oracle_session():
+                    report = build_pack_control_details(
+                        date_from,
+                        date_to,
+                        user_id=user_id,
+                        terminal=terminal,
+                        branch_code=row_branch,
+                        warehouse_code=warehouse,
+                        group_code=group,
+                    )
+                    row_info['branch'] = (
+                        _branch_names().get(row_branch) or row_branch or '-'
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_purchase_pack_control_details failed: %s', exc)
+            error = f'تعذّر تحميل التفاصيل: {exc}'
+            report = None
+
+    if report:
+        row_info['user'] = report.get('user') or row_info['user']
+
+    return render(
+        request,
+        'search/browse_purchase_pack_control_details.html',
+        {
+            'report': report,
+            'error': error,
+            'row': row_info,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'back_url': back_url,
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_employees_report(request):
+    """الموظفون النشطون (بلا سلة المحذوفات) الذين لهم حركة أو قيد في الشهر المختار."""
+    from .oracle_employees import (
+        build_employees_excel,
+        build_employees_report,
+        parse_month,
+        previous_month,
+    )
+
+    selected_branch = str(request.GET.get('branch') or '').strip()
+    month = str(request.GET.get('month') or '').strip() or previous_month()
+    selected_pay = str(request.GET.get('pay') or '').strip()
+    if selected_pay not in {'transfer', 'cash', 'unknown'}:
+        selected_pay = ''
+    branches: list[dict] = []
+    report = None
+    error = ''
+    submitted = 'month' in request.GET
+
+    try:
+        parse_month(month)
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc)
+        month = previous_month()
+        submitted = False
+
+    try:
+        from .oracle_income import fetch_income_branches
+        from .oracle_stock import oracle_enabled, oracle_session
+
+        if not oracle_enabled():
+            error = error or 'أوراكل غير مفعّل — لا يمكن عرض التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                if selected_branch not in {row['code'] for row in branches}:
+                    selected_branch = ''
+                if submitted and not error:
+                    report = build_employees_report(
+                        month, branch_code=selected_branch, pay=selected_pay
+                    )
+                    if str(request.GET.get('export') or '').strip().lower() in {'1', 'excel', 'xls', 'xlsx'}:
+                        label = next(
+                            (b['name'] for b in branches if b['code'] == selected_branch), ''
+                        )
+                        return build_employees_excel(report, branch_label=label)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_employees_report failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    return render(
+        request,
+        'search/browse_employees_report.html',
+        {
+            'month': month,
+            'selected_branch': selected_branch,
+            'selected_pay': selected_pay,
+            'branches': branches,
+            'report': report,
+            'submitted': submitted,
+            'error': error,
         },
     )
 

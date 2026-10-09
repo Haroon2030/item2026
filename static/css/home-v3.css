@@ -1,16 +1,16 @@
 /* الصفحة الرئيسية — لوحة مبيعات اليوم في الأعلى وأقسام المنصة تحتها */
-html body.welcome-body:not(#fx) { background: #f4f2ec !important; }
+html body.welcome-body:not(#fx) { background: #F6F8FB !important; }
 html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 
 .hv-stage {
-  --hv-ink: #17140f;
-  --hv-ink-2: #26211a;
-  --hv-graphite: #5b564b;
-  --hv-line: #e3e1d8;
-  --hv-gold: #e9a800;
-  --hv-gold-soft: #fff2c4;
+  --hv-ink: #1F2A37;
+  --hv-ink-2: #1F2A37;
+  --hv-graphite: #3B4A5C;
+  --hv-line: #E3E8EF;
+  --hv-gold: #4A7FB5;
+  --hv-gold-soft: #EEF3F9;
   --hv-muted: #cfc8b6;
-  --hv-bad: #ff9a8f;
+  --hv-bad: #E57373;
   --hv-font: var(--lg-font, "IBM Plex Sans Arabic", "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif);
   box-sizing: border-box; max-width: 1120px; margin: 0 auto; direction: rtl;
   padding: 2rem clamp(1rem, 4vw, 2.5rem) 5rem; color: var(--hv-ink); font-family: var(--hv-font);
@@ -22,23 +22,23 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 .hv-sub { margin: 0; color: var(--hv-graphite); font: 400 .95rem/1.5 var(--hv-font); }
 
 /* لوحة مبيعات اليوم — العنصر الأبرز */
-.hv-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); overflow: hidden; background: var(--hv-ink); color: #fff; border-radius: 28px; }
+.hv-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); overflow: hidden; background: #FFFFFF; border: 1px solid #E3E8EF; color: var(--hv-ink); border-radius: 28px; }
 .hv-hero.hv-hero-solo { grid-template-columns: 1fr; }
-.hv-today { padding: clamp(1.4rem, 3vw, 2.4rem); display: grid; align-content: space-between; gap: 1.8rem; background: linear-gradient(180deg, #ffe680 0%, #ffd23f 55%, #ffbf14 100%); color: var(--hv-ink); }
-.hv-today-label { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font: 600 .95rem/1.4 var(--hv-font); color: #4a3a08; }
+.hv-today { padding: clamp(1.4rem, 3vw, 2.4rem); display: grid; align-content: space-between; gap: 1.8rem; background: #F6F8FB; color: #1F2A37; }
+.hv-today-label { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font: 600 .95rem/1.4 var(--hv-font); color: #3B4A5C; }
 .hv-today-num { margin: .2rem 0 0; font: 700 clamp(2.4rem, 5.5vw, 4.2rem)/1.05 var(--hv-font); font-variant-numeric: tabular-nums; direction: ltr; text-align: right; letter-spacing: -.01em; }
 .hv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; padding-top: 1.2rem; border-top: 1.5px solid rgba(23, 20, 15, .2); }
 .hv-kpi { display: flex; align-items: center; gap: .65rem; min-width: 0; }
-.hv-kpi-ico { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--hv-ink); }
+.hv-kpi-ico { flex: none; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; background: #4A7FB5; }
 .hv-kpi-ico svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.hv-kpi small { display: block; color: #4a3a08; font: 600 .8rem/1.4 var(--hv-font); }
+.hv-kpi small { display: block; color: #FFFFFF; font: 600 .8rem/1.4 var(--hv-font); }
 .hv-kpi b { display: block; font: 700 1.15rem/1.4 var(--hv-font); font-variant-numeric: tabular-nums; }
-.hv-kpi-bad b { color: #a3261b; }
-.hv-kpi-bad .hv-kpi-ico { background: #a3261b; }
+.hv-kpi-bad b { color: #E57373; }
+.hv-kpi-bad .hv-kpi-ico { background: #E57373; }
 .hv-kpi-bad .hv-kpi-ico svg { stroke: #fff; }
-.hv-today-note { margin: 0; color: #a3261b; font-weight: 700; font: 500 .85rem/1.4 var(--hv-font); }
+.hv-today-note { margin: 0; color: #E57373; font-weight: 700; font: 500 .85rem/1.4 var(--hv-font); }
 
-.hv-brand { display: grid; place-content: center; justify-items: center; gap: .8rem; padding: 2rem 1.4rem; background: var(--hv-ink-2); text-align: center; }
+.hv-brand { display: grid; place-content: center; justify-items: center; gap: .8rem; padding: 2rem 1.4rem; background: #F6F8FB; text-align: center; }
 .hv-logo { display: grid; place-items: center; width: 4rem; height: 4rem; border-radius: 16px; background: rgba(255, 255, 255, .06); }
 .hv-logo svg { width: 2.4rem; height: 2.4rem; }
 .hv-brand-name { margin: 0; font: 700 1.6rem/1.2 var(--hv-font); }
@@ -50,7 +50,7 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 .hv-sec-title { margin: 2.4rem 0 1rem; font: 700 1.1rem/1.3 var(--hv-font); }
 .hv-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .hv-card {
-  --hue: #f2c811;
+  --hue: #4A7FB5;
   position: relative; overflow: hidden;
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: .9rem; row-gap: .15rem; align-items: center;
   padding: 1.05rem 1.2rem; box-sizing: border-box;
@@ -60,11 +60,11 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 /* خط اللون على حافة البطاقة: لون كل قسم نفس لونه في الشريط الجانبي */
 .hv-card::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 4px; background: var(--hue); }
 .hv-card-head { display: contents; }
-.hv-k-sales { --hue: #f2c811; }
+.hv-k-sales { --hue: #4A7FB5; }
 .hv-k-perf { --hue: #fda4af; }
-.hv-k-purch { --hue: #fdba74; }
-.hv-k-inv { --hue: #ffb21e; }
-.hv-k-income { --hue: #37d26f; }
+.hv-k-purch { --hue: #EEF3F9; }
+.hv-k-inv { --hue: #F2B65C; }
+.hv-k-income { --hue: #5BB98C; }
 .hv-k-assets { --hue: #c4b5fd; }
 .hv-card:hover, .hv-card:focus-visible { border-color: var(--hv-ink); box-shadow: 0 10px 24px rgba(23, 20, 15, .08); outline: none; }
 .hv-card:focus-visible { outline: 3px solid var(--hv-gold); outline-offset: 3px; }
@@ -96,18 +96,18 @@ html body.welcome-body .app-backdrop:not(#fx) { display: none !important; }
 }
 
 /* حماية من قواعد الثيم العامة التي تفرض ألوان الروابط والعناوين */
-html body.welcome-body .hv-hero:not(#fx) { background: #17140f !important; }
-html body.welcome-body .hv-today:not(#fx) { background: linear-gradient(180deg, #ffe680 0%, #ffd23f 55%, #ffbf14 100%) !important; }
+html body.welcome-body .hv-hero:not(#fx) { background: #FFFFFF !important; }
+html body.welcome-body .hv-today:not(#fx) { background: #F6F8FB !important; }
 html body.welcome-body .hv-today .hv-today-num:not(#fx),
-html body.welcome-body .hv-today .hv-kpi b:not(#fx) { color: #17140f !important; -webkit-text-fill-color: #17140f !important; background: none !important; }
-html body.welcome-body .hv-today .hv-kpi-bad b:not(#fx) { color: #a3261b !important; -webkit-text-fill-color: #a3261b !important; }
+html body.welcome-body .hv-today .hv-kpi b:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
+html body.welcome-body .hv-today .hv-kpi-bad b:not(#fx) { color: #E57373 !important; -webkit-text-fill-color: #E57373 !important; }
 html body.welcome-body .hv-today .hv-today-label:not(#fx),
-html body.welcome-body .hv-today .hv-kpi small:not(#fx) { color: #4a3a08 !important; -webkit-text-fill-color: #4a3a08 !important; }
-html body.welcome-body .hv-brand .hv-brand-name:not(#fx) { color: #fff !important; -webkit-text-fill-color: #fff !important; background: none !important; }
-html body.welcome-body .hv-brand .hv-greet:not(#fx) { color: #cfc8b6 !important; -webkit-text-fill-color: #cfc8b6 !important; }
-html body.welcome-body .hv-hero .hv-role:not(#fx) { background: #e9a800 !important; color: #17140f !important; -webkit-text-fill-color: #17140f !important; }
-html body.welcome-body .hv-card:not(#fx) { background: #fff !important; color: #17140f !important; -webkit-text-fill-color: #17140f !important; }
-html body.welcome-body .hv-card strong:not(#fx) { color: #17140f !important; -webkit-text-fill-color: #17140f !important; background: none !important; }
-html body.welcome-body .hv-card small:not(#fx) { color: #5b564b !important; -webkit-text-fill-color: #5b564b !important; }
-html body.welcome-body .hv-title:not(#fx) { color: #17140f !important; -webkit-text-fill-color: #17140f !important; background: none !important; }
-html body.welcome-body .hv-brand .hv-line:not(#fx) { color: #cfc8b6 !important; -webkit-text-fill-color: #cfc8b6 !important; }
+html body.welcome-body .hv-today .hv-kpi small:not(#fx) { color: #3B4A5C !important; -webkit-text-fill-color: #3B4A5C !important; }
+html body.welcome-body .hv-brand .hv-brand-name:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
+html body.welcome-body .hv-brand .hv-greet:not(#fx) { color: #6B7785 !important; -webkit-text-fill-color: #6B7785 !important; }
+html body.welcome-body .hv-hero .hv-role:not(#fx) { background: #4A7FB5 !important; color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; }
+html body.welcome-body .hv-card:not(#fx) { background: #fff !important; color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; }
+html body.welcome-body .hv-card strong:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
+html body.welcome-body .hv-card small:not(#fx) { color: #6B7785 !important; -webkit-text-fill-color: #6B7785 !important; }
+html body.welcome-body .hv-title:not(#fx) { color: #1F2A37 !important; -webkit-text-fill-color: #1F2A37 !important; background: none !important; }
+html body.welcome-body .hv-brand .hv-line:not(#fx) { color: #6B7785 !important; -webkit-text-fill-color: #6B7785 !important; }

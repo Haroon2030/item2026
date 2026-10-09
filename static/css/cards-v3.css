@@ -4,33 +4,33 @@
   /* شريط عنوان الصفحة */
   html body.theme-navy .page .dash-head:not(#fx) {
     min-height: 4.5rem; padding-block: .5rem; border: 0 !important; border-radius: 8px !important;
-    background: linear-gradient(to right, #fffffe 0%, #fff2d5 28%, #ffe8b9 48%, #ffdf9d 68%, #ffd275 100%) !important;
+    background: #FFFFFF !important; border: 1px solid #E3E8EF !important;
     box-shadow: none !important;
   }
 
   /* البطاقة */
   html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):not(#fx) {
-    --hdr: #f7941e;
+    --hdr: #4A7FB5;
     position: relative !important; display: flex !important; flex-direction: column !important; justify-content: flex-start !important;
     min-height: 0 !important; max-height: none !important; height: auto !important; padding: 0 !important; gap: 0 !important;
-    background: #fff !important; border: 1.5px solid #231f20 !important; border-radius: 12px !important;
-    box-shadow: none !important; overflow: hidden !important; color: #231f20 !important;
+    background: #fff !important; border: 1px solid #E3E8EF !important; border-radius: 12px !important;
+    box-shadow: none !important; overflow: hidden !important; color: #1F2A37 !important;
   }
-  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+1):not(#fx) { --hdr: #f7941e; }
-  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+2):not(#fx) { --hdr: #fbab18; }
-  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+3):not(#fx) { --hdr: #ffc30e; }
-  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+4):not(#fx) { --hdr: #ffda00; }
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+1):not(#fx) { --hdr: #4A7FB5; }
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+2):not(#fx) { --hdr: #4A7FB5; }
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+3):not(#fx) { --hdr: #4A7FB5; }
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):nth-child(4n+4):not(#fx) { --hdr: #4A7FB5; }
 
   /* الترويسة: أيقونة داكنة + العنوان بالأبيض */
   html body.theme-navy .page :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label):not(#fx) {
     display: flex !important; align-items: center !important; gap: .45rem !important; box-sizing: border-box; width: 100%;
     min-height: 2.3rem; padding: .25rem .5rem .25rem 1.9rem !important; background: var(--hdr) !important;
-    color: #231f20 !important; font-size: .8rem !important; font-weight: 700 !important; text-shadow: none;
+    color: #FFFFFF !important; font-size: .8rem !important; font-weight: 700 !important; text-shadow: none;
     white-space: normal !important; overflow: visible !important; line-height: 1.3; margin: 0 !important;
   }
   html body.theme-navy .page :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico):not(#fx) {
     flex: none; width: 1.85rem !important; height: 1.85rem !important; border-radius: 4px !important;
-    background: #231f20 !important; color: #fff !important; border: 0 !important; box-shadow: none !important; display: grid; place-items: center;
+    background: #4A7FB5 !important; color: #fff !important; border: 0 !important; box-shadow: none !important; display: grid; place-items: center;
   }
   html body.theme-navy .page :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico) svg:not(#fx) {
     width: 1.35rem !important; height: 1.35rem !important; stroke: #fff !important; stroke-width: 1.8; fill: none !important;
@@ -40,27 +40,27 @@
 
   /* على الأصفر الفاتح (البطاقتان 3 و4) يكون العنوان داكنًا كما في التصميم */
   html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi):is(:nth-child(4n+3), :nth-child(4n+4)) :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label):not(#fx) {
-    color: #231f20 !important; text-shadow: none;
+    color: #FFFFFF !important; text-shadow: none;
   }
 
   /* الدائرة الصغيرة ▲ في طرف الترويسة */
   html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi)::before {
     content: "▲" !important; position: absolute !important; inset: .75rem auto auto .6rem !important; width: .85rem !important; height: .85rem !important;
-    display: flex !important; align-items: center; justify-content: center; border-radius: 50% !important; background: #27143e !important;
+    display: flex !important; align-items: center; justify-content: center; border-radius: 50% !important; background: #4A7FB5 !important;
     color: #fff; font-size: .5rem; line-height: 1; transform: none !important; z-index: 3 !important;
   }
 
   /* الجسم: القيمة والتفصيل */
   html body.theme-navy .page :is(.dash-kpi-value, .up-kpi-value, .lm-kpi-value):not(#fx) {
-    color: #231f20 !important; padding: .4rem .7rem 0 !important; box-sizing: border-box; justify-content: flex-start !important;
+    color: #1F2A37 !important; padding: .4rem .7rem 0 !important; box-sizing: border-box; justify-content: flex-start !important;
     font-size: 1.45rem !important; line-height: 1.2 !important; /* fit-kpi.js يقلّصه تلقائياً إن لم يتّسع */
   }
   html body.theme-navy .page :is(.dash-kpi-hint, .up-kpi-hint, .lm-kpi-hint):not(#fx) {
     margin: .15rem .7rem .5rem !important; width: auto !important; max-width: calc(100% - 1.4rem) !important; box-sizing: border-box;
     padding: .1rem .45rem !important; font-size: .68rem !important; line-height: 1.3 !important;
-    white-space: normal !important; overflow-wrap: anywhere; /* يلتف التلميح الطويل بدل أن يُقصّ */ border-radius: 6px !important; background: #fff4d6 !important; color: #5b4a14 !important;
+    white-space: normal !important; overflow-wrap: anywhere; /* يلتف التلميح الطويل بدل أن يُقصّ */ border-radius: 6px !important; background: #FDF3E1 !important; color: #5b4a14 !important;
   }
-  html body.theme-navy .page .inv-hl-name:not(#fx) { padding: .45rem .8rem 0; color: #231f20 !important; }
+  html body.theme-navy .page .inv-hl-name:not(#fx) { padding: .45rem .8rem 0; color: #1F2A37 !important; }
 
   /* الشبكة: كل البطاقات جنبًا إلى جنب في صف واحد قدر ما يتّسع العرض، ثم تلتفّ بلا فراغات */
   html body.theme-navy .page :is(.sales-ov-kpis, .up-kpi-grid, .vt-kpis, .purchase-kpis, .income-kpi-grid, .suppliers-kpis, .lm-kpi-grid, .inv-kpi-grid, .assets-kpis):not(#fx) {

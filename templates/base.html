@@ -70,10 +70,10 @@
             <span class="brand-mark" aria-hidden="true">
               <svg viewBox="0 0 48 48" focusable="false">
                 <defs>
-                  <linearGradient id="sbRing" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F26854"/><stop offset=".5" stop-color="#F58446"/><stop offset="1" stop-color="#FAA128"/></linearGradient>
-                  <linearGradient id="sbHandle" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3724F"/><stop offset=".4" stop-color="#F9A12B"/><stop offset="1" stop-color="#FAA623"/></linearGradient>
+                  <linearGradient id="sbRing" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E8A0A0"/><stop offset=".5" stop-color="#6C9BD1"/><stop offset="1" stop-color="#7CC4B0"/></linearGradient>
+                  <linearGradient id="sbHandle" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F2C57C"/><stop offset=".4" stop-color="#4A7FB5"/><stop offset="1" stop-color="#F2C57C"/></linearGradient>
                   <linearGradient id="sbLens" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C8C9CB"/><stop offset=".35" stop-color="#A9ACAF"/><stop offset=".65" stop-color="#858B90"/><stop offset="1" stop-color="#6E747A"/></linearGradient>
-                  <linearGradient id="sbBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F69284"/><stop offset="1" stop-color="#F3705A"/></linearGradient>
+                  <linearGradient id="sbBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E8A0A0"/><stop offset="1" stop-color="#E57373"/></linearGradient>
                   <clipPath id="sbClip"><circle cx="20" cy="20" r="14.3"/></clipPath>
                 </defs>
                 <rect x="33.2" y="28.5" width="7.2" height="15.5" rx="3.6" transform="rotate(-45 36.8 36.2)" fill="url(#sbHandle)"/>
@@ -462,13 +462,13 @@
             <span>إعدادات الربط</span>
           </a>
           <div
-            class="sidebar-group{% if request.resolver_match.url_name == 'browse_purchase_control' or request.resolver_match.url_name == 'browse_purchase_control_details' %} is-open is-current{% endif %}"
+            class="sidebar-group{% if '_control' in request.resolver_match.url_name %} is-open is-current{% endif %}"
             data-sidebar-group
           >
             <button
               type="button"
               class="sidebar-link sidebar-group-toggle"
-              aria-expanded="{% if request.resolver_match.url_name == 'browse_purchase_control' or request.resolver_match.url_name == 'browse_purchase_control_details' %}true{% else %}false{% endif %}"
+              aria-expanded="{% if '_control' in request.resolver_match.url_name %}true{% else %}false{% endif %}"
               title="الرقابة"
             >
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>
@@ -479,6 +479,39 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_control' or request.resolver_match.url_name == 'browse_purchase_control_details' %}is-active{% endif %}" href="{% url 'browse_purchase_control' %}" title="نقد/آجل ومن أدخل فاتورة الشراء ومن أي جهاز">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
                 <span>رقابة فواتير الشراء</span>
+              </a>
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_transfer_control' or request.resolver_match.url_name == 'browse_transfer_control_details' %}is-active{% endif %}" href="{% url 'browse_transfer_control' %}" title="صادر/وارد ومن أدخل التحويل ومن أي جهاز">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+                <span>رقابة التحويلات</span>
+              </a>
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_issue_control' or request.resolver_match.url_name == 'browse_issue_control_details' %}is-active{% endif %}" href="{% url 'browse_issue_control' %}" title="من أدخل أمر الصرف المخزني ومن أي جهاز">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8l7-4 7 4v8l-7 4-7-4z"/><path d="M5 8l7 4 7-4M12 12v8"/></svg>
+                <span>رقابة أوامر الصرف المخزني</span>
+              </a>
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_purchase_pack_control' or request.resolver_match.url_name == 'browse_purchase_pack_control_details' %}is-active{% endif %}" href="{% url 'browse_purchase_pack_control' %}" title="صنف أُدخل بعبوة تخالف الشراء السابق ومن أدخله">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/></svg>
+                <span>رقابة اختلاف عبوة الشراء</span>
+              </a>
+            </div>
+          </div>
+          <div
+            class="sidebar-group{% if request.resolver_match.url_name == 'browse_employees_report' %} is-open is-current{% endif %}"
+            data-sidebar-group
+          >
+            <button
+              type="button"
+              class="sidebar-link sidebar-group-toggle"
+              aria-expanded="{% if request.resolver_match.url_name == 'browse_employees_report' %}true{% else %}false{% endif %}"
+              title="التقارير"
+            >
+              <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
+              <span>التقارير</span>
+              <svg class="sidebar-group-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="sidebar-group-items" role="group" aria-label="التقارير">
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_employees_report' %}is-active{% endif %}" href="{% url 'browse_employees_report' %}" title="الموظفون النشطون بحركة أو قيد في شهر">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 0 1 0 5.5M18 14.5c1.8.8 3 2.7 3 5.5"/></svg>
+                <span>بيانات الموظفين</span>
               </a>
             </div>
           </div>

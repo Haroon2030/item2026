@@ -1243,3 +1243,556 @@ def build_sales_top_users(
         "scope_label": _scope_label(brn, ""),
         "limit": lim,
     }
+
+
+_AR_MONTHS = (
+    "يناير", "فبراير", "مارس", "ابريل", "مايو", "يونيو",
+    "يوليو", "اغسطس", "سبتمبر", "اكتوبر", "نوفمبر", "ديسمبر",
+)
+
+
+def _span_label(d_from, d_to) -> str:
+    """«1–8 اكتوبر 2026» داخل الشهر الواحد، و«28 سبتمبر – 4 اكتوبر 2026» عبر شهرين."""
+    month_to = _AR_MONTHS[d_to.month - 1]
+    if (d_from.year, d_from.month) == (d_to.year, d_to.month):
+        if d_from.day == d_to.day:
+            return f"{d_to.day} {month_to} {d_to.year}"
+        return f"{d_from.day}–{d_to.day} {month_to} {d_to.year}"
+    month_from = _AR_MONTHS[d_from.month - 1]
+    year_from = "" if d_from.year == d_to.year else f" {d_from.year}"
+    return f"{d_from.day} {month_from}{year_from} – {d_to.day} {month_to} {d_to.year}"
+
+
+GROWTH_MIN_MONTHS = 2
+GROWTH_MAX_MONTHS = 12
+
+
+def _growth_mode(date_from, date_to) -> str:
+    """نوع المقارنة حسب الفترة المختارة:
+
+    - «month»: من أول الشهر إلى يوم فيه (شهر كامل أو حتى اليوم) → نفس الأيام من الأشهر السابقة.
+    - «months»: من أول شهر وتمتد عبر أشهر → كل فترة تُقارَن بالفترات السابقة بنفس عدد الأشهر.
+    - «days»: أي فترة تبدأ في منتصف الشهر (يوم أو عدة أيام) → الفترات السابقة بنفس عدد الأيام.
+    بلا تاريخ بداية: «month» (السلوك القديم)."""
+    from datetime import date
+
+    from .oracle_stock import _as_date
+
+    if not date_from:
+        return "month"
+    start = _as_date(date_from)
+    end = min(_as_date(date_to), date.today())
+    if start > end:
+        return "month"
+    if start.day != 1:
+        return "days"
+    if (start.year, start.month) == (end.year, end.month):
+        return "month"
+    return "months"
+
+
+def _add_months(d, k: int):
+    """يزيح تاريخًا k شهرًا (سالب = للخلف) ويقصّ اليوم لآخر يوم في الشهر الناتج."""
+    from calendar import monthrange
+    from datetime import date
+
+    idx = d.year * 12 + (d.month - 1) + k
+    year, month = divmod(idx, 12)
+    return date(year, month + 1, min(d.day, monthrange(year, month + 1)[1]))
+
+
+def _growth_windows(date_to, months: int, date_from=None) -> list[tuple]:
+    """نوافذ المقارنة من الأحدث للأقدم؛ أولها الفترة المختارة نفسها (انظر _growth_mode)."""
+    from datetime import date, timedelta
+
+    from .oracle_stock import _as_date
+
+    n = max(GROWTH_MIN_MONTHS, min(int(months or 3), GROWTH_MAX_MONTHS))
+    end = min(_as_date(date_to), date.today())
+    mode = _growth_mode(date_from, date_to)
+    if mode == "days":
+        start = _as_date(date_from)
+        length = (end - start).days + 1
+        return [
+            (start - timedelta(days=k * length), end - timedelta(days=k * length))
+            for k in range(n)
+        ]
+    if mode == "months":
+        start = _as_date(date_from)
+        span = (end.year - start.year) * 12 + (end.month - start.month) + 1
+        return [
+            (_add_months(start, -k * span), _add_months(end, -k * span)) for k in range(n)
+        ]
+    # month: كل شهر من أوله حتى نفس رقم اليوم (يُقصّ لآخر يوم في الشهر)
+    from calendar import monthrange
+
+    full_month = end.day == monthrange(end.year, end.month)[1] and date_from is not None
+    out: list[tuple] = []
+    for k in range(n):
+        first = _add_months(end.replace(day=1), -k)
+        last_day = monthrange(first.year, first.month)[1]
+        # شهر كامل مختار ← أشهر كاملة؛ وإلا نفس رقم اليوم (يُقصّ لآخر يوم)
+        day = last_day if full_month else min(end.day, last_day)
+        out.append((first, first.replace(day=day)))
+    return out
+
+
+def _growth_metrics(cur: float, prev: float) -> dict[str, Any]:
+    cur, prev = round(cur, 2), round(prev, 2)
+    delta = round(cur - prev, 2)
+    pct = round(delta / prev * 100.0, 1) if prev > 0 else None
+    if pct is None:
+        direction = "new" if cur > 0 else "flat"
+    elif abs(pct) < 0.05:
+        direction = "flat"
+    else:
+        direction = "up" if pct > 0 else "down"
+    sign = "+" if delta > 0 else ""
+    return {
+        "current": cur,
+        "previous": prev,
+        "delta": delta,
+        "growth_pct": pct,
+        "direction": direction,
+        "current_display": f"{cur:,.0f}",
+        "previous_display": f"{prev:,.0f}",
+        "delta_display": f"{sign}{delta:,.0f}",
+        "growth_display": (
+            f"{'+' if pct > 0 else ''}{pct:.1f}%"
+            if pct is not None
+            else ("جديد" if cur > 0 else "—")
+        ),
+    }
+
+
+def _sum_by_branch(
+    rows: list[dict] | None,
+    code_key: str = "branch_code",
+    name_key: str = "branch_name",
+    norm=None,
+) -> dict[str, dict[str, Any]]:
+    """إجمالي المبيعات لكل كيان (فرع أو مجموعة) — مفتاح الكود والاسم يُحدَّدان بالمعاملين."""
+    if norm is None:
+        from .oracle_stock import _norm_brn_code as norm
+
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows or []:
+        code = norm(r.get(code_key))
+        slot = out.setdefault(code, {"name": "", "sales": 0.0})
+        slot["sales"] += float(r.get("sales_total") or 0)
+        slot["name"] = slot["name"] or str(r.get(name_key) or "").strip()
+    return out
+
+
+def _month_series(
+    amounts: list[float], labels: list[str], names: list[str]
+) -> list[dict[str, Any]]:
+    """مبلغ كل شهر (من الأحدث) ونمو كل شهر عن الذي قبله؛ الأقدم بلا نسبة."""
+    out = []
+    for i, amount in enumerate(amounts):
+        item: dict[str, Any] = {
+            "label": labels[i],
+            "name": names[i],
+            "amount": round(amount, 2),
+            "display": f"{amount:,.0f}",
+            "growth_pct": None,
+            "growth_display": "",
+            "direction": "none",
+        }
+        if i + 1 < len(amounts):
+            m = _growth_metrics(amount, amounts[i + 1])
+            item["growth_pct"] = m["growth_pct"]
+            item["growth_display"] = m["growth_display"]
+            item["direction"] = m["direction"]
+        out.append(item)
+    return out
+
+
+def assemble_branch_growth(
+    period_rows: list[list[dict]],
+    windows: list[tuple],
+    *,
+    code_key: str = "branch_code",
+    name_key: str = "branch_name",
+    norm=None,
+    total_label: str = "كل الفروع",
+) -> dict[str, Any]:
+    """نمو مبيعات كل فرع عبر عدة أشهر (الأحدث أولاً). دالة نقية قابلة للاختبار.
+
+    period_rows[k] = إجماليات الفروع للنافذة windows[k]. النمو الرئيسي للصف = الشهر الأحدث عن الذي يليه."""
+    labels = [_span_label(f, t) for f, t in windows]
+    base_year = windows[0][0].year if windows else 0
+    names = [
+        _AR_MONTHS[f.month - 1] + ("" if f.year == base_year else f" {f.year}")
+        for f, _t in windows
+    ]
+    per_month = [_sum_by_branch(rows, code_key, name_key, norm) for rows in period_rows]
+    codes = set().union(*[set(m) for m in per_month]) if per_month else set()
+
+    rows = []
+    for code in codes:
+        amounts = [m.get(code, {}).get("sales", 0.0) for m in per_month]
+        if all(abs(a) < 0.005 for a in amounts):
+            continue
+        name = next((m[code]["name"] for m in per_month if m.get(code, {}).get("name")), "") or code or "—"
+        rows.append(
+            {
+                "code": code,
+                "name": name,
+                "branch_code": code,
+                "branch_name": name,
+                "months": _month_series(amounts, labels, names),
+                **_growth_metrics(amounts[0], amounts[1] if len(amounts) > 1 else 0.0),
+            }
+        )
+    rows.sort(
+        key=lambda r: (
+            r["growth_pct"] is None,
+            -(r["growth_pct"] if r["growth_pct"] is not None else 0.0),
+            -r["current"],
+        )
+    )
+    totals = [sum(v["sales"] for v in m.values()) for m in per_month]
+    total = {
+        "code": "",
+        "name": total_label,
+        "branch_code": "",
+        "branch_name": total_label,
+        "months": _month_series(totals, labels, names),
+        **_growth_metrics(totals[0] if totals else 0.0, totals[1] if len(totals) > 1 else 0.0),
+    }
+    return {
+        "rows": rows,
+        "total": total,
+        "labels": labels,
+        "current_label": labels[0] if labels else "",
+        "previous_label": labels[1] if len(labels) > 1 else "",
+        "months": len(windows),
+        "days": windows[0][1].day if windows else 0,
+    }
+
+
+def _with_period(payload: dict[str, Any], windows: list[tuple], date_from, date_to) -> dict[str, Any]:
+    """يضيف نوع المقارنة وحدود الفترة؛ وفي «الأيام/الأشهر» تُسمّى كل فترة بتاريخها."""
+    mode = _growth_mode(date_from, date_to)
+    payload["mode"] = mode
+    if date_from and windows:
+        payload["period"] = {
+            "from": windows[0][0].isoformat(),
+            "to": windows[0][1].isoformat(),
+            "mode": mode,
+        }
+    if mode != "month" and windows:
+        labels = payload.get("labels") or []
+
+        def rename(series):
+            for i, item in enumerate(series or []):
+                if i < len(labels):
+                    item["name"] = labels[i]
+
+        for r in payload.get("rows", []):
+            rename(r.get("months"))
+        if payload.get("total"):
+            rename(payload["total"].get("months"))
+    return payload
+
+
+def build_sales_branch_growth(
+    date_to, *, branch_code: str = "", months: int = 3, group_code: str = "", date_from=None
+) -> dict[str, Any]:
+    """نمو مبيعات نقاط البيع لكل فرع عبر 2–12 شهراً بنفس عدد الأيام من كل شهر.
+
+    مع مجموعة مختارة: نمو مبيعات تلك المجموعة في كل فرع (استعلام بنود ثقيل يُخزَّن)."""
+    from .oracle_stock import fetch_branch_sales_totals, oracle_session
+
+    windows = _growth_windows(date_to, months, date_from)
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    if gcode:
+        period_rows = _group_branch_windows(windows, brn, gcode)
+        return _with_period(assemble_branch_growth(period_rows, windows), windows, date_from, date_to)
+    with oracle_session():
+        period_rows = [
+            _filter_branch_rows(fetch_branch_sales_totals(f, t, system="pos"), brn)
+            for f, t in windows
+        ]
+    return _with_period(assemble_branch_growth(period_rows, windows), windows, date_from, date_to)
+
+
+def _group_window_totals(date_from, date_to, branch_code: str) -> list[dict]:
+    """مبيعات المجموعات لنافذة واحدة، موزّعة على صافي الفروع كما تفعل لوحة المجموعات في الصفحة.
+
+    الاستعلام ثقيل (نحو 20 ثانية لتسعة أيام) فيُخزَّن: نافذة مضت منذ أيام لا تتغيّر (ست ساعات)،
+    والقريبة من اليوم عشر دقائق. طلبان متزامنان لنفس النافذة ينتظر الثاني الأول."""
+    from django.core.cache import cache
+
+    from .oracle_stock import (
+        fetch_branch_sales_totals,
+        fetch_group_sales_totals,
+        oracle_session,
+    )
+
+    brn = str(branch_code or "").strip()
+    key = f"sales:group_growth:v1:{date_from}:{date_to}:{brn}"
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    with _key_lock(key):
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        with oracle_session():
+            raw = fetch_group_sales_totals(
+                date_from, date_to, system="pos", branch_code=brn, force_fast=True
+            )
+            pos_raw = _filter_branch_rows(
+                fetch_branch_sales_totals(date_from, date_to, system="pos"), brn
+            )
+        target = sum(float(r.get("sales_total") or 0) for r in pos_raw)
+        rows = _reconcile_group_sales_to_target(raw, target) if raw else []
+        slim = [
+            {
+                "group_code": str(r.get("group_code") or "").strip(),
+                "group_name": str(r.get("group_name") or "").strip(),
+                "sales_total": float(r.get("sales_total") or 0),
+            }
+            for r in rows
+        ]
+        cache.set(key, slim, _cache_ttl_for(date_to))
+        return slim
+
+
+def build_sales_group_growth(
+    date_to, *, branch_code: str = "", months: int = 3, group_code: str = "", date_from=None
+) -> dict[str, Any]:
+    """نمو مبيعات نقاط البيع لكل مجموعة عبر 2–12 شهراً بنفس عدد الأيام من كل شهر.
+
+    النوافذ تُجلب بالتوازي (كل نافذة استعلام ثقيل)، والإجمالي يطابق صافي الفروع لكل نافذة.
+    مع مجموعة مختارة: بطاقة واحدة لتلك المجموعة (مجموع فروعها) عبر الأشهر."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    windows = _growth_windows(date_to, months, date_from)
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    if gcode:
+        per_window = _group_branch_windows(windows, brn, gcode)
+        period_rows = [
+            [
+                {
+                    "group_code": gcode,
+                    "group_name": next(
+                        (r.get("group_name") for r in rows if r.get("group_name")), ""
+                    )
+                    or gcode,
+                    "sales_total": sum(float(r.get("sales_total") or 0) for r in rows),
+                }
+            ]
+            if rows
+            else []
+            for rows in per_window
+        ]
+        return _with_period(assemble_branch_growth(
+            period_rows,
+            windows,
+            code_key="group_code",
+            name_key="group_name",
+            norm=lambda c: str(c or "").strip(),
+            total_label="إجمالي المجموعة",
+        ), windows, date_from, date_to)
+    with ThreadPoolExecutor(max_workers=min(4, len(windows))) as pool:
+        period_rows = list(
+            pool.map(lambda w: _group_window_totals(w[0], w[1], brn), windows)
+        )
+    return _with_period(assemble_branch_growth(
+        period_rows,
+        windows,
+        code_key="group_code",
+        name_key="group_name",
+        norm=lambda c: str(c or "").strip(),
+        total_label="كل المجموعات",
+    ), windows, date_from, date_to)
+
+
+# ———————————————— وضع المجموعة: كل الصفحة لمجموعة واحدة ————————————————
+
+
+_KEY_LOCKS: dict[str, Any] = {}
+_KEY_LOCKS_GUARD = None
+
+
+def _key_lock(key: str):
+    """قفل لكل مفتاح كاش: طلبان متزامنان لنفس الاستعلام الثقيل (لوحتا النمو) ينتظر الثاني الأول
+    ثم يقرأ من الكاش بدل أن يكرّر العمل على أوراكل."""
+    import threading
+
+    global _KEY_LOCKS_GUARD
+    if _KEY_LOCKS_GUARD is None:
+        _KEY_LOCKS_GUARD = threading.Lock()
+    with _KEY_LOCKS_GUARD:
+        return _KEY_LOCKS.setdefault(key, threading.Lock())
+
+
+def _cache_ttl_for(date_to) -> int:
+    """فترة تنتهي قرب اليوم تُحدَّث كل 10 دقائق؛ الماضية 6 ساعات."""
+    from datetime import date, timedelta
+
+    from .oracle_stock import _as_date
+
+    return 600 if _as_date(date_to) >= date.today() - timedelta(days=2) else 6 * 3600
+
+
+def _group_branch_window_rows(date_from, date_to, branch_code: str, group_code: str) -> list[dict]:
+    """مبيعات نقاط البيع لمجموعة واحدة موزّعة على الفروع لنافذة (استعلام بنود ثقيل — يُخزَّن)."""
+    from django.core.cache import cache
+
+    from .oracle_stock import (
+        _branch_names,
+        _norm_brn_code,
+        fetch_group_sales_totals,
+        oracle_session,
+    )
+
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    key = f"sales:group_branch_growth:v2:{date_from}:{date_to}:{brn}:{gcode}"
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    with _key_lock(key):
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        with oracle_session():
+            raw = fetch_group_sales_totals(
+                date_from, date_to, system="pos", branch_code=brn, group_code=gcode,
+                by_branch=True, force_fast=True,
+            )
+            names = _branch_names()
+        slim = [
+            {
+                "branch_code": str(r.get("branch_code") or "").strip(),
+                "branch_name": names.get(_norm_brn_code(r.get("branch_code")))
+                or str(r.get("branch_name") or "").strip(),
+                "group_name": str(r.get("group_name") or "").strip(),
+                "sales_total": float(r.get("sales_total") or 0),
+            }
+            for r in raw or []
+        ]
+        cache.set(key, slim, _cache_ttl_for(date_to))
+        return slim
+
+
+def _group_branch_windows(windows: list[tuple], branch_code: str, group_code: str) -> list[list[dict]]:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=min(4, len(windows))) as pool:
+        return list(
+            pool.map(
+                lambda w: _group_branch_window_rows(w[0], w[1], branch_code, group_code),
+                windows,
+            )
+        )
+
+
+def _group_system_rows(date_from, date_to, system: str, branch_code: str, group_code: str) -> list[dict]:
+    """صفوف الفروع لمجموعة في نظام واحد بنفس شكل fetch_branch_sales_totals (مع المرتجع)."""
+    from .oracle_stock import (
+        _norm_brn_code,
+        fetch_group_return_totals,
+        fetch_group_sales_totals,
+        oracle_session,
+    )
+
+    brn = str(branch_code or "").strip()
+    with oracle_session():
+        raw = fetch_group_sales_totals(
+            date_from, date_to, system=system, branch_code=brn, group_code=group_code,
+            by_branch=True, force_fast=True,
+        )
+        out: list[dict] = []
+        for r in raw or []:
+            code = _norm_brn_code(r.get("branch_code"))
+            try:
+                rets = fetch_group_return_totals(
+                    date_from, date_to, system=system, branch_code=code, group_code=group_code
+                )
+            except Exception:  # noqa: BLE001
+                rets = []
+            ret_total = round(sum(float(x.get("return_total") or 0) for x in rets), 2)
+            ret_count = sum(int(x.get("return_count") or 0) for x in rets)
+            gross = round(float(r.get("gross_total") or r.get("sales_total") or 0), 2)
+            inv = int(r.get("invoice_count") or 0)
+            sales = round(gross - ret_total, 2)
+            out.append(
+                {
+                    "branch_code": code,
+                    "branch_name": str(r.get("branch_name") or "").strip(),
+                    "invoice_count": inv,
+                    "return_count": ret_count,
+                    "return_total": ret_total,
+                    "net_invoice_count": inv,
+                    "gross_total": gross,
+                    "net_total": round(float(r.get("net_total") or gross), 2),
+                    "vat_total": round(float(r.get("vat_total") or 0), 2),
+                    "sales_total": sales,
+                    "avg_basket": round(sales / inv, 2) if inv else 0.0,
+                    "group_name": str(r.get("group_name") or "").strip(),
+                }
+            )
+    return out
+
+
+def build_sales_branches_for_group(
+    date_from, date_to, *, branch_code: str = "", group_code: str = ""
+) -> dict[str, Any]:
+    """نفس لوحة تحليل المبيعات (بطاقات + جدولا الفروع + المرتجعات) لمجموعة واحدة.
+
+    الأنظمة الثلاثة بالتوازي، والنتيجة تُخزَّن (10 دقائق للفترات الحديثة وإلا 6 ساعات)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from django.core.cache import cache
+
+    brn = str(branch_code or "").strip()
+    gcode = str(group_code or "").strip()
+    if not gcode:
+        raise ValueError("المجموعة مطلوبة.")
+    key = f"sales:group_mode:v1:{date_from}:{date_to}:{brn}:{gcode}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    systems = ("pos", "wholesale", "onix")
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        pos_raw, credit_raw, cash_raw = list(
+            pool.map(
+                lambda sysname: _group_system_rows(date_from, date_to, sysname, brn, gcode),
+                systems,
+            )
+        )
+    payload = _assemble_sales_branches_dashboard(
+        pos_raw,
+        credit_raw,
+        cash_raw,
+        date_from,
+        date_to,
+        branch_code=brn,
+        group_code=gcode,
+    )
+    name = next(
+        (r.get("group_name") for rows in (pos_raw, cash_raw, credit_raw) for r in rows if r.get("group_name")),
+        "",
+    )
+    payload["group_name"] = name or gcode
+    payload["groups_pending"] = False
+    cache.set(key, payload, _cache_ttl_for(date_to))
+    return payload
+
+
+def build_sales_branches_placeholder(
+    date_from, date_to, *, branch_code: str = "", group_code: str = ""
+) -> dict[str, Any]:
+    """هيكل فارغ سريع لوضع المجموعة قبل وصول الأرقام (بلا أي استعلام ثقيل)."""
+    payload = _assemble_sales_branches_dashboard(
+        [], [], [], date_from, date_to, branch_code=branch_code, group_code=group_code
+    )
+    return payload

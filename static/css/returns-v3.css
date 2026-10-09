@@ -4,7 +4,7 @@
   html body.theme-navy .page :is(.sales-ov-returns, .sales-ov-users) > .dash-panel-head h3:not(#fx) { font-size: 1.6rem !important; font-weight: 800 !important; line-height: 1.2; }
   html body.theme-navy .page :is(.sales-ov-returns, .sales-ov-users) > .dash-panel-head .sales-ov-sub:not(#fx) { font-size: .8rem !important; font-weight: 600 !important; }
   .rb-head-ico { flex: none; display: grid; place-items: center; width: 3rem; height: 3rem; }
-  .rb-head-ico svg { width: 2.6rem; height: 2.6rem; fill: none; stroke: #231f20; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .rb-head-ico svg { width: 2.6rem; height: 2.6rem; fill: none; stroke: #1F2A37; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 
   .rb-board { display: flex; flex-direction: column; flex: 1 1 auto; padding: .8rem 1.4rem .6rem; }
   .rb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
@@ -15,21 +15,21 @@
   /* الشريط: نسبة فوقه، جزء برتقالي فاتح والباقي رمادي داكن */
   .rb-bar-col { display: grid; gap: .2rem; }
   .rb-pct { font-size: 1rem; font-weight: 700; color: #555; text-align: end; direction: ltr; unicode-bidi: plaintext; }
-  .rb-track { display: block; height: .6rem; background: #4a4a4a; direction: ltr; }
-  .rb-fill { display: block; height: 100%; background: #fdab5c; }
+  .rb-track { display: block; height: .6rem; background: #4A7FB5; direction: ltr; }
+  .rb-fill { display: block; height: 100%; background: #F2B65C; }
 
   /* التفاصيل في الجهة الأخرى */
   .rb-details { display: grid; gap: .05rem; justify-items: start; text-align: start; min-width: 0; }
-  .rb-name { font-size: .98rem; font-weight: 800; color: #231f20; }
+  .rb-name { font-size: .98rem; font-weight: 800; color: #1F2A37; }
   .rb-meta { font-size: .8rem; font-weight: 600; color: #5a5047; }
 
   .rb-more {
     align-self: flex-start; display: inline-flex; align-items: center; gap: .4rem; margin-top: .5rem; padding: .2rem 0;
-    background: none; border: 0; cursor: pointer; font: 600 1rem var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif); color: #231f20;
+    background: none; border: 0; cursor: pointer; font: 600 1rem var(--lg-font, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif); color: #1F2A37;
   }
   .rb-more svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
   .rb-more[aria-expanded="true"] svg { transform: rotate(-90deg); }
-  .rb-more:focus-visible { outline: 3px solid #fdab5c; outline-offset: 3px; }
+  .rb-more:focus-visible { outline: 3px solid #F2B65C; outline-offset: 3px; }
 
   @media (max-width: 640px) {
     .rb-row { grid-template-columns: 1fr; gap: .6rem; }
@@ -37,10 +37,10 @@
   }
 
   /* أكثر المستخدمين بيعاً: ترتيب ومبلغ إلى جانب الاسم */
-  .rb-rank { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; margin-inline-end: .5rem; border-radius: 50%; background: #231f20 !important; color: #fff !important; font-size: .75rem; font-weight: 700; vertical-align: middle; }
+  .rb-rank { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; margin-inline-end: .5rem; border-radius: 50%; background: #4A7FB5 !important; color: #fff !important; font-size: .75rem; font-weight: 700; vertical-align: middle; }
   .rb-name small { font-weight: 600; color: #5a5047; }
-  .rb-amt { font-size: 1.05rem; font-weight: 800; color: #231f20; }
+  .rb-amt { font-size: 1.05rem; font-weight: 800; color: #1F2A37; }
 
   /* ترتيب الأصول: دائرة داكنة بنص أبيض بدل الأزرق الفاتح القديم */
-  html body.theme-navy .assets-top-rank:not(#fx) { background: #231f20 !important; color: #fff !important; border: 0 !important; }
+  html body.theme-navy .assets-top-rank:not(#fx) { background: #4A7FB5 !important; color: #fff !important; border: 0 !important; }
 }

@@ -1,0 +1,35 @@
+{# لوحة نمو مبيعات (فروع أو مجموعات) — يملؤها sales-branch-growth.js من الـ API المذكور في data-url-id #}
+<section
+  class="dash-panel dash-panel-glass sales-ov-panel sales-ov-users sales-growth"
+  data-sg-panel
+  data-sg-kind="{{ kind }}"
+  data-sg-url-id="{{ url_id }}"
+  aria-label="{{ title }}"
+>
+  <div class="dash-panel-head">
+    <span class="rb-head-ico" aria-hidden="true">
+      <svg viewBox="0 0 48 48"><path d="M6 40V8"/><path d="M6 40h36"/><path d="M12 32l9-9 7 6 12-14"/><path d="M33 15h7v7"/></svg>
+    </span>
+    <div>
+      <h3>{{ title }}</h3>
+      <p class="sales-ov-sub" data-sg="sub">نقاط البيع · جاري التحميل…</p>
+    </div>
+    <div class="sales-groups-head-meta">
+      <span class="sales-groups-status is-loading" data-sg="status" aria-live="polite">جاري التحميل…</span>
+      <span class="result-pill" data-sg="pill">…</span>
+    </div>
+  </div>
+  <div class="rb-board sales-growth-board">
+    <div class="sg-legend" data-sg="legend" hidden></div>
+    <div class="sg-head" data-sg="head" hidden aria-hidden="true">
+      <span>الشهر</span>
+      <span>حجم المبيعات</span>
+      <span>المبلغ</span>
+      <span title="نسبة التغيّر عن الشهر الذي قبله">التغيّر</span>
+    </div>
+    <ol class="rb-list sg-list" data-sg="chart" aria-label="{{ title }}" tabindex="0">
+      <li class="sales-users-empty sales-ov-loading">جاري التحميل…</li>
+    </ol>
+    <div class="sales-users-total" data-sg="total" hidden></div>
+  </div>
+</section>

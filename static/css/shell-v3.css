@@ -2,37 +2,37 @@
 /* داخل طبقة app-components: قواعد !important في الطبقات تتغلّب على قواعد الثيم غير المطبّقة */
 @layer app-components {
   html body.theme-navy aside.sidebar:not(#fx) {
-    --sb-ink: #231f20;
-    --sb-orange: #f79423;
-    --sb-glossy: linear-gradient(180deg, #ffd90b 0%, #fdd04b 24%, #fbbe5c 46%, #f8a643 52%, #f89b2f 80%, #f79423 100%);
-    background: #050708 !important; color: #fff !important;
+    --sb-ink: #FFFFFF;
+    --sb-orange: #4A7FB5;
+    --sb-glossy: #4A7FB5;
+    background: #FFFFFF !important; color: #1F2A37 !important; border-inline-end: 1px solid #E3E8EF !important;
     border: 0 !important; box-shadow: none !important;
   }
 
   /* الهوية */
   html body.theme-navy aside.sidebar .sidebar-brand:not(#fx) { border-bottom: 0 !important; background: transparent !important; }
   html body.theme-navy aside.sidebar .brand-sub:not(#fx) { display: none !important; }
-  html body.theme-navy aside.sidebar .sidebar-brand .brand:not(#fx) { color: #fff !important; text-shadow: none !important; font-weight: 700 !important; }
+  html body.theme-navy aside.sidebar .sidebar-brand .brand:not(#fx) { color: #1F2A37 !important; text-shadow: none !important; font-weight: 700 !important; }
   html body.theme-navy aside.sidebar .sidebar-brand .brand-mark:not(#fx) {
     background: none !important; border: 0 !important; box-shadow: none !important; width: 3rem !important; height: 3rem !important;
   }
   html body.theme-navy aside.sidebar .sidebar-brand .brand-mark svg:not(#fx) { width: 100% !important; height: 100% !important; }
-  html body.theme-navy aside.sidebar .sidebar-brand-lockup:hover .brand:not(#fx) { color: #fff !important; }
+  html body.theme-navy aside.sidebar .sidebar-brand-lockup:hover .brand:not(#fx) { color: #1F2A37 !important; }
 
   /* أزرار أعلى الشريط: بيضاء بلا خلفية */
   html body.theme-navy aside.sidebar .sidebar-brand-tools .app-hard-refresh--brand:not(#fx),
   html body.theme-navy aside.sidebar .sidebar-brand-tools .sidebar-collapse:not(#fx),
   html body.theme-navy aside.sidebar .sidebar-brand-tools .sidebar-close:not(#fx) {
-    color: #fff !important; background: transparent !important; border: 0 !important; box-shadow: none !important;
+    color: #1F2A37 !important; background: transparent !important; border: 0 !important; box-shadow: none !important;
   }
   html body.theme-navy aside.sidebar .sidebar-brand-tools .app-hard-refresh--brand:hover:not(#fx),
-  html body.theme-navy aside.sidebar .sidebar-brand-tools .sidebar-collapse:hover:not(#fx) { background: rgba(255, 255, 255, .1) !important; color: #fff !important; }
+  html body.theme-navy aside.sidebar .sidebar-brand-tools .sidebar-collapse:hover:not(#fx) { background: rgba(74, 127, 181, .08) !important; color: #1F2A37 !important; }
 
   /* عناوين الأقسام والفواصل */
-  html body.theme-navy aside.sidebar .sidebar-section-label:not(#fx) { color: #8d9298 !important; }
-  html body.theme-navy aside.sidebar .sidebar-zone + .sidebar-zone:not(#fx) { border-top-color: rgba(255, 255, 255, .1) !important; }
-  html body.theme-navy aside.sidebar .sidebar-group-items:not(#fx) { border-inline-start-color: rgba(255, 255, 255, .14) !important; }
-  html body.theme-navy aside.sidebar .sidebar-group-chevron:not(#fx) { color: #c9ccd0 !important; }
+  html body.theme-navy aside.sidebar .sidebar-section-label:not(#fx) { color: #6B7785 !important; }
+  html body.theme-navy aside.sidebar .sidebar-zone + .sidebar-zone:not(#fx) { border-top-color: rgba(74, 127, 181, .08) !important; }
+  html body.theme-navy aside.sidebar .sidebar-group-items:not(#fx) { border-inline-start-color: #E3E8EF !important; }
+  html body.theme-navy aside.sidebar .sidebar-group-chevron:not(#fx) { color: #6B7785 !important; }
 
   /* الروابط: نص أبيض وأيقونات خطية بلا مربعات */
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link:not(#fx),
@@ -40,13 +40,13 @@
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-sublink:not(#fx),
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-sublink > span:not(#fx),
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:not(#fx),
-  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle > span:not(#fx) { color: #fff !important; }
-  html body.theme-navy aside.sidebar .sidebar-ico:not(#fx) { background: transparent !important; color: #fff !important; stroke: currentColor; box-shadow: none !important; }
+  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle > span:not(#fx) { color: #1F2A37 !important; }
+  html body.theme-navy aside.sidebar .sidebar-ico:not(#fx) { background: transparent !important; color: #1F2A37 !important; stroke: currentColor; box-shadow: none !important; }
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link:hover:not(#fx),
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-sublink:hover:not(#fx),
-  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:hover:not(#fx) { background: rgba(255, 255, 255, .09) !important; border-color: transparent !important; }
+  html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-toggle:hover:not(#fx) { background: rgba(74, 127, 181, .08) !important; border-color: transparent !important; }
   html body.theme-navy aside.sidebar .sidebar-group.is-current > .sidebar-group-toggle:not(#fx) {
-    background: rgba(255, 255, 255, .1) !important; border-color: transparent !important; box-shadow: none !important;
+    background: rgba(74, 127, 181, .08) !important; border-color: transparent !important; box-shadow: none !important;
   }
 
   /* العنصر النشط وزر الخروج: لوح برتقالي بزاوية علوية مستديرة وسطح داخلي لامع */
@@ -63,7 +63,7 @@
   html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx)::before {
     content: "" !important; position: absolute !important; inset: 5px !important; width: auto !important; height: auto !important;
     border-radius: 10px !important; z-index: -1 !important;
-    background: linear-gradient(180deg, #ffd90b 0%, #fed241 15%, #fccb57 30%, #fbbc5c 55%, #faab50 70%, #f8a643 80%, #f79423 100%) !important;
+    background: #4A7FB5 !important;
   }
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle) > span:not(#fx),
   html body.theme-navy aside.sidebar .sidebar-nav .sidebar-sublink.is-active > span:not(#fx),
@@ -76,10 +76,10 @@
   html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:hover:not(#fx) { filter: brightness(1.05); }
 
   /* بطاقة المستخدم */
-  html body.theme-navy aside.sidebar .sidebar-foot:not(#fx) { border-top-color: rgba(255, 255, 255, .1) !important; background: transparent !important; }
-  html body.theme-navy aside.sidebar .sidebar-user-name:not(#fx) { color: #fff !important; }
-  html body.theme-navy aside.sidebar .sidebar-user-role:not(#fx) { color: #aeb2b8 !important; }
-  html body.theme-navy aside.sidebar .sidebar-user-avatar:not(#fx) { background: rgba(255, 255, 255, .1) !important; color: #fff !important; }
+  html body.theme-navy aside.sidebar .sidebar-foot:not(#fx) { border-top-color: rgba(74, 127, 181, .08) !important; background: transparent !important; }
+  html body.theme-navy aside.sidebar .sidebar-user-name:not(#fx) { color: #1F2A37 !important; }
+  html body.theme-navy aside.sidebar .sidebar-user-role:not(#fx) { color: #6B7785 !important; }
+  html body.theme-navy aside.sidebar .sidebar-user-avatar:not(#fx) { background: rgba(74, 127, 181, .08) !important; color: #1F2A37 !important; }
 
   /* الطي: العنصر النشط يبقى بوضوح */
   html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(#fx),
@@ -104,11 +104,11 @@
   /* أزرار الجوال العائمة (القائمة والتحديث): داكنة بأيقونة بيضاء كالشريط الجانبي */
   html body.theme-navy .sidebar-open:not(#fx),
   html body.theme-navy .app-hard-refresh--float:not(#fx) {
-    background: #050708 !important; color: #fff !important; border: 1.5px solid #f79423 !important; border-radius: 12px !important;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, .28) !important;
+    background: #FFFFFF !important; color: #1F2A37 !important; border: 1.5px solid #4A7FB5 !important; border-radius: 12px !important;
+    box-shadow: 0 6px 16px rgba(31, 42, 55, .12) !important;
   }
   html body.theme-navy .sidebar-open svg:not(#fx),
-  html body.theme-navy .app-hard-refresh--float svg:not(#fx) { stroke: #fff !important; color: #fff !important; }
+  html body.theme-navy .app-hard-refresh--float svg:not(#fx) { stroke: #1F2A37 !important; color: #1F2A37 !important; }
 
   /* رأس الشريط: الشعار والعنوان في سطر واحد، والأدوات (تحديث + طي) في الطرف الآخر */
   html body.theme-navy aside.sidebar .sidebar-brand-top:not(#fx) { flex-wrap: nowrap !important; align-items: center !important; gap: .4rem !important; }
@@ -140,7 +140,7 @@
    كل صف: ارتفاع 40 · حشوة 12 · أيقونة 20 في عمود ثابت · سهم 16 في آخر الصف · مسافة 12 */
 html body.theme-navy aside.sidebar .sidebar-nav:not(#fx) { padding: 6px 4px 8px 8px !important; gap: 4px !important; }
 html body.theme-navy aside.sidebar .sidebar-zone:not(#fx) { gap: 2px !important; }
-html body.theme-navy aside.sidebar .sidebar-section-label:not(#fx) { padding: 14px 12px 6px !important; font-size: .72rem !important; font-weight: 600 !important; letter-spacing: 0 !important; opacity: .7; }
+html body.theme-navy aside.sidebar .sidebar-section-label:not(#fx) { padding: 14px 12px 6px !important; font-size: .72rem !important; font-weight: 600 !important; letter-spacing: 0 !important; opacity: 1; }
 
 html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-group-toggle):not(.sidebar-sublink):not(#fx) {
   display: flex !important; align-items: center !important; box-sizing: border-box !important;
@@ -156,7 +156,7 @@ html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-chevron:not(#fx) 
 
 /* الصف النشط: تعبئة ذهبية مسطّحة بنفس عرض بقية الصفوف (بدون بروز) */
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle):not(#fx) {
-  background: #f9a11b !important; border-radius: 10px !important; box-shadow: none !important; transform: none !important;
+  background: #4A7FB5 !important; border-radius: 10px !important; box-shadow: none !important; transform: none !important;
 }
 
 /* الروابط الفرعية: إزاحة ثابتة 32px تحت أيقونة القسم */
@@ -174,7 +174,7 @@ html body.theme-navy aside.sidebar .btn-logout:not(#fx) {
 /* تسطيح اللوح اللامع: لون واحد، بدون طبقة داخلية، نفس عرض وزوايا بقية الصفوف */
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle):not(#fx):not(#fx2),
 html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx):not(#fx2) {
-  min-height: 40px !important; border-radius: 10px !important; background: #f9a11b !important;
+  min-height: 40px !important; border-radius: 10px !important; background: #4A7FB5 !important;
 }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-link.is-active:not(.sidebar-group-toggle):not(.sidebar-sublink):not(#fx):not(#fx2)::before,
 html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx):not(#fx2)::before { content: none !important; display: none !important; }
@@ -187,43 +187,43 @@ html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#fx):not(#fx2) 
 /* القائمة الفرعية: خط المحور على منتصف أيقونة القسم، ونص الفرعي يبدأ من نفس نقطة نص القسم */
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items:not(#fx):not(#fx2) {
   margin: 2px 0 6px !important; margin-inline-start: 21px !important; padding: 0 !important;
-  border-inline-start: 1px solid rgba(255, 255, 255, .16) !important; gap: 2px !important;
+  border-inline-start: 1px solid #E3E8EF !important; gap: 2px !important;
 }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:not(#fx):not(#fx2) {
   min-height: 36px !important; margin: 0 !important; padding: 6px 12px 6px 10px !important; padding-inline-start: 22px !important;
   border-radius: 8px !important; font-size: .82rem !important; font-weight: 500 !important; line-height: 1.35 !important;
   text-align: start !important;
 }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover:not(#fx):not(#fx2) { background: rgba(255, 255, 255, .08) !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover:not(#fx):not(#fx2) { background: #EEF3F9 !important; }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2) {
-  background: #f9a11b !important; border-radius: 8px !important; min-height: 36px !important; padding-block: 6px !important;
+  background: #4A7FB5 !important; border-radius: 8px !important; min-height: 36px !important; padding-block: 6px !important;
 }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2)::before { content: none !important; display: none !important; }
 
 /* تمييز المستويات: القسم الرئيسي أبيض وسميك، والفرعي أخفت وأصغر ومزاح أعمق مع نقطة على الخط */
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:not(#fx):not(#fx2) {
   position: relative !important; padding-inline-start: 42px !important;
-  font-size: .9rem !important; font-weight: 700 !important; color: #b4b8bf !important;
+  font-size: .9rem !important; font-weight: 600 !important; color: #1F2A37 !important;
 }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink > span:not(#fx):not(#fx2) { color: #b4b8bf !important; font-weight: 700 !important; }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover > span:not(#fx):not(#fx2) { color: #fff !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink > span:not(#fx):not(#fx2) { color: #1F2A37 !important; font-weight: 600 !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover > span:not(#fx):not(#fx2) { color: #1F2A37 !important; }
 html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink::after {
   content: "" !important; position: absolute; inset-inline-start: -3.5px; top: 50%; width: 6px; height: 6px; margin-top: -3px;
-  border-radius: 50%; background: #5d626a; box-shadow: 0 0 0 3px #050708;
+  border-radius: 50%; background: #6C9BD1; box-shadow: 0 0 0 3px #FFFFFF;
 }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover::after { background: #f9a11b; }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2)::after { background: #f9a11b; }
-html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active > span:not(#fx):not(#fx2) { color: #17140f !important; font-weight: 700 !important; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink:hover::after { background: #4A7FB5; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active:not(#fx):not(#fx2)::after { background: #4A7FB5; }
+html body.theme-navy aside.sidebar .sidebar-nav .sidebar-group-items .sidebar-sublink.is-active > span:not(#fx):not(#fx2) { color: #FFFFFF !important; font-weight: 700 !important; }
 /* القسم المفتوح: عنوانه يتلوّن بالذهبي ليبيّن أن ما تحته تابع له */
-html body.theme-navy aside.sidebar .sidebar-group.is-open > .sidebar-group-toggle > span:not(#fx):not(#fx2) { color: #ffc21a !important; }
-html body.theme-navy aside.sidebar .sidebar-group.is-open > .sidebar-group-toggle .sidebar-ico:not(#fx):not(#fx2) { color: #ffc21a !important; }
+html body.theme-navy aside.sidebar .sidebar-group.is-open > .sidebar-group-toggle > span:not(#fx):not(#fx2) { color: #4A7FB5 !important; }
+html body.theme-navy aside.sidebar .sidebar-group.is-open > .sidebar-group-toggle .sidebar-ico:not(#fx):not(#fx2) { color: #4A7FB5 !important; }
 
 /* زرّا رأس الشريط (تحديث / طيّ): أزرار أيقونية مربعة بنفس لغة الصفوف */
 html body.theme-navy aside.sidebar .sidebar-brand-tools:not(#fx):not(#fx2) { gap: 6px !important; }
 html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close):not(#fx):not(#fx2) {
   width: 32px !important; height: 32px !important; border-radius: 10px !important;
-  background: rgba(255, 255, 255, .06) !important; border: 1px solid rgba(255, 255, 255, .12) !important;
-  color: #d9dce1 !important; box-shadow: none !important; place-items: center !important;
+  background: rgba(74, 127, 181, .08) !important; border: 1px solid #E3E8EF !important;
+  color: #6B7785 !important; box-shadow: none !important; place-items: center !important;
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close) svg:not(#fx):not(#fx2) {
@@ -231,6 +231,6 @@ html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--b
 }
 html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close):hover:not(#fx):not(#fx2),
 html body.theme-navy aside.sidebar .sidebar-brand-tools :is(.app-hard-refresh--brand, .sidebar-collapse, .sidebar-close):focus-visible:not(#fx):not(#fx2) {
-  background: #f9a11b !important; border-color: #f9a11b !important; color: #17140f !important; outline: none !important;
+  background: #4A7FB5 !important; border-color: #4A7FB5 !important; color: #FFFFFF !important; outline: none !important;
 }
 }

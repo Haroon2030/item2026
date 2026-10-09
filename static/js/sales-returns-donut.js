@@ -82,6 +82,8 @@
     }
   }
 
+  window.salesReturnsInit = init; // يستدعيه وضع المجموعة بعد استبدال لوحة المرتجعات
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {

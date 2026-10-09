@@ -1,0 +1,103 @@
+{% load money_fmt %}
+    <section class="dash-panel dash-panel-glass sales-ov-panel" aria-label="مبيعات نقاط البيع حسب الفروع">
+      <div class="dash-panel-head">
+        <div>
+          <h3>مبيعات نقاط البيع</h3>
+        </div>
+        <span class="result-pill">{{ dashboard.pos.branches|length }}</span>
+      </div>
+      <div class="table-wrap sales-ov-scroll">
+        <table class="data-table sales-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الفرع</th>
+              <th>الفواتير</th>
+              <th>المرتجع</th>
+              <th>المبيعات</th>
+              <th class="sales-col-cost">متوسط السلة</th>
+              <th>الحصة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in dashboard.pos.branches %}
+              <tr{% if row.no_sales %} class="sales-zero-row"{% endif %}>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
+                <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
+                <td class="mono">{% money row.return_total_display %}</td>
+                <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money row.avg_basket_display %}</td>
+                <td class="mono sales-col-share">{{ row.share_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="sales-empty">لا مبيعات نقاط بيع في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if dashboard.pos.branches %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono sales-col-inv">{{ dashboard.pos.totals.invoice_count_display }}</td>
+                <td class="mono">{% money dashboard.pos.totals.return_total_display %}</td>
+                <td class="mono sales-amt">{% money dashboard.pos.totals.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money dashboard.pos.totals.avg_basket_display %}</td>
+                <td class="mono sales-col-share">100%</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+
+    <section class="dash-panel dash-panel-glass sales-ov-panel" aria-label="مبيعات نظام المبيعات حسب الفروع">
+      <div class="dash-panel-head">
+        <div>
+          <h3>مبيعات نظام المبيعات</h3>
+        </div>
+        <span class="result-pill">{{ dashboard.wholesale.branches|length }}</span>
+      </div>
+      <div class="table-wrap sales-ov-scroll">
+        <table class="data-table sales-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>الفرع</th>
+              <th>الفواتير</th>
+              <th>المرتجع</th>
+              <th>المبيعات</th>
+              <th class="sales-col-cost">متوسط السلة</th>
+              <th>الحصة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in dashboard.wholesale.branches %}
+              <tr>
+                <td class="mono">{{ forloop.counter }}</td>
+                <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
+                <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
+                <td class="mono">{% money row.return_total_display %}</td>
+                <td class="mono sales-amt">{% money row.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money row.avg_basket_display %}</td>
+                <td class="mono sales-col-share">{{ row.share_display }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if dashboard.wholesale.branches %}
+            <tfoot>
+              <tr class="sales-grand-row">
+                <td colspan="2">الإجمالي</td>
+                <td class="mono sales-col-inv">{{ dashboard.wholesale.totals.invoice_count_display }}</td>
+                <td class="mono">{% money dashboard.wholesale.totals.return_total_display %}</td>
+                <td class="mono sales-amt">{% money dashboard.wholesale.totals.sales_total_display %}</td>
+                <td class="mono sales-col-cost">{% money dashboard.wholesale.totals.avg_basket_display %}</td>
+                <td class="mono sales-col-share">100%</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+

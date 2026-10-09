@@ -2,9 +2,9 @@
   "use strict";
 
   var DONUT_COLORS = [
-    "#1d6bb8", "#23b268", "#c9891a", "#d45f78", "#6d7f93",
-    "#3d7cc4", "#148f52", "#e0a14a", "#a83752", "#445468",
-    "#5b8def", "#00897b", "#b0754a", "#2f6fbd", "#9aa8b8"
+    "#6C9BD1", "#7CC4B0", "#F2C57C", "#E8A0A0", "#A9A1D9",
+    "#4A7FB5", "#5BB98C", "#F2B65C", "#E57373", "#8F87C4",
+    "#8FB4DB", "#9AD3C4", "#F6D9A8", "#F0BDBD", "#C5C0E6"
   ];
 
   function esc(s) {

@@ -51,6 +51,29 @@ urlpatterns = [
         views.browse_purchase_control_details,
         name='browse_purchase_control_details',
     ),
+    path('control/transfers/', views.browse_transfer_control, name='browse_transfer_control'),
+    path(
+        'control/transfers/details/',
+        views.browse_transfer_control_details,
+        name='browse_transfer_control_details',
+    ),
+    path(
+        'control/purchase-pack/',
+        views.browse_purchase_pack_control,
+        name='browse_purchase_pack_control',
+    ),
+    path(
+        'control/purchase-pack/details/',
+        views.browse_purchase_pack_control_details,
+        name='browse_purchase_pack_control_details',
+    ),
+    path('reports/employees/', views.browse_employees_report, name='browse_employees_report'),
+    path('control/issues/', views.browse_issue_control, name='browse_issue_control'),
+    path(
+        'control/issues/details/',
+        views.browse_issue_control_details,
+        name='browse_issue_control_details',
+    ),
     path(
         'purchases/turnover/',
         views.browse_vendor_turnover,
@@ -117,6 +140,21 @@ urlpatterns = [
         'sales/api/top-items/',
         views.browse_sales_top_items_api,
         name='browse_sales_top_items_api',
+    ),
+    path(
+        'sales/api/group-mode/',
+        views.browse_sales_group_mode_api,
+        name='browse_sales_group_mode_api',
+    ),
+    path(
+        'sales/api/group-growth/',
+        views.browse_sales_group_growth_api,
+        name='browse_sales_group_growth_api',
+    ),
+    path(
+        'sales/api/branch-growth/',
+        views.browse_sales_branch_growth_api,
+        name='browse_sales_branch_growth_api',
     ),
     path(
         'sales/api/top-users/',
