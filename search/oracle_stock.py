@@ -5543,11 +5543,47 @@ def _pick_richer_group_rows(
     return primary
 
 
-def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
-    """كل المجموعات × الفروع (نقاط البيع) بمسح واحد — نفس صيغة استعلام المجموعة الواحدة بلا فلتر المجموعة.
+_CLOSED_MONTH_CACHE_TTL = 60 * 60 * 24  # شهر مغلق: يوم كامل (لا يتغير عادةً)
 
-    كلفة المسح (بنود الفواتير) واحدة سواء جلبنا مجموعة أو كلها؛ فيُخزَّن الشهر كله مرة
-    وتُقرأ منه أي مجموعة لاحقًا فورًا."""
+
+def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
+    """كل المجموعات × الفروع (نقاط البيع) لفترة — شهرًا شهرًا على التوالي.
+
+    كل شهر استعلام واحد يُخزَّن في الكاش (الشهر المغلق ليوم كامل)، فتصير أي فترة لاحقة
+    تتقاطع مع أشهر محسوبة فورية، ولا يُعاد حساب إلا الشهر الجاري. التوالي (لا التوازي)
+    حتى لا تزاحم المسوح بعضها على أوراكل. الفاتورة لا تعبر الشهر فجمع العدّاد دقيق."""
+    merged: dict[tuple[str, str], dict] = {}
+    today = date.today()
+    for a, b in _month_spans(date_from, date_to):
+        key = f"sales:pos_all_groups_br_raw:v2:{a.isoformat()}:{b.isoformat()}"
+        raw = cache.get(key)
+        if raw is None:
+            raw = _fetch_pos_all_groups_by_branch_raw(a, b)
+            closed = _as_date(b) < today.replace(day=1)
+            _sales_cache_set(
+                key,
+                raw,
+                _CLOSED_MONTH_CACHE_TTL if closed else None,
+                date_from=a,
+                date_to=b,
+                keep_stale=False,
+            )
+        for r in raw:
+            k = (str(r.get("GROUP_CODE")), str(r.get("BRANCH_CODE")))
+            cur = merged.get(k)
+            if cur is None:
+                merged[k] = dict(r)
+                continue
+            for f in ("INVOICE_COUNT", "QTY_TOTAL", "NET_TOTAL", "VAT_TOTAL"):
+                cur[f] = float(cur.get(f) or 0) + float(r.get(f) or 0)
+    for cur in merged.values():
+        for f in ("QTY_TOTAL", "NET_TOTAL", "VAT_TOTAL"):
+            cur[f] = round(float(cur.get(f) or 0), 2)
+    return _assemble_group_rows(list(merged.values()), {}, by_branch=True)
+
+
+def _fetch_pos_all_groups_by_branch_raw(date_from, date_to) -> list[dict]:
+    """صفوف خام (GROUP_CODE, BRANCH_CODE, أعداد/مجاميع) لفترة قصيرة — مسح واحد."""
     pos = _pos_owner()
     schema = _schema()
     params: dict = _date_params(date_from, date_to)
@@ -5558,9 +5594,9 @@ def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
             NVL(TO_CHAR(x.G_CODE), '(بلا)') AS GROUP_CODE,
             TO_CHAR(x.BRN_NO) AS BRANCH_CODE,
             COUNT(*) AS INVOICE_COUNT,
-            ROUND(SUM(x.QTY_TOTAL), 2) AS QTY_TOTAL,
-            ROUND(SUM(x.NET_TOTAL), 2) AS NET_TOTAL,
-            ROUND(SUM(x.VAT_TOTAL), 2) AS VAT_TOTAL
+            SUM(x.QTY_TOTAL) AS QTY_TOTAL,
+            SUM(x.NET_TOTAL) AS NET_TOTAL,
+            SUM(x.VAT_TOTAL) AS VAT_TOTAL
         FROM (
             SELECT
                 i.G_CODE,
@@ -5585,7 +5621,7 @@ def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
         """,
         params,
     )
-    return _assemble_group_rows(sales_rows, {}, by_branch=True)
+    return sales_rows
 
 
 def _single_flight(res_key: str, compute, *, date_from=None, date_to=None, wait: float = 240.0):
@@ -5642,6 +5678,7 @@ def _warm_pos_all_groups_by_branch(date_from, date_to, key: str) -> None:
         return
 
     def _run() -> None:
+        failed = False
         try:
             with _WARM_SEM:
                 if cache.get(key) is None:
@@ -5651,12 +5688,15 @@ def _warm_pos_all_groups_by_branch(date_from, date_to, key: str) -> None:
                         key, rows, date_from=date_from, date_to=date_to, keep_stale=False
                     )
         except Exception as exc:  # noqa: BLE001
+            failed = True
             logger.warning("POS all-groups warm failed: %s", exc)
         finally:
-            try:
-                cache.delete(lock_key)
-            except Exception:  # noqa: BLE001
-                pass
+            # عند الفشل (مهلة أوراكل) يبقى القفل حتى ينتهي (15 دقيقة) فلا يُعاد المسح الثقيل مع كل زيارة
+            if not failed:
+                try:
+                    cache.delete(lock_key)
+                except Exception:  # noqa: BLE001
+                    pass
 
     threading.Thread(target=_run, name="pos-all-groups-warm", daemon=True).start()
 
