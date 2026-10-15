@@ -1513,6 +1513,12 @@ def fetch_inventory_by_warehouse(
         """,
         params,
     )
+    assembled = _finish_inv_by_warehouse(rows)
+    _sales_cache_set(cache_key, assembled, ttl=1800)
+    return assembled
+
+
+def _finish_inv_by_warehouse(rows: list[dict]) -> list[dict]:
     branch_names = _branch_names()
     branch_by_wh = {
         str(r.get("WAREHOUSE_CODE") or "").strip(): str(r.get("BRANCH_CODE") or "").strip()
@@ -1527,8 +1533,123 @@ def fetch_inventory_by_warehouse(
         brn_code = branch_by_wh.get(row["code"], "")
         row["branch_code"] = brn_code
         row["branch_name"] = branch_names.get(brn_code) or brn_code or "—"
-    _sales_cache_set(cache_key, assembled, ttl=1800)
     return assembled
+
+
+def _finish_inv_by_group(rows: list[dict]) -> list[dict]:
+    group_names = {
+        str(g.get("code") or "").strip(): str(g.get("name") or "").strip()
+        for g in fetch_sales_group_options()
+        if str(g.get("code") or "").strip()
+    }
+    return _assemble_inventory_rows(
+        rows, key_field="GROUP_CODE", name_lookup=group_names
+    )
+
+
+def _finish_inv_by_branch(rows: list[dict]) -> list[dict]:
+    return _assemble_inventory_rows(
+        rows, key_field="BRANCH_CODE", name_lookup=_branch_names()
+    )
+
+
+def fetch_inventory_breakdowns(
+    *,
+    warehouse: str = "",
+    group_code: str = "",
+    branch_code: str = "",
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """(حسب المخزن، حسب المجموعة، حسب الفرع) بمسح واحد عبر GROUPING SETS.
+
+    بدلاً من ثلاثة استعلامات يمسح كل منها IAS_ITM_WCODE ويعيد حساب مبيعات POS غير
+    المرحلة (نافذة _PENDING_SALES_LOOKBACK_DAYS). النتيجة ونفس مفاتيح الكاش مطابقة
+    للدوال المنفردة fetch_inventory_by_warehouse/group/branch.
+    """
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    schema = _schema()
+    wh = str(warehouse or "").strip()
+    gcode = str(group_code or "").strip()
+    brn = str(branch_code or "").strip()
+    suffix = f"{wh}:{gcode}:{brn}"
+    keys = (
+        f"inv:by_wh:v6:{suffix}",
+        f"inv:by_group:v6:{suffix}",
+        f"inv:by_brn:v6:{suffix}",
+    )
+    cached = [_sales_cache_get(k) for k in keys]
+    if all(c is not None for c in cached):
+        return cached[0], cached[1], cached[2]
+
+    where, params = _inventory_stock_filters(
+        warehouse=wh, group_code=gcode, branch_code=brn
+    )
+    qty_sql = _inv_expected_qty_sql()
+    pend_sql = _pending_pos_net_sql()
+    rows = _fetch_all(
+        f"""
+        SELECT
+            GROUPING(x.WC) AS G_WC,
+            GROUPING(x.GC) AS G_GC,
+            x.WC AS WAREHOUSE_CODE,
+            x.GC AS GROUP_CODE,
+            x.BC AS BRANCH_CODE,
+            MAX(x.WN) AS WAREHOUSE_NAME,
+            TO_CHAR(MAX(x.BRN_RAW)) AS WH_BRANCH_CODE,
+            COUNT(*) AS ROW_COUNT,
+            COUNT(DISTINCT x.IC) AS ITEM_COUNT,
+            COUNT(DISTINCT x.WC) AS WH_COUNT,
+            ROUND(SUM(x.EQ), 2) AS QTY_TOTAL,
+            ROUND(SUM(x.EQ * x.CST), 2) AS STOCK_VALUE,
+            ROUND(SUM(x.AQ * x.CST), 2) AS STOCK_BEFORE,
+            ROUND(SUM(x.PQ * x.CST), 2) AS PENDING_COST,
+            ROUND(SUM(x.PQ), 2) AS PENDING_QTY
+        FROM (
+            SELECT
+                TO_CHAR(w.W_CODE) AS WC,
+                NVL(TO_CHAR(m.G_CODE), '(بلا)') AS GC,
+                NVL(TO_CHAR(wh.CONN_BRN_NO), '(بلا)') AS BC,
+                NVL(wh.W_NAME, TO_CHAR(w.W_CODE)) AS WN,
+                wh.CONN_BRN_NO AS BRN_RAW,
+                w.I_CODE AS IC,
+                {qty_sql} AS EQ,
+                NVL(w.AVL_QTY, 0) AS AQ,
+                NVL(w.I_CWTAVG, w.PRIMARY_COST) AS CST,
+                GREATEST(0, NVL(pend.QTY, 0)) AS PQ
+            FROM {schema}.IAS_ITM_WCODE w
+            JOIN {schema}.IAS_ITM_MST m ON m.I_CODE = w.I_CODE
+            LEFT JOIN {schema}.WAREHOUSE_DETAILS wh
+              ON wh.W_CODE = w.W_CODE
+            LEFT JOIN {pend_sql} pend
+              ON pend.I_CODE = w.I_CODE
+             AND pend.W_CODE = TO_CHAR(w.W_CODE)
+            WHERE {where}
+        ) x
+        GROUP BY GROUPING SETS ((x.WC), (x.GC), (x.BC))
+        HAVING ROUND(SUM(x.EQ), 2) > 0
+        """,
+        params,
+    )
+    wh_rows: list[dict] = []
+    group_rows: list[dict] = []
+    branch_rows: list[dict] = []
+    for row in rows:
+        if not int(row.get("G_WC") or 0):
+            # الاستعلام المنفرد حسب المخزن لا يعيد عدد المخازن، وفرعه = MAX(CONN_BRN_NO)
+            row = {**row, "BRANCH_CODE": row.get("WH_BRANCH_CODE"), "WH_COUNT": 0}
+            wh_rows.append(row)
+        elif not int(row.get("G_GC") or 0):
+            group_rows.append(row)
+        else:
+            branch_rows.append(row)
+    result = (
+        _finish_inv_by_warehouse(wh_rows),
+        _finish_inv_by_group(group_rows),
+        _finish_inv_by_branch(branch_rows),
+    )
+    for key, value in zip(keys, result):
+        _sales_cache_set(key, value, ttl=1800)
+    return result
 
 
 def fetch_inventory_by_group(
@@ -1576,14 +1697,7 @@ def fetch_inventory_by_group(
         """,
         params,
     )
-    group_names = {
-        str(g.get("code") or "").strip(): str(g.get("name") or "").strip()
-        for g in fetch_sales_group_options()
-        if str(g.get("code") or "").strip()
-    }
-    assembled = _assemble_inventory_rows(
-        rows, key_field="GROUP_CODE", name_lookup=group_names
-    )
+    assembled = _finish_inv_by_group(rows)
     _sales_cache_set(cache_key, assembled, ttl=1800)
     return assembled
 
@@ -1633,9 +1747,7 @@ def fetch_inventory_by_branch(
         """,
         params,
     )
-    assembled = _assemble_inventory_rows(
-        rows, key_field="BRANCH_CODE", name_lookup=_branch_names()
-    )
+    assembled = _finish_inv_by_branch(rows)
     _sales_cache_set(cache_key, assembled, ttl=1800)
     return assembled
 
@@ -1665,7 +1777,7 @@ def fetch_stagnant_items(
     brn = str(branch_code or "").strip()
     lim = max(1, min(int(limit or 15), 30))
     cache_key = (
-        f"inv:stagnant_items:v2:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"inv:stagnant_items:v3:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{wh}:{gcode}:{brn}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -1738,7 +1850,10 @@ def fetch_stagnant_items(
         sales_params["wh"] = wh
         sales_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
         ret_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
-    item_filter = _item_in_filter("d.I_CODE", item_codes, sales_params)
+    # كل المرشحين (حتى 360) — وإلا عُدّ من بعد الثمانين «راكداً» دون فحص مبيعاته
+    item_filter = _item_in_filter(
+        "d.I_CODE", item_codes, sales_params, limit=len(item_codes)
+    )
     qty_expr = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
 
     sales_qty: dict[str, float] = {}
@@ -1763,7 +1878,9 @@ def fetch_stagnant_items(
             sales_qty[code] = float(row.get("SALES_QTY") or 0)
 
     ret_params = dict(sales_params)
-    ret_item_filter = _item_in_filter("d.I_CODE", item_codes, ret_params)
+    ret_item_filter = _item_in_filter(
+        "d.I_CODE", item_codes, ret_params, limit=len(item_codes)
+    )
     for row in _fetch_all(
         f"""
         SELECT
@@ -1822,6 +1939,49 @@ def fetch_stagnant_items(
     return out
 
 
+def _fetch_wastage_raw(schema: str, d_from, d_to, *, wh: str, gcode: str, brn: str) -> list[dict]:
+    """صفوف توالف خام (فرع × مجموعة) لفترة قصيرة — بلا تقريب ليُجمع عبر الشهور."""
+    filters = [
+        "m.A_CODE = '41101006'",
+        "m.OUT_DATE >= :d_from",
+        "m.OUT_DATE < :d_to_excl",
+    ]
+    params: dict[str, Any] = {
+        "d_from": d_from,
+        "d_to_excl": d_to + timedelta(days=1),
+    }
+    if wh:
+        filters.append("m.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END")
+        params["wh"] = wh
+    if gcode:
+        filters.append("i.G_CODE = :gcode")
+        params["gcode"] = _bind_gcode(gcode)
+    if brn:
+        filters.append("m.BRN_NO = :brn")
+        params["brn"] = _bind_brn(brn)
+    return _fetch_all(
+        f"""
+        SELECT
+            NVL(TO_CHAR(m.BRN_NO), '(بلا)') AS BRANCH_CODE,
+            NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
+            COUNT(DISTINCT m.OUT_SER) AS DOC_COUNT,
+            SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
+            SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)) AS WASTE_VALUE
+        FROM {schema}.IAS_OUTGOING_MST m
+        JOIN {schema}.IAS_OUTGOING_DTL d
+          ON d.OUT_SER = m.OUT_SER
+         AND d.OUT_TYPE = m.OUT_TYPE
+        JOIN {schema}.IAS_ITM_MST i
+          ON i.I_CODE = d.I_CODE
+        WHERE {" AND ".join(filters)}
+        GROUP BY
+            NVL(TO_CHAR(m.BRN_NO), '(بلا)'),
+            NVL(TO_CHAR(i.G_CODE), '(بلا)')
+        """,
+        params,
+    )
+
+
 def fetch_inventory_wastage(
     date_from,
     date_to,
@@ -1851,48 +2011,45 @@ def fetch_inventory_wastage(
     if cached is not None:
         return cached
 
-    filters = [
-        "m.A_CODE = '41101006'",
-        "m.OUT_DATE >= :d_from",
-        "m.OUT_DATE < :d_to_excl",
-    ]
-    params: dict[str, Any] = {
-        "d_from": d_from,
-        "d_to_excl": d_to + timedelta(days=1),
-    }
-    if wh:
-        filters.append("m.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END")
-        params["wh"] = wh
-    if gcode:
-        filters.append("i.G_CODE = :gcode")
-        params["gcode"] = _bind_gcode(gcode)
-    if brn:
-        filters.append("m.BRN_NO = :brn")
-        params["brn"] = _bind_brn(brn)
-
-    rows = _fetch_all(
-        f"""
-        SELECT
-            NVL(TO_CHAR(m.BRN_NO), '(بلا)') AS BRANCH_CODE,
-            NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
-            COUNT(DISTINCT m.OUT_SER) AS DOC_COUNT,
-            ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL,
-            ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)), 2) AS WASTE_VALUE
-        FROM {schema}.IAS_OUTGOING_MST m
-        JOIN {schema}.IAS_OUTGOING_DTL d
-          ON d.OUT_SER = m.OUT_SER
-         AND d.OUT_TYPE = m.OUT_TYPE
-        JOIN {schema}.IAS_ITM_MST i
-          ON i.I_CODE = d.I_CODE
-        WHERE {" AND ".join(filters)}
-        GROUP BY
-            NVL(TO_CHAR(m.BRN_NO), '(بلا)'),
-            NVL(TO_CHAR(i.G_CODE), '(بلا)')
-        HAVING SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)) <> 0
-        ORDER BY WASTE_VALUE DESC
-        """,
-        params,
-    )
+    # من بداية السنة: شهرًا شهرًا والمغلق منها يُخزَّن يومًا، فلا يكبر المسح مع تقدّم السنة
+    merged: dict[tuple[str, str], dict[str, Any]] = {}
+    today = date.today()
+    for a, b in _month_spans(d_from, d_to):
+        month_key = f"inv:wastage_raw:v1:{a.isoformat()}:{b.isoformat()}:{wh}:{gcode}:{brn}"
+        raw = _sales_cache_get(month_key)
+        if raw is None:
+            raw = _fetch_wastage_raw(schema, a, b, wh=wh, gcode=gcode, brn=brn)
+            closed = b < today.replace(day=1)
+            _sales_cache_set(
+                month_key,
+                raw,
+                _CLOSED_MONTH_CACHE_TTL if closed else 1800,
+                keep_stale=False,
+            )
+        for r in raw:
+            k = (str(r.get("BRANCH_CODE")), str(r.get("GROUP_CODE")))
+            cur = merged.setdefault(
+                k,
+                {
+                    "BRANCH_CODE": r.get("BRANCH_CODE"),
+                    "GROUP_CODE": r.get("GROUP_CODE"),
+                    "DOC_COUNT": 0,
+                    "QTY_TOTAL": 0.0,
+                    "WASTE_VALUE": 0.0,
+                },
+            )
+            # المستند في شهر واحد (OUT_DATE) فجمع عدد المستندات عبر الشهور صحيح
+            cur["DOC_COUNT"] += int(r.get("DOC_COUNT") or 0)
+            cur["QTY_TOTAL"] += float(r.get("QTY_TOTAL") or 0)
+            cur["WASTE_VALUE"] += float(r.get("WASTE_VALUE") or 0)
+    rows = []
+    for cur in merged.values():
+        if round(cur["WASTE_VALUE"], 6) == 0:
+            continue
+        cur["QTY_TOTAL"] = round(cur["QTY_TOTAL"], 2)
+        cur["WASTE_VALUE"] = round(cur["WASTE_VALUE"], 2)
+        rows.append(cur)
+    rows.sort(key=lambda r: r["WASTE_VALUE"], reverse=True)
 
     branch_names = _branch_names()
     group_names = {
@@ -6251,10 +6408,10 @@ def _schedule_groups_refresh(
             pass
 
 
-def _item_in_filter(alias_col: str, codes: list[str], params: dict) -> str:
-    """شرط IN لأكواد الأصناف مع ربط آمن."""
+def _item_in_filter(alias_col: str, codes: list[str], params: dict, *, limit: int = 80) -> str:
+    """شرط IN لأكواد الأصناف مع ربط آمن (أوراكل: حد IN = 1000)."""
     keys = []
-    for index, code in enumerate(codes[:80]):
+    for index, code in enumerate(codes[: min(int(limit), 1000)]):
         key = f"ic_{index}"
         params[key] = code
         keys.append(f":{key}")

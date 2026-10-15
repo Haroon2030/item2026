@@ -2657,3 +2657,173 @@ class ConnectionSettingsTests(TestCase):
     def test_page_renders(self):
         self.client.force_login(self.admin)
         self.assertContains(self.client.get(reverse('connection_settings')), 'إعدادات الربط')
+
+
+@override_settings(CACHES={'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'inventory-tests'}})
+class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
+    """تحليل المخزون: مسح واحد للمخزن/المجموعة/الفرع، فحص مبيعات كل المرشحين، وتوالف شهرية."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        for target, value in (
+            ('search.oracle_stock.oracle_enabled', True),
+            ('search.oracle_stock._branch_names', {'6': 'فرع الرياض'}),
+            ('search.oracle_stock.fetch_sales_group_options', [{'code': '10', 'name': 'ألبان'}]),
+            ('search.oracle_stock._pos_owner', 'YSPOS'),
+        ):
+            patcher = patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _agg(**kw):
+        row = {
+            'ROW_COUNT': 3, 'ITEM_COUNT': 2, 'WH_COUNT': 1, 'QTY_TOTAL': 30,
+            'STOCK_VALUE': 300, 'STOCK_BEFORE': 320, 'PENDING_COST': 20, 'PENDING_QTY': 2,
+        }
+        row.update(kw)
+        return row
+
+    @patch('search.oracle_stock._fetch_all')
+    def test_breakdowns_single_query_matches_separate_functions(self, fetch_all):
+        from django.core.cache import cache
+
+        from search import oracle_stock as os_
+
+        fetch_all.return_value = [
+            self._agg(G_WC=0, G_GC=1, WAREHOUSE_CODE='60', WAREHOUSE_NAME='مخزن 60',
+                      WH_BRANCH_CODE='6', WH_COUNT=1),
+            self._agg(G_WC=1, G_GC=0, GROUP_CODE='10', WH_COUNT=2),
+            self._agg(G_WC=1, G_GC=1, BRANCH_CODE='6', WH_COUNT=2),
+        ]
+        by_wh, by_group, by_brn = os_.fetch_inventory_breakdowns(branch_code='6')
+        self.assertEqual(fetch_all.call_count, 1)
+        sql = fetch_all.call_args[0][0]
+        self.assertIn('GROUPING SETS', sql)
+        self.assertEqual(sql.count('IAS_POS_BILL_DTL'), 1)
+
+        self.assertEqual(by_wh[0]['code'], '60')
+        self.assertEqual(by_wh[0]['branch_code'], '6')
+        self.assertEqual(by_wh[0]['branch_name'], 'فرع الرياض')
+        self.assertEqual(by_wh[0]['warehouse_count'], 0)
+        self.assertEqual(by_group[0]['name'], 'ألبان')
+        self.assertEqual(by_group[0]['warehouse_count'], 2)
+        self.assertEqual(by_brn[0]['name'], 'فرع الرياض')
+
+        # نفس مفاتيح الكاش: الدوال المنفردة تقرأ النتيجة دون استعلام جديد
+        fetch_all.reset_mock()
+        self.assertEqual(os_.fetch_inventory_by_warehouse(branch_code='6'), by_wh)
+        self.assertEqual(os_.fetch_inventory_by_group(branch_code='6'), by_group)
+        self.assertEqual(os_.fetch_inventory_by_branch(branch_code='6'), by_brn)
+        fetch_all.assert_not_called()
+
+        # والعكس: الشكل مطابق لما تعيده الدوال المنفردة من أوراكل
+        cache.clear()
+        fetch_all.side_effect = [
+            [self._agg(WAREHOUSE_CODE='60', WAREHOUSE_NAME='مخزن 60', BRANCH_CODE='6', WH_COUNT=None)],
+            [self._agg(GROUP_CODE='10', WH_COUNT=2)],
+            [self._agg(BRANCH_CODE='6', WH_COUNT=2)],
+        ]
+        self.assertEqual(os_.fetch_inventory_by_warehouse(branch_code='6'), by_wh)
+        self.assertEqual(os_.fetch_inventory_by_group(branch_code='6'), by_group)
+        self.assertEqual(os_.fetch_inventory_by_branch(branch_code='6'), by_brn)
+
+    @patch('search.oracle_stock._fetch_all')
+    def test_stagnant_checks_sales_for_all_candidates(self, fetch_all):
+        from datetime import date
+
+        from search.oracle_stock import fetch_stagnant_items
+
+        stock = [
+            {'ITEM_CODE': f'I{i:03d}', 'ITEM_NAME': f'صنف {i}', 'QTY_TOTAL': 1000 - i, 'STOCK_VALUE': 10}
+            for i in range(180)
+        ]
+        sold = {f'I{i:03d}' for i in range(170)}  # كلها مباعة عدا آخر عشرة
+        calls = []
+
+        def fake(sql, params=None):
+            calls.append((sql, dict(params or {})))
+            if 'IAS_ITM_WCODE' in sql:
+                return stock
+            if 'IAS_POS_RT_BILL_MST m' in sql and 'RET_QTY' in sql:
+                return []
+            return [{'ITEM_CODE': c, 'SALES_QTY': 5} for c in sold]
+
+        fetch_all.side_effect = fake
+        rows = fetch_stagnant_items(date(2026, 10, 9), date(2026, 10, 15), limit=15)
+        sales_params = calls[1][1]
+        self.assertEqual(len([k for k in sales_params if k.startswith('ic_')]), 180)
+        self.assertEqual([r['code'] for r in rows], [f'I{i:03d}' for i in range(170, 180)])
+
+    @patch('search.oracle_stock._fetch_all')
+    def test_wastage_queries_month_by_month_and_caches_closed_months(self, fetch_all):
+        from datetime import date
+
+        from search.oracle_stock import fetch_inventory_wastage
+
+        class FakeDate(date):
+            today_value = date(2026, 3, 15)
+
+            @classmethod
+            def today(cls):
+                return cls.today_value
+
+        patcher = patch('search.oracle_stock.date', FakeDate)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        fetch_all.side_effect = lambda sql, params: [
+            {'BRANCH_CODE': '6', 'GROUP_CODE': '10', 'DOC_COUNT': 2, 'QTY_TOTAL': 4.0, 'WASTE_VALUE': 40.0},
+        ]
+        result = fetch_inventory_wastage(date(2026, 1, 1), date(2026, 3, 15))
+        self.assertEqual(fetch_all.call_count, 3)
+        self.assertEqual(
+            [c.args[1]['d_from'] for c in fetch_all.call_args_list],
+            [date(2026, 1, 1), date(2026, 2, 1), date(2026, 3, 1)],
+        )
+        self.assertEqual(result['waste_value'], 120.0)
+        self.assertEqual(result['doc_count'], 6)
+        self.assertEqual(result['top_group']['name'], 'ألبان')
+
+        # يوم لاحق: يناير وفبراير من الكاش، يُستعلم الشهر الجاري فقط
+        fetch_all.reset_mock()
+        FakeDate.today_value = date(2026, 3, 16)
+        fetch_inventory_wastage(date(2026, 1, 1), date(2026, 3, 16))
+        self.assertEqual(fetch_all.call_count, 1)
+        self.assertEqual(fetch_all.call_args.args[1]['d_from'], date(2026, 3, 1))
+
+    def test_build_inventory_insights_runs_jobs_in_parallel_in_production(self):
+        import contextlib
+        import threading
+
+        from search.inventory_insights import build_inventory_insights
+
+        threads = set()
+
+        def track(value):
+            def _fn(*a, **k):
+                threads.add(threading.current_thread().name)
+                return value
+            return _fn
+
+        wh_row = {'code': '60', 'name': 'مخزن 60', 'stock_value': 300.0, 'qty_total': 30.0,
+                  'item_count': 2, 'row_count': 3, 'share_pct': 100.0, 'share_display': '100.0%',
+                  'stock_value_display': '300.00'}
+        patches = {
+            'fetch_inventory_breakdowns': track(([wh_row], [], [])),
+            'fetch_group_sales_totals': track([]),
+            'fetch_stagnant_items': track([]),
+            'fetch_inventory_wastage': track({'waste_value': 0}),
+            'oracle_session': contextlib.nullcontext,
+        }
+        for name, fn in patches.items():
+            patcher = patch(f'search.oracle_stock.{name}', fn)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        with self.settings(DEBUG=False):
+            insights = build_inventory_insights()
+        self.assertEqual(insights['kpis']['stock_value_num'], 300.0)
+        self.assertEqual(insights['by_warehouse'][0]['code'], '60')
+        self.assertNotIn(threading.current_thread().name, threads)

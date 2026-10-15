@@ -201,10 +201,11 @@ def build_inventory_insights(
     """يبني لوحة تحليل مخزون من أوراكل (قيمة بعد خصم مبيعات POS غير المرحلة)."""
     from datetime import date, timedelta
 
+    from django.conf import settings
+
     from .oracle_stock import (
-        fetch_inventory_by_branch,
-        fetch_inventory_by_group,
-        fetch_inventory_by_warehouse,
+        _run_parallel,
+        fetch_inventory_breakdowns,
         fetch_inventory_wastage,
         fetch_stagnant_items,
         oracle_session,
@@ -217,21 +218,10 @@ def build_inventory_insights(
     activity_from_sales = activity_to - timedelta(days=6)
     activity_from_ytd = activity_to.replace(month=1, day=1)
 
-    def _by_wh():
+    def _breakdowns():
+        # المخزن + المجموعة + الفرع بمسح واحد (كانت ثلاثة مسوح متطابقة)
         with oracle_session():
-            return fetch_inventory_by_warehouse(
-                warehouse=wh, group_code=gcode, branch_code=brn
-            )
-
-    def _by_group():
-        with oracle_session():
-            return fetch_inventory_by_group(
-                warehouse=wh, group_code=gcode, branch_code=brn
-            )
-
-    def _by_brn():
-        with oracle_session():
-            return fetch_inventory_by_branch(
+            return fetch_inventory_breakdowns(
                 warehouse=wh, group_code=gcode, branch_code=brn
             )
 
@@ -275,14 +265,15 @@ def build_inventory_insights(
                 branch_code=brn,
             )
 
-    # تسلسلي فقط: تجنّب ThreadPoolExecutor (يتعطّل بعد إعادة تحميل runserver على Windows)
-    by_warehouse = _by_wh()
+    jobs = [_breakdowns, _sales_raw, _stagnant, _wastage]
+    if settings.DEBUG:
+        # محلياً تسلسلي: ThreadPoolExecutor يتعطّل بعد إعادة تحميل runserver على Windows
+        results = [job() for job in jobs]
+    else:
+        # الإنتاج: أربعة استعلامات مستقلة بالتوازي، كلٌّ بجلسة أوراكل من المجمّع
+        results = _run_parallel(jobs, max_workers=len(jobs))
+    (by_warehouse, by_group, by_branch), sales_rows, stagnant_rows, wastage = results
     _attach_inv_rank_bars(by_warehouse)
-    by_group = _by_group()
-    by_branch = _by_brn()
-    sales_rows = _sales_raw()
-    stagnant_rows = _stagnant()
-    wastage = _wastage()
 
     group_sales_rank, sales_period_label, sales_by_code = _rank_group_sales(
         by_group,
