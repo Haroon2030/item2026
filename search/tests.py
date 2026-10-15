@@ -2680,7 +2680,7 @@ class ConnectionSettingsTests(TestCase):
 
 @override_settings(CACHES={'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'inventory-tests'}})
 class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
-    """تحليل المخزون: مسح واحد للمخزن/المجموعة/الفرع، فحص مبيعات كل المرشحين، وتوالف شهرية."""
+    """تحليل المخزون: مسح واحد للمخزن/المجموعة/الفرع، وتوالف شهرية، وبلا أصناف راكدة."""
 
     def setUp(self):
         from django.core.cache import cache
@@ -2750,45 +2750,6 @@ class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
         self.assertEqual(os_.fetch_inventory_by_branch(branch_code='6'), by_brn)
 
     @patch('search.oracle_stock._fetch_all')
-    def test_stagnant_checks_sales_for_all_candidates(self, fetch_all):
-        from datetime import date
-
-        from search.oracle_stock import fetch_stagnant_items
-
-        stock = [
-            {'ITEM_CODE': f'I{i:03d}', 'ITEM_NAME': f'صنف {i}', 'QTY_TOTAL': 1000 - i, 'STOCK_VALUE': 10}
-            for i in range(180)
-        ]
-        # كلها مباعة عدا آخر عشرة، وI005 بيعه ألغاه مرتجع كامل (صافي 0) فيُعد راكداً
-        net = [{'ITEM_CODE': f'I{i:03d}', 'NET_QTY': 5} for i in range(170) if i != 5]
-        net.append({'ITEM_CODE': 'I005', 'NET_QTY': 0})
-        calls = []
-
-        def fake(sql, params=None):
-            calls.append((sql, dict(params or {})))
-            return stock if 'IAS_ITM_WCODE' in sql else net
-
-        fetch_all.side_effect = fake
-        rows = fetch_stagnant_items(date(2026, 10, 9), date(2026, 10, 15), branch_code='6', limit=15)
-        self.assertEqual(
-            [r['code'] for r in rows],
-            ['I005'] + [f'I{i:03d}' for i in range(170, 180)],
-        )
-        # مبيعات ومرتجعات باستعلام واحد بنطاق التاريخ، بلا قائمة أصناف IN
-        self.assertEqual(len(calls), 2)
-        sales_sql, sales_params = calls[1]
-        self.assertIn('UNION ALL', sales_sql)
-        self.assertNotIn(' IN (', sales_sql)
-        self.assertFalse([k for k in sales_params if k.startswith('ic_')])
-        self.assertEqual(sales_params['brn'], 6)
-
-        # نفس الفترة والفرع: خريطة المبيعات من الكاش (مثلاً بعد تغيير المجموعة)
-        calls.clear()
-        fetch_stagnant_items(date(2026, 10, 9), date(2026, 10, 15), branch_code='6', group_code='10', limit=15)
-        self.assertEqual(len(calls), 1)
-        self.assertIn('IAS_ITM_WCODE', calls[0][0])
-
-    @patch('search.oracle_stock._fetch_all')
     def test_wastage_queries_month_by_month_and_caches_closed_months(self, fetch_all):
         from datetime import date
 
@@ -2844,7 +2805,6 @@ class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
         patches = {
             'fetch_inventory_breakdowns': track(([wh_row], [], [])),
             'fetch_group_sales_totals': track([]),
-            'fetch_stagnant_items': track([]),
             'fetch_inventory_wastage': track({'waste_value': 0}),
             'oracle_session': contextlib.nullcontext,
         }
@@ -2858,3 +2818,4 @@ class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
         self.assertEqual(insights['kpis']['stock_value_num'], 300.0)
         self.assertEqual(insights['by_warehouse'][0]['code'], '60')
         self.assertNotIn(threading.current_thread().name, threads)
+        self.assertNotIn('stagnant', insights)

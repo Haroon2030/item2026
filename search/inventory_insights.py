@@ -151,47 +151,6 @@ def _rank_group_sales(
     }
 
 
-def _build_stagnant_items(
-    rows: list[dict],
-    *,
-    total_stock_qty: float,
-    total_stock_value: float,
-) -> dict[str, Any]:
-    """أصناف بأعلى كمية بلا مبيعات — لقائمة الترتيب."""
-    stagnant = list(rows or [])
-    stagnant_qty = round(sum(float(r.get("qty_total") or 0) for r in stagnant), 2)
-    stagnant_value = round(sum(float(r.get("stock_value") or 0) for r in stagnant), 2)
-    for row in stagnant:
-        if "qty_display" not in row:
-            row["qty_display"] = _qty(row.get("qty_total") or 0)
-        if "stock_value_display" not in row:
-            row["stock_value_display"] = _money(row.get("stock_value") or 0)
-        qty = float(row.get("qty_total") or 0)
-        share = (qty / stagnant_qty * 100.0) if stagnant_qty > 0 else 0.0
-        row["share_pct"] = round(share, 1)
-        row["share_display"] = f"{share:.1f}%"
-    top = stagnant[:15]
-    _attach_inv_rank_bars(top, value_key="qty_total")
-    of_all = (
-        (stagnant_qty / total_stock_qty * 100.0) if total_stock_qty > 0 else 0.0
-    )
-    of_value = (
-        (stagnant_value / total_stock_value * 100.0) if total_stock_value > 0 else 0.0
-    )
-    return {
-        "rows": top,
-        "count": len(stagnant),
-        "qty_total": stagnant_qty,
-        "qty_display": _qty(stagnant_qty),
-        "stock_value": stagnant_value,
-        "stock_value_display": _money(stagnant_value),
-        "of_total_pct": round(of_all, 1),
-        "of_total_display": f"{of_all:.1f}%",
-        "of_value_pct": round(of_value, 1),
-        "of_value_display": f"{of_value:.1f}%",
-    }
-
-
 def build_inventory_insights(
     *,
     warehouse: str = "",
@@ -207,7 +166,6 @@ def build_inventory_insights(
         _run_parallel,
         fetch_inventory_breakdowns,
         fetch_inventory_wastage,
-        fetch_stagnant_items,
         oracle_session,
     )
 
@@ -244,17 +202,6 @@ def build_inventory_insights(
                 by_branch=False,
             )
 
-    def _stagnant():
-        with oracle_session():
-            return fetch_stagnant_items(
-                activity_from_sales,
-                activity_to,
-                warehouse=wh,
-                group_code=gcode,
-                branch_code=brn,
-                limit=15,
-            )
-
     def _wastage():
         with oracle_session():
             return fetch_inventory_wastage(
@@ -265,14 +212,14 @@ def build_inventory_insights(
                 branch_code=brn,
             )
 
-    jobs = [_breakdowns, _sales_raw, _stagnant, _wastage]
+    jobs = [_breakdowns, _sales_raw, _wastage]
     if settings.DEBUG:
         # محلياً تسلسلي: ThreadPoolExecutor يتعطّل بعد إعادة تحميل runserver على Windows
         results = [job() for job in jobs]
     else:
-        # الإنتاج: أربعة استعلامات مستقلة بالتوازي، كلٌّ بجلسة أوراكل من المجمّع
+        # الإنتاج: ثلاثة استعلامات مستقلة بالتوازي، كلٌّ بجلسة أوراكل من المجمّع
         results = _run_parallel(jobs, max_workers=len(jobs))
-    (by_warehouse, by_group, by_branch), sales_rows, stagnant_rows, wastage = results
+    (by_warehouse, by_group, by_branch), sales_rows, wastage = results
     _attach_inv_rank_bars(by_warehouse)
 
     group_sales_rank, sales_period_label, sales_by_code = _rank_group_sales(
@@ -296,12 +243,6 @@ def build_inventory_insights(
     group_totals["warehouse_count_display"] = f"{warehouse_count:,}"
     branch_totals["warehouse_count"] = warehouse_count
     branch_totals["warehouse_count_display"] = f"{warehouse_count:,}"
-
-    stagnant = _build_stagnant_items(
-        stagnant_rows,
-        total_stock_qty=total_qty,
-        total_stock_value=total_value,
-    )
 
     top_wh = by_warehouse[0] if by_warehouse else None
     top_group = by_group[0] if by_group else None
@@ -358,24 +299,6 @@ def build_inventory_insights(
                 "detail": "لا توجد كميات متاحة > 0 بالمعايير المحددة.",
             }
         )
-    if stagnant["count"] > 0 and float(stagnant.get("of_total_pct") or 0) >= 10:
-        alerts.append(
-            {
-                "severity": "warn",
-                "title": "أصناف راكدة بكمية عالية",
-                "detail": (
-                    f"{stagnant['count']} صنفاً بكمية {stagnant['qty_display']} "
-                    f"({stagnant['of_total_display']} من الكمية) بلا مبيعات خلال آخر 7 أيام."
-                ),
-            }
-        )
-        actions.append(
-            {
-                "severity": "warn",
-                "text": "راجع الأصناف الأعلى كمية والأقل حركة: عروض، نقل مخزون، أو إعادة تسعير.",
-                "from_alert": "مخزون راكد",
-            }
-        )
 
     return {
         "scope_label": _scope_label(wh, gcode, brn),
@@ -420,7 +343,6 @@ def build_inventory_insights(
         "by_branch": [r for r in by_branch[:40] if str(r.get("share_display") or "").strip() not in ("0.0%", "0%")],
         "group_sales_rank": group_sales_rank,
         "sales_period_label": sales_period_label,
-        "stagnant": stagnant,
         "wastage": wastage,
         "warehouse_totals": warehouse_totals,
         "group_totals": group_totals,

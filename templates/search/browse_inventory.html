@@ -274,7 +274,7 @@
   </section>
 
   <section class="inv-tables-duo inv-branch-charts-row" aria-label="الفروع والترتيب البياني">
-    <div class="inv-branch-stagnant-stack" aria-label="الفروع والمخزون الراكد">
+    <div class="inv-branch-stagnant-stack" aria-label="الفروع والتوالف">
       <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact" aria-label="حسب الفروع">
         <div class="dash-panel-head">
           <h3>حسب الفروع</h3>
@@ -329,71 +329,6 @@
               </tbody>
             </table>
           {% endif %}
-        </div>
-      </section>
-
-      <section class="dash-panel dash-panel-glass perf-panel inv-panel-compact inv-stagnant-panel" aria-label="المخزون الراكد">
-        <div class="dash-panel-head inv-scope-head">
-          <div class="inv-scope-head-copy">
-            <h3>أصناف راكدة · أعلى كمية</h3>
-            <p class="inv-scope-meta">
-              <span class="mono">{{ insights.sales_period_label }}</span>
-              <span class="inv-scope-sep" aria-hidden="true">·</span>
-              <span>
-                {% if selected_branch %}
-                  {% for b in branches %}{% if b.code == selected_branch %}{{ b.name }}{% endif %}{% endfor %}
-                {% else %}
-                  كل الفروع
-                {% endif %}
-              </span>
-              <span class="inv-scope-sep" aria-hidden="true">·</span>
-              <span>
-                {% if selected_warehouse %}
-                  {% for w in warehouses %}{% if w.code == selected_warehouse %}{{ w.name }}{% endif %}{% endfor %}
-                {% else %}
-                  كل المخازن
-                {% endif %}
-              </span>
-            </p>
-          </div>
-          <div class="dash-panel-head-actions">
-            <span class="result-pill" id="inv-stagnant-pill">أعلى {{ insights.stagnant.rows|length }}</span>
-            <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
-              PDF
-            </button>
-          </div>
-        </div>
-        <p class="inv-rank-period">
-          بلا مبيعات · كمية {{ insights.stagnant.qty_display }}
-          ({{ insights.stagnant.of_total_display }})
-        </p>
-        <div class="inv-rank-chart inv-rank-chart-stagnant" id="inv-stagnant-board" role="list">
-          {% for row in insights.stagnant.rows %}
-            <div
-              class="inv-rank-row"
-              role="listitem"
-              style="--i: {{ forloop.counter0 }}"
-              title="{{ row.name }} — كمية {{ row.qty_display }} · قيمة {{ row.stock_value_display }}{% if row.code %} · #{{ row.code }}{% endif %}"
-            >
-              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
-              <div class="inv-rank-body">
-                <div class="inv-rank-head">
-                  <strong class="inv-rank-name" title="{{ row.name }}{% if row.code %} #{{ row.code }}{% endif %}">{{ row.name }}</strong>
-                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
-                </div>
-                <div class="inv-rank-track" aria-hidden="true">
-                  <div
-                    class="inv-rank-fill inv-rank-fill-stagnant"
-                    data-bar-pct="{{ row.bar_pct|default:row.share_pct|default:0 }}"
-                  ></div>
-                </div>
-                <span class="inv-rank-meta mono">{{ row.qty_display }}</span>
-              </div>
-            </div>
-          {% empty %}
-            <p class="sales-empty">لا أصناف راكدة ضمن الفلتر.</p>
-          {% endfor %}
         </div>
       </section>
 
