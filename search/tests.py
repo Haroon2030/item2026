@@ -2759,22 +2759,34 @@ class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
             {'ITEM_CODE': f'I{i:03d}', 'ITEM_NAME': f'صنف {i}', 'QTY_TOTAL': 1000 - i, 'STOCK_VALUE': 10}
             for i in range(180)
         ]
-        sold = {f'I{i:03d}' for i in range(170)}  # كلها مباعة عدا آخر عشرة
+        # كلها مباعة عدا آخر عشرة، وI005 بيعه ألغاه مرتجع كامل (صافي 0) فيُعد راكداً
+        net = [{'ITEM_CODE': f'I{i:03d}', 'NET_QTY': 5} for i in range(170) if i != 5]
+        net.append({'ITEM_CODE': 'I005', 'NET_QTY': 0})
         calls = []
 
         def fake(sql, params=None):
             calls.append((sql, dict(params or {})))
-            if 'IAS_ITM_WCODE' in sql:
-                return stock
-            if 'IAS_POS_RT_BILL_MST m' in sql and 'RET_QTY' in sql:
-                return []
-            return [{'ITEM_CODE': c, 'SALES_QTY': 5} for c in sold]
+            return stock if 'IAS_ITM_WCODE' in sql else net
 
         fetch_all.side_effect = fake
-        rows = fetch_stagnant_items(date(2026, 10, 9), date(2026, 10, 15), limit=15)
-        sales_params = calls[1][1]
-        self.assertEqual(len([k for k in sales_params if k.startswith('ic_')]), 180)
-        self.assertEqual([r['code'] for r in rows], [f'I{i:03d}' for i in range(170, 180)])
+        rows = fetch_stagnant_items(date(2026, 10, 9), date(2026, 10, 15), branch_code='6', limit=15)
+        self.assertEqual(
+            [r['code'] for r in rows],
+            ['I005'] + [f'I{i:03d}' for i in range(170, 180)],
+        )
+        # مبيعات ومرتجعات باستعلام واحد بنطاق التاريخ، بلا قائمة أصناف IN
+        self.assertEqual(len(calls), 2)
+        sales_sql, sales_params = calls[1]
+        self.assertIn('UNION ALL', sales_sql)
+        self.assertNotIn(' IN (', sales_sql)
+        self.assertFalse([k for k in sales_params if k.startswith('ic_')])
+        self.assertEqual(sales_params['brn'], 6)
+
+        # نفس الفترة والفرع: خريطة المبيعات من الكاش (مثلاً بعد تغيير المجموعة)
+        calls.clear()
+        fetch_stagnant_items(date(2026, 10, 9), date(2026, 10, 15), branch_code='6', group_code='10', limit=15)
+        self.assertEqual(len(calls), 1)
+        self.assertIn('IAS_ITM_WCODE', calls[0][0])
 
     @patch('search.oracle_stock._fetch_all')
     def test_wastage_queries_month_by_month_and_caches_closed_months(self, fetch_all):

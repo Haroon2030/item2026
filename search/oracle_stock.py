@@ -1752,6 +1752,87 @@ def fetch_inventory_by_branch(
     return assembled
 
 
+def _pos_item_net_qty(
+    date_from: date,
+    date_to: date,
+    *,
+    branch_code: str = "",
+    warehouse: str = "",
+) -> dict[str, float]:
+    """صافي كمية مبيعات نقاط البيع (مبيعات − مرتجع) لكل صنف في الفترة — مسح بالتاريخ.
+
+    بلا قائمة أصناف (IN): مع مئات الأكواد كان أوراكل يمسح كل تاريخ الصنف عبر فهرس
+    I_CODE (61 ثانية على الإنتاج). المسح بنطاق التاريخ ثم التجميع هو نمط استعلامات
+    المجموعات السريعة نفسه.
+    """
+    cache_key = (
+        f"inv:pos_item_net:v1:{date_from.isoformat()}:{date_to.isoformat()}:"
+        f"{branch_code}:{warehouse}"
+    )
+    cached = _sales_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    pos = _pos_owner()
+    params: dict[str, Any] = {
+        "d_from": date_from,
+        "d_to_excl": date_to + timedelta(days=1),
+    }
+    sales_filters = [
+        "m.BILL_DATE >= :d_from",
+        "m.BILL_DATE < :d_to_excl",
+        "NVL(m.HUNG, 0) = 0",
+        "d.I_CODE IS NOT NULL",
+    ]
+    ret_filters = [
+        "m.RT_BILL_DATE >= :d_from",
+        "m.RT_BILL_DATE < :d_to_excl",
+        "NVL(m.HUNG, 0) = 0",
+        "d.I_CODE IS NOT NULL",
+    ]
+    if branch_code:
+        params["brn"] = _bind_brn(branch_code)
+        sales_filters.append("m.BRN_NO = :brn")
+        ret_filters.append("m.BRN_NO = :brn")
+    if warehouse:
+        params["wh"] = warehouse
+        sales_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
+        ret_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
+    qty_expr = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
+    rows = _fetch_all(
+        f"""
+        SELECT ITEM_CODE, ROUND(SUM(QTY), 4) AS NET_QTY
+        FROM (
+            SELECT TO_CHAR(d.I_CODE) AS ITEM_CODE, SUM({qty_expr}) AS QTY
+            FROM {pos}.IAS_POS_BILL_DTL d
+            JOIN {pos}.IAS_POS_BILL_MST m
+              ON m.BILL_NO = d.BILL_NO
+             AND m.BRN_NO = d.BRN_NO
+             AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+            WHERE {" AND ".join(sales_filters)}
+            GROUP BY TO_CHAR(d.I_CODE)
+            UNION ALL
+            SELECT TO_CHAR(d.I_CODE) AS ITEM_CODE, -SUM({qty_expr}) AS QTY
+            FROM {pos}.IAS_POS_RT_BILL_DTL d
+            JOIN {pos}.IAS_POS_RT_BILL_MST m
+              ON m.RT_BILL_NO = d.RT_BILL_NO
+             AND m.BRN_NO = d.BRN_NO
+            WHERE {" AND ".join(ret_filters)}
+            GROUP BY TO_CHAR(d.I_CODE)
+        )
+        GROUP BY ITEM_CODE
+        """,
+        params,
+    )
+    out = {
+        str(r.get("ITEM_CODE") or "").strip(): float(r.get("NET_QTY") or 0)
+        for r in rows
+        if str(r.get("ITEM_CODE") or "").strip()
+    }
+    _sales_cache_set(cache_key, out, ttl=1800)
+    return out
+
+
 def fetch_stagnant_items(
     date_from,
     date_to,
@@ -1766,7 +1847,6 @@ def fetch_stagnant_items(
         raise OracleStockError("أوراكل غير مفعّل.")
 
     schema = _schema()
-    pos = _pos_owner()
     d_from = _as_date(date_from)
     d_to = _as_date(date_to)
     if d_from > d_to:
@@ -1777,7 +1857,7 @@ def fetch_stagnant_items(
     brn = str(branch_code or "").strip()
     lim = max(1, min(int(limit or 15), 30))
     cache_key = (
-        f"inv:stagnant_items:v4:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"inv:stagnant_items:v5:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{wh}:{gcode}:{brn}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -1821,86 +1901,7 @@ def fetch_stagnant_items(
         _sales_cache_set(cache_key, [], ttl=1800)
         return []
 
-    item_codes = [
-        str(r.get("ITEM_CODE") or "").strip()
-        for r in stock_rows
-        if str(r.get("ITEM_CODE") or "").strip()
-    ]
-    sales_params: dict[str, Any] = {
-        "d_from": d_from,
-        "d_to_excl": d_to + timedelta(days=1),
-    }
-    sales_filters = [
-        "m.BILL_DATE >= :d_from",
-        "m.BILL_DATE < :d_to_excl",
-        "NVL(m.HUNG, 0) = 0",
-        "d.I_CODE IS NOT NULL",
-    ]
-    ret_filters = [
-        "m.RT_BILL_DATE >= :d_from",
-        "m.RT_BILL_DATE < :d_to_excl",
-        "NVL(m.HUNG, 0) = 0",
-        "d.I_CODE IS NOT NULL",
-    ]
-    if brn:
-        sales_params["brn"] = _bind_brn(brn)
-        sales_filters.append("m.BRN_NO = :brn")
-        ret_filters.append("m.BRN_NO = :brn")
-    if wh:
-        sales_params["wh"] = wh
-        sales_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
-        ret_filters.append("TO_CHAR(NVL(d.W_CODE, m.W_CODE)) = :wh")
-    # كل المرشحين (حتى 360) — وإلا عُدّ من بعد الثمانين «راكداً» دون فحص مبيعاته
-    item_filter = _item_in_filter(
-        "d.I_CODE", item_codes, sales_params, limit=len(item_codes)
-    )
-    qty_expr = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(d.P_SIZE, 1))"
-
-    sales_qty: dict[str, float] = {}
-    for row in _fetch_all(
-        f"""
-        SELECT
-            TO_CHAR(d.I_CODE) AS ITEM_CODE,
-            ROUND(SUM({qty_expr}), 4) AS SALES_QTY
-        FROM {pos}.IAS_POS_BILL_DTL d
-        JOIN {pos}.IAS_POS_BILL_MST m
-          ON m.BILL_NO = d.BILL_NO
-         AND m.BRN_NO = d.BRN_NO
-         AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
-        WHERE {" AND ".join(sales_filters)}
-          {item_filter}
-        GROUP BY TO_CHAR(d.I_CODE)
-        """,
-        sales_params,
-    ):
-        code = str(row.get("ITEM_CODE") or "").strip()
-        if code:
-            sales_qty[code] = float(row.get("SALES_QTY") or 0)
-
-    ret_params = dict(sales_params)
-    ret_item_filter = _item_in_filter(
-        "d.I_CODE", item_codes, ret_params, limit=len(item_codes)
-    )
-    for row in _fetch_all(
-        f"""
-        SELECT
-            TO_CHAR(d.I_CODE) AS ITEM_CODE,
-            ROUND(SUM({qty_expr}), 4) AS RET_QTY
-        FROM {pos}.IAS_POS_RT_BILL_DTL d
-        JOIN {pos}.IAS_POS_RT_BILL_MST m
-          ON m.RT_BILL_NO = d.RT_BILL_NO
-         AND m.BRN_NO = d.BRN_NO
-        WHERE {" AND ".join(ret_filters)}
-          {ret_item_filter}
-        GROUP BY TO_CHAR(d.I_CODE)
-        """,
-        ret_params,
-    ):
-        code = str(row.get("ITEM_CODE") or "").strip()
-        if code:
-            sales_qty[code] = float(sales_qty.get(code, 0)) - float(
-                row.get("RET_QTY") or 0
-            )
+    sales_qty = _pos_item_net_qty(d_from, d_to, branch_code=brn, warehouse=wh)
 
     out: list[dict] = []
     for row in stock_rows:
@@ -6408,10 +6409,10 @@ def _schedule_groups_refresh(
             pass
 
 
-def _item_in_filter(alias_col: str, codes: list[str], params: dict, *, limit: int = 80) -> str:
-    """شرط IN لأكواد الأصناف مع ربط آمن (أوراكل: حد IN = 1000)."""
+def _item_in_filter(alias_col: str, codes: list[str], params: dict) -> str:
+    """شرط IN لأكواد الأصناف مع ربط آمن."""
     keys = []
-    for index, code in enumerate(codes[: min(int(limit), 1000)]):
+    for index, code in enumerate(codes[:80]):
         key = f"ic_{index}"
         params[key] = code
         keys.append(f":{key}")
