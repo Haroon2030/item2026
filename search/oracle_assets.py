@@ -21,7 +21,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 1800
-_CACHE_VER = "v5"
+_CACHE_VER = "v6"
 
 # مصنع المنهل، ركن التغليف، البلاستيك
 _EXCLUDED_BRN = (17, 16, 13)
@@ -480,6 +480,7 @@ def build_assets_report(
         )
 
     hint = "/*+ INDEX(a FAS_ASSETS_MST_BRN_FK) */" if branch else ""
+    # القيمة الدفترية البديلة تطرح الإهلاك من نفس التكلفة المعروضة (PRCH_CST إن غاب رصيد النهاية)
     raw = _fetch_all(
         f"""
         SELECT {hint}
@@ -494,7 +495,7 @@ def build_assets_report(
                ROUND(
                  NVL(
                    a.END_BV,
-                   NVL(a.END_BLNC_CST, 0) - NVL(a.END_BLNC_DEPR, 0)
+                   NVL(a.END_BLNC_CST, NVL(a.PRCH_CST, 0)) - NVL(a.END_BLNC_DEPR, 0)
                  ),
                  2
                ) AS BV

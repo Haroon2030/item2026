@@ -1461,6 +1461,25 @@ class AssetsExecutiveReportTests(OracleSchemaMixin, TestCase):
         self.assertIn('executive_alerts', report)
         self.assertEqual(report['branch_rows'][0]['bv_bar_pct'], '100.0')
 
+    @patch('search.oracle_assets.cache')
+    @patch('search.oracle_assets._branch_names', return_value={})
+    @patch('search.oracle_assets._fetch_all', return_value=[])
+    @patch('search.oracle_assets.oracle_enabled', return_value=True)
+    def test_book_value_fallback_uses_same_cost_as_cost_column(self, _enabled, mock_fetch, _names, mock_cache):
+        """بدون END_BLNC_CST: التكلفة = PRCH_CST، فالقيمة الدفترية = PRCH_CST − الإهلاك (لا 0 − الإهلاك)."""
+        import re
+
+        from search.oracle_assets import build_assets_report
+
+        mock_cache.get.return_value = None
+        build_assets_report()
+        sql = re.sub(r'\s+', ' ', mock_fetch.call_args[0][0])
+        self.assertIn('NVL(a.END_BLNC_CST, NVL(a.PRCH_CST, 0)), 2) AS COST', sql)
+        self.assertIn(
+            'NVL(a.END_BLNC_CST, NVL(a.PRCH_CST, 0)) - NVL(a.END_BLNC_DEPR, 0) ), 2 ) AS BV',
+            sql,
+        )
+
 
 class PurchaseInvoiceMovementTests(TestCase):
     """حركة فواتير الشراء: توزيع FIFO لصافي البيع على فواتير الصنف في فرعه."""
