@@ -1480,7 +1480,7 @@ def fetch_inventory_by_warehouse(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_wh:v6:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_wh:v7:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -1573,9 +1573,9 @@ def fetch_inventory_breakdowns(
     brn = str(branch_code or "").strip()
     suffix = f"{wh}:{gcode}:{brn}"
     keys = (
-        f"inv:by_wh:v6:{suffix}",
-        f"inv:by_group:v6:{suffix}",
-        f"inv:by_brn:v6:{suffix}",
+        f"inv:by_wh:v7:{suffix}",
+        f"inv:by_group:v7:{suffix}",
+        f"inv:by_brn:v7:{suffix}",
     )
     cached = [_sales_cache_get(k) for k in keys]
     if all(c is not None for c in cached):
@@ -1665,7 +1665,7 @@ def fetch_inventory_by_group(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_group:v6:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_group:v7:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -1715,7 +1715,7 @@ def fetch_inventory_by_branch(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    cache_key = f"inv:by_brn:v6:{wh}:{gcode}:{brn}"
+    cache_key = f"inv:by_brn:v7:{wh}:{gcode}:{brn}"
     cached = _sales_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -1777,7 +1777,7 @@ def fetch_stagnant_items(
     brn = str(branch_code or "").strip()
     lim = max(1, min(int(limit or 15), 30))
     cache_key = (
-        f"inv:stagnant_items:v3:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"inv:stagnant_items:v4:{d_from.isoformat()}:{d_to.isoformat()}:"
         f"{wh}:{gcode}:{brn}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -2643,7 +2643,7 @@ def fetch_item_stock_by_warehouses(
 
 
 # نافذة احتياطية لمبيعات نقاط البيع غير المرحلة (أيام)
-_PENDING_SALES_LOOKBACK_DAYS = 400
+_PENDING_SALES_LOOKBACK_DAYS = 40
 
 
 def fetch_pending_sales_qty_map(
