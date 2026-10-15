@@ -258,14 +258,14 @@ html body.theme-navy .page.sales-dash:not(.welcome-dash):not(.users-dash) .inv-c
 html body.theme-navy.theme-navy.theme-navy .page.page .inv-cards > :is(.inv-top, .inv-kpi-grid):not(#fx):not(#fx2) { display: contents !important; }
 html body.theme-navy.theme-navy.theme-navy .page.page .inv-cards:not(#fx):not(#fx2) { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 2rem) / 5)), 1fr)) !important; gap: .5rem !important; margin: 0 0 .8rem !important; }
 
-/* تحليل المخزون: صفّ اللوحات متوازن (الفروع بارتفاع لوحتي الترتيب، والتوالف بعرض كامل) بدل عمود طويل وعمود قصير */
+/* تحليل المخزون: صفّ اللوحات الأربع متوازن (الفروع والتوالف بجانب لوحتي الترتيب) بدل عمود طويل وعمود قصير */
 @media (min-width: 1100px) {
   html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-charts-row:not(#fx):not(#fx2) {
     display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; grid-auto-rows: auto !important; gap: .6rem !important; align-items: stretch !important;
   }
   html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-charts-row > :is(.inv-branch-stagnant-stack, .inv-rank-stack):not(#fx):not(#fx2) { display: contents !important; }
-  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(1):not(#fx):not(#fx2) { grid-area: 1 / 1 / 3 / 2 !important; }
-  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(2):not(#fx):not(#fx2) { grid-area: 3 / 1 / 4 / 3 !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(1):not(#fx):not(#fx2) { grid-area: 1 / 1 !important; }
+  html body.theme-navy.theme-navy.theme-navy .page.page .inv-branch-stagnant-stack > :nth-child(2):not(#fx):not(#fx2) { grid-area: 2 / 1 !important; }
   html body.theme-navy.theme-navy.theme-navy .page.page .inv-rank-stack > :nth-child(1):not(#fx):not(#fx2) { grid-area: 1 / 2 !important; }
   html body.theme-navy.theme-navy.theme-navy .page.page .inv-rank-stack > :nth-child(2):not(#fx):not(#fx2) { grid-area: 2 / 2 !important; }
 }
