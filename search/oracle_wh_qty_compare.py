@@ -503,7 +503,9 @@ def build_wh_qty_compare_report(
     qty_basis: str = "avail",
     wh_a_name: str = "",
     wh_b_name: str = "",
+    max_rows: int | None = _MAX_ROWS,
 ) -> dict[str, Any]:
+    """max_rows=None يُرجع كل الصفوف المطابقة (للتصدير)؛ الشاشة تُقطَع عند _MAX_ROWS."""
     wh_a, wh_b = _validate(warehouse_a, warehouse_b)
     gcode = _norm_code(group_code)
     mcode = _norm_code(subgroup_code) if gcode else ""
@@ -528,7 +530,7 @@ def build_wh_qty_compare_report(
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
-        return _apply_mode(cached, mode_key)
+        return _apply_mode(cached, mode_key, max_rows)
 
     def _job_qty(wh: str) -> Callable[[], dict[str, float]]:
         def run() -> dict[str, float]:
@@ -667,7 +669,7 @@ def build_wh_qty_compare_report(
         cache.set(cache_key, base, _CACHE_TTL)
     except Exception:  # noqa: BLE001
         pass
-    return _apply_mode(base, mode_key)
+    return _apply_mode(base, mode_key, max_rows)
 
 
 def _totals(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -702,7 +704,9 @@ def _totals(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"kpis": kpis, "totals": totals}
 
 
-def _apply_mode(report: dict[str, Any], mode: str) -> dict[str, Any]:
+def _apply_mode(
+    report: dict[str, Any], mode: str, max_rows: int | None = _MAX_ROWS
+) -> dict[str, Any]:
     mode_key = _norm_mode(mode)
     all_rows = list(report.get("rows") or [])
     base_kpis = report.get("kpis") or {}
@@ -731,8 +735,8 @@ def _apply_mode(report: dict[str, Any], mode: str) -> dict[str, Any]:
             )
         )
     truncated = False
-    if len(rows) > _MAX_ROWS:
-        rows = rows[:_MAX_ROWS]
+    if max_rows is not None and len(rows) > max_rows:
+        rows = rows[:max_rows]
         truncated = True
     stats = _totals(rows)
     kpis = stats["kpis"]
@@ -754,7 +758,7 @@ def _apply_mode(report: dict[str, Any], mode: str) -> dict[str, Any]:
     kpis["qty_a_filtered_display"] = stats["kpis"].get("qty_a_display")
     kpis["qty_b_filtered_display"] = stats["kpis"].get("qty_b_display")
     kpis["truncated"] = truncated
-    kpis["max_rows"] = _MAX_ROWS
+    kpis["max_rows"] = max_rows if max_rows is not None else len(rows)
     matched_n = sum(
         1 for r in all_rows if _row_matches(str(r.get("kind") or ""), mode_key)
     )

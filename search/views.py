@@ -6409,6 +6409,7 @@ def browse_wh_qty_compare(request):
             oracle_session,
         )
         from .oracle_wh_qty_compare import (
+            _MAX_ROWS as _WQC_SCREEN_ROWS,
             build_wh_qty_compare_excel,
             build_wh_qty_compare_report,
         )
@@ -6509,6 +6510,7 @@ def browse_wh_qty_compare(request):
                     qty_basis=qty_basis,
                     wh_a_name=wh_a_name,
                     wh_b_name=wh_b_name,
+                    max_rows=None if want_excel else _WQC_SCREEN_ROWS,
                 )
                 # مجموعة عالقة من بحث سابق بلا أصناف في المستودع الأول → أعد بدونها
                 if (
@@ -6544,6 +6546,7 @@ def browse_wh_qty_compare(request):
                         qty_basis=qty_basis,
                         wh_a_name=wh_a_name,
                         wh_b_name=wh_b_name,
+                        max_rows=None if want_excel else _WQC_SCREEN_ROWS,
                     )
                     recovered = int(
                         (report.get('kpis') or {}).get('item_count_all')
