@@ -52,6 +52,8 @@
     try { url = new URL(a.href, location.href); } catch (err) { return; }
     if (url.origin !== location.origin) return;
     if (url.pathname === location.pathname && url.search === location.search) return;
+    // روابط التصدير تنزّل ملفاً ولا تغيّر الصفحة — لا لوحة تحميل لأنها لن تُخفى
+    if (/[?&]export=(excel|xls|xlsx|csv|pdf)(&|$)/i.test(url.search)) return;
     show();
   });
 
