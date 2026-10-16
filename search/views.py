@@ -6368,6 +6368,7 @@ def browse_wh_qty_compare(request):
         request.GET.get('branch_b') or request.GET.get('brn_b') or ''
     ).strip()
     selected_group = str(request.GET.get('group') or '').strip()
+    selected_subgroup = str(request.GET.get('subgroup') or '').strip()
     item_q = str(request.GET.get('q') or request.GET.get('item') or '').strip()
     mode_raw = str(request.GET.get('mode') or 'all').strip().lower()
     if mode_raw not in ('all', 'zero_b', 'both', 'diff', 'gap', 'a_only', 'b_only'):
@@ -6394,12 +6395,14 @@ def browse_wh_qty_compare(request):
     hint = ''
     branches: list[dict] = []
     groups: list[dict] = []
+    subgroups: list[dict] = []
     all_warehouses: list[dict] = []
     wh_a_name = selected_wh_a
     wh_b_name = selected_wh_b
 
     try:
         from .oracle_stock import (
+            fetch_main_subgroup_options,
             fetch_sales_group_options,
             fetch_warehouse_options,
             oracle_enabled,
@@ -6449,6 +6452,13 @@ def browse_wh_qty_compare(request):
                 group_codes = {str(g.get('code') or '').strip() for g in groups}
                 if selected_group and selected_group not in group_codes:
                     selected_group = ''
+                subgroups = fetch_main_subgroup_options() or []
+                if selected_subgroup and not any(
+                    str(s.get('group_code') or '').strip() == selected_group
+                    and str(s.get('code') or '').strip() == selected_subgroup
+                    for s in subgroups
+                ):
+                    selected_subgroup = ''
 
                 allowed_wh = set(wh_name_map)
                 allowed_br = set(branch_map)
@@ -6493,6 +6503,7 @@ def browse_wh_qty_compare(request):
                     warehouse_a=selected_wh_a,
                     warehouse_b=selected_wh_b,
                     group_code=selected_group,
+                    subgroup_code=selected_subgroup,
                     item_q=item_q,
                     mode=mode_raw,
                     qty_basis=qty_basis,
@@ -6503,6 +6514,7 @@ def browse_wh_qty_compare(request):
                 if (
                     report is not None
                     and selected_group
+                    and not selected_subgroup
                     and not item_q
                     and int(
                         (report.get('kpis') or {}).get('item_count_all')
@@ -6512,6 +6524,7 @@ def browse_wh_qty_compare(request):
                     == 0
                 ):
                     stale_group = selected_group
+                    stale_subgroup = selected_subgroup
                     stale_label = next(
                         (
                             str(g.get('name') or '').strip()
@@ -6521,6 +6534,7 @@ def browse_wh_qty_compare(request):
                         stale_group,
                     ) or stale_group
                     selected_group = ''
+                    selected_subgroup = ''
                     report = build_wh_qty_compare_report(
                         warehouse_a=selected_wh_a,
                         warehouse_b=selected_wh_b,
@@ -6543,6 +6557,7 @@ def browse_wh_qty_compare(request):
                         )
                     else:
                         selected_group = stale_group
+                        selected_subgroup = stale_subgroup
                 if want_excel and report is not None:
                     return build_wh_qty_compare_excel(report)
             else:
@@ -6565,6 +6580,7 @@ def browse_wh_qty_compare(request):
         {
             'branches': branches,
             'groups': groups,
+            'subgroups': subgroups,
             'all_warehouses': all_warehouses,
             'selected_branch_a': selected_branch_a,
             'selected_branch_b': selected_branch_b,
@@ -6573,6 +6589,7 @@ def browse_wh_qty_compare(request):
             'wh_a_name': wh_a_name,
             'wh_b_name': wh_b_name,
             'selected_group': selected_group,
+            'selected_subgroup': selected_subgroup,
             'item_q': item_q,
             'mode': mode_raw,
             'qty_basis': qty_basis,

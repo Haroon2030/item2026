@@ -33,6 +33,7 @@
 >
   <input type="hidden" name="run" value="1">
   {{ all_warehouses|json_script:"wqc-wh-data" }}
+  {{ subgroups|json_script:"wqc-subgroup-data" }}
 
   <div class="wqc-pair wqc-pair-branches" role="group" aria-label="فرع مقابل فرع">
     <span class="wqc-pair-label">الفرع</span>
@@ -109,6 +110,13 @@
       {% for g in groups %}
         <option value="{{ g.code }}" {% if g.code == selected_group %}selected{% endif %}>{{ g.code }}- {{ g.name }}</option>
       {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wqc-field-subgroup">
+    <label for="wqc-subgroup">المجموعة الفرعية</label>
+    <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
+      <option value="">كل المجموعات الفرعية</option>
     </select>
   </div>
 
@@ -192,7 +200,7 @@
       <div class="wqc-sheet-actions">
         <a
           class="btn-ghost wqc-excel-btn"
-          href="?run=1&amp;branch_a={{ selected_branch_a|urlencode }}&amp;branch_b={{ selected_branch_b|urlencode }}&amp;wh_a={{ selected_wh_a|urlencode }}&amp;wh_b={{ selected_wh_b|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;q={{ item_q|urlencode }}&amp;mode={{ mode|urlencode }}&amp;qty={{ qty_basis|urlencode }}&amp;export=excel"
+          href="?run=1&amp;branch_a={{ selected_branch_a|urlencode }}&amp;branch_b={{ selected_branch_b|urlencode }}&amp;wh_a={{ selected_wh_a|urlencode }}&amp;wh_b={{ selected_wh_b|urlencode }}&amp;group={{ selected_group|urlencode }}&amp;subgroup={{ selected_subgroup|urlencode }}&amp;q={{ item_q|urlencode }}&amp;mode={{ mode|urlencode }}&amp;qty={{ qty_basis|urlencode }}&amp;export=excel"
           title="تصدير Excel"
         >Excel</a>
         <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
@@ -256,4 +264,5 @@
 {% block extra_js %}
 <script src="/static/js/branch-wh-cascade.js?v={{ app_client_version }}" defer></script>
 <script src="/static/js/wqc-scroll.js?v={{ app_client_version }}" defer></script>
+<script src="/static/js/wqc-subgroup.js?v={{ app_client_version }}" defer></script>
 {% endblock %}

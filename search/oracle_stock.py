@@ -4166,6 +4166,37 @@ def fetch_sales_group_options() -> list[dict]:
     return _django_lookup_set("group_options", out)
 
 
+def fetch_main_subgroup_options() -> list[dict]:
+    """المجموعات الفرعية (MNG_CODE) لكل مجموعة — من IAS_MAINSUB_GRP_DTL."""
+    if not oracle_enabled():
+        return []
+    hit, cached = _django_lookup_get("main_subgroup_options")
+    if hit:
+        return cached
+    try:
+        rows = _fetch_all(
+            f"""
+            SELECT TO_CHAR(G_CODE) AS G_CODE, TO_CHAR(MNG_CODE) AS MNG_CODE,
+                   MNG_A_NAME, MNG_E_NAME
+            FROM {_schema()}.IAS_MAINSUB_GRP_DTL
+            WHERE G_CODE IS NOT NULL AND MNG_CODE IS NOT NULL
+            ORDER BY G_CODE, NVL(MNG_ORDR, 999999), MNG_A_NAME, MNG_CODE
+            """
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Main sub-group options unavailable: %s", exc)
+        return _django_lookup_set("main_subgroup_options", [])
+    out: list[dict] = []
+    for row in rows:
+        gcode = str(row.get("G_CODE") or "").strip()
+        code = str(row.get("MNG_CODE") or "").strip()
+        if not gcode or not code:
+            continue
+        name = str(row.get("MNG_A_NAME") or row.get("MNG_E_NAME") or "").strip() or code
+        out.append({"group_code": gcode, "code": code, "name": name})
+    return _django_lookup_set("main_subgroup_options", out)
+
+
 def _group_branch_key(group_code: str, branch_code: str) -> str:
     return f"{group_code}|{branch_code}"
 

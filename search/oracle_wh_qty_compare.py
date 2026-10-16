@@ -118,11 +118,12 @@ def _cache_key(
     wh_b: str,
     *,
     group_code: str,
+    subgroup_code: str = "",
     item_q: str,
     qty_basis: str,
 ) -> str:
     return (
-        f"whqty:{_CACHE_VER}:{wh_a}:{wh_b}:{group_code}:{item_q}:{qty_basis}"
+        f"whqty:{_CACHE_VER}:{wh_a}:{wh_b}:{group_code}:{subgroup_code}:{item_q}:{qty_basis}"
     )
 
 
@@ -130,6 +131,7 @@ def _fetch_wh_qty(
     warehouse: str,
     *,
     group_code: str = "",
+    subgroup_code: str = "",
     item_code: str = "",
 ) -> dict[str, float]:
     """رصيد موجب لكل صنف في المخزن — قيادة بـ W_CODE."""
@@ -143,12 +145,15 @@ def _fetch_wh_qty(
     ]
 
     gcode = _bind_gcode(group_code) if group_code else None
-    if gcode not in ("", None):
-        params["gcode"] = gcode
-        joins = (
-            f" JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = w.I_CODE"
-            " AND i.G_CODE = :gcode"
-        )
+    mcode = str(subgroup_code or "").strip()
+    if gcode not in ("", None) or mcode:
+        joins = f" JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = w.I_CODE"
+        if gcode not in ("", None):
+            params["gcode"] = gcode
+            joins += " AND i.G_CODE = :gcode"
+        if mcode:
+            params["mng"] = mcode
+            joins += " AND TO_CHAR(i.MNG_CODE) = :mng"
 
     icode = _norm_code(item_code)
     if icode:
@@ -436,6 +441,7 @@ def build_wh_qty_compare_report(
     warehouse_a: str,
     warehouse_b: str,
     group_code: str = "",
+    subgroup_code: str = "",
     item_q: str = "",
     mode: str = "all",
     qty_basis: str = "avail",
@@ -444,6 +450,7 @@ def build_wh_qty_compare_report(
 ) -> dict[str, Any]:
     wh_a, wh_b = _validate(warehouse_a, warehouse_b)
     gcode = _norm_code(group_code)
+    mcode = _norm_code(subgroup_code) if gcode else ""
     mode_key = _norm_mode(mode)
     basis_key = _norm_qty_basis(qty_basis)
     item_raw = str(item_q or "").strip()
@@ -459,6 +466,7 @@ def build_wh_qty_compare_report(
         wh_a,
         wh_b,
         group_code=gcode,
+        subgroup_code=mcode,
         item_q=q_label or "",
         qty_basis=basis_key,
     )
@@ -469,7 +477,9 @@ def build_wh_qty_compare_report(
     def _job_qty(wh: str) -> Callable[[], dict[str, float]]:
         def run() -> dict[str, float]:
             with oracle_session():
-                return _fetch_wh_qty(wh, group_code=gcode, item_code=exact or "")
+                return _fetch_wh_qty(
+                    wh, group_code=gcode, subgroup_code=mcode, item_code=exact or ""
+                )
 
         return run
 
@@ -583,6 +593,7 @@ def build_wh_qty_compare_report(
             "wh_a_name": wh_a_name or wh_a,
             "wh_b_name": wh_b_name or wh_b,
             "group": gcode,
+            "subgroup": mcode,
             "item_q": q_label,
             "mode": "all",
             "mode_label": _MODES["all"],
