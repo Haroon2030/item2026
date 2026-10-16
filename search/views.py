@@ -6350,6 +6350,100 @@ def browse_wh_outgoing(request):
     )
 
 
+_ITEM_BRANCH_SCREEN_ROWS = 2500
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_item_branch_report(request):
+    """رصيد الصنف الحالي + مبيعات الفترة لكل فرع (مجموعة/فرعية/صنف)."""
+    from datetime import date as date_cls, timedelta
+
+    from .oracle_item_branch_report import build_item_branch_report
+    from .oracle_stock import fetch_sales_group_options, fetch_main_subgroup_options, oracle_enabled, oracle_session, fetch_warehouse_options
+
+    today = date_cls.today()
+    group = str(request.GET.get('group') or '').strip()
+    subgroup = str(request.GET.get('subgroup') or '').strip()
+    branch = str(request.GET.get('branch') or '').strip()
+    item_q = str(request.GET.get('q') or '').strip()[:80]
+    raw_from = str(request.GET.get('date_from') or '').strip()
+    raw_to = str(request.GET.get('date_to') or '').strip()
+    try:
+        date_from = date_cls.fromisoformat(raw_from) if raw_from else today.replace(day=1)
+        date_to = date_cls.fromisoformat(raw_to) if raw_to else today
+    except ValueError:
+        date_from, date_to = today.replace(day=1), today
+    error = ''
+    report = None
+    groups: list[dict] = []
+    subgroups: list[dict] = []
+    branches: list[dict] = []
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
+
+    try:
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+        else:
+            with oracle_session():
+                groups = fetch_sales_group_options() or []
+                subgroups = fetch_main_subgroup_options() or []
+                seen = {}
+                for w in fetch_warehouse_options(active_only=True) or []:
+                    b = str(w.get('branch_code') or '').strip()
+                    if b and b not in seen:
+                        seen[b] = str(w.get('branch_name') or b).strip() or b
+                branches = [{'code': k, 'name': v} for k, v in sorted(seen.items(), key=lambda x: (x[1], x[0]))]
+            if subgroup and not any(
+                s['group_code'] == group and s['code'] == subgroup for s in subgroups
+            ):
+                subgroup = ''
+            if not group:
+                subgroup = ''
+            if date_from > date_to:
+                raise ValidationError('تاريخ البداية بعد تاريخ النهاية.')
+            if run:
+                report = build_item_branch_report(
+                    group_code=group,
+                    subgroup_code=subgroup,
+                    date_from=date_from,
+                    date_to=date_to,
+                    branch_code=branch,
+                    item_q=item_q,
+                )
+    except ValidationError as exc:
+        error = str(exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_item_branch_report failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+
+    if report:
+        report['truncated'] = len(report['rows']) > _ITEM_BRANCH_SCREEN_ROWS
+        report['rows'] = report['rows'][:_ITEM_BRANCH_SCREEN_ROWS]
+
+    return render(
+        request,
+        'search/browse_item_branch_report.html',
+        {
+            'groups': groups,
+            'subgroups': subgroups,
+            'branches': branches,
+            'selected_group': group,
+            'selected_subgroup': subgroup,
+            'selected_branch': branch,
+            'item_q': item_q,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'report': report,
+            'error': error,
+            'run': run,
+            'screen_limit': _ITEM_BRANCH_SCREEN_ROWS,
+            'total_cols': 5 + 7 * len(report['branches']) if report else 5,
+        },
+    )
+
+
 @login_required
 @require_GET
 @never_cache

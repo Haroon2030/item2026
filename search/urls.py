@@ -198,6 +198,11 @@ urlpatterns = [
         name='browse_wh_qty_compare',
     ),
     path(
+        'warehouses/item-branch/',
+        views.browse_item_branch_report,
+        name='browse_item_branch_report',
+    ),
+    path(
         'warehouses/no-transfer/',
         views.browse_wh_no_transfer,
         name='browse_wh_no_transfer',

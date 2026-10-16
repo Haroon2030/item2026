@@ -162,6 +162,13 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavScreen("browse_inventory_pack_errors", "اختلاف شد الشراء/التحويل"),
         ),
     ),
+    NavSection(
+        "reports",
+        "التقارير",
+        (
+            NavScreen("browse_item_branch_report", "رصيد ومبيعات الأصناف بالفروع"),
+        ),
+    ),
 )
 
 SECTION_KEYS: tuple[str, ...] = tuple(s.key for s in NAV_SECTIONS)
