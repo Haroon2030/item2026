@@ -6357,7 +6357,7 @@ _ITEM_BRANCH_SCREEN_ROWS = 2500
 @require_GET
 @never_cache
 def browse_item_branch_report(request):
-    """رصيد الصنف الحالي + مبيعات الفترة لكل فرع (مجموعة/فرعية/صنف)."""
+    """رصيد الصنف الحالي + مبيعات الفترة والمرتجعات للمخازن المختارة (فرع/مخزن)."""
     from datetime import date as date_cls, timedelta
 
     from .oracle_item_branch_report import build_item_branch_report
@@ -6367,6 +6367,7 @@ def browse_item_branch_report(request):
     group = str(request.GET.get('group') or '').strip()
     subgroup = str(request.GET.get('subgroup') or '').strip()
     branch = str(request.GET.get('branch') or '').strip()
+    warehouse = str(request.GET.get('warehouse') or '').strip()
     item_q = str(request.GET.get('q') or '').strip()[:80]
     raw_from = str(request.GET.get('date_from') or '').strip()
     raw_to = str(request.GET.get('date_to') or '').strip()
@@ -6380,6 +6381,7 @@ def browse_item_branch_report(request):
     groups: list[dict] = []
     subgroups: list[dict] = []
     branches: list[dict] = []
+    warehouses: list[dict] = []
     run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
 
     try:
@@ -6391,10 +6393,23 @@ def browse_item_branch_report(request):
                 subgroups = fetch_main_subgroup_options() or []
                 seen = {}
                 for w in fetch_warehouse_options(active_only=True) or []:
+                    code = str(w.get('code') or '').strip()
                     b = str(w.get('branch_code') or '').strip()
+                    if not code:
+                        continue
+                    warehouses.append({
+                        'code': code,
+                        'name': str(w.get('name') or code).strip() or code,
+                        'branch_code': b,
+                    })
                     if b and b not in seen:
                         seen[b] = str(w.get('branch_name') or b).strip() or b
                 branches = [{'code': k, 'name': v} for k, v in sorted(seen.items(), key=lambda x: (x[1], x[0]))]
+                if branch and branch not in seen:
+                    branch = ''
+                wh_codes = {w['code'] for w in warehouses if not branch or w['branch_code'] == branch}
+                if warehouse and warehouse not in wh_codes:
+                    warehouse = ''
             if subgroup and not any(
                 s['group_code'] == group and s['code'] == subgroup for s in subgroups
             ):
@@ -6410,6 +6425,7 @@ def browse_item_branch_report(request):
                     date_from=date_from,
                     date_to=date_to,
                     branch_code=branch,
+                    warehouse_code=warehouse,
                     item_q=item_q,
                 )
     except ValidationError as exc:
@@ -6421,6 +6437,7 @@ def browse_item_branch_report(request):
     if report:
         report['truncated'] = len(report['rows']) > _ITEM_BRANCH_SCREEN_ROWS
         report['rows'] = report['rows'][:_ITEM_BRANCH_SCREEN_ROWS]
+        report['total_rows'] = report['item_count']
 
     return render(
         request,
@@ -6429,9 +6446,11 @@ def browse_item_branch_report(request):
             'groups': groups,
             'subgroups': subgroups,
             'branches': branches,
+            'warehouses': warehouses,
             'selected_group': group,
             'selected_subgroup': subgroup,
             'selected_branch': branch,
+            'selected_warehouse': warehouse,
             'item_q': item_q,
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
@@ -6439,7 +6458,7 @@ def browse_item_branch_report(request):
             'error': error,
             'run': run,
             'screen_limit': _ITEM_BRANCH_SCREEN_ROWS,
-            'total_cols': 5 + 7 * len(report['branches']) if report else 5,
+            'total_cols': 9,
         },
     )
 

@@ -1,8 +1,9 @@
-"""تقرير الأصناف حسب الفرع: الرصيد الحالي + مبيعات فترة (نقاط البيع + فواتير).
+"""تقرير الأصناف حسب الفرع/المخزن: الرصيد الحالي + إجمالي المبيعات + المرتجعات + الصافي.
 
-- الرصيد: حالي (لا يعتمد على التاريخ) من IAS_ITM_WCODE، مجموع مخازن كل فرع.
-- المبيعات: صافي الفترة لكل فرع، نقاط البيع غير المعلّقة + فواتير أونكس (أنواع 1 و5).
-  المرتجعات غير مخصومة في هذا الإصدار.
+- الرصيد: حالي (لا يعتمد على التاريخ) من IAS_ITM_WCODE للمخازن المختارة.
+- المبيعات: نقاط البيع غير المعلّقة + فواتير أونكس (أنواع 1 و5)، مجمّعة حسب المخزن.
+- المرتجعات: مرتجعات نقاط البيع + مرتجعات الفواتير (أنواع 1 و5)، بنفس الأساس.
+- الأساس: نقاط البيع بـ I_PRICE_VAT، والفواتير بـ I_PRICE (كما في شاشات التطبيق الحالية).
 SELECT فقط.
 """
 
@@ -18,7 +19,6 @@ from .oracle_stock import (
     OracleStockError,
     _as_date,
     _bill_mst_ok,
-    _rt_bill_mst_ok,
     _bind_gcode,
     _date_params,
     _doc_type_filter,
@@ -27,6 +27,7 @@ from .oracle_stock import (
     _norm_brn_code,
     _pos_dtl_net_sql,
     _pos_owner,
+    _rt_bill_mst_ok,
     _schema,
     _sales_cache_set,
     fetch_item_max_pack_map,
@@ -39,7 +40,7 @@ from .oracle_wh_qty_compare import _fmt_qty, _hydrate_items, _norm_code, _to_pac
 logger = logging.getLogger(__name__)
 
 _SALES_TTL = 60 * 60 * 2  # ساعتان للمبيعات (الرصيد حي دائماً)
-_CACHE_VER = "v3"
+_CACHE_VER = "v4"
 
 
 def _f(value: Any) -> float:
@@ -62,27 +63,31 @@ def _group_filters(params: dict, group_code: str, subgroup_code: str, alias: str
     return " ".join(parts)
 
 
-def _warehouses_by_branch() -> tuple[dict[str, list[str]], dict[str, str], dict[str, str]]:
-    """{فرع: [مخازن]}، أسماء الفروع، أسماء المخازن."""
-    by_branch: dict[str, list[str]] = {}
+def _warehouses() -> tuple[list[dict[str, str]], dict[str, str]]:
+    """المخازن النشطة [{code, name, branch_code}] وأسماء الفروع."""
+    out: list[dict[str, str]] = []
     branch_names: dict[str, str] = {}
-    wh_names: dict[str, str] = {}
     for w in fetch_warehouse_options(active_only=True) or []:
-        code = str(w.get("code") or "").strip()
-        brn = _norm_brn_code(w.get("branch_code"))
-        if not code or not brn:
+        code = _norm_code(w.get("code"))
+        if not code:
             continue
-        by_branch.setdefault(brn, []).append(code)
-        wh_names[code] = str(w.get("name") or code).strip()
-        branch_names[brn] = str(w.get("branch_name") or brn).strip() or brn
-    return by_branch, branch_names, wh_names
+        brn = _norm_brn_code(w.get("branch_code"))
+        if brn:
+            branch_names[brn] = str(w.get("branch_name") or brn).strip() or brn
+        out.append(
+            {
+                "code": code,
+                "name": str(w.get("name") or code).strip() or code,
+                "branch_code": brn,
+            }
+        )
+    return out, branch_names
 
 
-def _stock_by_branch(
-    by_branch: dict[str, list[str]], group_code: str, subgroup_code: str
+def _fetch_stock(
+    wh_codes: list[str], group_code: str, subgroup_code: str
 ) -> dict[tuple[str, str], float]:
-    wh_to_branch = {wh: brn for brn, whs in by_branch.items() for wh in whs}
-    wh_codes = sorted(wh_to_branch)
+    """{(صنف, مخزن): رصيد} من IAS_ITM_WCODE."""
     if not wh_codes:
         return {}
     schema = _schema()
@@ -109,17 +114,13 @@ def _stock_by_branch(
     out: dict[tuple[str, str], float] = {}
     for row in rows or []:
         code = _norm_code(row.get("I_CODE"))
-        brn = wh_to_branch.get(_norm_code(row.get("W_CODE")))
-        if not code or not brn:
-            continue
-        key = (code, brn)
-        out[key] = out.get(key, 0.0) + _f(row.get("QTY"))
+        wh = _norm_code(row.get("W_CODE"))
+        if code and wh:
+            out[(code, wh)] = out.get((code, wh), 0.0) + _f(row.get("QTY"))
     return out
 
 
-def _fetch_pos_sales(
-    date_from, date_to, group_code: str, subgroup_code: str
-) -> list[dict]:
+def _fetch_pos_sales(date_from, date_to, group_code: str, subgroup_code: str) -> list[dict]:
     pos = _pos_owner()
     schema = _schema()
     params: dict[str, Any] = _date_params(date_from, date_to)
@@ -128,7 +129,7 @@ def _fetch_pos_sales(
     return _fetch_all(
         f"""
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
-               TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+               TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
                ROUND(SUM(NVL(d.I_QTY, 0)), 4) AS QTY_TOTAL,
                ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS NET_TOTAL
         FROM {pos}.IAS_POS_BILL_DTL d
@@ -141,15 +142,13 @@ def _fetch_pos_sales(
           AND {hung_m}
           AND d.I_CODE IS NOT NULL
           {group_sql}
-        GROUP BY d.I_CODE, m.BRN_NO
+        GROUP BY d.I_CODE, NVL(d.W_CODE, m.W_CODE)
         """,
         params,
     )
 
 
-def _fetch_bill_sales(
-    date_from, date_to, group_code: str, subgroup_code: str
-) -> list[dict]:
+def _fetch_bill_sales(date_from, date_to, group_code: str, subgroup_code: str) -> list[dict]:
     schema = _schema()
     params: dict[str, Any] = _date_params(date_from, date_to)
     conf = {"doc_types": _ONIX_ITEM_SALES_DOC_TYPES}
@@ -158,7 +157,7 @@ def _fetch_bill_sales(
     return _fetch_all(
         f"""
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
-               TO_CHAR(b.BRN_NO) AS BRANCH_CODE,
+               TO_CHAR(NVL(d.W_CODE, b.W_CODE)) AS W_CODE,
                ROUND(SUM(NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(NULLIF(d.P_SIZE, 0), 1))), 4) AS QTY_TOTAL,
                ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL
         FROM {schema}.IAS_BILL_DTL d
@@ -172,15 +171,13 @@ def _fetch_bill_sales(
           {doc_filter}
           AND d.I_CODE IS NOT NULL
           {group_sql}
-        GROUP BY d.I_CODE, b.BRN_NO
+        GROUP BY d.I_CODE, NVL(d.W_CODE, b.W_CODE)
         """,
         params,
     )
 
 
-def _fetch_pos_returns(
-    date_from, date_to, group_code: str, subgroup_code: str
-) -> list[dict]:
+def _fetch_pos_returns(date_from, date_to, group_code: str, subgroup_code: str) -> list[dict]:
     """مرتجعات نقاط البيع بـ I_PRICE_VAT (نفس أساس مبيعات نقاط البيع)."""
     pos = _pos_owner()
     schema = _schema()
@@ -189,7 +186,7 @@ def _fetch_pos_returns(
     return _fetch_all(
         f"""
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
-               TO_CHAR(m.BRN_NO) AS BRANCH_CODE,
+               TO_CHAR(NVL(d.W_CODE, m.W_CODE)) AS W_CODE,
                ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS RET_NET
         FROM {pos}.IAS_POS_RT_BILL_DTL d
         JOIN {pos}.IAS_POS_RT_BILL_MST m
@@ -200,15 +197,13 @@ def _fetch_pos_returns(
           AND NVL(m.HUNG, 0) = 0
           AND d.I_CODE IS NOT NULL
           {group_sql}
-        GROUP BY d.I_CODE, m.BRN_NO
+        GROUP BY d.I_CODE, NVL(d.W_CODE, m.W_CODE)
         """,
         params,
     )
 
 
-def _fetch_bill_returns(
-    date_from, date_to, group_code: str, subgroup_code: str
-) -> list[dict]:
+def _fetch_bill_returns(date_from, date_to, group_code: str, subgroup_code: str) -> list[dict]:
     """مرتجعات الفواتير بـ I_PRICE (نفس أساس مبيعات الفواتير)."""
     schema = _schema()
     params: dict[str, Any] = _date_params(date_from, date_to)
@@ -218,7 +213,7 @@ def _fetch_bill_returns(
     return _fetch_all(
         f"""
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
-               TO_CHAR(r.BRN_NO) AS BRANCH_CODE,
+               TO_CHAR(NVL(d.W_CODE, r.W_CODE)) AS W_CODE,
                ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET
         FROM {schema}.IAS_RT_BILL_DTL d
         JOIN {schema}.IAS_RT_BILL_MST r
@@ -230,21 +225,18 @@ def _fetch_bill_returns(
           {ret_doc}
           AND d.I_CODE IS NOT NULL
           {group_sql}
-        GROUP BY d.I_CODE, r.BRN_NO
+        GROUP BY d.I_CODE, NVL(d.W_CODE, r.W_CODE)
         """,
         params,
     )
 
 
-def _sales_by_branch(
+def _sales_by_warehouse(
     date_from, date_to, group_code: str, subgroup_code: str
 ) -> dict[tuple[str, str], dict[str, float]]:
-    """{(صنف, فرع): {qty, gross, returns}} — المبيعات والمرتجعات، مخزّن مؤقتاً.
-
-    gross: إجمالي المبيعات (نقاط البيع + فواتير) قبل المرتجع.
-    returns: المرتجعات (نقاط البيع + فواتير) بنفس الأساس."""
+    """{(صنف, مخزن): {qty, pos, bill, returns}} — مخزّن مؤقتاً، مستقل عن اختيار الفرع/المخزن."""
     key = (
-        f"itmbr:{_CACHE_VER}:{_as_date(date_from).isoformat()}:"
+        f"itmwh:{_CACHE_VER}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{group_code}:{subgroup_code}"
     )
     cached = cache.get(key)
@@ -252,24 +244,23 @@ def _sales_by_branch(
         return cached
     out: dict[tuple[str, str], dict[str, float]] = {}
 
-    def _add(rows: list[dict], field: str, qty_field: str | None = None, value_key: str = "NET_TOTAL") -> None:
+    def _add(rows: list[dict], field: str, value_key: str, qty: bool = False) -> None:
         for row in rows or []:
             code = _norm_code(row.get("I_CODE"))
-            brn = _norm_brn_code(row.get("BRANCH_CODE"))
-            if not code or not brn:
+            wh = _norm_code(row.get("W_CODE"))
+            if not code or not wh:
                 continue
             cur = out.setdefault(
-                (code, brn),
-                {"qty": 0.0, "pos_gross": 0.0, "bill_gross": 0.0, "returns": 0.0},
+                (code, wh), {"qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0}
             )
             cur[field] += _f(row.get(value_key))
-            if qty_field:
-                cur["qty"] += _f(row.get(qty_field))
+            if qty:
+                cur["qty"] += _f(row.get("QTY_TOTAL"))
 
-    _add(_fetch_pos_sales(date_from, date_to, group_code, subgroup_code), "pos_gross", "QTY_TOTAL")
-    _add(_fetch_bill_sales(date_from, date_to, group_code, subgroup_code), "bill_gross", "QTY_TOTAL")
-    _add(_fetch_pos_returns(date_from, date_to, group_code, subgroup_code), "returns", value_key="RET_NET")
-    _add(_fetch_bill_returns(date_from, date_to, group_code, subgroup_code), "returns", value_key="RET_NET")
+    _add(_fetch_pos_sales(date_from, date_to, group_code, subgroup_code), "pos", "NET_TOTAL", qty=True)
+    _add(_fetch_bill_sales(date_from, date_to, group_code, subgroup_code), "bill", "NET_TOTAL", qty=True)
+    _add(_fetch_pos_returns(date_from, date_to, group_code, subgroup_code), "returns", "RET_NET")
+    _add(_fetch_bill_returns(date_from, date_to, group_code, subgroup_code), "returns", "RET_NET")
     _sales_cache_set(key, out, _SALES_TTL, keep_stale=False)
     return out
 
@@ -281,118 +272,102 @@ def build_item_branch_report(
     date_from=None,
     date_to=None,
     branch_code: str = "",
+    warehouse_code: str = "",
     item_q: str = "",
 ) -> dict[str, Any]:
-    """يرجع: branches (أعمدة)، rows (صنف + لكل فرع رصيد/كمية مبيعات/صافي)، totals."""
+    """صفوف الأصناف للمخازن المختارة: رصيد، إجمالي مبيعات، مرتجعات، صافي.
+
+    مخزن محدد ← مخزنه فقط؛ فرع ← كل مخازن الفرع؛ بلا اختيار ← كل المخازن.
+    """
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     gcode = _norm_code(group_code)
     mcode = _norm_code(subgroup_code) if gcode else ""
     brn_sel = _norm_brn_code(branch_code) if branch_code else ""
+    wh_sel = _norm_code(warehouse_code) if warehouse_code else ""
     needle = str(item_q or "").strip().lower()
 
     with oracle_session():
-        by_branch, branch_names, wh_names = _warehouses_by_branch()
-        if brn_sel:
-            by_branch = {k: v for k, v in by_branch.items() if k == brn_sel}
-        branches = [
-            {"code": b, "name": branch_names.get(b, b)}
-            for b in sorted(by_branch, key=lambda x: (branch_names.get(x, x), x))
-        ]
-        stock = _stock_by_branch(by_branch, gcode, mcode)
-        sales = _sales_by_branch(date_from, date_to, gcode, mcode)
+        all_wh, branch_names = _warehouses()
+        if wh_sel:
+            selected = [w for w in all_wh if w["code"] == wh_sel]
+        elif brn_sel:
+            selected = [w for w in all_wh if w["branch_code"] == brn_sel]
+        else:
+            selected = list(all_wh)
+        sel_codes = {w["code"] for w in selected}
+        wh_by_code = {w["code"]: w for w in selected}
 
-        codes = {c for c, _ in stock} | {c for c, _ in sales}
-        meta = _hydrate_items(sorted(codes)) if codes else {}
-        pack_map = fetch_item_max_pack_map(sorted(codes)) if codes else {}
+        stock = _fetch_stock(sorted(sel_codes), gcode, mcode)
+        sales = _sales_by_warehouse(date_from, date_to, gcode, mcode)
+
+        per_item: dict[str, dict[str, float]] = {}
+
+        def _acc(code: str) -> dict[str, float]:
+            return per_item.setdefault(
+                code, {"stock": 0.0, "qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0}
+            )
+
+        for (code, wh), qty in stock.items():
+            if wh in sel_codes:
+                _acc(code)["stock"] += qty
+        for (code, wh), v in sales.items():
+            if wh not in sel_codes:
+                continue
+            a = _acc(code)
+            for k in ("qty", "pos", "bill", "returns"):
+                a[k] += v[k]
+
+        meta = _hydrate_items(sorted(per_item)) if per_item else {}
+        pack_map = fetch_item_max_pack_map(sorted(per_item)) if per_item else {}
 
     rows: list[dict[str, Any]] = []
-    empty_sales = {"qty": 0.0, "pos_gross": 0.0, "bill_gross": 0.0, "returns": 0.0}
-    totals = {
-        b["code"]: {
-            "stock": 0.0,
-            "qty": 0.0,
-            "pos": 0.0,
-            "bill": 0.0,
-            "gross": 0.0,
-            "returns": 0.0,
-            "net": 0.0,
-        }
-        for b in branches
-    }
-    for code in codes:
+    tot = {"stock": 0.0, "qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0}
+    for code, a in per_item.items():
         info = meta.get(code) or {}
         name = info.get("item_name") or code
         if needle and needle not in code.lower() and needle not in name.lower():
             continue
+        if all(abs(v) <= 1e-9 for v in a.values()):
+            continue
         pack = _f((pack_map.get(code) or {}).get("pack")) or 1.0
         unit = str((pack_map.get(code) or {}).get("unit") or "").strip() or "—"
-        cells = []
-        has_value = False
-        for b in branches:
-            brn = b["code"]
-            st = stock.get((code, brn), 0.0)
-            sl = sales.get((code, brn), empty_sales)
-            pos_gross = sl["pos_gross"]
-            bill_gross = sl["bill_gross"]
-            gross = pos_gross + bill_gross
-            returns = sl["returns"]
-            net = gross - returns
-            if any(abs(v) > 1e-9 for v in (st, sl["qty"], gross, returns)):
-                has_value = True
-            t = totals[brn]
-            t["stock"] += st
-            t["qty"] += sl["qty"]
-            t["pos"] += pos_gross
-            t["bill"] += bill_gross
-            t["gross"] += gross
-            t["returns"] += returns
-            t["net"] += net
-            cells.append(
-                {
-                    "stock_display": _fmt_qty(_to_pack_qty(st, pack)),
-                    "qty_display": _fmt_qty(_to_pack_qty(sl["qty"], pack)),
-                    "pos_display": _fmt_qty(pos_gross),
-                    "bill_display": _fmt_qty(bill_gross),
-                    "gross_display": _fmt_qty(gross),
-                    "returns_display": _fmt_qty(returns),
-                    "net_display": _fmt_qty(net),
-                    "net": net,
-                }
-            )
-        if not has_value:
-            continue
+        gross = a["pos"] + a["bill"]
+        net = gross - a["returns"]
+        for k in tot:
+            tot[k] += a[k]
         rows.append(
             {
                 "item_code": code,
                 "item_name": name,
-                "g_code": info.get("g_code") or "",
                 "g_name": info.get("g_name") or "",
                 "unit": unit,
-                "cells": cells,
-                "net_total": sum(c["net"] for c in cells),
+                "stock_display": _fmt_qty(_to_pack_qty(a["stock"], pack)),
+                "gross_display": _fmt_qty(gross),
+                "returns_display": _fmt_qty(a["returns"]),
+                "net_display": _fmt_qty(net),
+                "net": net,
             }
         )
 
-    rows.sort(key=lambda r: (-r["net_total"], r["item_name"], r["item_code"]))
-    for b in branches:
-        t = totals[b["code"]]
-        b["stock_display"] = _fmt_qty(t["stock"])
-        b["qty_display"] = _fmt_qty(t["qty"])
-        b["pos_display"] = _fmt_qty(t["pos"])
-        b["bill_display"] = _fmt_qty(t["bill"])
-        b["gross_display"] = _fmt_qty(t["gross"])
-        b["returns_display"] = _fmt_qty(t["returns"])
-        b["net_display"] = _fmt_qty(t["net"])
+    rows.sort(key=lambda r: (-r["net"], r["item_name"], r["item_code"]))
+    gross_total = tot["pos"] + tot["bill"]
+    if wh_sel and wh_sel in wh_by_code:
+        scope_label = wh_by_code[wh_sel]["name"]
+    elif brn_sel:
+        scope_label = branch_names.get(brn_sel, brn_sel)
+    else:
+        scope_label = "كل الفروع وكل المخازن"
     return {
-        "branches": branches,
+        "scope_label": scope_label,
         "rows": rows,
         "item_count": len(rows),
-        "net_total_display": _fmt_qty(sum(r["net_total"] for r in rows)),
-        "pos_total_display": _fmt_qty(sum(t["pos"] for t in totals.values())),
-        "bill_total_display": _fmt_qty(sum(t["bill"] for t in totals.values())),
-        "gross_total_display": _fmt_qty(sum(t["gross"] for t in totals.values())),
+        "stock_total_display": _fmt_qty(tot["stock"]),
+        "gross_total_display": _fmt_qty(gross_total),
+        "returns_total_display": _fmt_qty(tot["returns"]),
+        "net_total_display": _fmt_qty(gross_total - tot["returns"]),
+        "pos_total_display": _fmt_qty(tot["pos"]),
+        "bill_total_display": _fmt_qty(tot["bill"]),
         "from": _as_date(date_from).isoformat() if date_from else "",
         "to": _as_date(date_to).isoformat() if date_to else "",
-        "wh_names": wh_names,
     }
