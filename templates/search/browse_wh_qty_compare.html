@@ -211,6 +211,7 @@
             <th scope="col">مخزن {{ selected_wh_a }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
             <th scope="col">مخزن {{ selected_wh_b }} · {{ report.filters.qty_basis_label|default:"كمية" }}</th>
             <th scope="col">الفرق</th>
+            <th scope="col" title="آخر فاتورة شراء للصنف في أي مخزن">آخر شراء</th>
           </tr>
         </thead>
         <tbody>
@@ -225,10 +226,11 @@
               <td class="mono wqc-td-a">{{ row.qty_a_display }}</td>
               <td class="mono wqc-td-b">{{ row.qty_b_display }}</td>
               <td class="mono wqc-td-gap">{{ row.qty_gap_display }}</td>
+              <td class="mono wqc-td-buy">{{ row.last_purchase_display }}</td>
             </tr>
           {% empty %}
             <tr>
-              <td colspan="9" class="wqc-empty">لا توجد أصناف ضمن العرض المحدد.</td>
+              <td colspan="10" class="wqc-empty">لا توجد أصناف ضمن العرض المحدد.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -241,6 +243,7 @@
               <td class="mono">{{ report.totals.qty_a_display }}</td>
               <td class="mono">{{ report.totals.qty_b_display }}</td>
               <td class="mono">{{ report.totals.qty_gap_display }}</td>
+              <td></td>
             </tr>
           </tfoot>
         {% endif %}

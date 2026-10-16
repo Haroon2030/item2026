@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import logging
+from datetime import date, datetime, timedelta
 from html import escape
 from typing import Any, Callable
 
@@ -25,10 +27,15 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v8"
+_CACHE_VER = "v9"
 _NAME_BATCH = 800
 _EPS = 0.0005
 _MAX_ROWS = 2500
+# آخر تاريخ شراء: نفس نافذة شاشة آخر حركة، ودفعات ربط أقل من حد IN في أوراكل (1000)
+_PURCHASE_LOOKBACK_DAYS = 2000
+_PURCHASE_BATCH = 500
+
+logger = logging.getLogger(__name__)
 
 _MODES = {
     "all": "كل أصناف المستودع الأول",
@@ -372,6 +379,58 @@ def _row_matches(kind: str, mode: str) -> bool:
     return True
 
 
+def _day_iso(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value or "")[:10]
+
+
+def _fetch_last_purchase_dates(codes: list[str]) -> dict[str, str]:
+    """{رقم الصنف: 'YYYY-MM-DD'} آخر فاتورة شراء للصنف في أي مخزن.
+
+    بحث بالصنف (فهرس I_CODE): بنود الشراء للصنف الواحد قليلة، بخلاف بنود
+    مبيعات نقاط البيع. فشل الاستعلام لا يُسقط الشاشة — يبقى العمود فارغاً.
+    """
+    if not codes:
+        return {}
+    schema = _schema()
+    since = date.today() - timedelta(days=_PURCHASE_LOOKBACK_DAYS)
+    out: dict[str, str] = {}
+    for start in range(0, len(codes), _PURCHASE_BATCH):
+        batch = codes[start : start + _PURCHASE_BATCH]
+        params: dict[str, Any] = {"d_from": since}
+        keys = []
+        for i, code in enumerate(batch):
+            params[f"c{i}"] = code
+            keys.append(f":c{i}")
+        try:
+            rows = _fetch_all(
+                f"""
+                SELECT TO_CHAR(d.I_CODE) AS I_CODE, MAX(m.BILL_DATE) AS LAST_DT
+                FROM {schema}.IAS_PI_BILL_DTL d
+                JOIN {schema}.IAS_PI_BILL_MST m
+                  ON m.BILL_NO = d.BILL_NO
+                 AND m.BILL_SER = d.BILL_SER
+                 AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+                WHERE d.I_CODE IN ({", ".join(keys)})
+                  AND m.BILL_DATE >= :d_from
+                GROUP BY TO_CHAR(d.I_CODE)
+                """,
+                params,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Last purchase dates failed: %s", exc)
+            continue
+        for row in rows:
+            code = _norm_code(row.get("I_CODE"))
+            day = _day_iso(row.get("LAST_DT"))
+            if code and day:
+                out[code] = day
+    return out
+
+
 def build_wh_qty_compare_report(
     *,
     warehouse_a: str,
@@ -465,6 +524,7 @@ def build_wh_qty_compare_report(
     with oracle_session():
         meta = _hydrate_items(sorted(all_codes))
         pack_map = fetch_item_max_pack_map(sorted(all_codes)) or {}
+        last_buy = _fetch_last_purchase_dates(sorted(all_codes))
 
     rows: list[dict[str, Any]] = []
     for code in all_codes:
@@ -503,6 +563,8 @@ def build_wh_qty_compare_report(
                 "qty_gap_display": _fmt_qty(gap),
                 "kind": kind,
                 "kind_label": _kind_label(kind, wh_b_label=wh_b_name or wh_b),
+                "last_purchase": last_buy.get(code, ""),
+                "last_purchase_display": last_buy.get(code) or "—",
             }
         )
 
@@ -697,7 +759,7 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         "<th>الوحدة</th><th>الحالة</th>"
         f"<th>{escape(str(a_label))} — {escape(str(basis_label))}</th>"
         f"<th>{escape(str(b_label))} — {escape(str(basis_label))}</th>"
-        "<th>الفرق</th>"
+        "<th>الفرق</th><th>آخر شراء</th>"
         "</tr></thead><tbody>"
     )
     _status_cls = {"zero_b": "st-zero", "diff": "st-diff", "both": "st-both"}
@@ -719,13 +781,14 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         buf.write(f'<td class="num qa">{_f(row.get("qty_a"))}</td>')
         buf.write(f'<td class="num qb">{_f(row.get("qty_b"))}</td>')
         buf.write(f'<td class="num gap">{_f(row.get("qty_gap"))}</td>')
+        buf.write(f'<td class="txt">{escape(str(row.get("last_purchase") or ""))}</td>')
         buf.write("</tr>")
     buf.write(
         '<tr class="foot"><td></td><td></td><td>الإجمالي</td><td></td><td></td><td></td>'
         f'<td class="num">{_f(kpis.get("qty_a"))}</td>'
         f'<td class="num">{_f(kpis.get("qty_b"))}</td>'
         f'<td class="num">{_f(abs(_f(kpis.get("qty_a")) - _f(kpis.get("qty_b"))))}</td>'
-        "</tr></tbody></table></body></html>"
+        "<td></td></tr></tbody></table></body></html>"
     )
     payload = buf.getvalue().encode("utf-8")
     filename = (

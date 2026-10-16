@@ -2819,3 +2819,48 @@ class InventoryAnalysisQueryTests(OracleSchemaMixin, TestCase):
         self.assertEqual(insights['by_warehouse'][0]['code'], '60')
         self.assertNotIn(threading.current_thread().name, threads)
         self.assertNotIn('stagnant', insights)
+
+
+class WhQtyCompareLastPurchaseTests(OracleSchemaMixin, TestCase):
+    """مقارنة رصيد مخزنين: عمود آخر شراء — دفعات ربط تحت حد IN، وفشل لا يُسقط الشاشة."""
+
+    @patch('search.oracle_wh_qty_compare._fetch_all')
+    def test_dates_batched_and_mapped(self, fetch_all):
+        import datetime as dt
+
+        from search.oracle_wh_qty_compare import _fetch_last_purchase_dates
+
+        codes = [str(100000 + i) for i in range(1200)]
+
+        def fake(sql, params):
+            binds = [v for k, v in params.items() if k.startswith('c')]
+            self.assertLessEqual(len(binds), 500)
+            self.assertIn('IAS_PI_BILL_DTL', sql)
+            return [
+                {'I_CODE': c, 'LAST_DT': dt.datetime(2026, 9, 30, 14, 5)}
+                for c in binds if c in ('100001', '100777')
+            ]
+
+        fetch_all.side_effect = fake
+        out = _fetch_last_purchase_dates(codes)
+        self.assertEqual(fetch_all.call_count, 3)
+        self.assertEqual(out, {'100001': '2026-09-30', '100777': '2026-09-30'})
+
+    @patch('search.oracle_wh_qty_compare._fetch_all', side_effect=RuntimeError('ORA-01013'))
+    def test_failure_leaves_column_empty(self, _fetch_all):
+        from search.oracle_wh_qty_compare import _fetch_last_purchase_dates
+
+        self.assertEqual(_fetch_last_purchase_dates(['1', '2']), {})
+
+    def test_excel_has_last_purchase_column(self):
+        from search.oracle_wh_qty_compare import build_wh_qty_compare_excel
+
+        report = {
+            'filters': {'warehouse_a': '3', 'warehouse_b': '60'},
+            'kpis': {'item_count': 1, 'qty_a': 5, 'qty_b': 0},
+            'rows': [{'item_code': '203421', 'item_name': 'مشروب', 'qty_a': 5, 'qty_b': 0, 'qty_gap': 5,
+                      'kind': 'zero_b', 'kind_label': 'لا يتوفر', 'last_purchase': '2026-09-30'}],
+        }
+        html = build_wh_qty_compare_excel(report).content.decode('utf-8')
+        self.assertIn('<th>آخر شراء</th>', html)
+        self.assertIn('<td class="txt">2026-09-30</td>', html)
