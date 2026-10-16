@@ -27,7 +27,7 @@ from .oracle_stock import (
 )
 
 _CACHE_TTL = 600
-_CACHE_VER = "v9"
+_CACHE_VER = "v10"
 _NAME_BATCH = 800
 _EPS = 0.0005
 _MAX_ROWS = 2500
@@ -436,6 +436,62 @@ def _fetch_last_purchase_dates(codes: list[str]) -> dict[str, str]:
     return out
 
 
+def _fetch_barcodes(codes: list[str]) -> dict[str, str]:
+    """{رقم الصنف: باركود} لوحدة أكبر عبوة (الوحدة المعروضة)، وإلا أي باركود رئيسي للصنف.
+
+    فشل الاستعلام لا يُسقط الشاشة — يبقى العمود فارغاً."""
+    if not codes:
+        return {}
+    schema = _schema()
+    out: dict[str, str] = {}
+    for start in range(0, len(codes), _PURCHASE_BATCH):
+        batch = codes[start : start + _PURCHASE_BATCH]
+        params: dict[str, Any] = {}
+        keys = []
+        for i, code in enumerate(batch):
+            params[f"c{i}"] = code
+            keys.append(f":c{i}")
+        in_list = ", ".join(keys)
+        try:
+            rows = _fetch_all(
+                f"""
+                SELECT TO_CHAR(x.I_CODE) AS I_CODE,
+                       NVL(
+                         (SELECT MIN(b.BARCODE) KEEP (DENSE_RANK FIRST
+                                 ORDER BY b.MAIN_BARCODE DESC NULLS LAST, b.BARCODE)
+                            FROM {schema}.IAS_ITM_UNT_BARCODE b
+                           WHERE b.I_CODE = x.I_CODE AND b.ITM_UNT = x.ITM_UNT),
+                         NVL(x.BARCODE,
+                           (SELECT MIN(b2.BARCODE) KEEP (DENSE_RANK FIRST
+                                   ORDER BY b2.MAIN_BARCODE DESC NULLS LAST, b2.BARCODE)
+                              FROM {schema}.IAS_ITM_UNT_BARCODE b2
+                             WHERE b2.I_CODE = x.I_CODE))
+                       ) AS BARCODE
+                FROM (
+                    SELECT d.I_CODE, d.ITM_UNT, d.BARCODE,
+                           ROW_NUMBER() OVER (
+                             PARTITION BY d.I_CODE
+                             ORDER BY NVL(d.P_SIZE, 0) DESC, d.ITM_UNT
+                           ) AS RN
+                    FROM {schema}.IAS_ITM_DTL d
+                    WHERE d.I_CODE IN ({in_list})
+                      AND NVL(d.P_SIZE, 0) > 0
+                ) x
+                WHERE x.RN = 1
+                """,
+                params,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Barcodes lookup failed: %s", exc)
+            continue
+        for row in rows:
+            code = _norm_code(row.get("I_CODE"))
+            bc = str(row.get("BARCODE") or "").strip()
+            if code and bc:
+                out[code] = bc
+    return out
+
+
 def build_wh_qty_compare_report(
     *,
     warehouse_a: str,
@@ -535,6 +591,7 @@ def build_wh_qty_compare_report(
         meta = _hydrate_items(sorted(all_codes))
         pack_map = fetch_item_max_pack_map(sorted(all_codes)) or {}
         last_buy = _fetch_last_purchase_dates(sorted(all_codes))
+        barcodes = _fetch_barcodes(sorted(all_codes))
 
     rows: list[dict[str, Any]] = []
     for code in all_codes:
@@ -558,6 +615,7 @@ def build_wh_qty_compare_report(
             {
                 "item_code": code,
                 "item_name": info.get("item_name") or code,
+                "barcode": barcodes.get(code, ""),
                 "g_code": info.get("g_code") or "",
                 "g_name": info.get("g_name") or "",
                 "unit": unit or "—",
@@ -766,7 +824,7 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         f" · {escape(str(filters.get('mode_label') or ''))}"
         f" · {escape(str(kpis.get('item_count') or 0))} صنف</span></caption>"
         "<thead><tr>"
-        "<th>#</th><th>رقم الصنف</th><th>اسم الصنف</th><th>المجموعة</th>"
+        "<th>#</th><th>رقم الصنف</th><th>الباركود</th><th>اسم الصنف</th><th>المجموعة</th>"
         "<th>الوحدة</th><th>الحالة</th>"
         f"<th>{escape(str(a_label))} — {escape(str(basis_label))}</th>"
         f"<th>{escape(str(b_label))} — {escape(str(basis_label))}</th>"
@@ -780,6 +838,7 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         buf.write(f"<tr{even}>")
         buf.write(f'<td class="int">{i}</td>')
         buf.write(f'<td class="txt">{escape(str(row.get("item_code") or ""))}</td>')
+        buf.write(f'<td class="txt">{escape(str(row.get("barcode") or ""))}</td>')
         buf.write(f"<td>{escape(str(row.get('item_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('g_name') or ''))}</td>")
         buf.write(f"<td>{escape(str(row.get('unit') or ''))}</td>")
@@ -795,7 +854,7 @@ def build_wh_qty_compare_excel(report: dict[str, Any]) -> HttpResponse:
         buf.write(f'<td class="txt">{escape(str(row.get("last_purchase") or ""))}</td>')
         buf.write("</tr>")
     buf.write(
-        '<tr class="foot"><td></td><td></td><td>الإجمالي</td><td></td><td></td><td></td>'
+        '<tr class="foot"><td></td><td></td><td></td><td>الإجمالي</td><td></td><td></td><td></td>'
         f'<td class="num">{_f(kpis.get("qty_a"))}</td>'
         f'<td class="num">{_f(kpis.get("qty_b"))}</td>'
         f'<td class="num">{_f(abs(_f(kpis.get("qty_a")) - _f(kpis.get("qty_b"))))}</td>'

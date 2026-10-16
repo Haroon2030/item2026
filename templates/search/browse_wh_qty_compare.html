@@ -212,6 +212,7 @@
           <tr>
             <th scope="col">#</th>
             <th scope="col">رقم الصنف</th>
+            <th scope="col">الباركود</th>
             <th scope="col">اسم الصنف</th>
             <th scope="col">المجموعة</th>
             <th scope="col">الوحدة</th>
@@ -227,6 +228,7 @@
             <tr class="wqc-row is-{{ row.kind }}">
               <td class="mono wqc-td-idx">{{ forloop.counter }}</td>
               <td class="mono wqc-td-code">{{ row.item_code }}</td>
+              <td class="mono wqc-td-bc">{{ row.barcode|default:"—" }}</td>
               <td class="wqc-td-name">{{ row.item_name }}</td>
               <td class="wqc-td-group">{{ row.g_name }}</td>
               <td class="wqc-td-unit">{{ row.unit }}</td>
@@ -238,7 +240,7 @@
             </tr>
           {% empty %}
             <tr>
-              <td colspan="10" class="wqc-empty">لا توجد أصناف ضمن العرض المحدد.</td>
+              <td colspan="11" class="wqc-empty">لا توجد أصناف ضمن العرض المحدد.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -246,7 +248,7 @@
           <tfoot>
             <tr class="wqc-tfoot">
               <td></td>
-              <td colspan="4">الإجمالي</td>
+              <td colspan="5">الإجمالي</td>
               <td></td>
               <td class="mono">{{ report.totals.qty_a_display }}</td>
               <td class="mono">{{ report.totals.qty_b_display }}</td>
