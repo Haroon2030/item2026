@@ -90,7 +90,7 @@
       <p class="wqc-kpi-value mono">{{ report.pos_total_display }}</p>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi">
-      <header><h3>مبيعات أونكس</h3></header>
+      <header><h3>مبيعات الجملة</h3></header>
       <p class="wqc-kpi-value mono">{{ report.bill_total_display }}</p>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi">
@@ -117,12 +117,13 @@
             <th scope="col">الوحدة</th>
             <th scope="col">الرصيد الحالي</th>
             <th scope="col">كمية نقاط البيع</th>
-            <th scope="col">كمية أونكس</th>
+            <th scope="col">كمية الجملة</th>
             <th scope="col">مبيعات نقاط البيع</th>
-            <th scope="col">مبيعات أونكس</th>
+            <th scope="col">مبيعات الجملة</th>
             <th scope="col">إجمالي المبيعات</th>
             <th scope="col">المرتجعات</th>
             <th scope="col">صافي المبيعات</th>
+            <th scope="col" title="كمية المبيعات ÷ الرصيد الحالي">نسبة المبيعات من المخزون</th>
           </tr>
         </thead>
         <tbody>
@@ -141,6 +142,7 @@
               <td class="mono">{{ row.gross_display }}</td>
               <td class="mono">{{ row.returns_display }}</td>
               <td class="mono">{{ row.net_display }}</td>
+              <td class="mono">{{ row.turnover_display }}</td>
             </tr>
           {% empty %}
             <tr>
@@ -161,9 +163,36 @@
               <td class="mono">{{ report.gross_total_display }}</td>
               <td class="mono">{{ report.returns_total_display }}</td>
               <td class="mono">{{ report.net_total_display }}</td>
+              <td class="mono">{{ report.turnover_total_display }}</td>
             </tr>
           </tfoot>
         {% endif %}
+      </table>
+    </div>
+  </section>
+
+  <section class="wqc-sheet" aria-label="ملخص المبيعات ونسبتها من المخزون">
+    <div class="table-wrap">
+      <table class="wqc-table ibr-summary" aria-label="ملخص المبيعات">
+        <caption>ملخص المبيعات ونسبتها من المخزون الحالي (الكمية بالوحدة الأساسية)</caption>
+        <thead>
+          <tr>
+            <th scope="col">البيان</th>
+            <th scope="col">الكمية</th>
+            <th scope="col">المبلغ</th>
+            <th scope="col">النسبة من المخزون الحالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.summary %}
+            <tr>
+              <td>{{ r.label }}</td>
+              <td class="mono">{{ r.qty_display }}</td>
+              <td class="mono">{{ r.amount_display }}</td>
+              <td class="mono">{{ r.pct_display }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
       </table>
     </div>
   </section>

@@ -41,7 +41,8 @@ from .oracle_wh_qty_compare import _fmt_qty, _hydrate_items, _norm_code, _to_pac
 logger = logging.getLogger(__name__)
 
 _SALES_TTL = 60 * 60 * 2  # ساعتان للمبيعات (الرصيد حي دائماً)
-_CACHE_VER = "v6"
+_WHOLESALE_DOC_TYPES = (4, 8)  # الآجل (الجملة) كما في تحليل المبيعات
+_CACHE_VER = "v7"
 
 
 def _bill_net_sql(alias: str = "d") -> str:
@@ -55,6 +56,13 @@ def _bill_net_sql(alias: str = "d") -> str:
         f"THEN NVL({a}.I_PRICE, 0) * NVL({a}.I_QTY, 0) + NVL({a}.VAT_AMT, 0) "
         f"ELSE {a}.I_PRICE_VAT * NVL({a}.I_QTY, 0) END - NVL({a}.DIS_AMT, 0))"
     )
+
+
+def _pct_display(sold: float, stock: float) -> str:
+    """نسبة كمية المبيعات من الرصيد الحالي (%)؛ «—» إن لم يوجد رصيد."""
+    if stock <= 1e-9:
+        return "—"
+    return f"{sold / stock * 100:,.1f}%"
 
 
 def _f(value: Any) -> float:
@@ -162,10 +170,12 @@ def _fetch_pos_sales(date_from, date_to, group_code: str, subgroup_code: str) ->
     )
 
 
-def _fetch_bill_sales(date_from, date_to, group_code: str, subgroup_code: str) -> list[dict]:
+def _fetch_bill_sales(
+    date_from, date_to, group_code: str, subgroup_code: str, doc_types: tuple = _ONIX_ITEM_SALES_DOC_TYPES
+) -> list[dict]:
     schema = _schema()
     params: dict[str, Any] = _date_params(date_from, date_to)
-    conf = {"doc_types": _ONIX_ITEM_SALES_DOC_TYPES}
+    conf = {"doc_types": doc_types}
     doc_filter = _doc_type_filter(conf, "b", "BILL_DOC_TYPE", params)
     group_sql = _group_filters(params, group_code, subgroup_code, "i")
     return _fetch_all(
@@ -217,11 +227,13 @@ def _fetch_pos_returns(date_from, date_to, group_code: str, subgroup_code: str) 
     )
 
 
-def _fetch_bill_returns(date_from, date_to, group_code: str, subgroup_code: str) -> list[dict]:
-    """مرتجعات الفواتير بـ I_PRICE (نفس أساس مبيعات الفواتير)."""
+def _fetch_bill_returns(
+    date_from, date_to, group_code: str, subgroup_code: str, doc_types: tuple = _ONIX_ITEM_SALES_DOC_TYPES
+) -> list[dict]:
+    """مرتجعات الفواتير بنفس أساس مبيعات الفواتير (شامل الضريبة)."""
     schema = _schema()
     params: dict[str, Any] = _date_params(date_from, date_to)
-    conf = {"doc_types": _ONIX_ITEM_SALES_DOC_TYPES}
+    conf = {"doc_types": doc_types}
     ret_doc = _doc_type_filter(conf, "r", "RT_BILL_DOC_TYPE", params)
     group_sql = _group_filters(params, group_code, subgroup_code, "i")
     return _fetch_all(
@@ -248,7 +260,9 @@ def _fetch_bill_returns(date_from, date_to, group_code: str, subgroup_code: str)
 def _sales_by_warehouse(
     date_from, date_to, group_code: str, subgroup_code: str
 ) -> dict[tuple[str, str], dict[str, float]]:
-    """{(صنف, مخزن): {qty, pos, bill, returns}} — مخزّن مؤقتاً، مستقل عن اختيار الفرع/المخزن."""
+    """{(صنف, مخزن): {...}} — نقاط البيع، نقدي 1/5، آجل 4/8، ومرتجعاتها؛ مخزّن مؤقتاً.
+
+    مستقل عن اختيار الفرع/المخزن. نقدي 1/5 غالباً انعكاس لنقاط البيع، فلا يُعرض كاملاً."""
     key = (
         f"itmwh:{_CACHE_VER}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{group_code}:{subgroup_code}"
@@ -266,16 +280,34 @@ def _sales_by_warehouse(
                 continue
             cur = out.setdefault(
                 (code, wh),
-                {"pos_qty": 0.0, "bill_qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0},
+                {
+                    "pos_qty": 0.0,
+                    "pos": 0.0,
+                    "cash_qty": 0.0,
+                    "cash": 0.0,
+                    "credit_qty": 0.0,
+                    "credit": 0.0,
+                    "ret_pos": 0.0,
+                    "ret_cash": 0.0,
+                    "ret_credit": 0.0,
+                },
             )
             cur[field] += _f(row.get(value_key))
             if qty_key:
                 cur[qty_key] += _f(row.get("QTY_TOTAL"))
 
     _add(_fetch_pos_sales(date_from, date_to, group_code, subgroup_code), "pos", "NET_TOTAL", "pos_qty")
-    _add(_fetch_bill_sales(date_from, date_to, group_code, subgroup_code), "bill", "NET_TOTAL", "bill_qty")
-    _add(_fetch_pos_returns(date_from, date_to, group_code, subgroup_code), "returns", "RET_NET")
-    _add(_fetch_bill_returns(date_from, date_to, group_code, subgroup_code), "returns", "RET_NET")
+    _add(_fetch_bill_sales(date_from, date_to, group_code, subgroup_code), "cash", "NET_TOTAL", "cash_qty")
+    _add(
+        _fetch_bill_sales(date_from, date_to, group_code, subgroup_code, _WHOLESALE_DOC_TYPES),
+        "credit", "NET_TOTAL", "credit_qty",
+    )
+    _add(_fetch_pos_returns(date_from, date_to, group_code, subgroup_code), "ret_pos", "RET_NET")
+    _add(_fetch_bill_returns(date_from, date_to, group_code, subgroup_code), "ret_cash", "RET_NET")
+    _add(
+        _fetch_bill_returns(date_from, date_to, group_code, subgroup_code, _WHOLESALE_DOC_TYPES),
+        "ret_credit", "RET_NET",
+    )
     _sales_cache_set(key, out, _SALES_TTL, keep_stale=False)
     return out
 
@@ -312,6 +344,7 @@ def build_item_branch_report(
             selected = list(all_wh)
         sel_codes = {w["code"] for w in selected}
         wh_by_code = {w["code"]: w for w in selected}
+        wh_to_branch = {w["code"]: w["branch_code"] for w in all_wh}
 
         stock = _fetch_stock(sorted(sel_codes), gcode, mcode)
         sales = _sales_by_warehouse(date_from, date_to, gcode, mcode)
@@ -334,12 +367,36 @@ def build_item_branch_report(
         for (code, wh), qty in stock.items():
             if wh in sel_codes:
                 _acc(code)["stock"] += qty
+        # الجملة كما في تحليل المبيعات لكل فرع: الآجل 4/8 + الزائد من نقدي 1/5 عن نقاط البيع
+        # (مستند 1/5 غالباً انعكاس لنقاط البيع). نسبة الزائد تُحسب على كامل مخازن الفرع
+        # ثم تُطبَّق على المخازن المختارة، فيطابق مجموع الفرع الشاشة الأم.
+        br_pos: dict[str, float] = {}
+        br_cash: dict[str, float] = {}
+        for (code, wh), v in sales.items():
+            b = wh_to_branch.get(wh, "")
+            br_pos[b] = br_pos.get(b, 0.0) + v["pos"]
+            br_cash[b] = br_cash.get(b, 0.0) + v["cash"]
+        cash_ratio: dict[str, float] = {}
+        for b, cash_total in br_cash.items():
+            extra = max(0.0, cash_total - br_pos.get(b, 0.0))
+            cash_ratio[b] = (extra / cash_total) if cash_total > 0 else 0.0
+
         for (code, wh), v in sales.items():
             if wh not in sel_codes:
                 continue
+            b = wh_to_branch.get(wh, "")
+            ratio = cash_ratio.get(b, 0.0)
+            has_pos = br_pos.get(b, 0.0) > 0
             a = _acc(code)
-            for k in ("pos_qty", "bill_qty", "pos", "bill", "returns"):
-                a[k] += v[k]
+            a["pos"] += v["pos"]
+            a["pos_qty"] += v["pos_qty"]
+            a["bill"] += v["credit"] + v["cash"] * ratio
+            a["bill_qty"] += v["credit_qty"] + v["cash_qty"] * ratio
+            a["returns"] += (
+                v["ret_pos"]
+                + v["ret_credit"]
+                + (0.0 if has_pos else v["ret_cash"])
+            )
 
         meta = _hydrate_items(sorted(per_item)) if per_item else {}
         pack_map = fetch_item_max_pack_map(sorted(per_item)) if per_item else {}
@@ -380,6 +437,7 @@ def build_item_branch_report(
                 "gross_display": _fmt_qty(gross),
                 "returns_display": _fmt_qty(a["returns"]),
                 "net_display": _fmt_qty(net),
+                "turnover_display": _pct_display(a["pos_qty"] + a["bill_qty"], a["stock"]),
                 "net": net,
             }
         )
@@ -396,6 +454,33 @@ def build_item_branch_report(
         "scope_label": scope_label,
         "rows": rows,
         "item_count": len(rows),
+        "turnover_total_display": _pct_display(tot["pos_qty"] + tot["bill_qty"], tot["stock"]),
+        "summary": [
+            {
+                "label": "الرصيد الحالي",
+                "qty_display": _fmt_qty(tot["stock"]),
+                "amount_display": "",
+                "pct_display": "100.0%" if tot["stock"] > 1e-9 else "—",
+            },
+            {
+                "label": "نقاط البيع",
+                "qty_display": _fmt_qty(tot["pos_qty"]),
+                "amount_display": _fmt_qty(tot["pos"]),
+                "pct_display": _pct_display(tot["pos_qty"], tot["stock"]),
+            },
+            {
+                "label": "الجملة",
+                "qty_display": _fmt_qty(tot["bill_qty"]),
+                "amount_display": _fmt_qty(tot["bill"]),
+                "pct_display": _pct_display(tot["bill_qty"], tot["stock"]),
+            },
+            {
+                "label": "إجمالي المبيعات",
+                "qty_display": _fmt_qty(tot["pos_qty"] + tot["bill_qty"]),
+                "amount_display": _fmt_qty(tot["pos"] + tot["bill"]),
+                "pct_display": _pct_display(tot["pos_qty"] + tot["bill_qty"], tot["stock"]),
+            },
+        ],
         "stock_total_display": _fmt_qty(tot["stock"]),
         "pos_qty_total_display": _fmt_qty(tot["pos_qty"]),
         "bill_qty_total_display": _fmt_qty(tot["bill_qty"]),
@@ -423,12 +508,13 @@ def build_item_branch_excel(report: dict[str, Any]) -> HttpResponse:
         ("الوحدة", "unit"),
         ("الرصيد الحالي", "stock_display"),
         ("كمية نقاط البيع", "pos_qty_display"),
-        ("كمية أونكس", "bill_qty_display"),
+        ("كمية الجملة", "bill_qty_display"),
         ("مبيعات نقاط البيع", "pos_display"),
-        ("مبيعات أونكس", "bill_display"),
+        ("مبيعات الجملة", "bill_display"),
         ("إجمالي المبيعات", "gross_display"),
         ("المرتجعات", "returns_display"),
         ("صافي المبيعات", "net_display"),
+        ("نسبة المبيعات من المخزون", "turnover_display"),
     ]
     head = "".join(f"<th>{escape(h)}</th>" for h, _ in cols)
     body = []
@@ -436,7 +522,8 @@ def build_item_branch_excel(report: dict[str, Any]) -> HttpResponse:
         cells = [f"<td>{i}</td>"]
         for h, key in cols[1:]:
             val = row.get(key) or ""
-            cls = ' class="num"' if key and key.endswith("display") else ' class="txt"'
+            numeric = key and key.endswith("display") and key != "turnover_display"
+            cls = ' class="num"' if numeric else ' class="txt"'
             cells.append(f"<td{cls}>{escape(str(val))}</td>")
         body.append("<tr>" + "".join(cells) + "</tr>")
     foot = (
@@ -448,7 +535,24 @@ def build_item_branch_excel(report: dict[str, Any]) -> HttpResponse:
         f'<td class="num">{escape(str(report.get("bill_row_total_display") or ""))}</td>'
         f'<td class="num">{escape(str(report.get("gross_total_display") or ""))}</td>'
         f'<td class="num">{escape(str(report.get("returns_total_display") or ""))}</td>'
-        f'<td class="num">{escape(str(report.get("net_total_display") or ""))}</td></tr>'
+        f'<td class="num">{escape(str(report.get("net_total_display") or ""))}</td>'
+        f'<td class="txt">{escape(str(report.get("turnover_total_display") or ""))}</td></tr>'
+    )
+    summary_rows = "".join(
+        "<tr>"
+        f'<td>{escape(str(r.get("label") or ""))}</td>'
+        f'<td class="num">{escape(str(r.get("qty_display") or ""))}</td>'
+        f'<td class="num">{escape(str(r.get("amount_display") or ""))}</td>'
+        f'<td class="txt">{escape(str(r.get("pct_display") or ""))}</td>'
+        "</tr>"
+        for r in (report.get("summary") or [])
+    )
+    summary_html = (
+        "<br><table><caption>ملخص المبيعات ونسبتها من المخزون الحالي "
+        "(الكمية بالوحدة الأساسية)</caption>"
+        "<thead><tr><th>البيان</th><th>الكمية</th><th>المبلغ</th>"
+        "<th>النسبة من المخزون الحالي</th></tr></thead>"
+        f"<tbody>{summary_rows}</tbody></table>"
     )
     html = (
         '<html xmlns:o="urn:schemas-microsoft-com:office:office" '
@@ -468,6 +572,7 @@ def build_item_branch_excel(report: dict[str, Any]) -> HttpResponse:
         f"<table><caption>رصيد ومبيعات الأصناف — {escape(str(report.get('scope_label') or ''))}"
         f" · {escape(str(report.get('from') or ''))} ← {escape(str(report.get('to') or ''))}</caption>"
         f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody><tfoot>{foot}</tfoot></table>"
+        f"{summary_html}"
         "</body></html>"
     )
     filename = f"item-branch-{report.get('from') or ''}-{report.get('to') or ''}.xls"

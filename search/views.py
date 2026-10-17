@@ -6486,7 +6486,7 @@ def browse_item_branch_report(request):
             'error': error,
             'run': run,
             'screen_limit': _ITEM_BRANCH_SCREEN_ROWS,
-            'total_cols': 13,
+            'total_cols': 14,
             'export_query': _query_without(request.GET, 'export'),
         },
     )
