@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from django.core.cache import cache
+from django.http import HttpResponse
 
 from .oracle_stock import (
     _ONIX_ITEM_SALES_DOC_TYPES,
@@ -40,7 +41,7 @@ from .oracle_wh_qty_compare import _fmt_qty, _hydrate_items, _norm_code, _to_pac
 logger = logging.getLogger(__name__)
 
 _SALES_TTL = 60 * 60 * 2  # ساعتان للمبيعات (الرصيد حي دائماً)
-_CACHE_VER = "v4"
+_CACHE_VER = "v5"
 
 
 def _f(value: Any) -> float:
@@ -244,21 +245,22 @@ def _sales_by_warehouse(
         return cached
     out: dict[tuple[str, str], dict[str, float]] = {}
 
-    def _add(rows: list[dict], field: str, value_key: str, qty: bool = False) -> None:
+    def _add(rows: list[dict], field: str, value_key: str, qty_key: str = "") -> None:
         for row in rows or []:
             code = _norm_code(row.get("I_CODE"))
             wh = _norm_code(row.get("W_CODE"))
             if not code or not wh:
                 continue
             cur = out.setdefault(
-                (code, wh), {"qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0}
+                (code, wh),
+                {"pos_qty": 0.0, "bill_qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0},
             )
             cur[field] += _f(row.get(value_key))
-            if qty:
-                cur["qty"] += _f(row.get("QTY_TOTAL"))
+            if qty_key:
+                cur[qty_key] += _f(row.get("QTY_TOTAL"))
 
-    _add(_fetch_pos_sales(date_from, date_to, group_code, subgroup_code), "pos", "NET_TOTAL", qty=True)
-    _add(_fetch_bill_sales(date_from, date_to, group_code, subgroup_code), "bill", "NET_TOTAL", qty=True)
+    _add(_fetch_pos_sales(date_from, date_to, group_code, subgroup_code), "pos", "NET_TOTAL", "pos_qty")
+    _add(_fetch_bill_sales(date_from, date_to, group_code, subgroup_code), "bill", "NET_TOTAL", "bill_qty")
     _add(_fetch_pos_returns(date_from, date_to, group_code, subgroup_code), "returns", "RET_NET")
     _add(_fetch_bill_returns(date_from, date_to, group_code, subgroup_code), "returns", "RET_NET")
     _sales_cache_set(key, out, _SALES_TTL, keep_stale=False)
@@ -305,7 +307,15 @@ def build_item_branch_report(
 
         def _acc(code: str) -> dict[str, float]:
             return per_item.setdefault(
-                code, {"stock": 0.0, "qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0}
+                code,
+                {
+                    "stock": 0.0,
+                    "pos_qty": 0.0,
+                    "bill_qty": 0.0,
+                    "pos": 0.0,
+                    "bill": 0.0,
+                    "returns": 0.0,
+                },
             )
 
         for (code, wh), qty in stock.items():
@@ -315,14 +325,21 @@ def build_item_branch_report(
             if wh not in sel_codes:
                 continue
             a = _acc(code)
-            for k in ("qty", "pos", "bill", "returns"):
+            for k in ("pos_qty", "bill_qty", "pos", "bill", "returns"):
                 a[k] += v[k]
 
         meta = _hydrate_items(sorted(per_item)) if per_item else {}
         pack_map = fetch_item_max_pack_map(sorted(per_item)) if per_item else {}
 
     rows: list[dict[str, Any]] = []
-    tot = {"stock": 0.0, "qty": 0.0, "pos": 0.0, "bill": 0.0, "returns": 0.0}
+    tot = {
+        "stock": 0.0,
+        "pos_qty": 0.0,
+        "bill_qty": 0.0,
+        "pos": 0.0,
+        "bill": 0.0,
+        "returns": 0.0,
+    }
     for code, a in per_item.items():
         info = meta.get(code) or {}
         name = info.get("item_name") or code
@@ -343,6 +360,10 @@ def build_item_branch_report(
                 "g_name": info.get("g_name") or "",
                 "unit": unit,
                 "stock_display": _fmt_qty(_to_pack_qty(a["stock"], pack)),
+                "pos_qty_display": _fmt_qty(_to_pack_qty(a["pos_qty"], pack)),
+                "bill_qty_display": _fmt_qty(_to_pack_qty(a["bill_qty"], pack)),
+                "pos_display": _fmt_qty(a["pos"]),
+                "bill_display": _fmt_qty(a["bill"]),
                 "gross_display": _fmt_qty(gross),
                 "returns_display": _fmt_qty(a["returns"]),
                 "net_display": _fmt_qty(net),
@@ -363,6 +384,10 @@ def build_item_branch_report(
         "rows": rows,
         "item_count": len(rows),
         "stock_total_display": _fmt_qty(tot["stock"]),
+        "pos_qty_total_display": _fmt_qty(tot["pos_qty"]),
+        "bill_qty_total_display": _fmt_qty(tot["bill_qty"]),
+        "pos_row_total_display": _fmt_qty(tot["pos"]),
+        "bill_row_total_display": _fmt_qty(tot["bill"]),
         "gross_total_display": _fmt_qty(gross_total),
         "returns_total_display": _fmt_qty(tot["returns"]),
         "net_total_display": _fmt_qty(gross_total - tot["returns"]),
@@ -371,3 +396,68 @@ def build_item_branch_report(
         "from": _as_date(date_from).isoformat() if date_from else "",
         "to": _as_date(date_to).isoformat() if date_to else "",
     }
+
+
+def build_item_branch_excel(report: dict[str, Any]) -> HttpResponse:
+    """ملف Excel (HTML بامتداد xls) لكل صفوف التقرير بلا قطع."""
+    from html import escape
+
+    cols = [
+        ("#", None),
+        ("رقم الصنف", "item_code"),
+        ("اسم الصنف", "item_name"),
+        ("المجموعة", "g_name"),
+        ("الوحدة", "unit"),
+        ("الرصيد الحالي", "stock_display"),
+        ("كمية نقاط البيع", "pos_qty_display"),
+        ("كمية أونكس", "bill_qty_display"),
+        ("مبيعات نقاط البيع", "pos_display"),
+        ("مبيعات أونكس", "bill_display"),
+        ("إجمالي المبيعات", "gross_display"),
+        ("المرتجعات", "returns_display"),
+        ("صافي المبيعات", "net_display"),
+    ]
+    head = "".join(f"<th>{escape(h)}</th>" for h, _ in cols)
+    body = []
+    for i, row in enumerate(report.get("rows") or [], 1):
+        cells = [f"<td>{i}</td>"]
+        for h, key in cols[1:]:
+            val = row.get(key) or ""
+            cls = ' class="num"' if key and key.endswith("display") else ' class="txt"'
+            cells.append(f"<td{cls}>{escape(str(val))}</td>")
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    foot = (
+        '<tr class="foot"><td></td><td>الإجمالي</td><td></td><td></td><td></td>'
+        f'<td class="num">{escape(str(report.get("stock_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("pos_qty_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("bill_qty_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("pos_row_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("bill_row_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("gross_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("returns_total_display") or ""))}</td>'
+        f'<td class="num">{escape(str(report.get("net_total_display") or ""))}</td></tr>'
+    )
+    html = (
+        '<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+        'xmlns:x="urn:schemas-microsoft-com:office:excel" '
+        'xmlns="http://www.w3.org/TR/REC-html40">'
+        '<head><meta charset="utf-8">'
+        "<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>"
+        "<x:ExcelWorksheet><x:Name>الأصناف</x:Name>"
+        "<x:WorksheetOptions><x:DisplayRightToLeft/></x:WorksheetOptions>"
+        "</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->"
+        "<style>table{border-collapse:collapse;font-family:Tahoma,Arial;font-size:11px;}"
+        "th,td{border:1px solid #94a3b8;padding:4px 6px;white-space:nowrap;}"
+        "th{background:#d9e2f3;font-weight:700;}"
+        r"td.txt{mso-number-format:'\@';}"
+        r"td.num{mso-number-format:'\#\,\#\#0\.000';text-align:left;}"
+        "tr.foot td{background:#d9e2f3;font-weight:800;}</style></head><body dir=\"rtl\">"
+        f"<table><caption>رصيد ومبيعات الأصناف — {escape(str(report.get('scope_label') or ''))}"
+        f" · {escape(str(report.get('from') or ''))} ← {escape(str(report.get('to') or ''))}</caption>"
+        f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody><tfoot>{foot}</tfoot></table>"
+        "</body></html>"
+    )
+    filename = f"item-branch-{report.get('from') or ''}-{report.get('to') or ''}.xls"
+    resp = HttpResponse(("﻿" + html).encode("utf-8"), content_type="application/vnd.ms-excel; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp

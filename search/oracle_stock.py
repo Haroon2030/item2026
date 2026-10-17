@@ -1365,6 +1365,7 @@ def _inventory_stock_filters(
     warehouse: str = "",
     group_code: str = "",
     branch_code: str = "",
+    subgroup_code: str = "",
 ) -> tuple[str, dict]:
     """فلاتر مشتركة لتحليل المخزون — كمية موجبة فقط."""
     params: dict = {}
@@ -1372,12 +1373,16 @@ def _inventory_stock_filters(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
+    sub = str(subgroup_code or "").strip()
     if wh:
         params["wh"] = wh
         filters.append("w.W_CODE = CASE WHEN REGEXP_LIKE(:wh, '^ *[0-9]+ *$') THEN TO_NUMBER(:wh) END")
     if gcode:
         params["gcode"] = _bind_gcode(gcode)
         filters.append("m.G_CODE = :gcode")
+    if sub:
+        params["mng"] = sub
+        filters.append("TO_CHAR(m.MNG_CODE) = :mng")
     if brn:
         params["brn"] = _bind_brn(brn)
         filters.append("wh.CONN_BRN_NO = :brn")
@@ -1558,6 +1563,7 @@ def fetch_inventory_breakdowns(
     warehouse: str = "",
     group_code: str = "",
     branch_code: str = "",
+    subgroup_code: str = "",
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """(حسب المخزن، حسب المجموعة، حسب الفرع) بمسح واحد عبر GROUPING SETS.
 
@@ -1571,7 +1577,8 @@ def fetch_inventory_breakdowns(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
-    suffix = f"{wh}:{gcode}:{brn}"
+    sub = str(subgroup_code or "").strip()
+    suffix = f"{wh}:{gcode}:{brn}" + (f":sg{sub}" if sub else "")
     keys = (
         f"inv:by_wh:v7:{suffix}",
         f"inv:by_group:v7:{suffix}",
@@ -1582,7 +1589,7 @@ def fetch_inventory_breakdowns(
         return cached[0], cached[1], cached[2]
 
     where, params = _inventory_stock_filters(
-        warehouse=wh, group_code=gcode, branch_code=brn
+        warehouse=wh, group_code=gcode, branch_code=brn, subgroup_code=sub
     )
     qty_sql = _inv_expected_qty_sql()
     pend_sql = _pending_pos_net_sql()
@@ -1752,7 +1759,9 @@ def fetch_inventory_by_branch(
     return assembled
 
 
-def _fetch_wastage_raw(schema: str, d_from, d_to, *, wh: str, gcode: str, brn: str) -> list[dict]:
+def _fetch_wastage_raw(
+    schema: str, d_from, d_to, *, wh: str, gcode: str, brn: str, sub: str = ""
+) -> list[dict]:
     """صفوف توالف خام (فرع × مجموعة) لفترة قصيرة — بلا تقريب ليُجمع عبر الشهور."""
     filters = [
         "m.A_CODE = '41101006'",
@@ -1769,6 +1778,9 @@ def _fetch_wastage_raw(schema: str, d_from, d_to, *, wh: str, gcode: str, brn: s
     if gcode:
         filters.append("i.G_CODE = :gcode")
         params["gcode"] = _bind_gcode(gcode)
+    if sub:
+        filters.append("TO_CHAR(i.MNG_CODE) = :mng")
+        params["mng"] = sub
     if brn:
         filters.append("m.BRN_NO = :brn")
         params["brn"] = _bind_brn(brn)
@@ -1795,6 +1807,76 @@ def _fetch_wastage_raw(schema: str, d_from, d_to, *, wh: str, gcode: str, brn: s
     )
 
 
+def fetch_pos_group_sales_for_subgroup(
+    date_from,
+    date_to,
+    *,
+    group_code: str,
+    subgroup_code: str,
+    branch_code: str = "",
+) -> list[dict]:
+    """مبيعات نقاط البيع الصافية لمجموعة/فرعية كصفوف مجموعات (شكل fetch_group_sales_totals)."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    gcode = str(group_code or "").strip()
+    sub = str(subgroup_code or "").strip()
+    brn = str(branch_code or "").strip()
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    key = (
+        f"inv:pos_sub_sales:v1:{d_from.isoformat()}:{d_to.isoformat()}:"
+        f"{gcode}:{sub}:{brn}"
+    )
+    cached = _sales_cache_get(key)
+    if cached is not None:
+        return cached
+    pos = _pos_owner()
+    schema = _schema()
+    params: dict[str, Any] = _date_params(d_from, d_to)
+    filters = []
+    if gcode:
+        params["gcode"] = _bind_gcode(gcode)
+        filters.append("AND i.G_CODE = :gcode")
+    if sub:
+        params["mng"] = sub
+        filters.append("AND TO_CHAR(i.MNG_CODE) = :mng")
+    if brn:
+        params["brn"] = _bind_brn(brn)
+        filters.append("AND m.BRN_NO = :brn")
+    rows = _fetch_all(
+        f"""
+        SELECT NVL(TO_CHAR(i.G_CODE), '(بلا)') AS GROUP_CODE,
+               MAX(g.G_A_NAME) AS GROUP_NAME,
+               ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS SALES_TOTAL,
+               ROUND(SUM(NVL(d.I_QTY, 0)), 2) AS QTY_TOTAL
+        FROM {pos}.IAS_POS_BILL_DTL d
+        JOIN {pos}.IAS_POS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO
+         AND m.BRN_NO = d.BRN_NO
+         AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+        JOIN {schema}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        LEFT JOIN {schema}.GROUP_DETAILS g ON g.G_CODE = i.G_CODE
+        WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+          AND {_hung_ok("m")}
+          AND d.I_CODE IS NOT NULL
+          {" ".join(filters)}
+        GROUP BY NVL(TO_CHAR(i.G_CODE), '(بلا)')
+        """,
+        params,
+    )
+    out = [
+        {
+            "group_code": str(r.get("GROUP_CODE") or ""),
+            "group_name": str(r.get("GROUP_NAME") or "").strip(),
+            "sales_total": float(r.get("SALES_TOTAL") or 0),
+            "qty_total": float(r.get("QTY_TOTAL") or 0),
+        }
+        for r in rows
+    ]
+    _sales_cache_set(key, out, ttl=1800)
+    return out
+
+
 def fetch_inventory_wastage(
     date_from,
     date_to,
@@ -1802,6 +1884,7 @@ def fetch_inventory_wastage(
     warehouse: str = "",
     group_code: str = "",
     branch_code: str = "",
+    subgroup_code: str = "",
 ) -> dict[str, Any]:
     """توالف الصرف المخزني من حساب 41101006، مجمعة حسب الفرع والمجموعة."""
     if not oracle_enabled():
@@ -1816,9 +1899,10 @@ def fetch_inventory_wastage(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
+    sub = str(subgroup_code or "").strip()
     cache_key = (
         f"inv:wastage:v4:{d_from.isoformat()}:{d_to.isoformat()}:"
-        f"{wh}:{gcode}:{brn}"
+        f"{wh}:{gcode}:{brn}" + (f":sg{sub}" if sub else "")
     )
     cached = _sales_cache_get(cache_key)
     if cached is not None:
@@ -1828,10 +1912,13 @@ def fetch_inventory_wastage(
     merged: dict[tuple[str, str], dict[str, Any]] = {}
     today = date.today()
     for a, b in _month_spans(d_from, d_to):
-        month_key = f"inv:wastage_raw:v1:{a.isoformat()}:{b.isoformat()}:{wh}:{gcode}:{brn}"
+        month_key = (
+            f"inv:wastage_raw:v1:{a.isoformat()}:{b.isoformat()}:{wh}:{gcode}:{brn}"
+            + (f":sg{sub}" if sub else "")
+        )
         raw = _sales_cache_get(month_key)
         if raw is None:
-            raw = _fetch_wastage_raw(schema, a, b, wh=wh, gcode=gcode, brn=brn)
+            raw = _fetch_wastage_raw(schema, a, b, wh=wh, gcode=gcode, brn=brn, sub=sub)
             closed = b < today.replace(day=1)
             _sales_cache_set(
                 month_key,

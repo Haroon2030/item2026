@@ -2400,14 +2400,17 @@ def browse_inventory(request):
     warehouses: list[dict] = []
     groups: list[dict] = []
     branches: list[dict] = []
+    subgroups: list[dict] = []
 
     selected_warehouse = str(request.GET.get('warehouse') or '').strip()
     selected_group = str(request.GET.get('group') or '').strip()
     selected_branch = str(request.GET.get('branch') or '').strip()
+    selected_subgroup = str(request.GET.get('subgroup') or '').strip()
 
     try:
         from .inventory_insights import build_inventory_insights
         from .oracle_stock import (
+            fetch_main_subgroup_options,
             fetch_sales_group_options,
             fetch_warehouse_options,
             oracle_enabled,
@@ -2420,12 +2423,20 @@ def browse_inventory(request):
             with oracle_session():
                 raw_warehouses = fetch_warehouse_options(active_only=True)
                 groups = fetch_sales_group_options()
+                subgroups = fetch_main_subgroup_options() or []
                 wh_codes = {w['code'] for w in raw_warehouses}
                 group_codes = {g['code'] for g in groups}
                 if selected_warehouse and selected_warehouse not in wh_codes:
                     selected_warehouse = ''
                 if selected_group and selected_group not in group_codes:
                     selected_group = ''
+                if selected_subgroup and not any(
+                    s['code'] == selected_subgroup and s['group_code'] == selected_group
+                    for s in subgroups
+                ):
+                    selected_subgroup = ''
+                if not selected_group:
+                    selected_subgroup = ''
 
                 branch_map: dict[str, str] = {}
                 warehouses = []
@@ -2469,6 +2480,7 @@ def browse_inventory(request):
                 warehouse=selected_warehouse,
                 group_code=selected_group,
                 branch_code=selected_branch,
+                subgroup_code=selected_subgroup,
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning('browse_inventory failed: %s', exc)
@@ -2488,9 +2500,11 @@ def browse_inventory(request):
         {
             'selected_warehouse': selected_warehouse,
             'selected_group': selected_group,
+            'selected_subgroup': selected_subgroup,
             'selected_branch': selected_branch,
             'warehouses': warehouses,
             'groups': groups,
+            'subgroups': subgroups,
             'branches': branches,
             'insights': insights,
             'error': error,
@@ -6353,6 +6367,14 @@ def browse_wh_outgoing(request):
 _ITEM_BRANCH_SCREEN_ROWS = 2500
 
 
+def _query_without(qd, *keys: str) -> str:
+    """رابط الاستعلام الحالي دون المعلمات المذكورة (لروابط التصدير)."""
+    copy = qd.copy()
+    for key in keys:
+        copy.pop(key, None)
+    return copy.urlencode()
+
+
 @login_required
 @require_GET
 @never_cache
@@ -6383,6 +6405,8 @@ def browse_item_branch_report(request):
     branches: list[dict] = []
     warehouses: list[dict] = []
     run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {'xls', 'excel', 'xlsx'}
+    run = run or want_excel
 
     try:
         if not oracle_enabled():
@@ -6434,6 +6458,10 @@ def browse_item_branch_report(request):
         logger.warning('browse_item_branch_report failed: %s', exc)
         error = f'تعذّر تحميل التقرير: {exc}'
 
+    if report and want_excel:
+        from .oracle_item_branch_report import build_item_branch_excel
+
+        return build_item_branch_excel(report)
     if report:
         report['truncated'] = len(report['rows']) > _ITEM_BRANCH_SCREEN_ROWS
         report['rows'] = report['rows'][:_ITEM_BRANCH_SCREEN_ROWS]
@@ -6458,7 +6486,8 @@ def browse_item_branch_report(request):
             'error': error,
             'run': run,
             'screen_limit': _ITEM_BRANCH_SCREEN_ROWS,
-            'total_cols': 9,
+            'total_cols': 13,
+            'export_query': _query_without(request.GET, 'export'),
         },
     )
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 
-def _scope_label(warehouse: str, group_code: str, branch_code: str) -> str:
+def _scope_label(
+    warehouse: str, group_code: str, branch_code: str, subgroup_code: str = ""
+) -> str:
     parts: list[str] = []
     if branch_code:
         parts.append(f"فرع {branch_code}")
@@ -13,6 +15,8 @@ def _scope_label(warehouse: str, group_code: str, branch_code: str) -> str:
         parts.append(f"مخزن {warehouse}")
     if group_code:
         parts.append(f"مجموعة {group_code}")
+    if subgroup_code:
+        parts.append(f"فرعية {subgroup_code}")
     return " · ".join(parts) if parts else "كل المخزون المتاح"
 
 
@@ -156,6 +160,7 @@ def build_inventory_insights(
     warehouse: str = "",
     group_code: str = "",
     branch_code: str = "",
+    subgroup_code: str = "",
 ) -> dict[str, Any]:
     """يبني لوحة تحليل مخزون من أوراكل (قيمة بعد خصم مبيعات POS غير المرحلة)."""
     from datetime import date, timedelta
@@ -172,6 +177,7 @@ def build_inventory_insights(
     wh = str(warehouse or "").strip()
     gcode = str(group_code or "").strip()
     brn = str(branch_code or "").strip()
+    sub = str(subgroup_code or "").strip() if gcode else ""
     activity_to = date.today()
     activity_from_sales = activity_to - timedelta(days=6)
     activity_from_ytd = activity_to.replace(month=1, day=1)
@@ -180,12 +186,12 @@ def build_inventory_insights(
         # المخزن + المجموعة + الفرع بمسح واحد (كانت ثلاثة مسوح متطابقة)
         with oracle_session():
             return fetch_inventory_breakdowns(
-                warehouse=wh, group_code=gcode, branch_code=brn
+                warehouse=wh, group_code=gcode, branch_code=brn, subgroup_code=sub
             )
 
     def _sales_raw():
         with oracle_session():
-            from .oracle_stock import fetch_group_sales_totals, fetch_warehouse_options
+            from .oracle_stock import fetch_warehouse_options
 
             sales_brn = brn
             if wh and not sales_brn:
@@ -193,13 +199,15 @@ def build_inventory_insights(
                     if str(w.get("code") or "") == wh:
                         sales_brn = str(w.get("branch_code") or "").strip()
                         break
-            return fetch_group_sales_totals(
+            # حساب كامل من بنود نقاط البيع (المسار السريع يعيد عينة وليس الإجمالي)
+            from .oracle_stock import fetch_pos_group_sales_for_subgroup
+
+            return fetch_pos_group_sales_for_subgroup(
                 activity_from_sales,
                 activity_to,
-                system="pos",
-                branch_code=sales_brn,
                 group_code=gcode,
-                by_branch=False,
+                subgroup_code=sub,
+                branch_code=sales_brn,
             )
 
     def _wastage():
@@ -210,6 +218,7 @@ def build_inventory_insights(
                 warehouse=wh,
                 group_code=gcode,
                 branch_code=brn,
+                subgroup_code=sub,
             )
 
     jobs = [_breakdowns, _sales_raw, _wastage]
@@ -301,7 +310,7 @@ def build_inventory_insights(
         )
 
     return {
-        "scope_label": _scope_label(wh, gcode, brn),
+        "scope_label": _scope_label(wh, gcode, brn, sub),
         "warehouse": wh,
         "group_code": gcode,
         "branch_code": brn,

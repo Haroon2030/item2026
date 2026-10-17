@@ -151,6 +151,17 @@
         {% endfor %}
       </select>
     </div>
+    <div class="field">
+      <label for="inv-subgroup">المجموعة الفرعية</label>
+      <select id="inv-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
+        <option value="">كل المجموعات الفرعية</option>
+        {% for s in subgroups %}
+          <option value="{{ s.code }}" data-group="{{ s.group_code }}"
+            {% if s.group_code != selected_group %}hidden disabled{% endif %}
+            {% if s.code == selected_subgroup and s.group_code == selected_group %}selected{% endif %}>{{ s.code }}- {{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
   <div class="perf-filter-actions">
     <button type="submit" class="btn-primary">تطبيق</button>
@@ -532,6 +543,30 @@
   }
 
   ready(function () {
+    // المجموعة الفرعية تتبع المجموعة المختارة
+    var grp = document.getElementById("inv-group");
+    var sub = document.getElementById("inv-subgroup");
+    if (grp && sub) {
+      var applySub = function () {
+        var g = grp.value;
+        sub.disabled = !g;
+        Array.prototype.forEach.call(sub.options, function (o) {
+          if (!o.value) { o.hidden = false; o.disabled = false; return; }
+          var match = !!g && o.getAttribute("data-group") === g;
+          o.hidden = !match;
+          o.disabled = !match;
+        });
+        var cur = sub.options[sub.selectedIndex];
+        if (!cur || cur.disabled) sub.value = "";
+        sub.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      grp.addEventListener("change", function () {
+        sub.value = "";
+        applySub();
+      });
+      applySub();
+    }
+
     document.querySelectorAll(".inv-rank-fill[data-bar-pct]").forEach(function (el) {
       var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
       var pct = parseFloat(raw);
