@@ -3,7 +3,7 @@
 - الرصيد: حالي (لا يعتمد على التاريخ) من IAS_ITM_WCODE للمخازن المختارة.
 - المبيعات: نقاط البيع غير المعلّقة + فواتير أونكس (أنواع 1 و5)، مجمّعة حسب المخزن.
 - المرتجعات: مرتجعات نقاط البيع + مرتجعات الفواتير (أنواع 1 و5)، بنفس الأساس.
-- الأساس: نقاط البيع بـ I_PRICE_VAT، والفواتير بـ I_PRICE (كما في شاشات التطبيق الحالية).
+- الأساس: شامل الضريبة للمصدرين (I_PRICE_VAT × الكمية − الخصم)، كما في «صافي المبيعات» بتقرير أونكس.
 SELECT فقط.
 """
 
@@ -41,7 +41,20 @@ from .oracle_wh_qty_compare import _fmt_qty, _hydrate_items, _norm_code, _to_pac
 logger = logging.getLogger(__name__)
 
 _SALES_TTL = 60 * 60 * 2  # ساعتان للمبيعات (الرصيد حي دائماً)
-_CACHE_VER = "v5"
+_CACHE_VER = "v6"
+
+
+def _bill_net_sql(alias: str = "d") -> str:
+    """صافي بند فاتورة أونكس شامل الضريبة: I_PRICE_VAT × الكمية − الخصم.
+
+    يطابق عمود «صافي المبيعات» في تقرير أونكس. إن كان I_PRICE_VAT فارغاً/صفراً (صفوف قليلة)
+    يُستعاض عنه بـ I_PRICE × الكمية + VAT_AMT."""
+    a = alias
+    return (
+        f"(CASE WHEN NVL({a}.I_PRICE_VAT, 0) = 0 "
+        f"THEN NVL({a}.I_PRICE, 0) * NVL({a}.I_QTY, 0) + NVL({a}.VAT_AMT, 0) "
+        f"ELSE {a}.I_PRICE_VAT * NVL({a}.I_QTY, 0) END - NVL({a}.DIS_AMT, 0))"
+    )
 
 
 def _f(value: Any) -> float:
@@ -160,7 +173,7 @@ def _fetch_bill_sales(date_from, date_to, group_code: str, subgroup_code: str) -
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
                TO_CHAR(NVL(d.W_CODE, b.W_CODE)) AS W_CODE,
                ROUND(SUM(NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(NULLIF(d.P_SIZE, 0), 1))), 4) AS QTY_TOTAL,
-               ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS NET_TOTAL
+               ROUND(SUM({_bill_net_sql("d")}), 2) AS NET_TOTAL
         FROM {schema}.IAS_BILL_DTL d
         JOIN {schema}.IAS_BILL_MST b
           ON b.BILL_NO = d.BILL_NO
@@ -215,7 +228,7 @@ def _fetch_bill_returns(date_from, date_to, group_code: str, subgroup_code: str)
         f"""
         SELECT TO_CHAR(d.I_CODE) AS I_CODE,
                TO_CHAR(NVL(d.W_CODE, r.W_CODE)) AS W_CODE,
-               ROUND(SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)), 2) AS RET_NET
+               ROUND(SUM({_bill_net_sql("d")}), 2) AS RET_NET
         FROM {schema}.IAS_RT_BILL_DTL d
         JOIN {schema}.IAS_RT_BILL_MST r
           ON r.RT_BILL_SER = d.RT_BILL_SER
