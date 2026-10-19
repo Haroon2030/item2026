@@ -1,0 +1,122 @@
+/* ==========================================================================
+   root-theme.css — نسخة :root الموحّدة للثيم والألوان (مستخرجة، غير محمّلة في base.html)
+
+   القيم هنا هي النتيجة النهائية بعد ترتيب التحميل في templates/base.html:
+     style.css → theme-v2.css → (بعد الدخول) theme-gold.css [body.theme-navy] → app-components.css
+   ما كان في theme-gold.css مُعرَّفاً على body.theme-navy صار هنا على :root بقيمه الفعلية.
+   المصادر: style.css:1 · theme-v2.css:6 · theme-gold.css:6 · app-components.css:26
+            shell-v3 · cards-v3 · home-v3 · login-v3 · sales-growth
+   ========================================================================== */
+
+:root {
+  /* ——— 1. لوحة الأساس (theme-gold) ——— */
+  --bg-main: #F6F8FB;
+  --bg-card: #FFFFFF;
+  --text-primary: #1F2A37;
+  --text-secondary: #6B7785;
+  --primary: #4A7FB5;
+  --success: #5BB98C;
+  --warning: #F2B65C;
+  --purple: #A9A1D9;
+  --border: #E3E8EF;
+
+  /* ——— 2. أسماء التطبيق (aliases) ——— */
+  --bg: var(--bg-main);
+  --bg-soft: var(--bg-card);
+  --ink: var(--text-primary);
+  --ink-soft: #3a3a3a;
+  --muted: var(--text-secondary);
+  --line: var(--border);
+  --line-strong: rgba(31, 42, 55, 0.12);
+  --panel: var(--bg-card);
+  --brand: var(--primary);
+  --brand-dark: #4A7FB5;
+  --brand-mid: var(--primary);
+  --brand-soft: rgba(74, 127, 181, 0.18);
+  --accent: var(--primary);
+  --accent-soft: #cffafe;           /* theme-v2 (لم يُعاد تعريفه في الذهبي) */
+  --gold: #06b6d4;                  /* theme-v2 */
+  --gold-soft: #ecfeff;             /* theme-v2 */
+  --ok: var(--success);
+  --ok-bg: #ecfdf5;
+  --warn: var(--warning);
+  --warn-bg: #F6F8FB;
+  --danger: #E57373;
+  --danger-bg: #fef2f2;
+
+  /* ——— 3. تدرّج الخلفيات (navy aliases) ——— */
+  --navy-0: var(--bg-main);
+  --navy-1: #F6F8FB;
+  --navy-2: var(--bg-card);
+  --navy-3: #EEF3F9;
+  --navy-hover: #E3ECF6;
+  --navy-text: var(--text-primary);
+  --navy-muted: var(--text-secondary);
+  --navy-head: var(--primary);
+
+  /* ——— 4. رموز app-components ——— */
+  --ac-gold: #4A7FB5;
+  --ac-ink: #1F2A37;
+  --ac-muted: #51647F;
+  --ac-ok: #166534;
+  --ac-warn: #854D0E;
+  --ac-danger: #9F1239;
+  --ac-cream: #F6F8FB;
+  --ac-ease: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* ——— 5. نمو المبيعات (sales-growth) ——— */
+  --sg-up: #26805A;
+  --sg-up-bg: #E3F4EC;
+  --sg-down: #C24545;
+  --sg-down-bg: #FBE7E7;
+  --sg-flat: #6B7785;
+  --sg-flat-bg: #EEF3F9;
+  --sg-ink: #1F2A37;
+
+  /* ——— 6. القشرة والبطاقات والرئيسية ——— */
+  --sb-orange: #4A7FB5;             /* shell-v3 */
+  --sb-ink: #FFFFFF;
+  --hdr: #4A7FB5;                   /* cards-v3 */
+  --kpi-accent: #4A7FB5;
+  --hv-ink: #1F2A37;                /* home-v3 */
+  --hv-graphite: #3B4A5C;
+  --hv-line: #E3E8EF;
+  --hv-gold: #4A7FB5;
+  --hv-bad: #E57373;
+
+  /* ——— 7. الشكل والخط ——— */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(14, 116, 144, 0.04), 0 10px 28px rgba(8, 145, 178, 0.07);
+  --shadow-sm: 0 1px 2px rgba(26, 43, 51, 0.05);
+  --font: "IBM Plex Sans Arabic", "Tajawal", Tahoma, sans-serif;
+  --mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+  --fw: 700;
+  --fw-strong: 800;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --sidebar-w: 290px;
+  --sidebar-w-collapsed: 78px;
+
+  /* ——— 8. ألوان أعمدة الجداول tcc-1…9: خلفية · عند المرور · إطار RGB ——— */
+  --tcc-1: #E6F0FA; --tcc-1-h: #D3E5F6; --tcc-1-ring: 50 100 160;   /* أعداد  */
+  --tcc-2: #E8F4E3; --tcc-2-h: #D6EBCE; --tcc-2-ring: 60 120 60;    /* مبالغ  */
+  --tcc-3: #FBE8E4; --tcc-3-h: #F6D5CF; --tcc-3-ring: 160 60 50;    /* مرتجع  */
+  --tcc-4: #EEEAF8; --tcc-4-h: #E2DCF3; --tcc-4-ring: 100 80 160;   /* متوسط  */
+  --tcc-5: #FCEBD3; --tcc-5-h: #F8DDB8; --tcc-5-ring: 170 110 30;   /* حصة    */
+  --tcc-6: #E1F3F1; --tcc-6-h: #CDE8E4; --tcc-6-ring: 30 130 120;   /* كمية   */
+  --tcc-7: #F8E6F1; --tcc-7-h: #F1D3E6; --tcc-7-ring: 160 60 130;
+  --tcc-8: #EEF3D4; --tcc-8-h: #E2EBBB; --tcc-8-ring: 110 130 30;
+  --tcc-9: #EFEBE2; --tcc-9-h: #E3DDCF; --tcc-9-ring: 110 100 80;
+  --tc-name-top: #DCE8F4;           /* عمود الاسم */
+  --tc-name-bottom: #C9DBEE;
+}
+
+/* خلفية الصفحة (theme-gold body.theme-navy) */
+body {
+  color: var(--text-primary);
+  font-family: var(--font);
+  background:
+    radial-gradient(ellipse 70% 45% at 100% 0%, rgba(74, 127, 181, 0.16), transparent 55%),
+    radial-gradient(ellipse 55% 40% at 0% 100%, rgba(169, 161, 217, 0.12), transparent 50%),
+    linear-gradient(180deg, #F6F8FB 0%, #F6F8FB 100%);
+}

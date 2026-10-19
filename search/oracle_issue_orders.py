@@ -12,6 +12,7 @@ import logging
 from datetime import date
 from html import escape
 from typing import Any
+from urllib.parse import urlencode
 
 from django.core.cache import cache
 from django.http import HttpResponse
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 300
 _LOOKUP_TTL = 1800
-_CACHE_VER = "v2"
+_CACHE_VER = "v3"
 MAX_DAYS = 400
 
 # طريقة التجميع: مفتاح → (عنوان، الأبعاد بالترتيب)
@@ -245,6 +246,10 @@ def build_issue_orders_report(
     total_qty = float(total_raw.get("QTY") or 0)
     orders_total = int(total_raw.get("ORDERS") or 0)
 
+    base_drill = {
+        "date_from": d_from.isoformat(), "date_to": d_to.isoformat(), "status": status,
+        "branch": str(branch_code or ""), "account": str(account_code or ""), "group": str(group_code or ""),
+    }
     rows: list[dict[str, Any]] = []
     for r in rows_raw:
         value = _f(r.get("VALUE_AMT"))
@@ -266,6 +271,8 @@ def build_issue_orders_report(
             "last_date": r["LAST_DATE"].date().isoformat() if r.get("LAST_DATE") else "",
         }
         row["share_display"] = f"{row['share_pct']:.1f}%"
+        # عرض الشريط كنص بنقطة عشرية (القالب يعرض الأرقام بفاصلة فيُبطل CSS)
+        row["bar_width"] = f"{max(0.0, min(100.0, row['share_pct'])):.1f}"
         labels = []
         for d in dims:
             code = _code(r.get(_DIM_SQL[d][1]))
@@ -273,6 +280,12 @@ def build_issue_orders_report(
             row[f"{d}_name"] = label(d, code)
             labels.append({"code": code, "name": row[f"{d}_name"]})
         row["labels"] = labels
+        # فلاتر تفصيل اليوم: فلاتر التقرير مع قيم أبعاد هذا الصف
+        q = dict(base_drill)
+        for d in dims:
+            q[d] = row[f"{d}_code"]
+        row["drill"] = "" if q.get("group") == "(بلا)" else urlencode(q)
+        row["drill_title"] = " ← ".join(l["name"] for l in labels)
         rows.append(row)
     if len(dims) > 1:
         # الصفوف مجمّعة بالبُعد الأول (الأعلى قيمة أولاً) وداخل كل مجموعة الأعلى قيمة أولاً
@@ -326,115 +339,102 @@ def build_issue_orders_report(
         "branches": int(total_raw.get("BRANCHES") or 0),
         "groups": int(total_raw.get("GROUPS") or 0),
         "top": rows[0] if rows else None,
+        "drill_total": urlencode(base_drill),
     }
     cache.set(cache_key, report, _CACHE_TTL)
     return report
 
 
-WASTE_ACCOUNT_CODE = "41101006"  # حساب التوالف في أوامر الصرف
+_WEEKDAYS = ("الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد")
 
 
-def _purchases_total(d_from, d_to, branch_code: str, group_code: str) -> float:
-    """صافي المشتريات بعد المرتجعات شامل الضريبة، بنفس منطق شاشة المشتريات.
-
-    بلا مجموعة: من رأس الفاتورة (المبلغ + الضريبة). مع مجموعة: من بنود أصناف المجموعة
-    (الكمية × السعر − الخصم) مع الضريبة بنسبة VAT_PER، لأن رأس الفاتورة يضم مجموعات أخرى.
-    """
-    sch = _schema()
-    params: dict[str, Any] = _date_params(d_from, d_to)
-    brn = str(branch_code or "").strip()
-    gcode = str(group_code or "").strip()
-    pi_brn = pr_brn = ""
-    if brn:
-        params["branch"] = brn
-        pi_brn = "AND TO_CHAR(m.BRN_NO) = :branch"
-        pr_brn = "AND TO_CHAR(r.BRN_NO) = :branch"
-    if gcode:
-        params["gcode"] = _bind_gcode(gcode)
-        line = "(NVL(d.I_QTY, 0) * NVL(d.I_PRICE, 0) - NVL(d.DIS_AMT, 0)) * (1 + NVL(d.VAT_PER, 0) / 100)"
-        pi_sql = f"""
-            SELECT SUM({line}) AS AMT
-            FROM {sch}.IAS_PI_BILL_MST m
-            JOIN {sch}.IAS_PI_BILL_DTL d
-              ON d.BILL_NO = m.BILL_NO AND d.BILL_SER = m.BILL_SER AND d.BILL_DOC_TYPE = m.BILL_DOC_TYPE
-            JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-              AND NVL(m.HUNG, 0) = 0 AND i.G_CODE = :gcode {pi_brn}"""
-        pr_sql = f"""
-            SELECT SUM({line}) AS AMT
-            FROM {sch}.IAS_PR_BILL_MST r
-            JOIN {sch}.IAS_PR_BILL_DTL d
-              ON d.RT_BILL_NO = r.RT_BILL_NO AND d.RT_BILL_SER = r.RT_BILL_SER
-             AND d.RT_BILL_DOC_TYPE = r.RT_BILL_DOC_TYPE
-            JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-            WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-              AND NVL(r.HUNG, 0) = 0 AND i.G_CODE = :gcode {pr_brn}"""
-    else:
-        pi_sql = f"""
-            SELECT SUM(NVL(m.BILL_AMT, 0) + NVL(m.VAT_AMT, 0)) AS AMT
-            FROM {sch}.IAS_PI_BILL_MST m
-            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-              AND NVL(m.HUNG, 0) = 0 {pi_brn}"""
-        pr_sql = f"""
-            SELECT SUM(NVL(r.BILL_AMT, 0) + NVL(r.VAT_AMT, 0)) AS AMT
-            FROM {sch}.IAS_PR_BILL_MST r
-            WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
-              AND NVL(r.HUNG, 0) = 0 {pr_brn}"""
-    purchases = float((_fetch_all(pi_sql, params) or [{}])[0].get("AMT") or 0)
-    returns = float((_fetch_all(pr_sql, params) or [{}])[0].get("AMT") or 0)
-    return round(purchases - returns, 2)
-
-
-def _sales_total(d_from, d_to, branch_code: str, group_code: str) -> dict[str, float]:
-    """صافي المبيعات بعد المرتجعات شامل الضريبة (نقاط البيع + الجملة) كما في شاشة المبيعات."""
-    from .sales_dashboard import build_sales_branches, build_sales_branches_for_group
-
-    if str(group_code or "").strip():
-        payload = build_sales_branches_for_group(
-            d_from, d_to, branch_code=str(branch_code or ""), group_code=str(group_code)
-        )
-    else:
-        payload = build_sales_branches(d_from, d_to, branch_code=str(branch_code or ""))
-    pos = _f(payload["pos"]["totals"].get("sales_total"))
-    wholesale = _f(payload["wholesale"]["totals"].get("sales_total"))
-    return {"pos": pos, "wholesale": wholesale, "total": round(pos + wholesale, 2)}
-
-
-def build_waste_ratio(
-    date_from, date_to, *, branch_code: str = "", group_code: str = ""
+def build_issue_orders_daily(
+    date_from,
+    date_to,
+    *,
+    branch_code: str = "",
+    account_code: str = "",
+    group_code: str = "",
+    status: str = "",
 ) -> dict[str, Any]:
-    """نسبة التوالف (أوامر الصرف على حساب التوالف) من المشتريات ومن المبيعات لنفس الفترة والفلتر."""
+    """أوامر الصرف حسب الأيام لنفس فلاتر صف في التقرير (تفصيل عند الضغط على عدد الأوامر)."""
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     d_from, d_to = _as_date(date_from), _as_date(date_to)
-    key = f"issue_orders:waste:{_CACHE_VER}:{d_from}:{d_to}:{branch_code}:{group_code}"
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد تاريخ النهاية.")
+    if (d_to - d_from).days > MAX_DAYS:
+        raise OracleStockError(f"الفترة أطول من {MAX_DAYS} يوماً.")
+    if status not in STATUS_CHOICES:
+        status = ""
+    key = f"issue_orders:daily:{_CACHE_VER}:{d_from}:{d_to}:{branch_code}:{account_code}:{group_code}:{status}"
     cached = cache.get(key)
     if cached is not None:
         return cached
-    waste_report = build_issue_orders_report(
-        d_from, d_to, branch_code=branch_code, account_code=WASTE_ACCOUNT_CODE,
-        group_code=group_code, group_by="account",
+
+    sch = _schema()
+    where, params = _where(d_from, d_to, branch_code, account_code, group_code, status)
+    rows_raw = _fetch_all(
+        f"""
+        SELECT TRUNC(m.OUT_DATE) AS D, {_METRICS}
+        {_FROM.format(sch=sch)}
+        WHERE {where}
+        GROUP BY TRUNC(m.OUT_DATE)
+        ORDER BY TRUNC(m.OUT_DATE)
+        """,
+        params,
     )
-    waste = _f(waste_report["value"])
-    purchases = _purchases_total(d_from, d_to, branch_code, group_code)
-    sales = _sales_total(d_from, d_to, branch_code, group_code)
-    data = {
-        "waste": waste,
-        "waste_display": _money(waste),
-        "waste_orders": waste_report["orders"],
-        "purchases": purchases,
-        "purchases_display": _money(purchases),
-        "sales": sales["total"],
-        "sales_display": _money(sales["total"]),
-        "pos_display": _money(sales["pos"]),
-        "wholesale_display": _money(sales["wholesale"]),
-        "pct_purchases": round(waste / purchases * 100, 2) if purchases else None,
-        "pct_sales": round(waste / sales["total"] * 100, 2) if sales["total"] else None,
+    total_value = round(sum(_f(r.get("VALUE_AMT")) for r in rows_raw), 2)
+    total_cost = round(sum(_f(r.get("COST_AMT")) for r in rows_raw), 2)
+    total_qty = sum(float(r.get("QTY") or 0) for r in rows_raw)
+    # للأمر تاريخ واحد، فمجموع أوامر الأيام = عدد الأوامر الفعلي
+    total_orders = sum(int(r.get("ORDERS") or 0) for r in rows_raw)
+
+    rows: list[dict[str, Any]] = []
+    for r in rows_raw:
+        day = r["D"].date() if hasattr(r["D"], "date") else r["D"]
+        value = _f(r.get("VALUE_AMT"))
+        orders = int(r.get("ORDERS") or 0)
+        share = _pct(value, total_value)
+        rows.append({
+            "date": day.isoformat(),
+            "weekday": _WEEKDAYS[day.weekday()],
+            "orders": orders,
+            "orders_display": f"{orders:,}",
+            "qty_display": _qty(r.get("QTY")),
+            "value": value,
+            "value_display": _money(value),
+            "cost_display": _money(r.get("COST_AMT")),
+            "avg_order_display": _money(value / orders if orders else 0),
+            "share_display": f"{share:.1f}%",
+            "bar_width": f"{max(0.0, min(100.0, share)):.1f}",
+        })
+    names_b, names_g = _branch_names(), _group_name_lookup()
+    names_a = {a["code"]: a["name"] for a in fetch_issue_account_options()}
+    scope = [
+        x for x in (
+            names_b.get(str(branch_code), str(branch_code)) if branch_code else "",
+            names_a.get(str(account_code), str(account_code)) if account_code else "",
+            names_g.get(str(group_code), str(group_code)) if group_code else "",
+        ) if x
+    ]
+    peak = max(rows, key=lambda x: x["value"]) if rows else None
+    report = {
+        "from": d_from.isoformat(),
+        "to": d_to.isoformat(),
+        "scope_label": " · ".join(scope) if scope else "كل الفروع والحسابات والمجموعات",
+        "status_label": STATUS_CHOICES[status],
+        "rows": rows,
+        "days": len(rows),
+        "orders_display": f"{total_orders:,}",
+        "qty_display": _qty(total_qty),
+        "value_display": _money(total_value),
+        "cost_display": _money(total_cost),
+        "avg_order_display": _money(total_value / total_orders if total_orders else 0),
+        "peak": peak,
     }
-    for k in ("pct_purchases", "pct_sales"):
-        data[k + "_display"] = f"{data[k]:.2f}%" if data[k] is not None else "—"
-    cache.set(key, data, _CACHE_TTL)
-    return data
+    cache.set(key, report, _CACHE_TTL)
+    return report
 
 
 def build_issue_orders_excel(report: dict[str, Any]) -> HttpResponse:

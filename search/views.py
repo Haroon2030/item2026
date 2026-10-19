@@ -6602,45 +6602,8 @@ def browse_issue_orders_report(request):
             'run': run,
             'error': error,
             'export_query': _query_without(request.GET, 'export'),
-            'waste_query': urlencode({
-                'date_from': date_from.isoformat(),
-                'date_to': date_to.isoformat(),
-                'branch': branch,
-                'group': group,
-            }),
         },
     )
-
-
-@login_required
-@require_GET
-@never_cache
-def browse_issue_orders_waste_api(request):
-    """إجماليات نسبة التوالف من المشتريات والمبيعات — تُحمَّل بعد الصفحة لأن المبيعات قد تستغرق وقتاً."""
-    import re
-    from datetime import date as date_cls
-
-    from .oracle_issue_orders import build_waste_ratio
-    from .oracle_stock import oracle_enabled, oracle_session
-
-    branch = str(request.GET.get('branch') or '').strip()
-    group = str(request.GET.get('group') or '').strip()
-    if not re.fullmatch(r'[0-9A-Za-z_-]{0,20}', branch) or not re.fullmatch(r'[0-9A-Za-z_-]{0,20}', group):
-        return JsonResponse({'ok': False, 'error': 'فلتر غير صالح.'}, status=400)
-    try:
-        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or ''))
-        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or ''))
-    except ValueError:
-        return JsonResponse({'ok': False, 'error': 'تاريخ غير صالح.'}, status=400)
-    try:
-        if not oracle_enabled():
-            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'})
-        with oracle_session():
-            data = build_waste_ratio(date_from, date_to, branch_code=branch, group_code=group)
-        return JsonResponse({'ok': True, 'data': data})
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('browse_issue_orders_waste_api failed: %s', exc)
-        return JsonResponse({'ok': False, 'error': f'تعذّر حساب النسبة: {exc}'})
 
 
 @login_required

@@ -4,8 +4,9 @@
     {
       "name": "django",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["manage.py", "runserver", "8000", "--noreload"],
-      "port": 8000
+      "runtimeArgs": [".claude/run_dev.py"],
+      "port": 8000,
+      "autoPort": true
     }
   ]
 }

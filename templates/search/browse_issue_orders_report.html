@@ -38,12 +38,8 @@
       html body.ioq-printing .wqc-sheet:not(#fx) { box-shadow: none !important; margin-bottom: 10px; }
       html body.ioq-printing .wqc-sheet table thead:not(#fx) { display: table-header-group; }
       html body.ioq-printing .wqc-sheet table tr:not(#fx) { break-inside: avoid; }
-      html body.ioq-printing .ioq-waste:not(#fx) { break-inside: avoid; }
     }
   }
-  .ioq-waste-num { font-weight: 700; }
-  .ioq-waste-pct { color: #c24545; font-weight: 800; }
-  .ioq-waste-note { margin: 6px 0 0; color: #5a6675; font-size: 0.8rem; }
   .ioq-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
   .ioq-caption strong { display: block; font-size: 1rem; font-weight: 800; }
   .ioq-cap-meta { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
@@ -243,7 +239,7 @@
               <td class="mono">{{ row.value_display }}</td>
               <td class="mono">{{ row.cost_display }}</td>
               <td class="mono">{{ row.avg_order_display }}</td>
-              <td class="mono">{{ row.share_display }}<span class="ioq-bar" aria-hidden="true"><i style="width: {{ row.share_pct }}%"></i></span></td>
+              <td class="mono">{{ row.share_display }}<span class="ioq-bar" aria-hidden="true"><i style="width: {{ row.bar_width }}%"></i></span></td>
               <td class="mono">{{ row.last_date }}</td>
             </tr>
           {% empty %}
@@ -271,41 +267,6 @@
     </div>
   </section>
 
-  <section class="wqc-sheet ioq-waste" aria-label="إجماليات نسبة التوالف" data-url="{% url 'browse_issue_orders_waste_api' %}?{{ waste_query }}">
-    <div class="table-wrap">
-      <table class="wqc-table ibr-summary" aria-label="إجماليات نسبة التوالف">
-        <caption class="ioq-caption">
-          <strong>إجماليات نسبة التوالف</strong>
-          <span class="ioq-cap-meta">الفترة: من {{ report.from }} إلى {{ report.to }}{% if selected_branch %} · فرع محدد{% else %} · كل الفروع{% endif %}{% if selected_group %} · {{ selected_group_label }}{% else %} · كل المجموعات{% endif %}</span>
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">البيان</th>
-            <th scope="col">الإجمالي</th>
-            <th scope="col">نسبة التوالف منه</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>إجمالي التوالف (حساب 41101006)</td>
-            <td class="mono ioq-waste-num" data-w="waste">…</td>
-            <td class="mono">—</td>
-          </tr>
-          <tr>
-            <td>إجمالي المشتريات <small>(بعد المرتجعات، شامل الضريبة)</small></td>
-            <td class="mono ioq-waste-num" data-w="purchases">…</td>
-            <td class="mono ioq-waste-pct" data-w="pct_purchases">…</td>
-          </tr>
-          <tr>
-            <td>إجمالي المبيعات <small>(نقاط البيع + الجملة بعد المرتجعات، شامل الضريبة)</small></td>
-            <td class="mono ioq-waste-num" data-w="sales">…</td>
-            <td class="mono ioq-waste-pct" data-w="pct_sales">…</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="ioq-waste-note" data-w-note>جارٍ حساب المشتريات والمبيعات…</p>
-  </section>
 {% elif run and not error %}
   <p class="ioq-scope">لا توجد بيانات للعرض.</p>
 {% endif %}
@@ -360,31 +321,6 @@
     combo('ioq-group-q', 'ioq-group', 'ioq-group-list', 'مجموعة');
   })();
 
-  (function () {
-    var box = document.querySelector('.ioq-waste');
-    if (!box) return;
-    var note = box.querySelector('[data-w-note]');
-    function set(key, val) { var el = box.querySelector('[data-w="' + key + '"]'); if (el) el.textContent = val; }
-    function load() {
-      note.textContent = 'جارٍ حساب المشتريات والمبيعات…';
-      return fetch(box.getAttribute('data-url'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (!j.ok) throw new Error(j.error || 'تعذّر الحساب');
-          var d = j.data;
-          set('waste', d.waste_display);
-          set('purchases', d.purchases_display);
-          set('sales', d.sales_display);
-          set('pct_purchases', d.pct_purchases_display);
-          set('pct_sales', d.pct_sales_display);
-          note.textContent = 'المبيعات = نقاط البيع ' + d.pos_display + ' + الجملة ' + d.wholesale_display + '. النسبة = إجمالي التوالف ÷ الإجمالي. فلتر الحساب والحالة لا يؤثر على هذا الجدول.';
-        })
-        .catch(function (e) {
-          note.textContent = (e && e.message ? e.message : 'تعذّر الحساب') + ' — أعد تحديث الصفحة للمحاولة مرة أخرى.';
-        });
-    }
-    window.__ioqWaste = load();
-  })();
 
   // PDF: طباعة خاصة بالصفحة (بدل مُصدّر الجداول العام الذي يعيد تلوين الجدول ويُبقي الفلاتر والبطاقات)
   (function () {
@@ -416,8 +352,7 @@
       ev.preventDefault();
       ev.stopPropagation(); // لا يصل النقر لمُصدّر الجداول العام
       btn.disabled = true;
-      var wait = window.__ioqWaste ? Promise.race([window.__ioqWaste, new Promise(function (r) { setTimeout(r, 120000); })]) : Promise.resolve();
-      wait.then(function () {
+      Promise.resolve().then(function () {
         var now = new Date();
         var stamp = now.getFullYear() + '/' + pad(now.getMonth() + 1) + '/' + pad(now.getDate()) + '  ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
         var user = (document.querySelector('.sidebar-user-name') || {}).textContent || '';

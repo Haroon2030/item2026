@@ -2873,7 +2873,7 @@ class IssueOrdersReportTests(TestCase):
         row = {
             'rank': 1, 'orders': 3, 'orders_display': '3', 'qty_display': '10', 'value': 900.0,
             'value_display': '900.00', 'cost_display': '850.00', 'avg_order_display': '300.00',
-            'share_pct': 100.0, 'share_display': '100.0%', 'last_date': '2026-09-30',
+            'share_pct': 100.0, 'share_display': '100.0%', 'bar_width': '100.0', 'last_date': '2026-09-30',
             'labels': [{'code': '411', 'name': 'توالف'}],
         }
         return {
@@ -2913,6 +2913,7 @@ class IssueOrdersReportTests(TestCase):
             self.assertContains(page, 'توالف')
             self.assertContains(page, '900.00')
             self.assertContains(page, 'ioq-pdf-btn')
+            self.assertContains(page, 'width: 100.0%')
             self.assertContains(page, 'الفترة: من 2026-09-01 إلى 2026-09-30')
             kwargs = build.call_args.kwargs
             self.assertEqual((kwargs['account_code'], kwargs['branch_code'], kwargs['group_code']), ('411', '6', '26'))
@@ -2938,6 +2939,7 @@ class IssueOrdersReportTests(TestCase):
             )
         self.assertEqual([r['account_name'] for r in report['rows']], ['مصروف', 'توالف'])
         self.assertEqual([r['share_display'] for r in report['rows']], ['70.0%', '30.0%'])
+        self.assertEqual([r['bar_width'] for r in report['rows']], ['70.0', '30.0'])
         self.assertEqual(report['orders'], 3)
         sql, params = fetch.call_args_list[0].args
         self.assertIn('m.BRN_NO = :brn', sql)
@@ -2985,41 +2987,3 @@ class IssueOrdersReportTests(TestCase):
             [('مصروف', 'سكاي مول'), ('مصروف', 'المنصورة'), ('توالف', 'سكاي مول'), ('توالف', 'المنصورة')],
         )
         self.assertEqual([r['block_start'] for r in report['rows']], [True, False, True, False])
-
-    def test_waste_ratio_math_and_api(self):
-        from contextlib import contextmanager
-
-        from search import oracle_issue_orders as io
-
-        @contextmanager
-        def _session():
-            yield
-
-        with patch('search.oracle_issue_orders.oracle_enabled', return_value=True),                 patch('search.oracle_issue_orders.build_issue_orders_report',
-                      return_value={'value': 200.0, 'orders': 4}) as rep,                 patch('search.oracle_issue_orders._purchases_total', return_value=10000.0),                 patch('search.oracle_issue_orders._sales_total',
-                      return_value={'pos': 7000.0, 'wholesale': 3000.0, 'total': 10000.0}),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
-            data = io.build_waste_ratio('2026-09-01', '2026-09-30', branch_code='6', group_code='26')
-            self.assertEqual(rep.call_args.kwargs['account_code'], io.WASTE_ACCOUNT_CODE)
-            self.assertEqual((data['pct_purchases_display'], data['pct_sales_display']), ('2.00%', '2.00%'))
-            self.assertEqual(data['sales_display'], '10,000.00')
-
-        with patch('search.oracle_issue_orders.oracle_enabled', return_value=True),                 patch('search.oracle_issue_orders.build_issue_orders_report',
-                      return_value={'value': 5.0, 'orders': 1}),                 patch('search.oracle_issue_orders._purchases_total', return_value=0.0),                 patch('search.oracle_issue_orders._sales_total',
-                      return_value={'pos': 0.0, 'wholesale': 0.0, 'total': 0.0}),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
-            zero = io.build_waste_ratio('2026-09-01', '2026-09-30')
-            self.assertEqual((zero['pct_purchases_display'], zero['pct_sales_display']), ('—', '—'))
-
-        admin = get_user_model().objects.create_user('waste_admin', password='x-Test-123', is_staff=True, is_superuser=True)
-        self.client.force_login(admin)
-        url = reverse('browse_issue_orders_waste_api')
-        self.assertEqual(self.client.get(url, {'date_from': 'x', 'date_to': 'y'}).status_code, 400)
-        # فلتر بحروف غير مسموحة يُرفض (من الـ view أو من وسيط الحماية من حقن SQL)
-        self.assertIn(
-            self.client.get(url, {'date_from': '2026-09-01', 'date_to': '2026-09-30', 'branch': '6 OR 1=1'}).status_code,
-            (400, 403),
-        )
-        with patch('search.oracle_stock.oracle_enabled', return_value=True),                 patch('search.oracle_stock.oracle_session', _session),                 patch('search.oracle_issue_orders.build_waste_ratio', return_value={'waste_display': '1.00'}) as build:
-            response = self.client.get(url, {'date_from': '2026-09-01', 'date_to': '2026-09-30', 'group': '26'})
-            self.assertEqual(response.json(), {'ok': True, 'data': {'waste_display': '1.00'}})
-            self.assertEqual(build.call_args.kwargs['group_code'], '26')
-
