@@ -63,6 +63,7 @@
             <tr>
               <th>#</th>
               <th>الفرع</th>
+              {% if dashboard.wholesale.split %}<th>آجل</th><th>نقدي</th>{% endif %}
               <th>الفواتير</th>
               <th>المرتجع</th>
               <th>المبيعات</th>
@@ -75,6 +76,10 @@
               <tr>
                 <td class="mono">{{ forloop.counter }}</td>
                 <td title="{{ row.branch_code }}">{{ row.branch_name }}</td>
+                {% if dashboard.wholesale.split %}
+                  <td class="mono">{% money row.credit_sales_display %}</td>
+                  <td class="mono">{% money row.cash_sales_display %}</td>
+                {% endif %}
                 <td class="mono sales-col-inv">{{ row.invoice_count_display }}</td>
                 <td class="mono">{% money row.return_total_display %}</td>
                 <td class="mono sales-amt">{% money row.sales_total_display %}</td>
@@ -82,13 +87,14 @@
                 <td class="mono sales-col-share">{{ row.share_display }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="7" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
+              <tr><td colspan="{% if dashboard.wholesale.split %}9{% else %}7{% endif %}" class="sales-empty">لا مبيعات من نظام المبيعات في الفترة.</td></tr>
             {% endfor %}
           </tbody>
           {% if dashboard.wholesale.branches %}
             <tfoot>
               <tr class="sales-grand-row">
                 <td colspan="2">الإجمالي</td>
+                {% if dashboard.wholesale.split %}<td></td><td></td>{% endif %}
                 <td class="mono sales-col-inv">{{ dashboard.wholesale.totals.invoice_count_display }}</td>
                 <td class="mono">{% money dashboard.wholesale.totals.return_total_display %}</td>
                 <td class="mono sales-amt">{% money dashboard.wholesale.totals.sales_total_display %}</td>

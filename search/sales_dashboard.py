@@ -171,6 +171,8 @@ def _format_branch_rows(rows: list[dict]) -> tuple[list[dict], dict[str, Any]]:
                 "gross_total_display": _money(gross),
                 "avg_basket": round(float(row.get("avg_basket") or 0), 2),
                 "avg_basket_display": _money(row.get("avg_basket") or 0),
+                "credit_sales_display": row.get("credit_sales_display", ""),
+                "cash_sales_display": row.get("cash_sales_display", ""),
                 "share_pct": share_pct,
                 "share_display": share_display,
                 "no_sales": no_sales,
@@ -407,28 +409,18 @@ def _sales_system_excluding_pos(
         p = pos_map.get(code) or {}
         c = cash_map.get(code) or {}
         w = credit_map.get(code) or {}
-        pos_sales = float(p.get("sales_total") or 0)
         cash_sales = float(c.get("sales_total") or 0)
         credit_sales = float(w.get("sales_total") or 0)
-        extra_cash = max(0.0, round(cash_sales - pos_sales, 2))
-        sales = round(credit_sales + extra_cash, 2)
         credit_inv = int(w.get("invoice_count") or 0)
         cash_inv = int(c.get("invoice_count") or 0)
-        if pos_sales > 0:
-            # فواتير الآجل فقط + لا نضاعف فواتير POS المنعكسة
-            invoices = credit_inv
-            returns = round(float(w.get("return_total") or 0), 2)
-            return_count = int(w.get("return_count") or 0)
-        else:
-            invoices = credit_inv + cash_inv
-            returns = round(
-                float(w.get("return_total") or 0)
-                + float(c.get("return_total") or 0),
-                2,
-            )
-            return_count = int(w.get("return_count") or 0) + int(
-                c.get("return_count") or 0
-            )
+        # الجملة: الآجل + نقدي الجملة (أونيكس بلا فواتير ترحيل نقاط البيع)
+        sales = round(credit_sales + cash_sales, 2)
+        invoices = credit_inv + cash_inv
+        returns = round(
+            float(w.get("return_total") or 0) + float(c.get("return_total") or 0),
+            2,
+        )
+        return_count = int(w.get("return_count") or 0) + int(c.get("return_count") or 0)
         if sales <= 0 and invoices <= 0 and returns <= 0:
             continue
         name = (
@@ -453,6 +445,9 @@ def _sales_system_excluding_pos(
                 "vat_total": 0.0,
                 "sales_total": sales,
                 "avg_basket": round(sales / invoices, 2) if invoices else 0.0,
+                # تفصيل الآجل والنقدي (يظهر في وضع المجموعة)
+                "credit_sales_display": _money(credit_sales),
+                "cash_sales_display": _money(cash_sales),
             }
         )
     out.sort(key=lambda r: float(r.get("sales_total") or 0), reverse=True)
@@ -601,7 +596,7 @@ def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
     )
 
     key = (
-        f"sales:branches:v9:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:"
         f"r{int(not _skip_mst_returns(date_from, date_to))}"
     )
@@ -609,7 +604,7 @@ def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
     if hit is not None:
         return hit
     # توافق مع مفاتيح أقدم كُتبت قبل توحيد رقم الفرع
-    for ver in ("v8", "v7"):
+    for ver in (("v8", "v7") if system != "onix" else ()):  # الأونكس تغيّر تعريفه، لا نرجع لمفاتيح قديمة
         legacy = (
             f"sales:branches:{ver}:{system}:{_as_date(date_from).isoformat()}:"
             f"{_as_date(date_to).isoformat()}:"
@@ -634,6 +629,7 @@ def _assemble_sales_branches_dashboard(
     branch_code: str = "",
     group_code: str = "",
     from_cache: bool = False,
+    wholesale_include_cash: bool = False,
 ) -> dict[str, Any]:
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
@@ -671,7 +667,11 @@ def _assemble_sales_branches_dashboard(
         "group_code": gcode,
         "groups_pending": True,
         "pos": {"branches": pos_branches, "totals": pos_totals},
-        "wholesale": {"branches": wholesale_branches, "totals": wholesale_totals},
+        "wholesale": {
+            "branches": wholesale_branches,
+            "totals": wholesale_totals,
+            "split": wholesale_include_cash,
+        },
         "onix": {"totals": onix_totals},
         "groups": groups,
         "top_returns": top_returns,
@@ -1705,6 +1705,7 @@ def _group_branch_windows(windows: list[tuple], branch_code: str, group_code: st
 def _group_system_rows(date_from, date_to, system: str, branch_code: str, group_code: str) -> list[dict]:
     """صفوف الفروع لمجموعة في نظام واحد بنفس شكل fetch_branch_sales_totals (مع المرتجع)."""
     from .oracle_stock import (
+        _fetch_bill_group_totals,
         _norm_brn_code,
         fetch_group_return_totals,
         fetch_group_sales_totals,
@@ -1727,9 +1728,9 @@ def _group_system_rows(date_from, date_to, system: str, branch_code: str, group_
             raw = [
                 r
                 for r in (
-                    fetch_group_sales_totals(
-                        date_from, date_to, system=system, branch_code=brn, group_code="",
-                        by_branch=True, force_fast=True,
+                    _fetch_bill_group_totals(
+                        date_from, date_to, _system_conf(system), brn, gsel,
+                        by_branch=True, skip_returns=True,
                     )
                     or []
                 )
@@ -1737,7 +1738,8 @@ def _group_system_rows(date_from, date_to, system: str, branch_code: str, group_
             ]
         # مرتجعات كل الفروع باستعلام واحد مجمّع حسب الفرع (بدل استعلام لكل فرع)
         ret_by_branch: dict[str, list[dict]] = {}
-        if raw:
+        # مرتجعات أونيكس (1/5) تشمل مرتجعات ترحيل نقاط البيع ولا يمكن فصلها، فلا تُخصم من نقدي الجملة
+        if raw and system != "onix":
             try:
                 for x in fetch_group_return_totals(
                     date_from, date_to, system=system, branch_code=brn, group_code=group_code,
@@ -1788,7 +1790,7 @@ def build_sales_branches_for_group(
     gcode = str(group_code or "").strip()
     if not gcode:
         raise ValueError("المجموعة مطلوبة.")
-    key = f"sales:group_mode:v1:{date_from}:{date_to}:{brn}:{gcode}"
+    key = f"sales:group_mode:v7:{date_from}:{date_to}:{brn}:{gcode}"
     cached = cache.get(key)
     if cached is not None:
         return cached
@@ -1809,6 +1811,7 @@ def build_sales_branches_for_group(
         date_to,
         branch_code=brn,
         group_code=gcode,
+        wholesale_include_cash=True,
     )
     name = next(
         (r.get("group_name") for rows in (pos_raw, cash_raw, credit_raw) for r in rows if r.get("group_name")),

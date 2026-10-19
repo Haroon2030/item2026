@@ -2838,7 +2838,7 @@ def fetch_posted_item_sales_by_warehouses(
             "NVL(NULLIF(LTRIM(REGEXP_REPLACE("
             f"{bill_wh_expr}, '\\.0+$', ''), '0'), ''), '0')"
         )
-        bill_conf = {"doc_types": _ONIX_ITEM_SALES_DOC_TYPES}
+        bill_conf = {"doc_types": _ONIX_ITEM_SALES_DOC_TYPES, "exclude_pos_summary": True}
         doc_filter = _doc_type_filter(bill_conf, "b", "BILL_DOC_TYPE", params)
         try:
             for row in _fetch_all(
@@ -3269,12 +3269,15 @@ SALES_SYSTEMS: dict[str, dict] = {
         "source": "bill",  # IAS_BILL_MST
         "doc_types": (4, 8),
         "require_cash": False,
+        "vat_from_rate": True,
     },
     "onix": {
         "label": "أونكس",
         "source": "bill",
         "doc_types": _ONIX_ITEM_SALES_DOC_TYPES,
         "require_cash": False,
+        "exclude_pos_summary": True,
+        "vat_from_rate": True,
     },
     "sales_bill": {
         # نقدي فواتير (1/5) + آجل (4/8) من IAS_BILL — ليس جدول نقاط البيع.
@@ -3324,7 +3327,11 @@ def _doc_type_filter(conf: dict, alias: str, column: str, params: dict) -> str:
         names.append(f":{key}")
     if not names:
         return ""
-    return f"AND {alias}.{column} IN ({', '.join(names)})"
+    clause = f"AND {alias}.{column} IN ({', '.join(names)})"
+    if conf.get("exclude_pos_summary") and alias == "b":
+        # ترحيل نقاط البيع يُنشئ فواتير خلاصة باسم "خلاصة مبيعات رقم نقطة البيع"، وهي مبيعات POS لا جملة
+        clause += " AND NVL(b.C_NAME, ' ') NOT LIKE 'خلاصة مبيعات رقم نقطة البيع%'"
+    return clause
 
 
 def _assemble_branch_rows(sales_rows, returns_by_brn) -> list[dict]:
@@ -3496,7 +3503,7 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:branches:v9:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not _skip_mst_returns(date_from, date_to))}"
     )
     # فترة تنتهي اليوم: لا تُعرض أرقام كاش قديمة مكان الحيّ
@@ -3979,7 +3986,7 @@ def fetch_sales_mst_bundle(
 
     # مزامنة كاش الفروع المنفصل لواجهات أخرى
     br_cache = (
-        f"sales:branches:v9:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not skip_ret)}"
     )
     _sales_cache_set(br_cache, branches, date_from=date_from, date_to=date_to)
@@ -4972,6 +4979,12 @@ def _fetch_bill_group_totals(
     params: dict = _date_params(date_from, date_to)
     doc_filter = _doc_type_filter(conf, "b", "BILL_DOC_TYPE", params)
     cash_filter = "AND b.CASH_NO IS NOT NULL" if conf.get("require_cash") else ""
+    # VAT_AMT في أسطر الجملة غير مكتمل؛ التقرير يحسب الضريبة بنسبة VAT_PER على الصافي
+    vat_expr = (
+        "(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) * NVL(d.VAT_PER, 0) / 100"
+        if conf.get("vat_from_rate")
+        else "NVL(d.VAT_AMT, 0)"
+    )
     branch_filter = ""
     group_filter = ""
     if branch_code:
@@ -5007,7 +5020,7 @@ def _fetch_bill_group_totals(
                 b.BILL_SER,
                 SUM(NVL(d.I_QTY, 0)) AS QTY_TOTAL,
                 SUM(NVL(d.I_PRICE, 0) * NVL(d.I_QTY, 0) - NVL(d.DIS_AMT, 0)) AS NET_TOTAL,
-                SUM(NVL(d.VAT_AMT, 0)) AS VAT_TOTAL
+                SUM({vat_expr}) AS VAT_TOTAL
             FROM {schema}.IAS_BILL_DTL d
             JOIN {schema}.IAS_BILL_MST b
               ON b.BILL_NO = d.BILL_NO
@@ -5102,7 +5115,7 @@ def _groups_cache_key(
     version: str = "v24",
 ) -> str:
     return (
-        f"sales:groups:{version}:{system}:{_as_date(date_from).isoformat()}:"
+        f"sales:groups:{version}{'b' if system != 'pos' else ''}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
 
@@ -5178,7 +5191,7 @@ def _groups_month_json_key(
 ) -> str:
     """مفتاح JSON لشهر واحد: نتيجة SQL مخزّنة ثم تُجمَّع لاحقاً."""
     return (
-        f"sales:groups:monthjson:v2:{system}:"
+        f"sales:groups:monthjson:{'v3' if system != 'pos' else 'v2'}:{system}:"
         f"{_as_date(date_from).isoformat()}:{_as_date(date_to).isoformat()}:"
         f"{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
