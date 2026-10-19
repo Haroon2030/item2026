@@ -18,6 +18,29 @@
   body.theme-navy .page.wqc-dash .ioq-kpi header h3 { font-size: 0.92rem !important; }
   body.theme-navy .page.wqc-dash .ioq-kpi .wqc-kpi-value { font-size: 1.1rem !important; font-weight: 700 !important; line-height: 1.3; }
   body.theme-navy .page.wqc-dash .ioq-kpi small { font-size: 0.74rem !important; align-self: center !important; text-align: center; max-width: calc(100% - 1rem); }
+  /* ===== PDF: طباعة خاصة بالصفحة بنفس ألوان الشاشة (الجدول + إجماليات التوالف) بلا فلاتر ولا بطاقات ===== */
+  .ioq-print-head, .ioq-print-foot { display: none; }
+  @media print { @page { size: A4 landscape; margin: 8mm 8mm 12mm 8mm; } }
+  @layer app-components {
+    @media print {
+      html body.theme-navy.ioq-printing:not(#fx):not(#fy) { background: #fff !important; background-image: none !important; }
+      html body.ioq-printing:not(#fx), html body.ioq-printing *:not(#fx) { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html body.theme-navy.ioq-printing :is(.sidebar, .sidebar-open, .app-hard-refresh, .sidebar-scrim, .scroll-edge-btn, .app-backdrop, .dash-head, form.ioq-filter, .ioq-scope, .income-kpi-grid, .wqc-sheet-head, .alert):not(#fx):not(#fy) { display: none !important; }
+      html body.theme-navy.ioq-printing .page.has-sidebar.sales-dash:not(.welcome-dash):not(.users-dash):not(#fx):not(#fy),
+      html body.theme-navy.ioq-printing .page.has-sidebar.sales-dash > main:not(#fx):not(#fy) { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+      html body.ioq-printing .ioq-print-head:not(#fx):not(#fy) { display: flex !important; justify-content: space-between; align-items: flex-end; direction: rtl; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 3px solid #4A7FB5; font-family: "IBM Plex Sans Arabic", "Tajawal", Tahoma, sans-serif; }
+      html body.ioq-printing .ioq-ph-title h1:not(#fx) { margin: 0; font-size: 22px; font-weight: 800; color: #4A7FB5; }
+      html body.ioq-printing .ioq-ph-org:not(#fx) { text-align: left; direction: rtl; color: #1F2A37; }
+      html body.ioq-printing .ioq-ph-org b:not(#fx) { display: block; font-size: 15px; font-weight: 800; }
+      html body.ioq-printing .ioq-ph-org span:not(#fx) { display: block; font-size: 11px; font-weight: 700; margin-top: 2px; }
+      html body.ioq-printing .ioq-print-foot:not(#fx):not(#fy) { display: block !important; position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 9px; color: #6B7785; }
+      html body.ioq-printing .wqc-sheet .table-wrap:not(#fx) { overflow: visible !important; max-height: none !important; }
+      html body.ioq-printing .wqc-sheet:not(#fx) { box-shadow: none !important; margin-bottom: 10px; }
+      html body.ioq-printing .wqc-sheet table thead:not(#fx) { display: table-header-group; }
+      html body.ioq-printing .wqc-sheet table tr:not(#fx) { break-inside: avoid; }
+      html body.ioq-printing .ioq-waste:not(#fx) { break-inside: avoid; }
+    }
+  }
   .ioq-waste-num { font-weight: 700; }
   .ioq-waste-pct { color: #c24545; font-weight: 800; }
   .ioq-waste-note { margin: 6px 0 0; color: #5a6675; font-size: 0.8rem; }
@@ -142,6 +165,12 @@
 {% if report %}
   <p class="ioq-scope">{{ report.scope_label }} · {{ report.status_label }} · {{ report.from }} ← {{ report.to }}</p>
 
+  <div class="ioq-print-head" aria-hidden="true">
+    <div class="ioq-ph-title"><h1>تقرير أوامر الصرف</h1></div>
+    <div class="ioq-ph-org"><b>منصة التحليل</b><span data-ioq="stamp"></span><span data-ioq="user"></span></div>
+  </div>
+  <div class="ioq-print-foot" aria-hidden="true">تقرير صادر من منصة التحليل — للاستخدام الداخلي</div>
+
   <section class="income-kpi-grid ibr-kpi-grid" aria-label="ملخص">
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count ioq-kpi is-orders">
       <header>
@@ -181,7 +210,7 @@
   <section class="wqc-sheet" aria-label="جدول تحليل أوامر الصرف">
     <div class="wqc-sheet-head">
       <div class="wqc-sheet-actions">
-        <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" title="حفظ الجدول PDF مع تاريخ الفترة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
+        <button type="button" class="dash-pdf-btn dash-pdf-btn-sm ioq-pdf-btn" title="حفظ PDF بنفس ألوان الصفحة: الجدول وإجماليات التوالف مع تاريخ الفترة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
         <a class="btn-ghost wqc-excel-btn" href="?{{ export_query }}&amp;export=excel" title="تصدير الجدول إلى Excel">Excel</a>
       </div>
     </div>
@@ -338,7 +367,7 @@
     function set(key, val) { var el = box.querySelector('[data-w="' + key + '"]'); if (el) el.textContent = val; }
     function load() {
       note.textContent = 'جارٍ حساب المشتريات والمبيعات…';
-      fetch(box.getAttribute('data-url'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      return fetch(box.getAttribute('data-url'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
         .then(function (r) { return r.json(); })
         .then(function (j) {
           if (!j.ok) throw new Error(j.error || 'تعذّر الحساب');
@@ -354,7 +383,59 @@
           note.textContent = (e && e.message ? e.message : 'تعذّر الحساب') + ' — أعد تحديث الصفحة للمحاولة مرة أخرى.';
         });
     }
-    load();
+    window.__ioqWaste = load();
+  })();
+
+  // PDF: طباعة خاصة بالصفحة (بدل مُصدّر الجداول العام الذي يعيد تلوين الجدول ويُبقي الفلاتر والبطاقات)
+  (function () {
+    var btn = document.querySelector('.ioq-pdf-btn');
+    if (!btn) return;
+    // مُصدّر الجداول العام يستمع لـ beforeprint ويعيد تنسيق الصفحة؛ نمنعه أثناء طباعتنا فقط
+    window.addEventListener('beforeprint', function (e) {
+      if (document.body.classList.contains('ioq-printing')) e.stopImmediatePropagation();
+    });
+    var oldTitle = document.title;
+    var pageW = Math.round((297 - 16) * (96 / 25.4));
+    function tables() { return document.querySelectorAll('.wqc-sheet table'); }
+    function fit() {
+      tables().forEach(function (t) {
+        t.style.zoom = '';
+        t.style.width = 'max-content';
+        var natural = t.offsetWidth;
+        t.style.width = '';
+        if (natural > pageW) t.style.zoom = String(pageW / natural);
+      });
+    }
+    function cleanup() {
+      document.body.classList.remove('ioq-printing');
+      tables().forEach(function (t) { t.style.zoom = ''; t.style.width = ''; });
+      document.title = oldTitle;
+    }
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation(); // لا يصل النقر لمُصدّر الجداول العام
+      btn.disabled = true;
+      var wait = window.__ioqWaste ? Promise.race([window.__ioqWaste, new Promise(function (r) { setTimeout(r, 120000); })]) : Promise.resolve();
+      wait.then(function () {
+        var now = new Date();
+        var stamp = now.getFullYear() + '/' + pad(now.getMonth() + 1) + '/' + pad(now.getDate()) + '  ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+        var user = (document.querySelector('.sidebar-user-name') || {}).textContent || '';
+        var s = document.querySelector('[data-ioq="stamp"]'), u = document.querySelector('[data-ioq="user"]');
+        if (s) s.textContent = 'تاريخ الإصدار: ' + stamp;
+        if (u) u.textContent = user.trim() ? 'أصدره: ' + user.trim() : '';
+        var cap = document.querySelector('.ioq-cap-meta');
+        document.title = 'تقرير أوامر الصرف' + (cap ? ' — ' + cap.textContent.replace(/\s+/g, ' ').trim().slice(0, 60) : '');
+        document.body.classList.add('ioq-printing');
+        fit();
+        setTimeout(function () {
+          window.print();
+          setTimeout(cleanup, 300);
+          btn.disabled = false;
+        }, 60);
+      });
+    });
+    window.addEventListener('afterprint', cleanup);
   })();
 </script>
 {% endblock %}

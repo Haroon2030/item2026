@@ -2912,7 +2912,7 @@ class IssueOrdersReportTests(TestCase):
             })
             self.assertContains(page, 'توالف')
             self.assertContains(page, '900.00')
-            self.assertContains(page, 'js-fit-print')
+            self.assertContains(page, 'ioq-pdf-btn')
             self.assertContains(page, 'الفترة: من 2026-09-01 إلى 2026-09-30')
             kwargs = build.call_args.kwargs
             self.assertEqual((kwargs['account_code'], kwargs['branch_code'], kwargs['group_code']), ('411', '6', '26'))
