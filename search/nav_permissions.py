@@ -12,6 +12,7 @@ SCREEN_ALIASES: dict[str, str] = {
     "browse_last_movement_api": "browse_last_movement",
     "browse_last_purchases_api": "browse_last_movement",
     "browse_groups": "browse_last_movement",
+    "browse_issue_orders_waste_api": "browse_issue_orders_report",
 }
 
 # مسارات بلا قسم (دائماً مسموحة للمُسجّل) أو تُدار بـ is_staff
@@ -167,6 +168,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
         "التقارير",
         (
             NavScreen("browse_item_branch_report", "رصيد ومبيعات الأصناف بالفروع"),
+            NavScreen("browse_issue_orders_report", "تقرير أوامر الصرف"),
         ),
     ),
 )

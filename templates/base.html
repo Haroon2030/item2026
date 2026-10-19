@@ -495,13 +495,13 @@
             </div>
           </div>
           <div
-            class="sidebar-group{% if request.resolver_match.url_name == 'browse_employees_report' %} is-open is-current{% endif %}"
+            class="sidebar-group{% if request.resolver_match.url_name == 'browse_employees_report' or request.resolver_match.url_name == 'browse_issue_orders_report' %} is-open is-current{% endif %}"
             data-sidebar-group
           >
             <button
               type="button"
               class="sidebar-link sidebar-group-toggle"
-              aria-expanded="{% if request.resolver_match.url_name == 'browse_employees_report' %}true{% else %}false{% endif %}"
+              aria-expanded="{% if request.resolver_match.url_name == 'browse_employees_report' or request.resolver_match.url_name == 'browse_issue_orders_report' %}true{% else %}false{% endif %}"
               title="التقارير"
             >
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
@@ -513,6 +513,12 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_item_branch_report' %}is-active{% endif %}" href="{% url 'browse_item_branch_report' %}" title="رصيد ومبيعات الأصناف بالفروع">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M9 16V9M14 16V7M19 16v-5"/><path d="M3 19h18"/></svg>
                 <span>رصيد ومبيعات الأصناف بالفروع</span>
+              </a>
+              {% endif %}
+              {% if nav_access.screens.browse_issue_orders_report %}
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_issue_orders_report' %}is-active{% endif %}" href="{% url 'browse_issue_orders_report' %}" title="أوامر الصرف المخزني بالحساب والمجموعة والفرع">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>
+                <span>تقرير أوامر الصرف</span>
               </a>
               {% endif %}
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_employees_report' %}is-active{% endif %}" href="{% url 'browse_employees_report' %}" title="الموظفون النشطون بحركة أو قيد في شهر">

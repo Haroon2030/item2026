@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}تقرير أوامر الصرف{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .ioq-bar { display: inline-block; width: 90px; height: 8px; border-radius: 4px; background: #e3e8ef; vertical-align: middle; margin-inline-start: 6px; overflow: hidden; }
+  .ioq-bar > i { display: block; height: 100%; background: #4a7fb5; }
+  .ioq-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
+  .ioq-name { min-width: 160px; }
+  /* أيقونات البطاقات: ثيم التطبيق يوحّد لونها (أزرق المنصة بأيقونة بيضاء)، فنكتفي بترتيب الأيقونة بجانب العنوان */
+  /* الأيقونة والعنوان في بداية البطاقة (يمين الصفحة) بدل التوسيط */
+  body.theme-navy .page.wqc-dash .ioq-kpi header { display: flex; align-items: center; justify-content: flex-start !important; gap: 0.5rem; padding: 0.55rem 0.7rem 0 !important; }
+  .ioq-kpi header h3 { width: auto !important; margin: 0; text-align: start !important; }
+  /* خط متوسط داخل البطاقات */
+  body.theme-navy .page.wqc-dash .ioq-kpi header h3 { font-size: 0.92rem !important; }
+  body.theme-navy .page.wqc-dash .ioq-kpi .wqc-kpi-value { font-size: 1.1rem !important; font-weight: 700 !important; line-height: 1.3; }
+  body.theme-navy .page.wqc-dash .ioq-kpi small { font-size: 0.74rem !important; align-self: center !important; text-align: center; max-width: calc(100% - 1rem); }
+  .ioq-waste-num { font-weight: 700; }
+  .ioq-waste-pct { color: #c24545; font-weight: 800; }
+  .ioq-waste-note { margin: 6px 0 0; color: #5a6675; font-size: 0.8rem; }
+  .ioq-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
+  .ioq-caption strong { display: block; font-size: 1rem; font-weight: 800; }
+  .ioq-cap-meta { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  .ioq-block > td { border-top: 2px solid #4a7fb5 !important; }
+  /* القالب العام يجعل الفلتر صفاً مرناً بعنوان بجانب الحقل؛ نوسّع حقل الحساب حتى يظهر اسمه كاملاً */
+  .wqc-dash .wqc-filter.ioq-filter .field.ioq-wide { flex: 3 1 28rem !important; }
+  .wqc-dash .wqc-filter.ioq-filter .field.ioq-mid { flex: 1 1 17rem !important; }
+  /* عند اختيار اقتراح من القائمة يلوّن كروم الخانة بلون الإكمال التلقائي (رمادي مزرق بنص أبيض)؛ نثبّت اللون الأبيض والنص الداكن */
+  .wqc-dash .wqc-filter.ioq-filter input { color-scheme: light; }
+  .wqc-dash .wqc-filter.ioq-filter input:-webkit-autofill,
+  .wqc-dash .wqc-filter.ioq-filter input:-webkit-autofill:hover,
+  .wqc-dash .wqc-filter.ioq-filter input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #1F2A37 !important;
+    caret-color: #1F2A37;
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+  .wqc-dash .wqc-filter.ioq-filter input:autofill {
+    -webkit-text-fill-color: #1F2A37 !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+  }
+  .wqc-dash .wqc-filter.ioq-filter .field > select,
+  .wqc-dash .wqc-filter.ioq-filter .field > input { flex: 1 1 auto !important; min-width: 0 !important; width: auto !important; }
+</style>
+
+<section class="dash-head" aria-label="تقرير أوامر الصرف">
+  <div class="dash-head-copy">
+    <h2>تقرير أوامر الصرف</h2>
+    <p>أوامر الصرف المخزني مجمّعة حسب الحساب أو المجموعة أو الفرع. القيمة = الكمية × سعر البند، والتكلفة = الكمية × تكلفة المخزون.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_issue_orders_report' %}" class="dash-panel-glass wqc-filter ioq-filter" role="search">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field ioq-wide">
+    <label for="ioq-account-q">اسم الحساب</label>
+    <input id="ioq-account-q" type="text" list="ioq-account-list" value="{{ selected_account_label }}"
+           placeholder="كل الحسابات — اكتب للبحث بالاسم أو الرقم" autocomplete="off" spellcheck="false">
+    <input type="hidden" id="ioq-account" name="account" value="{{ selected_account }}">
+    <datalist id="ioq-account-list">
+      {% for a in accounts %}<option value="{{ a.code }}- {{ a.name }}" data-code="{{ a.code }}"></option>{% endfor %}
+    </datalist>
+  </div>
+
+  <div class="field ioq-mid">
+    <label for="ioq-group-q">المجموعة</label>
+    <input id="ioq-group-q" type="text" list="ioq-group-list" value="{{ selected_group_label }}"
+           placeholder="كل المجموعات — اكتب للبحث" autocomplete="off" spellcheck="false">
+    <input type="hidden" id="ioq-group" name="group" value="{{ selected_group }}">
+    <datalist id="ioq-group-list">
+      {% for g in groups %}<option value="{{ g.code }}- {{ g.name }}" data-code="{{ g.code }}"></option>{% endfor %}
+    </datalist>
+  </div>
+
+  <div class="field ioq-mid">
+    <label for="ioq-branch">الفرع</label>
+    <select id="ioq-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="ioq-status">حالة الأمر</label>
+    <select id="ioq-status" name="status">
+      {% for key, label in status_choices %}
+        <option value="{{ key }}" {% if key == selected_status %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field ioq-mid">
+    <label for="ioq-by">عرض التحليل</label>
+    <select id="ioq-by" name="group_by">
+      {% for key, label in group_by_choices %}
+        <option value="{{ key }}" {% if key == selected_group_by %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="ioq-from">من</label>
+    <input id="ioq-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+
+  <div class="field">
+    <label for="ioq-to">إلى</label>
+    <input id="ioq-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض التقرير</button>
+  </div>
+</form>
+
+{% if report %}
+  <p class="ioq-scope">{{ report.scope_label }} · {{ report.status_label }} · {{ report.from }} ← {{ report.to }}</p>
+
+  <section class="income-kpi-grid ibr-kpi-grid" aria-label="ملخص">
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count ioq-kpi is-orders">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></span>
+        <h3>عدد الأوامر</h3>
+      </header>
+      <p class="wqc-kpi-value">{{ report.orders_display }}</p>
+      <small>{{ report.accounts }} حساب · {{ report.branches }} فرع · {{ report.groups }} مجموعة</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi ioq-kpi is-value">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 10v4M17.5 10v4"/></svg></span>
+        <h3>قيمة الصرف</h3>
+      </header>
+      <p class="wqc-kpi-value mono">{{ report.value_display }}</p>
+      <small>متوسط الأمر {{ report.avg_order_display }}</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi ioq-kpi is-cost">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg></span>
+        <h3>تكلفة الصرف</h3>
+      </header>
+      <p class="wqc-kpi-value mono">{{ report.cost_display }}</p>
+    </article>
+    {% if report.top %}
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi ioq-kpi is-top">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg></span>
+        <h3>الأعلى قيمة</h3>
+      </header>
+      <p class="wqc-kpi-value">{% for l in report.top.labels %}{{ l.name }}{% if not forloop.last %} ← {% endif %}{% endfor %}</p>
+      <small>{{ report.top.value_display }} · {{ report.top.share_display }}</small>
+    </article>
+    {% endif %}
+  </section>
+
+  <section class="wqc-sheet" aria-label="جدول تحليل أوامر الصرف">
+    <div class="wqc-sheet-head">
+      <div class="wqc-sheet-actions">
+        <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" title="حفظ الجدول PDF مع تاريخ الفترة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
+        <a class="btn-ghost wqc-excel-btn" href="?{{ export_query }}&amp;export=excel" title="تصدير الجدول إلى Excel">Excel</a>
+      </div>
+    </div>
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="جدول التحليل — اسحب أفقياً وعمودياً">
+      <table class="wqc-table" aria-label="تحليل أوامر الصرف {{ report.group_by_label }}">
+        <caption class="ioq-caption">
+          <strong>{{ report.group_by_label }}</strong>
+          <span class="ioq-cap-meta">الفترة: من {{ report.from }} إلى {{ report.to }} · {{ report.scope_label }} · {{ report.status_label }}</span>
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            {% for d in report.dims %}<th scope="col">{{ d.label }}</th>{% endfor %}
+            <th scope="col">عدد الأوامر</th>
+            <th scope="col">الكمية</th>
+            <th scope="col">القيمة</th>
+            <th scope="col">التكلفة</th>
+            <th scope="col">متوسط الأمر</th>
+            <th scope="col">النسبة من القيمة</th>
+            <th scope="col">آخر أمر</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report.rows %}
+            <tr{% if row.block_start %} class="ioq-block"{% endif %}>
+              <td class="mono wqc-td-idx">{{ row.rank }}</td>
+              {% for l in row.labels %}<td class="ioq-name" title="{{ l.code }}">{{ l.name }}</td>{% endfor %}
+              <td class="mono">{{ row.orders_display }}</td>
+              <td class="mono">{{ row.qty_display }}</td>
+              <td class="mono">{{ row.value_display }}</td>
+              <td class="mono">{{ row.cost_display }}</td>
+              <td class="mono">{{ row.avg_order_display }}</td>
+              <td class="mono">{{ row.share_display }}<span class="ioq-bar" aria-hidden="true"><i style="width: {{ row.share_pct }}%"></i></span></td>
+              <td class="mono">{{ row.last_date }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="{{ report.dims|length|add:7 }}" class="wqc-empty">لا توجد أوامر صرف ضمن الاختيار.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td></td>
+              <td{% if report.dims|length > 1 %} colspan="{{ report.dims|length }}"{% endif %}>الإجمالي</td>
+              <td class="mono">{{ report.orders_display }}</td>
+              <td class="mono">{{ report.qty_display }}</td>
+              <td class="mono">{{ report.value_display }}</td>
+              <td class="mono">{{ report.cost_display }}</td>
+              <td class="mono">{{ report.avg_order_display }}</td>
+              <td class="mono">100.0%</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+
+  <section class="wqc-sheet ioq-waste" aria-label="إجماليات نسبة التوالف" data-url="{% url 'browse_issue_orders_waste_api' %}?{{ waste_query }}">
+    <div class="table-wrap">
+      <table class="wqc-table ibr-summary" aria-label="إجماليات نسبة التوالف">
+        <caption class="ioq-caption">
+          <strong>إجماليات نسبة التوالف</strong>
+          <span class="ioq-cap-meta">الفترة: من {{ report.from }} إلى {{ report.to }}{% if selected_branch %} · فرع محدد{% else %} · كل الفروع{% endif %}{% if selected_group %} · {{ selected_group_label }}{% else %} · كل المجموعات{% endif %}</span>
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">البيان</th>
+            <th scope="col">الإجمالي</th>
+            <th scope="col">نسبة التوالف منه</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>إجمالي التوالف (حساب 41101006)</td>
+            <td class="mono ioq-waste-num" data-w="waste">…</td>
+            <td class="mono">—</td>
+          </tr>
+          <tr>
+            <td>إجمالي المشتريات <small>(بعد المرتجعات، شامل الضريبة)</small></td>
+            <td class="mono ioq-waste-num" data-w="purchases">…</td>
+            <td class="mono ioq-waste-pct" data-w="pct_purchases">…</td>
+          </tr>
+          <tr>
+            <td>إجمالي المبيعات <small>(نقاط البيع + الجملة بعد المرتجعات، شامل الضريبة)</small></td>
+            <td class="mono ioq-waste-num" data-w="sales">…</td>
+            <td class="mono ioq-waste-pct" data-w="pct_sales">…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="ioq-waste-note" data-w-note>جارٍ حساب المشتريات والمبيعات…</p>
+  </section>
+{% elif run and not error %}
+  <p class="ioq-scope">لا توجد بيانات للعرض.</p>
+{% endif %}
+
+<script>
+  (function () {
+    var form = document.querySelector('form.ioq-filter');
+    if (!form) return;
+    // توحيد النص العربي للبحث: التشكيل، الألف، التاء المربوطة، الياء
+    function norm(s) {
+      return String(s || '').toLowerCase()
+        .replace(/[ً-ٟـ]/g, '')
+        .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/[ىئ]/g, 'ي')
+        .replace(/\s+/g, ' ').trim();
+    }
+    // خانة بحث تُترجم نصها إلى كود في حقل مخفي: الاسم أو الرقم، وتمنع الغامض وغير الموجود
+    function combo(qId, hiddenId, listId, noun) {
+      var q = document.getElementById(qId);
+      var hidden = document.getElementById(hiddenId);
+      if (!q || !hidden) return;
+      var opts = Array.prototype.map.call(document.querySelectorAll('#' + listId + ' option'), function (o) {
+        return { code: o.getAttribute('data-code'), label: o.value };
+      });
+      function resolve() {
+        var text = q.value.trim();
+        if (!text) return { code: '', ok: true };
+        var exact = opts.filter(function (o) { return o.label === text || o.code === text; });
+        if (exact.length === 1) return { code: exact[0].code, ok: true };
+        var n = norm(text);
+        var part = opts.filter(function (o) { return norm(o.label).indexOf(n) !== -1; });
+        if (part.length === 1) return { code: part[0].code, ok: true, label: part[0].label };
+        return { code: '', ok: false, many: part.length };
+      }
+      function sync() {
+        var r = resolve();
+        hidden.value = r.code;
+        if (r.ok) {
+          q.setCustomValidity('');
+          if (r.label) q.value = r.label;
+        } else {
+          q.setCustomValidity(r.many ? 'أكثر من ' + noun + ' يطابق البحث — اختر من القائمة' : 'لا يوجد ' + noun + ' بهذا الاسم أو الرقم');
+        }
+      }
+      q.addEventListener('input', function () { hidden.value = ''; q.setCustomValidity(''); });
+      q.addEventListener('change', sync);
+      form.addEventListener('submit', function (e) {
+        sync();
+        if (!q.checkValidity()) { e.preventDefault(); q.reportValidity(); }
+      });
+    }
+    combo('ioq-account-q', 'ioq-account', 'ioq-account-list', 'حساب');
+    combo('ioq-group-q', 'ioq-group', 'ioq-group-list', 'مجموعة');
+  })();
+
+  (function () {
+    var box = document.querySelector('.ioq-waste');
+    if (!box) return;
+    var note = box.querySelector('[data-w-note]');
+    function set(key, val) { var el = box.querySelector('[data-w="' + key + '"]'); if (el) el.textContent = val; }
+    function load() {
+      note.textContent = 'جارٍ حساب المشتريات والمبيعات…';
+      fetch(box.getAttribute('data-url'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) throw new Error(j.error || 'تعذّر الحساب');
+          var d = j.data;
+          set('waste', d.waste_display);
+          set('purchases', d.purchases_display);
+          set('sales', d.sales_display);
+          set('pct_purchases', d.pct_purchases_display);
+          set('pct_sales', d.pct_sales_display);
+          note.textContent = 'المبيعات = نقاط البيع ' + d.pos_display + ' + الجملة ' + d.wholesale_display + '. النسبة = إجمالي التوالف ÷ الإجمالي. فلتر الحساب والحالة لا يؤثر على هذا الجدول.';
+        })
+        .catch(function (e) {
+          note.textContent = (e && e.message ? e.message : 'تعذّر الحساب') + ' — أعد تحديث الصفحة للمحاولة مرة أخرى.';
+        });
+    }
+    load();
+  })();
+</script>
+{% endblock %}

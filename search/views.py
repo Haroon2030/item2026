@@ -6495,6 +6495,157 @@ def browse_item_branch_report(request):
 @login_required
 @require_GET
 @never_cache
+def browse_issue_orders_report(request):
+    """تقرير أوامر الصرف المخزني: تحليل بالحساب والمجموعة والفرع (كل الفروع/المجموعات/الحسابات اختيارياً)."""
+    from datetime import date as date_cls
+    from urllib.parse import urlencode
+
+    from .oracle_issue_orders import (
+        DEFAULT_GROUP_BY,
+        GROUP_BY_CHOICES,
+        STATUS_CHOICES,
+        build_issue_orders_excel,
+        build_issue_orders_report,
+        fetch_issue_account_options,
+    )
+    from .oracle_stock import fetch_sales_group_options, oracle_enabled, oracle_session
+
+    today = date_cls.today()
+    branch = str(request.GET.get('branch') or '').strip()
+    account = str(request.GET.get('account') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    status = str(request.GET.get('status') or '').strip()
+    group_by = str(request.GET.get('group_by') or DEFAULT_GROUP_BY).strip()
+    if group_by not in GROUP_BY_CHOICES:
+        group_by = DEFAULT_GROUP_BY
+    if status not in STATUS_CHOICES:
+        status = ''
+    try:
+        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or '').strip()) \
+            if request.GET.get('date_from') else today.replace(day=1)
+        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or '').strip()) \
+            if request.GET.get('date_to') else today
+    except ValueError:
+        date_from, date_to = today.replace(day=1), today
+
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {'xls', 'excel', 'xlsx'}
+    run = run or want_excel
+    error = ''
+    report = None
+    branches: list[dict] = []
+    accounts: list[dict] = []
+    groups: list[dict] = []
+
+    try:
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+        else:
+            from .oracle_income import fetch_income_branches
+
+            with oracle_session():
+                branches = fetch_income_branches()
+                accounts = fetch_issue_account_options()
+                groups = fetch_sales_group_options() or []
+                if branch not in {b['code'] for b in branches}:
+                    branch = ''
+                if account not in {a['code'] for a in accounts}:
+                    account = ''
+                if group not in {str(g.get('code') or '').strip() for g in groups}:
+                    group = ''
+                if run:
+                    report = build_issue_orders_report(
+                        date_from,
+                        date_to,
+                        branch_code=branch,
+                        account_code=account,
+                        group_code=group,
+                        status=status,
+                        group_by=group_by,
+                    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_issue_orders_report failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    if report and want_excel:
+        return build_issue_orders_excel(report)
+
+    return render(
+        request,
+        'search/browse_issue_orders_report.html',
+        {
+            'branches': branches,
+            'accounts': accounts,
+            'groups': groups,
+            'selected_branch': branch,
+            'selected_account': account,
+            'selected_account_label': next(
+                (f"{a['code']}- {a['name']}" for a in accounts if a['code'] == account), ''
+            ),
+            'selected_group': group,
+            'selected_group_label': next(
+                (
+                    f"{g.get('code')}- {g.get('name')}"
+                    for g in groups
+                    if str(g.get('code') or '').strip() == group
+                ),
+                '',
+            ),
+            'selected_status': status,
+            'selected_group_by': group_by,
+            'group_by_choices': [(k, v[0]) for k, v in GROUP_BY_CHOICES.items()],
+            'status_choices': list(STATUS_CHOICES.items()),
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'report': report,
+            'run': run,
+            'error': error,
+            'export_query': _query_without(request.GET, 'export'),
+            'waste_query': urlencode({
+                'date_from': date_from.isoformat(),
+                'date_to': date_to.isoformat(),
+                'branch': branch,
+                'group': group,
+            }),
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_issue_orders_waste_api(request):
+    """إجماليات نسبة التوالف من المشتريات والمبيعات — تُحمَّل بعد الصفحة لأن المبيعات قد تستغرق وقتاً."""
+    import re
+    from datetime import date as date_cls
+
+    from .oracle_issue_orders import build_waste_ratio
+    from .oracle_stock import oracle_enabled, oracle_session
+
+    branch = str(request.GET.get('branch') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    if not re.fullmatch(r'[0-9A-Za-z_-]{0,20}', branch) or not re.fullmatch(r'[0-9A-Za-z_-]{0,20}', group):
+        return JsonResponse({'ok': False, 'error': 'فلتر غير صالح.'}, status=400)
+    try:
+        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or ''))
+        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or ''))
+    except ValueError:
+        return JsonResponse({'ok': False, 'error': 'تاريخ غير صالح.'}, status=400)
+    try:
+        if not oracle_enabled():
+            return JsonResponse({'ok': False, 'error': 'أوراكل غير مفعّل.'})
+        with oracle_session():
+            data = build_waste_ratio(date_from, date_to, branch_code=branch, group_code=group)
+        return JsonResponse({'ok': True, 'data': data})
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_issue_orders_waste_api failed: %s', exc)
+        return JsonResponse({'ok': False, 'error': f'تعذّر حساب النسبة: {exc}'})
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_wh_qty_compare(request):
     """مقارنة كميات الأصناف بين مستودعين (رصيد IAS_ITM_WCODE)."""
     selected_wh_a = str(

@@ -203,6 +203,16 @@ urlpatterns = [
         name='browse_item_branch_report',
     ),
     path(
+        'reports/issue-orders/',
+        views.browse_issue_orders_report,
+        name='browse_issue_orders_report',
+    ),
+    path(
+        'reports/issue-orders/waste-ratio/',
+        views.browse_issue_orders_waste_api,
+        name='browse_issue_orders_waste_api',
+    ),
+    path(
         'warehouses/no-transfer/',
         views.browse_wh_no_transfer,
         name='browse_wh_no_transfer',

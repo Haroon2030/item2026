@@ -2864,3 +2864,162 @@ class WhQtyCompareLastPurchaseTests(OracleSchemaMixin, TestCase):
         html = build_wh_qty_compare_excel(report).content.decode('utf-8')
         self.assertIn('<th>آخر شراء</th>', html)
         self.assertIn('<td class="txt">2026-09-30</td>', html)
+
+
+class IssueOrdersReportTests(TestCase):
+    """تقرير أوامر الصرف المخزني: الشاشة والصلاحية ومنطق التجميع."""
+
+    def _canned_report(self):
+        row = {
+            'rank': 1, 'orders': 3, 'orders_display': '3', 'qty_display': '10', 'value': 900.0,
+            'value_display': '900.00', 'cost_display': '850.00', 'avg_order_display': '300.00',
+            'share_pct': 100.0, 'share_display': '100.0%', 'last_date': '2026-09-30',
+            'labels': [{'code': '411', 'name': 'توالف'}],
+        }
+        return {
+            'from': '2026-09-01', 'to': '2026-09-30', 'group_by': 'account',
+            'group_by_label': 'حسب الحساب', 'dims': [{'key': 'account', 'label': 'الحساب'}],
+            'status_label': 'كل الأوامر', 'scope_label': 'كل الفروع والحسابات والمجموعات',
+            'rows': [row], 'row_count': 1, 'orders': 3, 'orders_display': '3', 'qty_display': '10',
+            'value': 900.0, 'value_display': '900.00', 'cost_display': '850.00',
+            'avg_order_display': '300.00', 'accounts': 1, 'branches': 1, 'groups': 1, 'top': row,
+        }
+
+    def test_screen_is_registered_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS
+
+        self.assertIn('browse_issue_orders_report', ALL_SCREEN_KEYS)
+        self.assertEqual(self.client.get(reverse('browse_issue_orders_report')).status_code, 302)
+
+    def test_screen_renders_report_table_and_excel(self):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _session():
+            yield
+
+        admin = get_user_model().objects.create_user('io_admin', password='x-Test-123', is_staff=True, is_superuser=True)
+        self.client.force_login(admin)
+        report = self._canned_report()
+        with patch('search.oracle_stock.oracle_enabled', return_value=True),                 patch('search.oracle_stock.oracle_session', _session),                 patch('search.oracle_income.fetch_income_branches', return_value=[{'code': '6', 'name': 'سكاي مول'}]),                 patch('search.oracle_issue_orders.fetch_issue_account_options', return_value=[{'code': '411', 'name': 'توالف'}]),                 patch('search.oracle_stock.fetch_sales_group_options', return_value=[{'code': '26', 'name': 'مجموعة الطازج'}]),                 patch('search.oracle_issue_orders.build_issue_orders_report', return_value=report) as build:
+            page = self.client.get(reverse('browse_issue_orders_report'))
+            self.assertContains(page, 'تقرير أوامر الصرف')
+            self.assertContains(page, 'كل الحسابات')
+            build.assert_not_called()
+            page = self.client.get(reverse('browse_issue_orders_report'), {
+                'run': '1', 'account': '411', 'branch': '6', 'group': '26',
+                'group_by': 'account', 'date_from': '2026-09-01', 'date_to': '2026-09-30',
+            })
+            self.assertContains(page, 'توالف')
+            self.assertContains(page, '900.00')
+            self.assertContains(page, 'js-fit-print')
+            self.assertContains(page, 'الفترة: من 2026-09-01 إلى 2026-09-30')
+            kwargs = build.call_args.kwargs
+            self.assertEqual((kwargs['account_code'], kwargs['branch_code'], kwargs['group_code']), ('411', '6', '26'))
+            xls = self.client.get(reverse('browse_issue_orders_report'), {'export': 'excel'})
+            self.assertIn('ms-excel', xls['Content-Type'])
+            self.assertIn('توالف', xls.content.decode('utf-8'))
+
+    def test_report_aggregation_shares_and_filters(self):
+        from datetime import datetime
+
+        from search import oracle_issue_orders as io
+
+        rows = [
+            {'ACC': '411', 'ORDERS': 2, 'QTY': 4, 'VALUE_AMT': 300, 'COST_AMT': 250, 'LAST_DATE': datetime(2026, 9, 2)},
+            {'ACC': '511', 'ORDERS': 1, 'QTY': 6, 'VALUE_AMT': 700, 'COST_AMT': 600, 'LAST_DATE': datetime(2026, 9, 5)},
+        ]
+        total = [{'ORDERS': 3, 'QTY': 10, 'VALUE_AMT': 1000, 'COST_AMT': 850, 'LAST_DATE': None,
+                  'ACCOUNTS': 2, 'BRANCHES': 1, 'GROUPS': 3}]
+        with patch('search.oracle_issue_orders.oracle_enabled', return_value=True),                 patch('search.oracle_issue_orders._schema', return_value='S'),                 patch('search.oracle_issue_orders._branch_names', return_value={'6': 'سكاي مول'}),                 patch('search.oracle_issue_orders._group_name_lookup', return_value={'26': 'الطازج'}),                 patch('search.oracle_issue_orders.fetch_issue_account_options',
+                      return_value=[{'code': '411', 'name': 'توالف'}, {'code': '511', 'name': 'مصروف'}]),                 patch('search.oracle_issue_orders._fetch_all', side_effect=[rows, total]) as fetch,                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            report = io.build_issue_orders_report(
+                '2026-09-01', '2026-09-30', branch_code='6', group_code='26', status='posted', group_by='account',
+            )
+        self.assertEqual([r['account_name'] for r in report['rows']], ['مصروف', 'توالف'])
+        self.assertEqual([r['share_display'] for r in report['rows']], ['70.0%', '30.0%'])
+        self.assertEqual(report['orders'], 3)
+        sql, params = fetch.call_args_list[0].args
+        self.assertIn('m.BRN_NO = :brn', sql)
+        self.assertIn('i.G_CODE = :gcode', sql)
+        self.assertIn('m.OUT_POST = 1', sql)
+        self.assertEqual(params['brn'], 6)
+        with patch('search.oracle_issue_orders.oracle_enabled', return_value=True):
+            with self.assertRaises(io.OracleStockError):
+                io.build_issue_orders_report('2026-10-01', '2026-09-01')
+
+    def test_all_branches_adds_a_row_per_branch_grouped_by_first_dimension(self):
+        from datetime import datetime
+
+        from search import oracle_issue_orders as io
+
+        d = datetime(2026, 9, 2)
+        rows = [
+            {'ACC': '411', 'BRN': '8', 'ORDERS': 1, 'QTY': 1, 'VALUE_AMT': 50, 'COST_AMT': 40, 'LAST_DATE': d},
+            {'ACC': '511', 'BRN': '6', 'ORDERS': 2, 'QTY': 2, 'VALUE_AMT': 500, 'COST_AMT': 400, 'LAST_DATE': d},
+            {'ACC': '411', 'BRN': '6', 'ORDERS': 3, 'QTY': 3, 'VALUE_AMT': 400, 'COST_AMT': 300, 'LAST_DATE': d},
+            {'ACC': '511', 'BRN': '8', 'ORDERS': 1, 'QTY': 1, 'VALUE_AMT': 100, 'COST_AMT': 80, 'LAST_DATE': d},
+        ]
+        total = [{'ORDERS': 7, 'QTY': 7, 'VALUE_AMT': 1050, 'COST_AMT': 820, 'LAST_DATE': None,
+                  'ACCOUNTS': 2, 'BRANCHES': 2, 'GROUPS': 1}]
+        patches = (
+            patch('search.oracle_issue_orders.oracle_enabled', return_value=True),
+            patch('search.oracle_issue_orders._schema', return_value='S'),
+            patch('search.oracle_issue_orders._branch_names', return_value={'6': 'سكاي مول', '8': 'المنصورة'}),
+            patch('search.oracle_issue_orders._group_name_lookup', return_value={}),
+            patch('search.oracle_issue_orders.fetch_issue_account_options',
+                  return_value=[{'code': '411', 'name': 'توالف'}, {'code': '511', 'name': 'مصروف'}]),
+            patch('search.oracle_issue_orders._fetch_all', side_effect=[rows, total]),
+            patch('django.core.cache.cache.get', return_value=None),
+            patch('django.core.cache.cache.set'),
+        )
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        report = io.build_issue_orders_report('2026-09-01', '2026-09-30', group_by='account')
+        self.assertTrue(report['auto_branch'])
+        self.assertEqual([x['key'] for x in report['dims']], ['account', 'branch'])
+        # الحساب الأعلى مجموعاً أولاً (مصروف 600 ثم توالف 450)، وداخله الفرع الأعلى قيمة
+        self.assertEqual(
+            [(r['account_name'], r['branch_name']) for r in report['rows']],
+            [('مصروف', 'سكاي مول'), ('مصروف', 'المنصورة'), ('توالف', 'سكاي مول'), ('توالف', 'المنصورة')],
+        )
+        self.assertEqual([r['block_start'] for r in report['rows']], [True, False, True, False])
+
+    def test_waste_ratio_math_and_api(self):
+        from contextlib import contextmanager
+
+        from search import oracle_issue_orders as io
+
+        @contextmanager
+        def _session():
+            yield
+
+        with patch('search.oracle_issue_orders.oracle_enabled', return_value=True),                 patch('search.oracle_issue_orders.build_issue_orders_report',
+                      return_value={'value': 200.0, 'orders': 4}) as rep,                 patch('search.oracle_issue_orders._purchases_total', return_value=10000.0),                 patch('search.oracle_issue_orders._sales_total',
+                      return_value={'pos': 7000.0, 'wholesale': 3000.0, 'total': 10000.0}),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            data = io.build_waste_ratio('2026-09-01', '2026-09-30', branch_code='6', group_code='26')
+            self.assertEqual(rep.call_args.kwargs['account_code'], io.WASTE_ACCOUNT_CODE)
+            self.assertEqual((data['pct_purchases_display'], data['pct_sales_display']), ('2.00%', '2.00%'))
+            self.assertEqual(data['sales_display'], '10,000.00')
+
+        with patch('search.oracle_issue_orders.oracle_enabled', return_value=True),                 patch('search.oracle_issue_orders.build_issue_orders_report',
+                      return_value={'value': 5.0, 'orders': 1}),                 patch('search.oracle_issue_orders._purchases_total', return_value=0.0),                 patch('search.oracle_issue_orders._sales_total',
+                      return_value={'pos': 0.0, 'wholesale': 0.0, 'total': 0.0}),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            zero = io.build_waste_ratio('2026-09-01', '2026-09-30')
+            self.assertEqual((zero['pct_purchases_display'], zero['pct_sales_display']), ('—', '—'))
+
+        admin = get_user_model().objects.create_user('waste_admin', password='x-Test-123', is_staff=True, is_superuser=True)
+        self.client.force_login(admin)
+        url = reverse('browse_issue_orders_waste_api')
+        self.assertEqual(self.client.get(url, {'date_from': 'x', 'date_to': 'y'}).status_code, 400)
+        # فلتر بحروف غير مسموحة يُرفض (من الـ view أو من وسيط الحماية من حقن SQL)
+        self.assertIn(
+            self.client.get(url, {'date_from': '2026-09-01', 'date_to': '2026-09-30', 'branch': '6 OR 1=1'}).status_code,
+            (400, 403),
+        )
+        with patch('search.oracle_stock.oracle_enabled', return_value=True),                 patch('search.oracle_stock.oracle_session', _session),                 patch('search.oracle_issue_orders.build_waste_ratio', return_value={'waste_display': '1.00'}) as build:
+            response = self.client.get(url, {'date_from': '2026-09-01', 'date_to': '2026-09-30', 'group': '26'})
+            self.assertEqual(response.json(), {'ok': True, 'data': {'waste_display': '1.00'}})
+            self.assertEqual(build.call_args.kwargs['group_code'], '26')
+
