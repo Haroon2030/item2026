@@ -28,6 +28,18 @@
   /* القالب العام يجعل الفلتر صفاً مرناً بعنوان بجانب الحقل؛ نوسّع حقل الحساب حتى يظهر اسمه كاملاً */
   .wqc-dash .wqc-filter.ioq-filter .field.ioq-wide { flex: 3 1 28rem !important; }
   .wqc-dash .wqc-filter.ioq-filter .field.ioq-mid { flex: 1 1 17rem !important; }
+  /* خانات البحث (datalist) تعرض مثلثاً أسود أصلياً يخالف سهم القوائم المجاورة؛ نخفيه ونرسم نفس السهم الرفيع.
+     قواعد !important داخل @layer في ملفات الثيم تتغلب على الخارجة عنها، فنكتب القاعدة في الطبقة نفسها بخصوصية أعلى. */
+  @layer app-components {
+    html body.theme-navy .page.wqc-dash form.ioq-filter input[list]:not(#fx) {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important;
+      background-position: left 0.55rem center !important;
+      background-size: 0.8rem !important;
+      padding-left: 1.7rem !important;
+    }
+    html body.theme-navy .page.wqc-dash form.ioq-filter input[list]:not(#fx)::-webkit-calendar-picker-indicator { opacity: 0 !important; width: 1.6rem; cursor: pointer; }
+  }
   /* عند اختيار اقتراح من القائمة يلوّن كروم الخانة بلون الإكمال التلقائي (رمادي مزرق بنص أبيض)؛ نثبّت اللون الأبيض والنص الداكن */
   .wqc-dash .wqc-filter.ioq-filter input { color-scheme: light; }
   .wqc-dash .wqc-filter.ioq-filter input:-webkit-autofill,
