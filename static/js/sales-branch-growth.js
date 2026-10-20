@@ -80,18 +80,23 @@
     function el(name) { return panel.querySelector('[data-sg="' + name + '"]'); }
     // مع مجموعة مختارة الاستعلام ثقيل (بنود) فتطول المهلة
     var timeoutSec = baseUrl.indexOf("group=") >= 0 && baseUrl.indexOf("group=&") < 0 && !/group=$/.test(baseUrl) ? 900 : cfg.timeout;
-    var state = { months: loadMonths(), sort: cfg.defaultSort, data: null, seq: 0, started: 0 };
+    var state = { months: monthsFromFilter(), sort: cfg.defaultSort, data: null, seq: 0, started: 0 };
 
-    function loadMonths() {
-      try {
-        var v = parseInt(window.localStorage.getItem(cfg.store), 10);
-        if (v >= MIN_MONTHS && v <= MAX_MONTHS) return v;
-      } catch (e) { /* التخزين غير متاح */ }
-      return 3;
-    }
-
-    function saveMonths(n) {
-      try { window.localStorage.setItem(cfg.store, String(n)); } catch (e) { /* التخزين غير متاح */ }
+    // عدد الأشهر يتبع تواريخ الفلتر عند فتح الشاشة (عدد الأشهر التي تغطيها الفترة، وأقلّه شهران
+    // حتى تكون هناك مقارنة) — لا يُحفظ اختيار سابق، فلا تفتح الشاشة على 9 أشهر اختيرت مرة.
+    function monthsFromFilter() {
+      try { window.localStorage.removeItem(cfg.store); } catch (e) { /* التخزين غير متاح */ }
+      var q = baseUrl.split("?")[1] || "";
+      var params = {};
+      q.split("&").forEach(function (p) {
+        var kv = p.split("=");
+        if (kv[0]) params[decodeURIComponent(kv[0])] = decodeURIComponent((kv[1] || "").replace(/\+/g, " "));
+      });
+      var m1 = /^(\d{4})-(\d{2})/.exec(params.date_from || "");
+      var m2 = /^(\d{4})-(\d{2})/.exec(params.date_to || "");
+      if (!m1 || !m2) return MIN_MONTHS;
+      var span = (parseInt(m2[1], 10) - parseInt(m1[1], 10)) * 12 + (parseInt(m2[2], 10) - parseInt(m1[2], 10)) + 1;
+      return Math.max(MIN_MONTHS, Math.min(MAX_MONTHS, span));
     }
 
     function setStatus(statusKind, label) {
@@ -352,8 +357,7 @@
         if (nBtn) {
           var n = parseInt(nBtn.getAttribute("data-n"), 10);
           if (!(n >= MIN_MONTHS && n <= MAX_MONTHS) || n === state.months) return;
-          state.months = n;
-          saveMonths(n);
+          state.months = n; // لهذه الشاشة فقط؛ الفتح التالي يعود لتواريخ الفلتر
           load(1);
           return;
         }
