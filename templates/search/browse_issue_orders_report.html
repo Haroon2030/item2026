@@ -44,9 +44,6 @@
   .ioq-caption strong { display: block; font-size: 1rem; font-weight: 800; }
   .ioq-cap-meta { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
   .ioq-block > td { border-top: 2px solid #4a7fb5 !important; }
-  /* القالب العام يجعل الفلتر صفاً مرناً بعنوان بجانب الحقل؛ نوسّع حقل الحساب حتى يظهر اسمه كاملاً */
-  .wqc-dash .wqc-filter.ioq-filter .field.ioq-wide { flex: 3 1 28rem !important; }
-  .wqc-dash .wqc-filter.ioq-filter .field.ioq-mid { flex: 1 1 17rem !important; }
   /* خانات البحث (datalist) تعرض مثلثاً أسود أصلياً يخالف سهم القوائم المجاورة؛ نخفيه ونرسم نفس السهم الرفيع.
      قواعد !important داخل @layer في ملفات الثيم تتغلب على الخارجة عنها، فنكتب القاعدة في الطبقة نفسها بخصوصية أعلى. */
   @layer app-components {
@@ -95,7 +92,7 @@
 <form method="get" action="{% url 'browse_issue_orders_report' %}" class="dash-panel-glass wqc-filter ioq-filter" role="search">
   <input type="hidden" name="run" value="1">
 
-  <div class="field ioq-wide">
+  <div class="field ioq-wide" style="flex: 3 1 28rem !important">
     <label for="ioq-account-q">اسم الحساب</label>
     <input id="ioq-account-q" type="text" list="ioq-account-list" value="{{ selected_account_label }}"
            placeholder="كل الحسابات — اكتب للبحث بالاسم أو الرقم" autocomplete="off" spellcheck="false">
@@ -105,7 +102,7 @@
     </datalist>
   </div>
 
-  <div class="field ioq-mid">
+  <div class="field ioq-mid" style="flex: 1 1 17rem !important">
     <label for="ioq-group-q">المجموعة</label>
     <input id="ioq-group-q" type="text" list="ioq-group-list" value="{{ selected_group_label }}"
            placeholder="كل المجموعات — اكتب للبحث" autocomplete="off" spellcheck="false">
@@ -115,7 +112,7 @@
     </datalist>
   </div>
 
-  <div class="field ioq-mid">
+  <div class="field ioq-mid" style="flex: 1 1 17rem !important">
     <label for="ioq-branch">الفرع</label>
     <select id="ioq-branch" name="branch">
       <option value="">كل الفروع</option>
@@ -134,7 +131,7 @@
     </select>
   </div>
 
-  <div class="field ioq-mid">
+  <div class="field ioq-mid" style="flex: 1 1 17rem !important">
     <label for="ioq-by">عرض التحليل</label>
     <select id="ioq-by" name="group_by">
       {% for key, label in group_by_choices %}
