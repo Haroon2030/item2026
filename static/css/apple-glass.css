@@ -1,0 +1,423 @@
+/* ==========================================================================
+   apple-glass.css — طبقة تصميم أخيرة على نهج Apple HIG + Liquid Glass
+   ──────────────────────────────────────────────────────────────────────
+   • تُحمَّل بعد كل ملفات الثيم، داخل الطبقة نفسها (app-components)، وبثلاثة :not(#id)
+     في آخر كل محدِّد حتى تتغلّب على قواعد الثيم (التي تستخدم :not(#fx) واحداً أو اثنين).
+   • للشاشة فقط (@media screen) — الطباعة وPDF يبقيان كما هما.
+   • تصميم فقط: لا تغيير في الهيكل أو السلوك أو المنطق.
+   • اللون المميِّز: أزرق المنصة #4A7FB5 بدل أزرق Apple، حفاظاً على الهوية
+     (الأيقونات والرسوم في القوالب تستخدمه مباشرة).
+   القاعدة: المحتوى على خلفية رمادية مجمّعة وبطاقات بيضاء مسطّحة؛ الزجاج للعناصر
+   العائمة فقط (الشريط الجانبي والأزرار العائمة)؛ لون واحد للتفاعل؛ ظلال قليلة ناعمة.
+   ========================================================================== */
+
+@layer app-components {
+@media screen {
+
+  /* ——— الرموز ——— */
+  html body.theme-navy:not(#a1):not(#a2):not(#a3) {
+    --ag-tint: #4A7FB5;
+    --ag-tint-press: #3F6E9E;
+    --ag-tint-soft: rgba(74, 127, 181, 0.12);
+    --ag-tint-ring: rgba(74, 127, 181, 0.32);
+    --ag-label: #1d1d1f;
+    --ag-label-2: rgba(60, 60, 67, 0.62);
+    --ag-label-3: rgba(60, 60, 67, 0.32);
+    --ag-sep: rgba(60, 60, 67, 0.14);
+    --ag-sep-strong: rgba(60, 60, 67, 0.22);
+    --ag-bg: #f2f2f7;
+    --ag-cell: #ffffff;
+    --ag-fill: rgba(118, 118, 128, 0.10);
+    --ag-fill-2: rgba(118, 118, 128, 0.16);
+    --ag-red: #ff383c;
+    --ag-green: #34c759;
+    --ag-orange: #ff8d28;
+    --ag-radius-card: 18px;
+    --ag-radius-ctl: 10px;
+    --ag-ease: cubic-bezier(0.28, 0.11, 0.32, 1);
+    --ag-font: -apple-system, BlinkMacSystemFont, "SF Arabic", "SF Pro Text", "IBM Plex Sans Arabic", "Tajawal", "Segoe UI", Tahoma, sans-serif;
+    --ag-glass-bg: rgba(255, 255, 255, 0.72);
+    --ag-glass-shadow: 0 10px 36px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
+
+    /* الثيم كان يفرض color-scheme: dark فتظهر القوائم الأصلية (select/datalist/التقويم) سوداء */
+    color-scheme: light !important;
+    background: var(--ag-bg) !important;
+    background-image: none !important;
+    color: var(--ag-label) !important;
+    font-family: var(--ag-font) !important;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  html:has(> body.theme-navy):not(#a1):not(#a2):not(#a3) { background: #f2f2f7 !important; color-scheme: light !important; }
+
+  /* الزخارف الخلفية (الكرات والشبكة) تنافس المحتوى */
+  html body.theme-navy .app-backdrop:not(#a1):not(#a2):not(#a3) { display: none !important; }
+
+  /* ——— الشريط الجانبي: لوح زجاجي عائم ——— */
+  html body.theme-navy aside.sidebar:not(#a1):not(#a2):not(#a3) {
+    inset-block: 10px !important;
+    inset-inline-start: 10px !important;
+    width: calc(var(--sidebar-w) - 20px) !important;
+    height: auto !important;
+    background: var(--ag-glass-bg) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+    backdrop-filter: blur(28px) saturate(180%) !important;
+    border: 0 !important;
+    border-radius: 22px !important;
+    box-shadow: var(--ag-glass-shadow) !important;
+    color: var(--ag-label) !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar:not(#a1):not(#a2):not(#a3) {
+    width: calc(var(--sidebar-w-collapsed) - 14px) !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-brand .brand:not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label) !important; font-weight: 700 !important; letter-spacing: -0.01em;
+  }
+  html body.theme-navy aside.sidebar .sidebar-section-label:not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label-2) !important; font-size: 0.72rem !important; font-weight: 600 !important; letter-spacing: 0 !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-zone + .sidebar-zone:not(#a1):not(#a2):not(#a3) { border-top-color: var(--ag-sep) !important; }
+  html body.theme-navy aside.sidebar .sidebar-group-items:not(#a1):not(#a2):not(#a3) { border-inline-start-color: var(--ag-sep) !important; }
+
+  /* الروابط: صفوف مستديرة، تمييز ناعم عند المرور، والنشط مملوء بلون المنصة */
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-sublink, .sidebar-group-toggle):not(#a1):not(#a2):not(#a3) {
+    border-radius: var(--ag-radius-ctl) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: var(--ag-label) !important;
+    font-weight: 500 !important;
+    transition: background-color 0.18s var(--ag-ease), color 0.18s var(--ag-ease) !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-sublink, .sidebar-group-toggle) > span:not(#a1):not(#a2):not(#a3) { color: inherit !important; }
+  html body.theme-navy aside.sidebar .sidebar-ico:not(#a1):not(#a2):not(#a3) { color: var(--ag-tint) !important; background: transparent !important; box-shadow: none !important; }
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-sublink, .sidebar-group-toggle):hover:not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-fill) !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-group.is-current > .sidebar-group-toggle:not(#a1):not(#a2):not(#a3) {
+    background: transparent !important; font-weight: 600 !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link.is-active:not(.sidebar-group-toggle), .sidebar-sublink.is-active):not(#a1):not(#a2):not(#a3),
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link.is-active:not(.sidebar-group-toggle), .sidebar-sublink.is-active):hover:not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-tint) !important;
+    color: #fff !important;
+    border-radius: var(--ag-radius-ctl) !important;
+    font-weight: 600 !important;
+    min-height: 0 !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link.is-active, .sidebar-sublink.is-active) :is(.sidebar-ico, span):not(#a1):not(#a2):not(#a3) { color: #fff !important; }
+  /* زخارف اللوح البرتقالي القديم */
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link.is-active, .sidebar-sublink.is-active):not(#a1):not(#a2):not(#a3)::before,
+  html body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link.is-active, .sidebar-sublink.is-active):not(#a1):not(#a2):not(#a3)::after { display: none !important; }
+
+  /* الخروج: إجراء هدّام = نص أحمر بلا تعبئة */
+  html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:not(#a1):not(#a2):not(#a3) {
+    background: transparent !important;
+    color: var(--ag-red) !important;
+    border: 0 !important;
+    border-radius: var(--ag-radius-ctl) !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+    min-height: 2.5rem !important;
+  }
+  html body.theme-navy aside.sidebar .sidebar-foot .btn-logout:hover:not(#a1):not(#a2):not(#a3) { background: rgba(255, 56, 60, 0.08) !important; }
+  html body.theme-navy aside.sidebar .sidebar-foot .btn-logout :is(.sidebar-ico, span, svg):not(#a1):not(#a2):not(#a3) { color: var(--ag-red) !important; stroke: currentColor; }
+
+  /* ——— الأزرار العائمة (فتح القائمة / التحديث): دوائر زجاجية 44px ——— */
+  html body.theme-navy :is(.sidebar-open, .app-hard-refresh--float):not(#a1):not(#a2):not(#a3) {
+    width: 44px !important; height: 44px !important; min-width: 44px !important;
+    border-radius: 999px !important;
+    background: var(--ag-glass-bg) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+    backdrop-filter: blur(24px) saturate(180%) !important;
+    border: 0 !important;
+    box-shadow: var(--ag-glass-shadow) !important;
+    color: var(--ag-label) !important;
+    transition: transform 0.2s var(--ag-ease), opacity 0.2s var(--ag-ease) !important;
+  }
+  html body.theme-navy :is(.sidebar-open, .app-hard-refresh--float):active:not(#a1):not(#a2):not(#a3) { transform: scale(0.94); opacity: 0.85; }
+  html body.theme-navy .sidebar-scrim:not(#a1):not(#a2):not(#a3) {
+    background: rgba(0, 0, 0, 0.28) !important;
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+
+  /* ——— عنوان الصفحة: عنوان كبير بلا صندوق ——— */
+  html body.theme-navy .page .dash-head:not(#a1):not(#a2):not(#a3) {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding-inline: 0.25rem !important;
+  }
+  html body.theme-navy .page .dash-head:not(#a1):not(#a2):not(#a3)::before,
+  html body.theme-navy .page .dash-head:not(#a1):not(#a2):not(#a3)::after { display: none !important; }
+  html body.theme-navy .page .dash-head :is(h1, h2):not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label) !important;
+    font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2rem) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.015em !important;
+    line-height: 1.2 !important;
+    background: none !important;
+    -webkit-text-fill-color: currentColor !important;
+  }
+  html body.theme-navy .page .dash-head p:not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label-2) !important;
+    font-size: 0.94rem !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
+    max-width: 70ch;
+  }
+
+  /* ——— البطاقات (المحتوى): خلايا بيضاء مسطّحة على الخلفية المجمّعة ——— */
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .dash-kpi-glass, .wqc-kpi, .income-kpi, .kpi-card, .kpis > .kpi, .kpi-grid > .kpi, .card):not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-cell) !important;
+    background-image: none !important;
+    border: 0 !important;
+    border-radius: var(--ag-radius-card) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 0.5px var(--ag-sep) !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    color: var(--ag-label) !important;
+  }
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .dash-kpi-glass, .wqc-kpi, .income-kpi, .kpi-card):not(#a1):not(#a2):not(#a3)::before,
+  html body.theme-navy .page :is(.dash-kpi-card, .up-kpi, .lm-kpi, .dash-kpi-glass, .wqc-kpi, .income-kpi, .kpi-card):not(#a1):not(#a2):not(#a3)::after { display: none !important; }
+  /* الأرقام هي العنصر الأهم في البطاقة */
+  html body.theme-navy .page :is(.dash-kpi-value, .up-kpi-value, .lm-kpi-value, .wqc-kpi-value, .kpi-value):not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+    font-variant-numeric: tabular-nums;
+  }
+  html body.theme-navy .page :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label, .kpi-label, .wqc-kpi header h3, .income-kpi header h3):not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label-2) !important;
+    font-weight: 600 !important;
+  }
+  /* شريط العنوان الأزرق أعلى البطاقة يصبح سطراً هادئاً: أيقونة + عنوان رمادي، والرقم هو البطل */
+  html body.theme-navy .page :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label):not(#a1):not(#a2):not(#a3) {
+    background: transparent !important;
+    padding: 0.8rem 0.85rem 0.15rem !important;
+    min-height: 0 !important;
+    font-size: 0.82rem !important;
+  }
+  html body.theme-navy .page :is(.wqc-kpi, .income-kpi) > header:not(#a1):not(#a2):not(#a3) {
+    background: transparent !important;
+    padding: 0.8rem 0.85rem 0.15rem !important;
+  }
+  html body.theme-navy .page :is(.dash-kpi-value, .up-kpi-value, .lm-kpi-value, .wqc-kpi-value):not(#a1):not(#a2):not(#a3) {
+    padding-inline: 0.85rem !important;
+  }
+  html body.theme-navy .page :is(.dash-kpi-hint, .up-kpi-hint, .lm-kpi-hint):not(#a1):not(#a2):not(#a3) {
+    margin-inline: 0.85rem !important;
+    max-width: calc(100% - 1.7rem) !important;
+  }
+  html body.theme-navy .page :is(.dash-kpi-hint, .up-kpi-hint, .lm-kpi-hint, .kpi-hint):not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label-2) !important;
+    background: var(--ag-fill) !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    font-weight: 500 !important;
+  }
+  /* أيقونات البطاقات: مربع مستدير بلون المنصة وأيقونة بيضاء (نمط الإعدادات) */
+  html body.theme-navy .page :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico, .kpi-ico):not(#a1):not(#a2):not(#a3) {
+    border-radius: 8px !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  /* كانت الأيقونة معلّقة على زاوية البطاقة (absolute + إزاحة للأعلى)؛ تصبح أول عنصر في سطر العنوان */
+  html body.theme-navy .page :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label) > :is(.dash-kpi-ico, .up-kpi-ico, .lm-kpi-ico):not(#a1):not(#a2):not(#a3) {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+    order: -1;
+  }
+  html body.theme-navy .page :is(.dash-kpi-label, .up-kpi-label, .lm-kpi-label):not(#a1):not(#a2):not(#a3) {
+    display: flex !important; align-items: center !important; gap: 0.5rem !important;
+  }
+  /* الأرقام بخط الواجهة بأرقام جدولية متساوية العرض بدل الخط الأحادي */
+  html body.theme-navy .page :is(.dash-kpi-value, .up-kpi-value, .lm-kpi-value, .wqc-kpi-value, .kpi-value, .dash-kpi-hint, .up-kpi-hint, .lm-kpi-hint, .kpi-hint, .wqc-kpi small, td.mono, th.mono, .mono, .money, .money-value):not(#a1):not(#a2):not(#a3) {
+    font-family: var(--ag-font) !important;
+    font-variant-numeric: tabular-nums !important;
+  }
+  /* على الشاشات الضيقة: مسافة فوق العنوان حتى لا يصطدم بالأزرار العائمة */
+  @media (max-width: 900px) {
+    html body.theme-navy .page .dash-head:not(#a1):not(#a2):not(#a3) { padding-top: 1.6rem !important; }
+  }
+
+  /* ——— لوحات الفلاتر: مجموعة بيضاء وحقول بتعبئة رمادية بلا إطار ——— */
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter, form.ss-toolbar, form.browse-form):not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-cell) !important;
+    background-image: none !important;
+    border: 0 !important;
+    border-radius: var(--ag-radius-card) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 0.5px var(--ag-sep) !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+  /* الشريط الملوّن أعلى اللوحة */
+  html body.theme-navy .page form.dash-panel-glass:not(#a1):not(#a2):not(#a3)::before,
+  html body.theme-navy .page form.dash-panel-glass:not(#a1):not(#a2):not(#a3)::after { display: none !important; }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter, form.ss-toolbar, form.browse-form) label:not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label-2) !important;
+    font-weight: 600 !important;
+  }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter, form.ss-toolbar, form.browse-form) :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="hidden"], [type="submit"], [type="button"]):not(#a1):not(#a2):not(#a3) {
+    background-color: var(--ag-fill) !important;
+    border: 0 !important;
+    border-radius: var(--ag-radius-ctl) !important;
+    box-shadow: none !important;
+    color: var(--ag-label) !important;
+    font-weight: 500 !important;
+    color-scheme: light !important;
+    transition: background-color 0.18s var(--ag-ease), box-shadow 0.18s var(--ag-ease) !important;
+  }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter, form.ss-toolbar, form.browse-form) :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="hidden"], [type="submit"], [type="button"]):hover:not(#a1):not(#a2):not(#a3) {
+    background-color: var(--ag-fill-2) !important;
+  }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter, form.ss-toolbar, form.browse-form) :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="hidden"], [type="submit"], [type="button"]):focus:not(#a1):not(#a2):not(#a3) {
+    background-color: var(--ag-cell) !important;
+    box-shadow: 0 0 0 3px var(--ag-tint-ring) !important;
+    outline: none !important;
+  }
+  html body.theme-navy .page :is(form[role="search"], form.dash-panel-glass, form.income-filter-bar, form.purchase-filter, form.perf-filter, form.unpriced-filter, form.pr-compare-filter, form.ss-toolbar, form.browse-form) :is(input, textarea):not(#a1):not(#a2):not(#a3)::placeholder {
+    color: var(--ag-label-3) !important;
+  }
+
+  /* ——— الأزرار ——— */
+  /* أساسي: كبسولة مملوءة بلون المنصة — واحد لكل لوحة */
+  html body.theme-navy .page :is(.btn-primary, form :is(button[type="submit"], .fl-go)):not(.btn-ghost, .btn-secondary, .dash-pdf-btn, .dash-pdf-btn-sm):not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-tint) !important;
+    background-image: none !important;
+    color: #fff !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+    letter-spacing: 0 !important;
+    transition: background-color 0.18s var(--ag-ease), transform 0.18s var(--ag-ease), opacity 0.18s var(--ag-ease) !important;
+  }
+  html body.theme-navy .page :is(.btn-primary, form :is(button[type="submit"], .fl-go)):not(.btn-ghost, .btn-secondary, .dash-pdf-btn, .dash-pdf-btn-sm):hover:not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-tint-press) !important; transform: none !important;
+  }
+  html body.theme-navy .page :is(.btn-primary, form :is(button[type="submit"], .fl-go)):not(.btn-ghost, .btn-secondary, .dash-pdf-btn, .dash-pdf-btn-sm):active:not(#a1):not(#a2):not(#a3) {
+    transform: scale(0.97) !important; opacity: 0.85;
+  }
+  /* الزر الأساسي كان يرسم دائرة لامعة خلف الأيقونة */
+  html body.theme-navy .page form :is(button[type="submit"], .fl-go):not(#a1):not(#a2):not(#a3)::before { background: none !important; box-shadow: none !important; }
+  /* ثانوي: تعبئة رمادية ونص بلون المنصة */
+  html body.theme-navy .page :is(.btn-ghost, .btn-secondary):not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-fill) !important;
+    background-image: none !important;
+    color: var(--ag-tint) !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    transition: background-color 0.18s var(--ag-ease), transform 0.18s var(--ag-ease) !important;
+  }
+  html body.theme-navy .page :is(.btn-ghost, .btn-secondary):hover:not(#a1):not(#a2):not(#a3) { background: var(--ag-fill-2) !important; }
+  html body.theme-navy .page :is(.btn-ghost, .btn-secondary):active:not(#a1):not(#a2):not(#a3) { transform: scale(0.97) !important; }
+  /* أزرار التصدير بجانب الجداول (Excel / PDF): نفس الشكل الثانوي */
+  html body.theme-navy .page :is(.dash-pdf-btn, .dash-pdf-btn-sm, .wqc-sheet-actions :is(a, button)):not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-fill) !important;
+    background-image: none !important;
+    color: var(--ag-label) !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+  }
+  html body.theme-navy .page :is(.dash-pdf-btn, .dash-pdf-btn-sm, .wqc-sheet-actions :is(a, button)):hover:not(#a1):not(#a2):not(#a3) { background: var(--ag-fill-2) !important; }
+  html body.theme-navy .page :is(.dash-pdf-btn, .dash-pdf-btn-sm, .wqc-sheet-actions :is(a, button)):active:not(#a1):not(#a2):not(#a3) { transform: scale(0.97); }
+
+  /* تركيز لوحة المفاتيح واضح على كل العناصر التفاعلية */
+  html body.theme-navy :is(a, button, summary, [role="button"], [tabindex]):focus-visible:not(#a1):not(#a2):not(#a3) {
+    outline: 3px solid var(--ag-tint-ring) !important;
+    outline-offset: 2px !important;
+  }
+
+  /* ——— الجداول: لوح أبيض، ترويسة رمادية خفيفة، فواصل شعرية ——— */
+  html body.theme-navy .page :is(.wqc-sheet, .table-wrap):not(#a1):not(#a2):not(#a3) {
+    background: var(--ag-cell) !important;
+    border: 0 !important;
+    border-radius: var(--ag-radius-card) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 0.5px var(--ag-sep) !important;
+  }
+  /* جدول داخل لوح: اللوح الخارجي يكفي */
+  html body.theme-navy .page .wqc-sheet .table-wrap:not(#a1):not(#a2):not(#a3) { box-shadow: none !important; border-radius: 0 0 var(--ag-radius-card) var(--ag-radius-card) !important; }
+  html body.theme-navy .page .wqc-sheet-head:not(#a1):not(#a2):not(#a3) {
+    background: transparent !important;
+    border-bottom: 0.5px solid var(--ag-sep) !important;
+  }
+  html body.theme-navy .page :is(.wqc-sheet, .table-wrap) table thead th:not(#a1):not(#a2):not(#a3) {
+    background: rgba(246, 246, 249, 0.96) !important;
+    background-image: none !important;
+    color: var(--ag-label-2) !important;
+    font-weight: 600 !important;
+    border: 0 !important;
+    border-bottom: 0.5px solid var(--ag-sep-strong) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  html body.theme-navy .page :is(.wqc-sheet, .table-wrap) table tbody td:not(#a1):not(#a2):not(#a3) {
+    border-color: var(--ag-sep) !important;
+  }
+  html body.theme-navy .page :is(.wqc-sheet, .table-wrap) table tfoot td:not(#a1):not(#a2):not(#a3) {
+    border-top: 0.5px solid var(--ag-sep-strong) !important;
+    font-weight: 700 !important;
+  }
+
+  /* ——— التنبيهات: صندوق مستدير بتعبئة خفيفة بلا إطار ثقيل ——— */
+  html body.theme-navy .page .alert:not(#a1):not(#a2):not(#a3) {
+    border: 0 !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    font-weight: 500 !important;
+  }
+  html body.theme-navy .page .alert.alert-error:not(#a1):not(#a2):not(#a3) { background: rgba(255, 56, 60, 0.08) !important; color: #c4161c !important; }
+  html body.theme-navy .page .alert.alert-warn:not(#a1):not(#a2):not(#a3) { background: rgba(255, 141, 40, 0.10) !important; color: #9a4b00 !important; }
+  html body.theme-navy .page .alert.alert-info:not(#a1):not(#a2):not(#a3) { background: var(--ag-tint-soft) !important; color: #2f5b88 !important; }
+
+  /* ——— الرئيسية (غرفة القرار) ——— */
+  html body.theme-navy .hv-title:not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label) !important; font-weight: 700 !important; letter-spacing: -0.015em !important;
+  }
+  html body.theme-navy .hv-sub:not(#a1):not(#a2):not(#a3) { color: var(--ag-label-2) !important; font-weight: 500 !important; }
+  /* البطاقة الرئيسية: بلا إطار سميك ولا ظل أزرق؛ رقم اليوم هو البطل */
+  html body.theme-navy .hv-hero:not(#a1):not(#a2):not(#a3) {
+    border: 0 !important;
+    border-radius: 24px !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 0.5px var(--ag-sep), 0 12px 32px rgba(0, 0, 0, 0.06) !important;
+  }
+  html body.theme-navy .hv-today-num:not(#a1):not(#a2):not(#a3) { letter-spacing: -0.02em !important; font-variant-numeric: tabular-nums; }
+  html body.theme-navy .hv-kpis:not(#a1):not(#a2):not(#a3) { border-top: 0.5px solid rgba(255, 255, 255, 0.28) !important; }
+  html body.theme-navy .hv-sec-title:not(#a1):not(#a2):not(#a3) {
+    color: var(--ag-label) !important; font-weight: 700 !important; letter-spacing: -0.01em !important;
+  }
+  /* بطاقات الأقسام: خلايا بيضاء، الأيقونة الملوّنة وحدها تحمل اللون، بلا قفزة عند المرور */
+  html body.theme-navy .hv-card:not(#a1):not(#a2):not(#a3) {
+    border: 0 !important;
+    border-radius: var(--ag-radius-card) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 0.5px var(--ag-sep) !important;
+    transition: background-color 0.18s var(--ag-ease), transform 0.18s var(--ag-ease) !important;
+  }
+  html body.theme-navy .hv-card:is(:hover, :focus-visible):not(#a1):not(#a2):not(#a3) {
+    transform: none !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 0.5px var(--ag-sep-strong), 0 8px 24px rgba(0, 0, 0, 0.06) !important;
+  }
+  html body.theme-navy .hv-card:active:not(#a1):not(#a2):not(#a3) { transform: scale(0.98) !important; }
+  html body.theme-navy .hv-ico:not(#a1):not(#a2):not(#a3) { box-shadow: none !important; border-radius: 12px !important; }
+  /* الشريط الملوّن على طرف البطاقة يكرّر لون الأيقونة */
+  html body.theme-navy .hv-card:not(#a1):not(#a2):not(#a3)::before { display: none !important; }
+
+  /* ——— تقليل الحركة ——— */
+  @media (prefers-reduced-motion: reduce) {
+    html body.theme-navy *:not(#a1):not(#a2):not(#a3) {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+}
+}
