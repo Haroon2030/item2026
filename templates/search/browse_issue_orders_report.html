@@ -44,18 +44,39 @@
   .ioq-caption strong { display: block; font-size: 1rem; font-weight: 800; }
   .ioq-cap-meta { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
   .ioq-block > td { border-top: 2px solid #4a7fb5 !important; }
-  /* خانات البحث (datalist) تعرض مثلثاً أسود أصلياً يخالف سهم القوائم المجاورة؛ نخفيه ونرسم نفس السهم الرفيع.
-     قواعد !important داخل @layer في ملفات الثيم تتغلب على الخارجة عنها، فنكتب القاعدة في الطبقة نفسها بخصوصية أعلى. */
+  /* خانات البحث: قائمة اقتراحات خاصة بدل قائمة datalist الأصلية، لأن المتصفح يرسم الأصلية بثيم الصفحة الداكن
+     (body.theme-navy { color-scheme: dark }) فتظهر لوحة سوداء مقصوصة لا يمكن تنسيقها.
+     قواعد !important داخل @layer في ملفات الثيم تتغلب على الخارجة عنها، فنكتب سهم الخانة في الطبقة نفسها بخصوصية أعلى. */
   @layer app-components {
-    html body.theme-navy .page.wqc-dash form.ioq-filter input[list]:not(#fx) {
+    html body.theme-navy .page.wqc-dash form.ioq-filter input.ioq-combo:not(#fx) {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
       background-repeat: no-repeat !important;
       background-position: left 0.55rem center !important;
       background-size: 0.8rem !important;
       padding-left: 1.7rem !important;
     }
-    html body.theme-navy .page.wqc-dash form.ioq-filter input[list]:not(#fx)::-webkit-calendar-picker-indicator { opacity: 0 !important; width: 1.6rem; cursor: pointer; }
   }
+  .ioq-filter .field.ioq-has-pop { position: relative; }
+  /* الحقل المفتوح فوق الحقول التالية (بعضها ينشئ سياق تكديس خاصاً به فيغطي القائمة) */
+  .ioq-filter .field.ioq-pop-open { z-index: 70 !important; }
+  .ioq-pop {
+    position: absolute; z-index: 60; margin: 0; padding: 4px; list-style: none;
+    max-height: 16rem; overflow-y: auto; overscroll-behavior: contain;
+    background: #fff; color: #1F2A37; color-scheme: light;
+    border: 1px solid #E3E8EF; border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(31, 42, 55, 0.14);
+    direction: rtl; text-align: start;
+  }
+  .ioq-pop[hidden] { display: none; }
+  .ioq-pop li {
+    display: flex; gap: 0.5rem; align-items: baseline;
+    padding: 0.45rem 0.6rem; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; line-height: 1.35;
+  }
+  .ioq-pop li .ioq-pop-code { flex: none; min-width: 2.2rem; color: #6B7785; font-variant-numeric: tabular-nums; }
+  .ioq-pop li .ioq-pop-name { min-width: 0; overflow-wrap: anywhere; }
+  .ioq-pop li[aria-selected="true"] { background: #E3ECF6; color: #1F2A37; }
+  .ioq-pop li.ioq-pop-empty { cursor: default; color: #6B7785; font-weight: 500; }
   /* عند اختيار اقتراح من القائمة يلوّن كروم الخانة بلون الإكمال التلقائي (رمادي مزرق بنص أبيض)؛ نثبّت اللون الأبيض والنص الداكن */
   .wqc-dash .wqc-filter.ioq-filter input { color-scheme: light; }
   .wqc-dash .wqc-filter.ioq-filter input:-webkit-autofill,
@@ -94,20 +115,20 @@
 
   <div class="field ioq-wide" style="flex: 3 1 28rem !important">
     <label for="ioq-account-q">اسم الحساب</label>
-    <input id="ioq-account-q" type="text" list="ioq-account-list" value="{{ selected_account_label }}"
+    <input id="ioq-account-q" class="ioq-combo" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ioq-account-pop" value="{{ selected_account_label }}"
            placeholder="كل الحسابات — اكتب للبحث بالاسم أو الرقم" autocomplete="off" spellcheck="false">
     <input type="hidden" id="ioq-account" name="account" value="{{ selected_account }}">
-    <datalist id="ioq-account-list">
+    <datalist id="ioq-account-list" hidden>
       {% for a in accounts %}<option value="{{ a.code }}- {{ a.name }}" data-code="{{ a.code }}"></option>{% endfor %}
     </datalist>
   </div>
 
   <div class="field ioq-mid" style="flex: 1 1 17rem !important">
     <label for="ioq-group-q">المجموعة</label>
-    <input id="ioq-group-q" type="text" list="ioq-group-list" value="{{ selected_group_label }}"
+    <input id="ioq-group-q" class="ioq-combo" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ioq-group-pop" value="{{ selected_group_label }}"
            placeholder="كل المجموعات — اكتب للبحث" autocomplete="off" spellcheck="false">
     <input type="hidden" id="ioq-group" name="group" value="{{ selected_group }}">
-    <datalist id="ioq-group-list">
+    <datalist id="ioq-group-list" hidden>
       {% for g in groups %}<option value="{{ g.code }}- {{ g.name }}" data-code="{{ g.code }}"></option>{% endfor %}
     </datalist>
   </div>
@@ -307,8 +328,111 @@
           q.setCustomValidity(r.many ? 'أكثر من ' + noun + ' يطابق البحث — اختر من القائمة' : 'لا يوجد ' + noun + ' بهذا الاسم أو الرقم');
         }
       }
-      q.addEventListener('input', function () { hidden.value = ''; q.setCustomValidity(''); });
-      q.addEventListener('change', sync);
+      // قائمة الاقتراحات: تحت الخانة بعرضها، تُفلتر بما يُكتب، وتعمل بالأسهم و Enter و Esc
+      var popId = q.getAttribute('aria-controls');
+      var pop = document.createElement('ul');
+      pop.id = popId;
+      pop.className = 'ioq-pop';
+      pop.setAttribute('role', 'listbox');
+      pop.hidden = true;
+      q.parentNode.classList.add('ioq-has-pop');
+      q.parentNode.appendChild(pop);
+      var shown = [];
+      var active = -1;
+      function place() {
+        pop.style.top = (q.offsetTop + q.offsetHeight + 4) + 'px';
+        pop.style.left = q.offsetLeft + 'px';
+        pop.style.width = q.offsetWidth + 'px';
+      }
+      function setActive(i) {
+        var items = pop.querySelectorAll('li[role="option"]');
+        if (active >= 0 && items[active]) items[active].setAttribute('aria-selected', 'false');
+        active = i;
+        if (active >= 0 && items[active]) {
+          items[active].setAttribute('aria-selected', 'true');
+          q.setAttribute('aria-activedescendant', items[active].id);
+          items[active].scrollIntoView({ block: 'nearest' });
+        } else {
+          q.removeAttribute('aria-activedescendant');
+        }
+      }
+      function render() {
+        var n = norm(q.value);
+        // نص الخانة مطابق لخيار كامل (بعد الاختيار) = نعرض الكل ليسهل التبديل
+        var picked = opts.some(function (o) { return o.label === q.value.trim(); });
+        shown = (n && !picked) ? opts.filter(function (o) { return norm(o.label).indexOf(n) !== -1; }) : opts.slice();
+        pop.innerHTML = '';
+        active = -1;
+        if (!shown.length) {
+          var empty = document.createElement('li');
+          empty.className = 'ioq-pop-empty';
+          empty.textContent = 'لا يوجد ' + noun + ' يطابق «' + q.value.trim() + '»';
+          pop.appendChild(empty);
+        }
+        shown.forEach(function (o, i) {
+          var li = document.createElement('li');
+          li.id = popId + '-' + i;
+          li.setAttribute('role', 'option');
+          li.setAttribute('aria-selected', 'false');
+          var code = document.createElement('span');
+          code.className = 'ioq-pop-code';
+          code.textContent = o.code;
+          var name = document.createElement('span');
+          name.className = 'ioq-pop-name';
+          name.textContent = o.label.replace(new RegExp('^' + o.code + '-\\s*'), '');
+          li.appendChild(code);
+          li.appendChild(name);
+          // mousedown بدل click حتى لا تفقد الخانة التركيز فتُغلق القائمة قبل الاختيار
+          li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(i); });
+          pop.appendChild(li);
+        });
+      }
+      function open() {
+        render();
+        place();
+        pop.hidden = false;
+        q.parentNode.classList.add('ioq-pop-open');
+        q.setAttribute('aria-expanded', 'true');
+      }
+      function close() {
+        pop.hidden = true;
+        q.parentNode.classList.remove('ioq-pop-open');
+        q.setAttribute('aria-expanded', 'false');
+        q.removeAttribute('aria-activedescendant');
+        active = -1;
+      }
+      function pick(i) {
+        var o = shown[i];
+        if (!o) return;
+        q.value = o.label;
+        close();
+        sync();
+      }
+      q.addEventListener('focus', open);
+      q.addEventListener('click', function () { if (pop.hidden) open(); });
+      q.addEventListener('input', function () {
+        hidden.value = '';
+        q.setCustomValidity('');
+        open();
+      });
+      q.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (pop.hidden) open();
+          var max = shown.length - 1;
+          if (max < 0) return;
+          var next = e.key === 'ArrowDown' ? (active >= max ? 0 : active + 1) : (active <= 0 ? max : active - 1);
+          setActive(next);
+        } else if (e.key === 'Enter' && !pop.hidden && active >= 0) {
+          e.preventDefault();
+          pick(active);
+        } else if (e.key === 'Escape' && !pop.hidden) {
+          e.preventDefault();
+          close();
+        }
+      });
+      q.addEventListener('blur', function () { close(); sync(); });
+      window.addEventListener('resize', function () { if (!pop.hidden) place(); });
       form.addEventListener('submit', function (e) {
         sync();
         if (!q.checkValidity()) { e.preventDefault(); q.reportValidity(); }
