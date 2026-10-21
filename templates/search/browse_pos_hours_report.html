@@ -15,6 +15,8 @@
   /* أعلى ساعة في الجدول */
   .psh-peak > td { background: rgba(74, 127, 181, 0.10) !important; font-weight: 700; }
   .psh-zero > td { color: #8a94a3; }
+  .psh-brn { white-space: nowrap; }
+  .psh-tables > .psh-wide { grid-column: 1 / -1; }
   .psh-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; align-items: start; }
   .psh-tables .wqc-sheet { margin: 0; }
   .psh-note { margin: 0.25rem 0 0; color: #6B7785; font-size: 0.8rem; }
@@ -114,7 +116,7 @@
   </section>
 
   <div class="psh-tables">
-    <section class="wqc-sheet" aria-label="الفواتير بالساعة">
+    <section class="wqc-sheet{% if report.branch_cols|length > 1 %} psh-wide{% endif %}" aria-label="الفواتير بالساعة">
       <div class="wqc-sheet-head">
         <div class="wqc-sheet-actions">
           <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
@@ -124,11 +126,12 @@
         <table class="wqc-table">
           <caption class="psh-caption">
             <strong>الفواتير بالساعة</strong>
-            <span>مجموع كل الأيام المختارة لكل ساعة</span>
+            <span>مجموع كل الأيام المختارة لكل ساعة{% if report.branch_cols|length > 1 %} · عدد فواتير كل فرع في الساعة{% endif %}</span>
           </caption>
           <thead>
             <tr>
               <th scope="col">الساعة</th>
+              {% if report.branch_cols|length > 1 %}{% for col in report.branch_cols %}<th scope="col" class="psh-brn" title="عدد فواتير {{ col.name }}">{{ col.name }}</th>{% endfor %}{% endif %}
               <th scope="col">عدد الفواتير</th>
               <th scope="col">القيمة</th>
               <th scope="col">متوسط الفاتورة</th>
@@ -139,6 +142,7 @@
             {% for row in report.hours %}
               <tr class="{% if row.invoices and row.label == report.busiest_label %}psh-peak{% elif not row.invoices %}psh-zero{% endif %}">
                 <td class="mono" dir="ltr">{{ row.label }}</td>
+                {% if report.branch_cols|length > 1 %}{% for n in row.by_branch %}<td class="mono psh-brn">{{ n }}</td>{% endfor %}{% endif %}
                 <td class="mono">{{ row.invoices_display }}</td>
                 <td class="mono">{{ row.value_display }}</td>
                 <td class="mono">{{ row.avg_display }}</td>
@@ -149,6 +153,7 @@
           <tfoot>
             <tr class="wqc-tfoot">
               <td>الإجمالي</td>
+              {% if report.branch_cols|length > 1 %}{% for n in report.branch_totals %}<td class="mono psh-brn">{{ n }}</td>{% endfor %}{% endif %}
               <td class="mono">{{ report.invoices_display }}</td>
               <td class="mono">{{ report.value_display }}</td>
               <td class="mono">{{ report.avg_display }}</td>

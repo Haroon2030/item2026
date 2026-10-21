@@ -3049,6 +3049,10 @@ class PosHoursReportTests(TestCase):
         self.assertEqual([b['share_display'] for b in report['branches']], ['83.3%', '16.7%'])
         self.assertEqual([d['invoices'] for d in report['days_rows']], [40, 20])
         self.assertEqual(report['per_day_display'], '30')
+        # أعمدة الفروع في جدول الساعات: الأكثر فواتير أولاً، و«—» حيث لا فواتير
+        self.assertEqual([c['name'] for c in report['branch_cols']], ['سكاي مول', 'المنصورة'])
+        self.assertEqual([h['by_branch'] for h in report['hours']], [['50', '—'], ['—', '10'], ['—', '—']])
+        self.assertEqual(report['branch_totals'], ['50', '10'])
 
     def test_report_branch_filter_and_midnight_window(self):
         from search import oracle_pos_hours as ph
@@ -3100,10 +3104,12 @@ class PosHoursReportTests(TestCase):
             'avg_display': '100.00', 'per_day_display': '', 'busiest_label': '20:00 – 20:59',
             'busiest_invoices_display': '30',
             'hours': [
-                dict(hour, hour=20, label='20:00 – 20:59', invoices=30),
-                dict(hour, hour=21, label='21:00 – 21:59', invoices=12, invoices_display='12'),
+                dict(hour, hour=20, label='20:00 – 20:59', invoices=30, by_branch=['30', '—']),
+                dict(hour, hour=21, label='21:00 – 21:59', invoices=12, invoices_display='12', by_branch=['—', '12']),
             ],
             'branches': [dict(hour, code='6', label='سكاي مول', invoices=42, invoices_display='42')],
+            'branch_cols': [{'code': '6', 'name': 'سكاي مول'}, {'code': '7', 'name': 'فرع المنصورة'}],
+            'branch_totals': ['30', '12'],
             'days_rows': [],
         }
         with patch('search.oracle_stock.oracle_enabled', return_value=True), \
@@ -3119,6 +3125,7 @@ class PosHoursReportTests(TestCase):
             })
             self.assertContains(page, '4,200.00')
             self.assertContains(page, 'psh-peak')
+            self.assertContains(page, 'title="عدد فواتير فرع المنصورة">فرع المنصورة</th>', html=False)
             self.assertContains(page, '20:00 – 21:59')
             kwargs = build.call_args.kwargs
             self.assertEqual(

@@ -32,7 +32,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 120
-_CACHE_VER = "v1"
+_CACHE_VER = "v2"
 MAX_DAYS = 92
 _TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -169,6 +169,7 @@ def build_pos_hours_report(
     by_hour: dict[int, list] = {}
     by_branch: dict[str, list] = {}
     by_day: dict[date, list] = {}
+    hour_branch: dict[tuple[int, str], int] = {}
     total_invoices = 0
     total_value = 0.0
     for r in rows:
@@ -184,6 +185,7 @@ def build_pos_hours_report(
             acc = bucket.setdefault(k, [0, 0.0])
             acc[0] += invoices
             acc[1] += value
+        hour_branch[(hour, code)] = hour_branch.get((hour, code), 0) + invoices
         total_invoices += invoices
         total_value += value
 
@@ -204,6 +206,15 @@ def build_pos_hours_report(
         ),
         key=lambda x: (-x["invoices"], x["code"]),
     )
+
+    # عدد فواتير كل فرع في كل ساعة (أعمدة بأسماء الفروع، بترتيب الأكثر فواتير)
+    branch_cols = [{"code": b["code"], "name": b["label"]} for b in branch_rows]
+    for h in hour_rows:
+        h["by_branch"] = [
+            _count(hour_branch[(h["hour"], col["code"])]) if hour_branch.get((h["hour"], col["code"])) else "—"
+            for col in branch_cols
+        ]
+    branch_totals = [b["invoices_display"] for b in branch_rows]
 
     day_rows = []
     if d_from != d_to:
@@ -233,6 +244,8 @@ def build_pos_hours_report(
         "busiest_invoices_display": busiest["invoices_display"] if busiest and busiest["invoices"] else "",
         "hours": hour_rows,
         "branches": branch_rows,
+        "branch_cols": branch_cols,
+        "branch_totals": branch_totals,
         "days_rows": day_rows,
     }
     try:
