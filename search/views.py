@@ -6609,6 +6609,79 @@ def browse_issue_orders_report(request):
 @login_required
 @require_GET
 @never_cache
+def browse_pos_hours_report(request):
+    """فواتير نقاط البيع بالساعة: عدد الفواتير وقيمتها في تاريخ وساعات محددة، بالساعة والفرع واليوم."""
+    from datetime import date as date_cls
+
+    from .oracle_pos_hours import build_pos_hours_report, parse_hhmm
+    from .oracle_stock import oracle_enabled, oracle_session
+
+    today = date_cls.today()
+    branch = str(request.GET.get('branch') or '').strip()
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
+    error = ''
+    report = None
+    branches: list[dict] = []
+
+    try:
+        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or '').strip()) \
+            if request.GET.get('date_from') else today
+        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or '').strip()) \
+            if request.GET.get('date_to') else date_from
+    except ValueError:
+        date_from = date_to = today
+        error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
+    try:
+        time_from = parse_hhmm(request.GET.get('time_from'), '00:00')
+        time_to = parse_hhmm(request.GET.get('time_to'), '23:59')
+    except ValueError as exc:
+        time_from, time_to = '00:00', '23:59'
+        error = str(exc)
+
+    if not error:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                from .oracle_income import fetch_income_branches
+
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    if branch not in {b['code'] for b in branches}:
+                        branch = ''
+                    if run:
+                        report = build_pos_hours_report(
+                            date_from,
+                            date_to,
+                            time_from=time_from,
+                            time_to=time_to,
+                            branch_code=branch,
+                        )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_pos_hours_report failed: %s', exc)
+            error = f'تعذّر تحميل التقرير: {exc}'
+            report = None
+
+    return render(
+        request,
+        'search/browse_pos_hours_report.html',
+        {
+            'branches': branches,
+            'selected_branch': branch,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'time_from': time_from,
+            'time_to': time_to,
+            'report': report,
+            'run': run,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_wh_qty_compare(request):
     """مقارنة كميات الأصناف بين مستودعين (رصيد IAS_ITM_WCODE)."""
     selected_wh_a = str(

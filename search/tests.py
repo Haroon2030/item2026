@@ -2987,3 +2987,143 @@ class IssueOrdersReportTests(TestCase):
             [('مصروف', 'سكاي مول'), ('مصروف', 'المنصورة'), ('توالف', 'سكاي مول'), ('توالف', 'المنصورة')],
         )
         self.assertEqual([r['block_start'] for r in report['rows']], [True, False, True, False])
+
+
+class PosHoursReportTests(TestCase):
+    """تقرير فواتير نقاط البيع بالساعة: الشاشة والصلاحية وشرط الوقت والتجميع."""
+
+    def test_screen_is_registered_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, section_for_screen
+
+        self.assertIn('browse_pos_hours_report', ALL_SCREEN_KEYS)
+        self.assertEqual(section_for_screen('browse_pos_hours_report'), 'reports')
+        self.assertEqual(self.client.get(reverse('browse_pos_hours_report')).status_code, 302)
+
+    def test_time_parsing_and_window(self):
+        from search import oracle_pos_hours as ph
+
+        self.assertEqual(ph.parse_hhmm('8:5', '00:00'), '08:05')
+        self.assertEqual(ph.parse_hhmm('20:30:00', '00:00'), '20:30')
+        self.assertEqual(ph.parse_hhmm('', '23:59'), '23:59')
+        for bad in ('24:00', '12:60', 'abc', '1:2:3:4'):
+            with self.assertRaises(ValueError):
+                ph.parse_hhmm(bad, '00:00')
+        self.assertEqual(ph.window_hours('08:30', '10:15'), [8, 9, 10])
+        self.assertEqual(ph.window_hours('22:00', '01:30'), [22, 23, 0, 1])
+        self.assertEqual(ph._time_clause('00:00', '23:59'), '')
+        self.assertIn('AND m.BILL_TIME <= :t_to', ph._time_clause('08:00', '12:00'))
+        self.assertIn(' OR ', ph._time_clause('22:00', '02:00'))
+
+    def test_report_groups_by_hour_branch_and_day(self):
+        from datetime import datetime
+
+        from search import oracle_pos_hours as ph
+
+        rows = [
+            {'D': datetime(2026, 10, 19), 'BRN': 6, 'HH': '20', 'INVOICES': 30, 'VALUE_TOTAL': 3000},
+            {'D': datetime(2026, 10, 19), 'BRN': 7, 'HH': '21', 'INVOICES': 10, 'VALUE_TOTAL': 500},
+            {'D': datetime(2026, 10, 20), 'BRN': 6, 'HH': '20', 'INVOICES': 20, 'VALUE_TOTAL': 1500},
+        ]
+        with patch('search.oracle_pos_hours.oracle_enabled', return_value=True), \
+                patch('search.oracle_pos_hours._pos_owner', return_value='YSPOS1'), \
+                patch('search.oracle_pos_hours._branch_names', return_value={'6': 'سكاي مول', '7': 'المنصورة'}), \
+                patch('search.oracle_pos_hours._fetch_all', return_value=rows) as fetch, \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            report = ph.build_pos_hours_report(
+                '2026-10-19', '2026-10-20', time_from='20:00', time_to='22:30', branch_code='',
+            )
+        sql, params = fetch.call_args.args
+        self.assertIn('YSPOS1.IAS_POS_BILL_MST', sql)
+        self.assertIn('m.BILL_TIME >= :t_from AND m.BILL_TIME <= :t_to', sql)
+        self.assertEqual((params['t_from'], params['t_to']), ('20:00:00', '22:30:59'))
+        self.assertNotIn('brn', params)
+        self.assertEqual(report['invoices'], 60)
+        self.assertEqual(report['value_display'], '5,000.00')
+        self.assertEqual(report['avg_display'], '83.33')
+        # كل ساعات النطاق تظهر، والساعة 22 بلا فواتير صفر
+        self.assertEqual([h['hour'] for h in report['hours']], [20, 21, 22])
+        self.assertEqual([h['invoices'] for h in report['hours']], [50, 10, 0])
+        self.assertEqual(report['busiest_label'], '20:00 – 20:59')
+        self.assertEqual([b['label'] for b in report['branches']], ['سكاي مول', 'المنصورة'])
+        self.assertEqual([b['share_display'] for b in report['branches']], ['83.3%', '16.7%'])
+        self.assertEqual([d['invoices'] for d in report['days_rows']], [40, 20])
+        self.assertEqual(report['per_day_display'], '30')
+
+    def test_report_branch_filter_and_midnight_window(self):
+        from search import oracle_pos_hours as ph
+        from search.oracle_stock import OracleStockError
+
+        with patch('search.oracle_pos_hours.oracle_enabled', return_value=True), \
+                patch('search.oracle_pos_hours._pos_owner', return_value='YSPOS1'), \
+                patch('search.oracle_pos_hours._branch_names', return_value={'6': 'سكاي مول'}), \
+                patch('search.oracle_pos_hours._fetch_all', return_value=[]) as fetch, \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            report = ph.build_pos_hours_report(
+                '2026-10-20', '2026-10-20', time_from='23:00', time_to='01:00', branch_code='6',
+            )
+        sql, params = fetch.call_args.args
+        self.assertIn('(m.BILL_TIME >= :t_from OR m.BILL_TIME <= :t_to)', sql)
+        self.assertIn('m.BRN_NO = :brn', sql)
+        self.assertEqual(params['brn'], 6)
+        self.assertTrue(report['crosses_midnight'])
+        self.assertEqual([h['hour'] for h in report['hours']], [23, 0, 1])
+        self.assertEqual(report['invoices'], 0)
+        self.assertEqual(report['busiest_label'], '—')
+        self.assertEqual(report['days_rows'], [])
+        with patch('search.oracle_pos_hours.oracle_enabled', return_value=True):
+            with self.assertRaises(OracleStockError):
+                ph.build_pos_hours_report('2026-10-21', '2026-10-20')
+            with self.assertRaises(OracleStockError):
+                ph.build_pos_hours_report('2026-01-01', '2026-10-20')
+
+    def test_screen_renders_and_passes_filters(self):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _session():
+            yield
+
+        admin = get_user_model().objects.create_user(
+            'psh_admin', password='x-Test-123', is_staff=True, is_superuser=True,
+        )
+        self.client.force_login(admin)
+        hour = {
+            'avg_display': '100.00', 'value_display': '3,000.00', 'invoices_display': '30',
+            'share_display': '71.4%', 'bar_width': '100.0',
+        }
+        report = {
+            'from': '2026-10-20', 'to': '2026-10-20', 'days': 1, 'time_from': '20:00', 'time_to': '21:59',
+            'crosses_midnight': False, 'branch': '6', 'branch_name': 'سكاي مول',
+            'invoices': 42, 'invoices_display': '42', 'value': 4200.0, 'value_display': '4,200.00',
+            'avg_display': '100.00', 'per_day_display': '', 'busiest_label': '20:00 – 20:59',
+            'busiest_invoices_display': '30',
+            'hours': [
+                dict(hour, hour=20, label='20:00 – 20:59', invoices=30),
+                dict(hour, hour=21, label='21:00 – 21:59', invoices=12, invoices_display='12'),
+            ],
+            'branches': [dict(hour, code='6', label='سكاي مول', invoices=42, invoices_display='42')],
+            'days_rows': [],
+        }
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), \
+                patch('search.oracle_stock.oracle_session', _session), \
+                patch('search.oracle_income.fetch_income_branches', return_value=[{'code': '6', 'name': 'سكاي مول'}]), \
+                patch('search.oracle_pos_hours.build_pos_hours_report', return_value=report) as build:
+            page = self.client.get(reverse('browse_pos_hours_report'))
+            self.assertContains(page, 'فواتير نقاط البيع بالساعة')
+            build.assert_not_called()
+            page = self.client.get(reverse('browse_pos_hours_report'), {
+                'run': '1', 'date_from': '2026-10-20', 'date_to': '2026-10-20',
+                'time_from': '20:00', 'time_to': '21:59', 'branch': '6',
+            })
+            self.assertContains(page, '4,200.00')
+            self.assertContains(page, 'psh-peak')
+            self.assertContains(page, '20:00 – 21:59')
+            kwargs = build.call_args.kwargs
+            self.assertEqual(
+                (kwargs['time_from'], kwargs['time_to'], kwargs['branch_code']), ('20:00', '21:59', '6'),
+            )
+            bad = self.client.get(reverse('browse_pos_hours_report'), {'run': '1', 'time_from': '25:00'})
+            self.assertContains(bad, 'وقت غير صالح')
+        self.assertEqual(build.call_count, 1)

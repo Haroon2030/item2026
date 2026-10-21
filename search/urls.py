@@ -208,6 +208,11 @@ urlpatterns = [
         name='browse_issue_orders_report',
     ),
     path(
+        'reports/pos-hours/',
+        views.browse_pos_hours_report,
+        name='browse_pos_hours_report',
+    ),
+    path(
         'warehouses/no-transfer/',
         views.browse_wh_no_transfer,
         name='browse_wh_no_transfer',

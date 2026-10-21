@@ -168,6 +168,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
         (
             NavScreen("browse_item_branch_report", "رصيد ومبيعات الأصناف بالفروع"),
             NavScreen("browse_issue_orders_report", "تقرير أوامر الصرف"),
+            NavScreen("browse_pos_hours_report", "فواتير نقاط البيع بالساعة"),
         ),
     ),
 )

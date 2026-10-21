@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}فواتير نقاط البيع بالساعة{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .psh-bar { display: inline-block; width: 90px; height: 8px; border-radius: 4px; background: #e3e8ef; vertical-align: middle; margin-inline-start: 6px; overflow: hidden; }
+  .psh-bar > i { display: block; height: 100%; background: #4a7fb5; }
+  .psh-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
+  .psh-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
+  .psh-caption strong { display: block; font-size: 1rem; font-weight: 800; }
+  .psh-caption span { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  /* أعلى ساعة في الجدول */
+  .psh-peak > td { background: rgba(74, 127, 181, 0.10) !important; font-weight: 700; }
+  .psh-zero > td { color: #8a94a3; }
+  .psh-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; align-items: start; }
+  .psh-tables .wqc-sheet { margin: 0; }
+  .psh-note { margin: 0.25rem 0 0; color: #6B7785; font-size: 0.8rem; }
+</style>
+
+<section class="dash-head" aria-label="فواتير نقاط البيع بالساعة">
+  <div class="dash-head-copy">
+    <h2>فواتير نقاط البيع بالساعة</h2>
+    <p>عدد فواتير نقاط البيع وقيمتها في تاريخ وساعات تختارها، موزّعة بالساعة والفرع. القيمة شاملة الضريبة وقبل المرتجع، بنفس احتساب تحليل المبيعات.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_pos_hours_report' %}" class="dash-panel-glass wqc-filter psh-filter" role="search">
+  <input type="hidden" name="run" value="1">
+
+  <div class="field">
+    <label for="psh-from">من تاريخ</label>
+    <input id="psh-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+
+  <div class="field">
+    <label for="psh-to">إلى تاريخ</label>
+    <input id="psh-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+
+  <div class="field">
+    <label for="psh-tfrom">من الساعة</label>
+    <input id="psh-tfrom" type="time" name="time_from" value="{{ time_from }}" step="60" required>
+  </div>
+
+  <div class="field">
+    <label for="psh-tto">إلى الساعة</label>
+    <input id="psh-tto" type="time" name="time_to" value="{{ time_to }}" step="60" required>
+  </div>
+
+  <div class="field">
+    <label for="psh-branch">الفرع</label>
+    <select id="psh-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض التقرير</button>
+  </div>
+</form>
+
+{% if report %}
+  <p class="psh-scope">
+    {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
+    · من <bdi dir="ltr">{{ report.from }}</bdi>{% if report.to != report.from %} إلى <bdi dir="ltr">{{ report.to }}</bdi>{% endif %}
+    · الساعة <bdi dir="ltr">{{ report.time_from }} – {{ report.time_to }}</bdi>{% if report.crosses_midnight %} (تعبر منتصف الليل){% endif %}
+  </p>
+
+  <section class="income-kpi-grid ibr-kpi-grid" aria-label="ملخص">
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></span>
+        <h3>عدد الفواتير</h3>
+      </header>
+      <p class="wqc-kpi-value">{{ report.invoices_display }}</p>
+      {% if report.per_day_display %}<small>{{ report.per_day_display }} فاتورة في اليوم تقريباً</small>{% endif %}
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-value">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 10v4M17.5 10v4"/></svg></span>
+        <h3>قيمة الفواتير</h3>
+      </header>
+      <p class="wqc-kpi-value mono">{{ report.value_display }}</p>
+      <small>شاملة الضريبة</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-avg">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 9l1.5-5h15L21 9M3 9v1a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0V9M4.5 13v7h15v-7"/></svg></span>
+        <h3>متوسط الفاتورة</h3>
+      </header>
+      <p class="wqc-kpi-value mono">{{ report.avg_display }}</p>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-peak">
+      <header>
+        <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>
+        <h3>أكثر ساعة فواتير</h3>
+      </header>
+      <p class="wqc-kpi-value mono" dir="ltr">{{ report.busiest_label }}</p>
+      {% if report.busiest_invoices_display %}<small>{{ report.busiest_invoices_display }} فاتورة</small>{% endif %}
+    </article>
+  </section>
+
+  <div class="psh-tables">
+    <section class="wqc-sheet" aria-label="الفواتير بالساعة">
+      <div class="wqc-sheet-head">
+        <div class="wqc-sheet-actions">
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-label="الفواتير بالساعة">
+        <table class="wqc-table">
+          <caption class="psh-caption">
+            <strong>الفواتير بالساعة</strong>
+            <span>مجموع كل الأيام المختارة لكل ساعة</span>
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">الساعة</th>
+              <th scope="col">عدد الفواتير</th>
+              <th scope="col">القيمة</th>
+              <th scope="col">متوسط الفاتورة</th>
+              <th scope="col">النسبة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.hours %}
+              <tr class="{% if row.invoices and row.label == report.busiest_label %}psh-peak{% elif not row.invoices %}psh-zero{% endif %}">
+                <td class="mono" dir="ltr">{{ row.label }}</td>
+                <td class="mono">{{ row.invoices_display }}</td>
+                <td class="mono">{{ row.value_display }}</td>
+                <td class="mono">{{ row.avg_display }}</td>
+                <td class="mono">{{ row.share_display }}<span class="psh-bar" aria-hidden="true"><i style="width: {{ row.bar_width }}%"></i></span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td>الإجمالي</td>
+              <td class="mono">{{ report.invoices_display }}</td>
+              <td class="mono">{{ report.value_display }}</td>
+              <td class="mono">{{ report.avg_display }}</td>
+              <td class="mono">100.0%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% if report.crosses_midnight %}<p class="psh-note">الساعات بعد منتصف الليل تُحسب ضمن تاريخ الفاتورة نفسه.</p>{% endif %}
+    </section>
+
+    <section class="wqc-sheet" aria-label="الفواتير بالفرع">
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-label="الفواتير بالفرع">
+        <table class="wqc-table">
+          <caption class="psh-caption">
+            <strong>الفواتير بالفرع</strong>
+            <span>في الساعات المختارة فقط</span>
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">الفرع</th>
+              <th scope="col">عدد الفواتير</th>
+              <th scope="col">القيمة</th>
+              <th scope="col">متوسط الفاتورة</th>
+              <th scope="col">النسبة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.branches %}
+              <tr>
+                <td class="mono wqc-td-idx">{{ forloop.counter }}</td>
+                <td title="{{ row.code }}">{{ row.label }}</td>
+                <td class="mono">{{ row.invoices_display }}</td>
+                <td class="mono">{{ row.value_display }}</td>
+                <td class="mono">{{ row.avg_display }}</td>
+                <td class="mono">{{ row.share_display }}<span class="psh-bar" aria-hidden="true"><i style="width: {{ row.bar_width }}%"></i></span></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="wqc-empty">لا توجد فواتير في هذه الساعات.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  {% if report.days_rows %}
+    <section class="wqc-sheet" aria-label="الفواتير باليوم" style="margin-top: 1rem;">
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-label="الفواتير باليوم">
+        <table class="wqc-table">
+          <caption class="psh-caption">
+            <strong>الفواتير باليوم</strong>
+            <span>في الساعات المختارة من كل يوم</span>
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">التاريخ</th>
+              <th scope="col">عدد الفواتير</th>
+              <th scope="col">القيمة</th>
+              <th scope="col">متوسط الفاتورة</th>
+              <th scope="col">النسبة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.days_rows %}
+              <tr>
+                <td class="mono" dir="ltr">{{ row.label }}</td>
+                <td class="mono">{{ row.invoices_display }}</td>
+                <td class="mono">{{ row.value_display }}</td>
+                <td class="mono">{{ row.avg_display }}</td>
+                <td class="mono">{{ row.share_display }}<span class="psh-bar" aria-hidden="true"><i style="width: {{ row.bar_width }}%"></i></span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+
+{% elif run and not error %}
+  <p class="psh-scope">لا توجد بيانات للعرض.</p>
+{% endif %}
+{% endblock %}
