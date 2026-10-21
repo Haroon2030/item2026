@@ -11,6 +11,7 @@
   .psh-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
   .psh-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
   .psh-caption strong { display: block; font-size: 1rem; font-weight: 800; }
+  .psh-caption .psh-period { color: #1F2A37; }
   .psh-caption span { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
   /* أعلى ساعة في الجدول */
   .psh-peak > td { background: rgba(74, 127, 181, 0.10) !important; font-weight: 700; }
@@ -128,6 +129,7 @@
         <table class="wqc-table">
           <caption class="psh-caption">
             <strong>الفواتير بالساعة</strong>
+            <span class="psh-period">الفترة: من <bdi dir="ltr">{{ report.from }}</bdi>{% if report.to != report.from %} إلى <bdi dir="ltr">{{ report.to }}</bdi>{% endif %} · الساعة <bdi dir="ltr">{{ report.time_from }} – {{ report.time_to }}</bdi>{% if report.branch_name %} · {{ report.branch_name }}{% endif %}</span>
             <span>مجموع كل الأيام المختارة لكل ساعة{% if report.branch_cols|length > 1 %} · عدد فواتير كل فرع في الساعة{% endif %}</span>
           </caption>
           <thead>
@@ -172,6 +174,7 @@
         <table class="wqc-table">
           <caption class="psh-caption">
             <strong>الفواتير بالفرع</strong>
+            <span class="psh-period">الفترة: من <bdi dir="ltr">{{ report.from }}</bdi>{% if report.to != report.from %} إلى <bdi dir="ltr">{{ report.to }}</bdi>{% endif %} · الساعة <bdi dir="ltr">{{ report.time_from }} – {{ report.time_to }}</bdi>{% if report.branch_name %} · {{ report.branch_name }}{% endif %}</span>
             <span>في الساعات المختارة فقط{% if report.days > 1 %} · متوسط اليوم = إجمالي الفترة ÷ {{ report.days_elapsed }} يوم{% endif %}</span>
           </caption>
           <thead>
@@ -224,6 +227,7 @@
         <table class="wqc-table">
           <caption class="psh-caption">
             <strong>الفواتير باليوم</strong>
+            <span class="psh-period">الفترة: من <bdi dir="ltr">{{ report.from }}</bdi>{% if report.to != report.from %} إلى <bdi dir="ltr">{{ report.to }}</bdi>{% endif %} · الساعة <bdi dir="ltr">{{ report.time_from }} – {{ report.time_to }}</bdi>{% if report.branch_name %} · {{ report.branch_name }}{% endif %}</span>
             <span>في الساعات المختارة من كل يوم{% if report.branch_cols|length > 1 %} · عدد فواتير كل فرع في اليوم{% endif %}</span>
           </caption>
           <thead>
