@@ -6613,7 +6613,7 @@ def browse_pos_hours_report(request):
     """فواتير نقاط البيع بالساعة: عدد الفواتير وقيمتها في تاريخ وساعات محددة، بالساعة والفرع واليوم."""
     from datetime import date as date_cls
 
-    from .oracle_pos_hours import build_pos_hours_report, parse_hhmm
+    from .oracle_pos_hours import build_pos_hours_report, normalize_window, parse_hhmm
     from .oracle_stock import oracle_enabled, oracle_session
 
     today = date_cls.today()
@@ -6632,8 +6632,10 @@ def browse_pos_hours_report(request):
         date_from = date_to = today
         error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
     try:
-        time_from = parse_hhmm(request.GET.get('time_from'), '00:00')
-        time_to = parse_hhmm(request.GET.get('time_to'), '23:59')
+        time_from, time_to = normalize_window(
+            parse_hhmm(request.GET.get('time_from'), '00:00'),
+            parse_hhmm(request.GET.get('time_to'), '23:59'),
+        )
     except ValueError as exc:
         time_from, time_to = '00:00', '23:59'
         error = str(exc)

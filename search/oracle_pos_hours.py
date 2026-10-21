@@ -51,6 +51,13 @@ def parse_hhmm(value: Any, default: str) -> str:
     return hhmm
 
 
+def normalize_window(time_from: str, time_to: str) -> tuple[str, str]:
+    """نفس وقت البداية والنهاية (مثل 12:00 ص → 12:00 ص) يعني اليوم كاملاً لا دقيقة واحدة."""
+    if time_from == time_to:
+        return "00:00", "23:59"
+    return time_from, time_to
+
+
 def window_hours(time_from: str, time_to: str) -> list[int]:
     """الساعات التي يمسّها النطاق بالترتيب (يلتفّ بعد منتصف الليل)."""
     start, end = int(time_from[:2]), int(time_to[:2])
@@ -129,8 +136,7 @@ def build_pos_hours_report(
         raise OracleStockError("تاريخ البداية بعد تاريخ النهاية.")
     if (d_to - d_from).days + 1 > MAX_DAYS:
         raise OracleStockError(f"الفترة أطول من {MAX_DAYS} يوماً — اختر فترة أقصر.")
-    time_from = parse_hhmm(time_from, "00:00")
-    time_to = parse_hhmm(time_to, "23:59")
+    time_from, time_to = normalize_window(parse_hhmm(time_from, "00:00"), parse_hhmm(time_to, "23:59"))
     brn = _norm_brn_code(branch_code)
 
     key = f"pos_hours:{_CACHE_VER}:{d_from}:{d_to}:{time_from}:{time_to}:{brn}"

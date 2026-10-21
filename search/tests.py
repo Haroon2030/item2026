@@ -3010,6 +3010,10 @@ class PosHoursReportTests(TestCase):
                 ph.parse_hhmm(bad, '00:00')
         self.assertEqual(ph.window_hours('08:30', '10:15'), [8, 9, 10])
         self.assertEqual(ph.window_hours('22:00', '01:30'), [22, 23, 0, 1])
+        # نفس وقت البداية والنهاية = اليوم كاملاً (لا دقيقة واحدة)
+        self.assertEqual(ph.normalize_window('00:00', '00:00'), ('00:00', '23:59'))
+        self.assertEqual(ph.normalize_window('08:00', '08:00'), ('00:00', '23:59'))
+        self.assertEqual(ph.normalize_window('08:00', '12:00'), ('08:00', '12:00'))
         self.assertEqual(ph._time_clause('00:00', '23:59'), '')
         self.assertIn('AND m.BILL_TIME <= :t_to', ph._time_clause('08:00', '12:00'))
         self.assertIn(' OR ', ph._time_clause('22:00', '02:00'))
@@ -3146,6 +3150,11 @@ class PosHoursReportTests(TestCase):
             self.assertEqual(
                 (kwargs['time_from'], kwargs['time_to'], kwargs['branch_code']), ('20:00', '21:59', '6'),
             )
+            same = self.client.get(reverse('browse_pos_hours_report'), {
+                'run': '1', 'date_from': '2026-10-01', 'date_to': '2026-10-21', 'time_from': '00:00', 'time_to': '00:00',
+            })
+            self.assertEqual((build.call_args.kwargs['time_from'], build.call_args.kwargs['time_to']), ('00:00', '23:59'))
+            self.assertContains(same, 'value="23:59"')
             bad = self.client.get(reverse('browse_pos_hours_report'), {'run': '1', 'time_from': '25:00'})
             self.assertContains(bad, 'وقت غير صالح')
-        self.assertEqual(build.call_count, 1)
+        self.assertEqual(build.call_count, 2)
