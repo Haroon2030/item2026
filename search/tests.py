@@ -3053,6 +3053,12 @@ class PosHoursReportTests(TestCase):
         self.assertEqual([c['name'] for c in report['branch_cols']], ['سكاي مول', 'المنصورة'])
         self.assertEqual([h['by_branch'] for h in report['hours']], [['50', '—'], ['—', '10'], ['—', '—']])
         self.assertEqual(report['branch_totals'], ['50', '10'])
+        # متوسط اليوم = إجمالي الفترة ÷ عدد الأيام (يومان)، لكل فرع وللإجمالي
+        self.assertEqual(report['days_elapsed'], 2)
+        self.assertEqual(report['branch_per_day'], ['25', '5'])
+        self.assertEqual([b['per_day_value_display'] for b in report['branches']], ['2,250.00', '250.00'])
+        self.assertEqual((report['per_day_invoices_display'], report['per_day_value_display']), ('30', '2,500.00'))
+        self.assertEqual([d['by_branch'] for d in report['days_rows']], [['30', '10'], ['20', '—']])
 
     def test_report_branch_filter_and_midnight_window(self):
         from search import oracle_pos_hours as ph
@@ -3076,6 +3082,15 @@ class PosHoursReportTests(TestCase):
         self.assertEqual(report['invoices'], 0)
         self.assertEqual(report['busiest_label'], '—')
         self.assertEqual(report['days_rows'], [])
+        # فترة تنتهي في المستقبل: القسمة على الأيام التي مضت فقط، والمتوسط بمنزلة عشرية
+        from datetime import date, timedelta
+
+        today = date.today()
+        future_rows = [{'D': today, 'BRN': 6, 'HH': '10', 'INVOICES': 5, 'VALUE_TOTAL': 100}]
+        with patch('search.oracle_pos_hours.oracle_enabled', return_value=True),                 patch('search.oracle_pos_hours._pos_owner', return_value='YSPOS1'),                 patch('search.oracle_pos_hours._branch_names', return_value={'6': 'سكاي مول'}),                 patch('search.oracle_pos_hours._fetch_all', return_value=future_rows),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            future = ph.build_pos_hours_report(today - timedelta(days=1), today + timedelta(days=5))
+        self.assertEqual((future['days'], future['days_elapsed']), (7, 2))
+        self.assertEqual(future['per_day_invoices_display'], '2.5')
         with patch('search.oracle_pos_hours.oracle_enabled', return_value=True):
             with self.assertRaises(OracleStockError):
                 ph.build_pos_hours_report('2026-10-21', '2026-10-20')

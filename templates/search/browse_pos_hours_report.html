@@ -16,6 +16,8 @@
   .psh-peak > td { background: rgba(74, 127, 181, 0.10) !important; font-weight: 700; }
   .psh-zero > td { color: #8a94a3; }
   .psh-brn { white-space: nowrap; }
+  .psh-perday > td { background: rgba(74, 127, 181, 0.08) !important; }
+  .psh-perday small { font-weight: 600; color: #6B7785; }
   .psh-tables > .psh-wide { grid-column: 1 / -1; }
   .psh-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; align-items: start; }
   .psh-tables .wqc-sheet { margin: 0; }
@@ -88,7 +90,7 @@
         <h3>عدد الفواتير</h3>
       </header>
       <p class="wqc-kpi-value">{{ report.invoices_display }}</p>
-      {% if report.per_day_display %}<small>{{ report.per_day_display }} فاتورة في اليوم تقريباً</small>{% endif %}
+      {% if report.days > 1 %}<small>{{ report.per_day_invoices_display }} فاتورة في اليوم · على {{ report.days_elapsed }} يوم</small>{% endif %}
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-value">
       <header>
@@ -96,7 +98,7 @@
         <h3>قيمة الفواتير</h3>
       </header>
       <p class="wqc-kpi-value mono">{{ report.value_display }}</p>
-      <small>شاملة الضريبة</small>
+      <small>شاملة الضريبة{% if report.days > 1 %} · {{ report.per_day_value_display }} في اليوم{% endif %}</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-avg">
       <header>
@@ -170,7 +172,7 @@
         <table class="wqc-table">
           <caption class="psh-caption">
             <strong>الفواتير بالفرع</strong>
-            <span>في الساعات المختارة فقط</span>
+            <span>في الساعات المختارة فقط{% if report.days > 1 %} · متوسط اليوم = إجمالي الفترة ÷ {{ report.days_elapsed }} يوم{% endif %}</span>
           </caption>
           <thead>
             <tr>
@@ -178,6 +180,7 @@
               <th scope="col">الفرع</th>
               <th scope="col">عدد الفواتير</th>
               <th scope="col">القيمة</th>
+              {% if report.days > 1 %}<th scope="col">فواتير اليوم</th><th scope="col">قيمة اليوم</th>{% endif %}
               <th scope="col">متوسط الفاتورة</th>
               <th scope="col">النسبة</th>
             </tr>
@@ -189,13 +192,27 @@
                 <td title="{{ row.code }}">{{ row.label }}</td>
                 <td class="mono">{{ row.invoices_display }}</td>
                 <td class="mono">{{ row.value_display }}</td>
+                {% if report.days > 1 %}<td class="mono">{{ row.per_day_invoices_display }}</td><td class="mono">{{ row.per_day_value_display }}</td>{% endif %}
                 <td class="mono">{{ row.avg_display }}</td>
                 <td class="mono">{{ row.share_display }}<span class="psh-bar" aria-hidden="true"><i style="width: {{ row.bar_width }}%"></i></span></td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="wqc-empty">لا توجد فواتير في هذه الساعات.</td></tr>
+              <tr><td colspan="{% if report.days > 1 %}8{% else %}6{% endif %}" class="wqc-empty">لا توجد فواتير في هذه الساعات.</td></tr>
             {% endfor %}
           </tbody>
+          {% if report.branches %}
+            <tfoot>
+              <tr class="wqc-tfoot">
+                <td></td>
+                <td>الإجمالي</td>
+                <td class="mono">{{ report.invoices_display }}</td>
+                <td class="mono">{{ report.value_display }}</td>
+                {% if report.days > 1 %}<td class="mono">{{ report.per_day_invoices_display }}</td><td class="mono">{{ report.per_day_value_display }}</td>{% endif %}
+                <td class="mono">{{ report.avg_display }}</td>
+                <td class="mono">100.0%</td>
+              </tr>
+            </tfoot>
+          {% endif %}
         </table>
       </div>
     </section>
@@ -207,11 +224,12 @@
         <table class="wqc-table">
           <caption class="psh-caption">
             <strong>الفواتير باليوم</strong>
-            <span>في الساعات المختارة من كل يوم</span>
+            <span>في الساعات المختارة من كل يوم{% if report.branch_cols|length > 1 %} · عدد فواتير كل فرع في اليوم{% endif %}</span>
           </caption>
           <thead>
             <tr>
               <th scope="col">التاريخ</th>
+              {% if report.branch_cols|length > 1 %}{% for col in report.branch_cols %}<th scope="col" class="psh-brn">{{ col.name }}</th>{% endfor %}{% endif %}
               <th scope="col">عدد الفواتير</th>
               <th scope="col">القيمة</th>
               <th scope="col">متوسط الفاتورة</th>
@@ -222,6 +240,7 @@
             {% for row in report.days_rows %}
               <tr>
                 <td class="mono" dir="ltr">{{ row.label }}</td>
+                {% if report.branch_cols|length > 1 %}{% for n in row.by_branch %}<td class="mono psh-brn">{{ n }}</td>{% endfor %}{% endif %}
                 <td class="mono">{{ row.invoices_display }}</td>
                 <td class="mono">{{ row.value_display }}</td>
                 <td class="mono">{{ row.avg_display }}</td>
@@ -229,6 +248,24 @@
               </tr>
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td>الإجمالي</td>
+              {% if report.branch_cols|length > 1 %}{% for n in report.branch_totals %}<td class="mono psh-brn">{{ n }}</td>{% endfor %}{% endif %}
+              <td class="mono">{{ report.invoices_display }}</td>
+              <td class="mono">{{ report.value_display }}</td>
+              <td class="mono">{{ report.avg_display }}</td>
+              <td class="mono">100.0%</td>
+            </tr>
+            <tr class="wqc-tfoot psh-perday">
+              <td>متوسط اليوم <small>(÷ {{ report.days_elapsed }} يوم)</small></td>
+              {% if report.branch_cols|length > 1 %}{% for n in report.branch_per_day %}<td class="mono psh-brn">{{ n }}</td>{% endfor %}{% endif %}
+              <td class="mono">{{ report.per_day_invoices_display }}</td>
+              <td class="mono">{{ report.per_day_value_display }}</td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </section>

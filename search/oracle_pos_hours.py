@@ -32,7 +32,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 120
-_CACHE_VER = "v2"
+_CACHE_VER = "v3"
 MAX_DAYS = 92
 _TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -103,6 +103,12 @@ def _row(label: str, invoices: int, value: float, total_invoices: int, top_invoi
     }
 
 
+def _per_day(invoices: int, days: int) -> str:
+    """متوسط فواتير اليوم بمنزلة عشرية واحدة (12.5) ودون كسور حين يكون عدداً صحيحاً."""
+    avg = invoices / days if days else 0.0
+    return f"{avg:,.0f}" if float(avg).is_integer() else f"{avg:,.1f}"
+
+
 def hour_label(hour: int) -> str:
     return f"{hour:02d}:00 – {hour:02d}:59"
 
@@ -170,6 +176,7 @@ def build_pos_hours_report(
     by_branch: dict[str, list] = {}
     by_day: dict[date, list] = {}
     hour_branch: dict[tuple[int, str], int] = {}
+    day_branch: dict[tuple[date, str], int] = {}
     total_invoices = 0
     total_value = 0.0
     for r in rows:
@@ -186,6 +193,7 @@ def build_pos_hours_report(
             acc[0] += invoices
             acc[1] += value
         hour_branch[(hour, code)] = hour_branch.get((hour, code), 0) + invoices
+        day_branch[(day, code)] = day_branch.get((day, code), 0) + invoices
         total_invoices += invoices
         total_value += value
 
@@ -197,6 +205,10 @@ def build_pos_hours_report(
         for h in hours
     ]
     busiest = max(hour_rows, key=lambda x: x["invoices"], default=None)
+
+    # الأيام المقسوم عليها: أيام الفترة التي مضت فعلاً (فترة تنتهي في المستقبل لا تُقسَم على أيام لم تأتِ)
+    days = (d_to - d_from).days + 1
+    days_elapsed = max(1, (min(d_to, date.today()) - d_from).days + 1)
 
     top_branch = max((v[0] for v in by_branch.values()), default=0)
     branch_rows = sorted(
@@ -215,16 +227,26 @@ def build_pos_hours_report(
             for col in branch_cols
         ]
     branch_totals = [b["invoices_display"] for b in branch_rows]
+    # متوسط اليوم لكل فرع = إجمالي الفترة ÷ عدد الأيام
+    for b in branch_rows:
+        b["per_day_invoices_display"] = _per_day(b["invoices"], days_elapsed)
+        b["per_day_value_display"] = _money(b["value"] / days_elapsed)
+    branch_per_day = [b["per_day_invoices_display"] for b in branch_rows]
 
     day_rows = []
     if d_from != d_to:
         top_day = max((v[0] for v in by_day.values()), default=0)
         day_rows = [
-            dict(_row(d.isoformat(), *by_day[d], total_invoices, top_day), date=d.isoformat())
+            dict(
+                _row(d.isoformat(), *by_day[d], total_invoices, top_day),
+                date=d.isoformat(),
+                by_branch=[
+                    _count(day_branch[(d, col["code"])]) if day_branch.get((d, col["code"])) else "—"
+                    for col in branch_cols
+                ],
+            )
             for d in sorted(by_day)
         ]
-
-    days = (d_to - d_from).days + 1
     report = {
         "from": d_from.isoformat(),
         "to": d_to.isoformat(),
@@ -239,13 +261,17 @@ def build_pos_hours_report(
         "value": round(total_value, 2),
         "value_display": _money(total_value),
         "avg_display": _money(total_value / total_invoices) if total_invoices else "—",
-        "per_day_display": _count(round(total_invoices / days)) if days > 1 else "",
+        "per_day_display": _count(round(total_invoices / days_elapsed)) if days > 1 else "",
+        "days_elapsed": days_elapsed,
+        "per_day_invoices_display": _per_day(total_invoices, days_elapsed),
+        "per_day_value_display": _money(total_value / days_elapsed),
         "busiest_label": busiest["label"] if busiest and busiest["invoices"] else "—",
         "busiest_invoices_display": busiest["invoices_display"] if busiest and busiest["invoices"] else "",
         "hours": hour_rows,
         "branches": branch_rows,
         "branch_cols": branch_cols,
         "branch_totals": branch_totals,
+        "branch_per_day": branch_per_day,
         "days_rows": day_rows,
     }
     try:
