@@ -3158,3 +3158,70 @@ class PosHoursReportTests(TestCase):
             bad = self.client.get(reverse('browse_pos_hours_report'), {'run': '1', 'time_from': '25:00'})
             self.assertContains(bad, 'وقت غير صالح')
         self.assertEqual(build.call_count, 2)
+
+    def test_excel_export_has_one_formatted_sheet_per_table(self):
+        from datetime import datetime
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from search import oracle_pos_hours as ph
+
+        rows = [
+            {'D': datetime(2026, 10, 19), 'BRN': 6, 'HH': '20', 'INVOICES': 30, 'VALUE_TOTAL': 3000},
+            {'D': datetime(2026, 10, 19), 'BRN': 7, 'HH': '21', 'INVOICES': 10, 'VALUE_TOTAL': 500},
+            {'D': datetime(2026, 10, 20), 'BRN': 6, 'HH': '20', 'INVOICES': 20, 'VALUE_TOTAL': 1500},
+        ]
+        with patch('search.oracle_pos_hours.oracle_enabled', return_value=True), \
+                patch('search.oracle_pos_hours._pos_owner', return_value='YSPOS1'), \
+                patch('search.oracle_pos_hours._branch_names', return_value={'6': 'سكاي مول', '7': 'المنصورة'}), \
+                patch('search.oracle_pos_hours._fetch_all', return_value=rows), \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            report = ph.build_pos_hours_report('2026-10-19', '2026-10-20', time_from='20:00', time_to='21:59')
+        response = ph.build_pos_hours_excel(report)
+        self.assertIn('spreadsheetml', response['Content-Type'])
+        self.assertIn('pos_invoices_by_hour_20261019_20261020.xlsx', response['Content-Disposition'])
+        wb = load_workbook(BytesIO(response.content))
+        self.assertEqual(wb.sheetnames, ['الفواتير بالساعة', 'الفواتير بالفرع', 'الفواتير باليوم'])
+        hours = wb['الفواتير بالساعة']
+        self.assertTrue(hours.sheet_view.rightToLeft)
+        self.assertEqual(hours['A1'].value, 'الفواتير بالساعة')
+        self.assertEqual(hours['A2'].value, 'الفترة: من 2026-10-19 إلى 2026-10-20 · الساعة 20:00 – 21:59')
+        # ترويسة: الساعة، الفروع بأسمائها، ثم الأعمدة الثابتة
+        self.assertEqual([c.value for c in hours[4]], ['الساعة', 'سكاي مول', 'المنصورة', 'عدد الفواتير', 'القيمة', 'متوسط الفاتورة', 'النسبة'])
+        self.assertEqual([c.value for c in hours[5]], ['20:00 – 20:59', 50, None, 50, 4500, 90, 50 / 60])
+        self.assertEqual(hours['G5'].number_format, '0.0%')
+        self.assertEqual(hours['E5'].number_format, '#,##0.00')
+        self.assertEqual([c.value for c in hours[7]][:5], ['الإجمالي', 50, 10, 60, 5000])
+        self.assertEqual(hours.page_setup.orientation, 'portrait')
+        branches = wb['الفواتير بالفرع']
+        self.assertEqual([c.value for c in branches[4]][4:6], ['فواتير اليوم', 'قيمة اليوم'])
+        self.assertEqual([c.value for c in branches[5]][:6], [1, 'سكاي مول', 50, 4500, 25, 2250])
+        days = wb['الفواتير باليوم']
+        self.assertEqual([c.value for c in days[5]][:4], ['2026-10-19', 30, 10, 40])
+        self.assertEqual(days.cell(row=days.max_row, column=1).value, 'متوسط اليوم (÷ 2 يوم)')
+        self.assertEqual(days.cell(row=days.max_row, column=4).value, 30)
+
+        # من الشاشة: export=excel يُرجع الملف مباشرة بنفس الفلاتر
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _session():
+            yield
+
+        admin = get_user_model().objects.create_user('psh_xl', password='x-Test-123', is_staff=True, is_superuser=True)
+        self.client.force_login(admin)
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), \
+                patch('search.oracle_stock.oracle_session', _session), \
+                patch('search.oracle_income.fetch_income_branches', return_value=[{'code': '6', 'name': 'سكاي مول'}]), \
+                patch('search.oracle_pos_hours.build_pos_hours_report', return_value=report) as build:
+            xls = self.client.get(reverse('browse_pos_hours_report'), {
+                'date_from': '2026-10-19', 'date_to': '2026-10-20', 'time_from': '20:00', 'time_to': '21:59', 'export': 'excel',
+            })
+            self.assertIn('spreadsheetml', xls['Content-Type'])
+            self.assertEqual(build.call_args.kwargs['time_from'], '20:00')
+            page = self.client.get(reverse('browse_pos_hours_report'), {'run': '1', 'date_from': '2026-10-19', 'date_to': '2026-10-20'})
+            self.assertContains(page, 'export=excel')
+            self.assertContains(page, 'data-psh-pdf="all"')
+            self.assertContains(page, 'data-psh-table="days"')

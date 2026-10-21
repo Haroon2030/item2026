@@ -6613,12 +6613,13 @@ def browse_pos_hours_report(request):
     """فواتير نقاط البيع بالساعة: عدد الفواتير وقيمتها في تاريخ وساعات محددة، بالساعة والفرع واليوم."""
     from datetime import date as date_cls
 
-    from .oracle_pos_hours import build_pos_hours_report, normalize_window, parse_hhmm
+    from .oracle_pos_hours import build_pos_hours_excel, build_pos_hours_report, normalize_window, parse_hhmm
     from .oracle_stock import oracle_enabled, oracle_session
 
     today = date_cls.today()
     branch = str(request.GET.get('branch') or '').strip()
-    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes') or want_excel
     error = ''
     report = None
     branches: list[dict] = []
@@ -6664,6 +6665,9 @@ def browse_pos_hours_report(request):
             error = f'تعذّر تحميل التقرير: {exc}'
             report = None
 
+    if report and want_excel:
+        return build_pos_hours_excel(report)
+
     return render(
         request,
         'search/browse_pos_hours_report.html',
@@ -6677,6 +6681,7 @@ def browse_pos_hours_report(request):
             'report': report,
             'run': run,
             'error': error,
+            'export_query': _query_without(request.GET, 'export'),
         },
     )
 

@@ -285,3 +285,207 @@ def build_pos_hours_report(
     except Exception:  # noqa: BLE001
         pass
     return report
+
+
+# ===== تصدير Excel: كل جدول في ورقة مستقلة بنفس تصميم الصفحة =====
+# ألوان الأعمدة كما في الصفحة: الاسم · الأعداد · المبالغ · المتوسط · النسبة
+_XL_COLORS = {
+    "name": "DCE8F4",
+    "count": "E6F0FA",
+    "avg1": "E6F0FA",
+    "money": "E8F4E3",
+    "avg": "EEEAF8",
+    "share": "FCEBD3",
+    "head": "F6F6F9",
+    "total": "EEF3F9",
+    "perday": "E3ECF6",
+}
+_XL_FORMATS = {"count": "#,##0", "avg1": "#,##0.0", "money": "#,##0.00", "avg": "#,##0.00", "share": "0.0%"}
+
+
+def _num(text: Any) -> float | int:
+    """«1,234.5» أو «—» → رقم (الخلية الفارغة صفر)."""
+    if isinstance(text, (int, float)):
+        return text
+    t = str(text or "").replace(",", "").strip()
+    if not t or t == "—":
+        return 0
+    try:
+        v = float(t)
+    except ValueError:
+        return 0
+    return int(v) if v.is_integer() else v
+
+
+def _cell(text: Any):
+    """خانة فرع في جدول: «—» (لا فواتير) تبقى فارغة كما في الصفحة، وغيرها رقم."""
+    return None if str(text or "").strip() in ("", "—") else _num(text)
+
+
+def report_period_line(report: dict[str, Any]) -> str:
+    """نفس سطر الفترة تحت عنوان كل جدول في الصفحة."""
+    line = f"الفترة: من {report['from']}"
+    if report["to"] != report["from"]:
+        line += f" إلى {report['to']}"
+    line += f" · الساعة {report['time_from']} – {report['time_to']}"
+    if report.get("branch_name"):
+        line += f" · {report['branch_name']}"
+    return line
+
+
+def _xl_sheet(wb, title: str, period: str, columns: list[tuple[str, str, int]], rows: list[list], footer: list[tuple[list, str]]):
+    """ورقة: عنوان الجدول وسطر الفترة ثم الترويسة والصفوف وصفوف الإجمالي.
+
+    columns: (العنوان، النوع، العرض) — النوع يحدد لون العمود وتنسيق الرقم.
+    footer: [(القيم، لون الخلفية)] صفوف أسفل الجدول (الإجمالي / متوسط اليوم).
+    """
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    ws = wb.create_sheet(title=title[:31])
+    ws.sheet_view.rightToLeft = True
+    ws.sheet_view.showGridLines = False
+    n = len(columns)
+    hair = Side(style="thin", color="D9DCE3")
+    border = Border(left=hair, right=hair, top=hair, bottom=hair)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    font = "Arial"
+
+    for row, text, size, color in ((1, title, 14, "1F2A37"), (2, period, 10, "5A6675")):
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n)
+        c = ws.cell(row=row, column=1, value=text)
+        c.font = Font(name=font, size=size, bold=True, color=color)
+        c.alignment = center
+    ws.row_dimensions[1].height = 24
+    ws.row_dimensions[2].height = 18
+
+    head_row = 4
+    for i, (label, _kind, width) in enumerate(columns, start=1):
+        c = ws.cell(row=head_row, column=i, value=label)
+        c.font = Font(name=font, size=10, bold=True, color="5A6675")
+        c.fill = PatternFill("solid", fgColor=_XL_COLORS["head"])
+        c.alignment = center
+        c.border = Border(left=hair, right=hair, top=hair, bottom=Side(style="medium", color="A8B0BD"))
+        ws.column_dimensions[get_column_letter(i)].width = width
+    ws.row_dimensions[head_row].height = 22
+
+    def write(r: int, values: list, fill: str | None = None, bold: bool = False):
+        for i, ((_label, kind, _w), v) in enumerate(zip(columns, values), start=1):
+            c = ws.cell(row=r, column=i, value=v)
+            c.font = Font(name=font, size=10, bold=bold or kind == "name", color="1F2A37")
+            c.alignment = center
+            c.border = border
+            color = fill or _XL_COLORS.get(kind)
+            if color:
+                c.fill = PatternFill("solid", fgColor=color)
+            if kind in _XL_FORMATS and isinstance(v, (int, float)):
+                # متوسط اليوم في أعمدة الأعداد قد يكون كسراً (466.5) — نُظهر منزلة عشرية بدل التقريب
+                fractional = kind == "count" and isinstance(v, float) and not v.is_integer()
+                c.number_format = "#,##0.0" if fractional else _XL_FORMATS[kind]
+
+    r = head_row + 1
+    for values in rows:
+        write(r, values)
+        r += 1
+    for k, (values, fill) in enumerate(footer):
+        write(r, values, fill=fill, bold=True)
+        if k == 0:
+            for i in range(1, n + 1):
+                ws.cell(row=r, column=i).border = Border(
+                    left=hair, right=hair, bottom=hair, top=Side(style="medium", color="4A7FB5"),
+                )
+        r += 1
+
+    ws.freeze_panes = ws.cell(row=head_row + 1, column=1)
+    ws.print_title_rows = f"{head_row}:{head_row}"
+    # طباعة رسمية: رأسي بعرض الصفحة (مثل PDF)، بلا ترويسة ولا تذييل
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True
+    ws.page_margins.left = ws.page_margins.right = 0.4
+    ws.page_margins.top = ws.page_margins.bottom = 0.5
+    ws.page_margins.header = ws.page_margins.footer = 0
+    return ws
+
+
+def _avg(value: float, invoices: int) -> float:
+    return round(value / invoices, 2) if invoices else 0
+
+
+def build_pos_hours_excel(report: dict[str, Any]):
+    """ملف xlsx: الفواتير بالساعة / بالفرع / باليوم — كل جدول في ورقة بنفس أعمدة الصفحة."""
+    from io import BytesIO
+
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    period = report_period_line(report)
+    cols = report.get("branch_cols") or []
+    multi = len(cols) > 1
+    total_inv = report["invoices"] or 0
+    share = (lambda inv: inv / total_inv if total_inv else 0)
+    branch_heads = [(c["name"], "count", 12) for c in cols] if multi else []
+    tail_heads = [("عدد الفواتير", "count", 13), ("القيمة", "money", 16), ("متوسط الفاتورة", "avg", 14), ("النسبة", "share", 10)]
+    grand = [report["invoices"], report["value"], _avg(report["value"], report["invoices"]), 1 if total_inv else 0]
+    branch_totals = [_num(x) for x in report.get("branch_totals", [])] if multi else []
+
+    # 1) الفواتير بالساعة
+    rows = [
+        [h["label"]] + ([_cell(x) for x in h.get("by_branch", [])] if multi else [])
+        + [h["invoices"], h["value"], _avg(h["value"], h["invoices"]), share(h["invoices"])]
+        for h in report["hours"]
+    ]
+    _xl_sheet(
+        wb, "الفواتير بالساعة", period, [("الساعة", "name", 16)] + branch_heads + tail_heads, rows,
+        [(["الإجمالي"] + branch_totals + grand, _XL_COLORS["total"])],
+    )
+
+    # 2) الفواتير بالفرع
+    daily = report.get("days", 1) > 1
+    columns = [("#", "count", 6), ("الفرع", "name", 26), ("عدد الفواتير", "count", 13), ("القيمة", "money", 16)]
+    if daily:
+        columns += [("فواتير اليوم", "avg1", 12), ("قيمة اليوم", "money", 15)]
+    columns += [("متوسط الفاتورة", "avg", 14), ("النسبة", "share", 10)]
+    rows = []
+    for i, b in enumerate(report["branches"], start=1):
+        row = [i, b["label"], b["invoices"], b["value"]]
+        if daily:
+            row += [_num(b.get("per_day_invoices_display")), _num(b.get("per_day_value_display"))]
+        rows.append(row + [_avg(b["value"], b["invoices"]), share(b["invoices"])])
+    total = ["", "الإجمالي", report["invoices"], report["value"]]
+    if daily:
+        total += [_num(report.get("per_day_invoices_display")), _num(report.get("per_day_value_display"))]
+    total += [_avg(report["value"], report["invoices"]), 1 if total_inv else 0]
+    _xl_sheet(wb, "الفواتير بالفرع", period, columns, rows, [(total, _XL_COLORS["total"])] if rows else [])
+
+    # 3) الفواتير باليوم (لفترة أكثر من يوم)
+    if report.get("days_rows"):
+        rows = [
+            [d["label"]] + ([_cell(x) for x in d.get("by_branch", [])] if multi else [])
+            + [d["invoices"], d["value"], _avg(d["value"], d["invoices"]), share(d["invoices"])]
+            for d in report["days_rows"]
+        ]
+        per_day = (
+            [f"متوسط اليوم (÷ {report.get('days_elapsed', 1)} يوم)"]
+            + ([_num(x) for x in report.get("branch_per_day", [])] if multi else [])
+            + [_num(report.get("per_day_invoices_display")), _num(report.get("per_day_value_display")), None, None]
+        )
+        _xl_sheet(
+            wb, "الفواتير باليوم", period, [("التاريخ", "name", 14)] + branch_heads + tail_heads, rows,
+            [(["الإجمالي"] + branch_totals + grand, _XL_COLORS["total"]), (per_day, _XL_COLORS["perday"])],
+        )
+
+    buf = BytesIO()
+    wb.save(buf)
+    stamp = f"{report['from']}_{report['to']}".replace("-", "")
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="pos_invoices_by_hour_{stamp}.xlsx"'
+    return response

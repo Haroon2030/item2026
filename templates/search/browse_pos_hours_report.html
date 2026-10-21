@@ -23,6 +23,43 @@
   .psh-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; align-items: start; }
   .psh-tables .wqc-sheet { margin: 0; }
   .psh-note { margin: 0.25rem 0 0; color: #6B7785; font-size: 0.8rem; }
+  .psh-export { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.75rem; }
+  .psh-export > span { color: #5a6675; font-size: 0.85rem; font-weight: 700; margin-inline-end: 0.25rem; }
+  .psh-print-gap { display: none; }
+  /* ===== PDF: الجداول فقط، كل جدول في صفحة، بلا ترويسة ===== */
+  @media print {
+    /* هامش الصفحة صفر: لا يبقى مكان لترويسة المتصفح وتذييله (التاريخ والرابط) */
+    @page { size: A4 portrait; margin: 0; }
+  }
+  @layer app-components {
+    @media print {
+      html body.psh-printing:not(#fx):not(#fy), html body.psh-printing *:not(#fx):not(#fy) { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html body.theme-navy.psh-printing:not(#fx):not(#fy) { background: #fff !important; background-image: none !important; margin: 0 !important; }
+      html body.theme-navy.psh-printing :is(.sidebar, .sidebar-open, .app-hard-refresh, .sidebar-scrim, .scroll-edge-btn, .app-backdrop, .dash-head, form.psh-filter, .psh-scope, .income-kpi-grid, .psh-export, .wqc-sheet-head, .alert, .psh-note):not(#fx):not(#fy) { display: none !important; }
+      html body.theme-navy.psh-printing .page.has-sidebar:not(#fx):not(#fy),
+      html body.theme-navy.psh-printing .page.has-sidebar > main:not(#fx):not(#fy) { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; transform: none !important; animation: none !important; }
+      html body.psh-printing .psh-tables:not(#fx):not(#fy) { display: block !important; }
+      /* كل جدول في صفحة مستقلة، بهامش داخلي بدل هامش الصفحة */
+      html body.psh-printing [data-psh-table]:not(#fx):not(#fy) {
+        display: block !important; break-after: page; page-break-after: always;
+        margin: 0 !important; padding: 0 8mm 6mm !important; box-shadow: none !important; border: 0 !important;
+        border-radius: 0 !important; background: #fff !important; transform: none !important; animation: none !important;
+      }
+      html body.psh-printing [data-psh-table="days"]:not(#fx):not(#fy),
+      html body.psh-printing:not([data-psh-has-days]) [data-psh-table="branches"]:not(#fx):not(#fy) { break-after: auto; page-break-after: auto; }
+      html body.psh-printing[data-psh-only] [data-psh-table]:not(#fx):not(#fy) { display: none !important; }
+      html body.psh-printing[data-psh-only="hours"] [data-psh-table="hours"]:not(#fx):not(#fy),
+      html body.psh-printing[data-psh-only="branches"] [data-psh-table="branches"]:not(#fx):not(#fy),
+      html body.psh-printing[data-psh-only="days"] [data-psh-table="days"]:not(#fx):not(#fy) { display: block !important; break-after: auto; page-break-after: auto; }
+      html body.psh-printing [data-psh-table] .table-wrap:not(#fx):not(#fy) { overflow: visible !important; max-height: none !important; box-shadow: none !important; }
+      html body.psh-printing [data-psh-table] table:not(#fx):not(#fy) { margin: 0 auto !important; }
+      html body.psh-printing [data-psh-table] table thead:not(#fx):not(#fy) { display: table-header-group; }
+      html body.psh-printing [data-psh-table] table tr:not(#fx):not(#fy) { break-inside: avoid; }
+      html body.psh-printing .psh-print-gap:not(#fx):not(#fy) { display: table-row !important; }
+      html body.psh-printing .psh-print-gap > th:not(#fx):not(#fy) { height: 9mm !important; padding: 0 !important; background: #fff !important; border: 0 !important; box-shadow: none !important; }
+      html body.psh-printing .psh-caption:not(#fx):not(#fy) { padding-top: 0 !important; }
+    }
+  }
 </style>
 
 <section class="dash-head" aria-label="فواتير نقاط البيع بالساعة">
@@ -118,21 +155,28 @@
     </article>
   </section>
 
+  <div class="psh-export" role="group" aria-label="تصدير التقرير">
+    <span>تصدير التقرير</span>
+    <button type="button" class="dash-pdf-btn psh-pdf-btn" data-psh-pdf="all" title="كل جدول في صفحة مستقلة، بلا ترويسة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF — كل الجداول</button>
+    <a class="btn-ghost psh-excel-btn" href="?{{ export_query }}&amp;export=excel" title="ملف Excel: كل جدول في ورقة مستقلة بنفس التنسيق">Excel</a>
+  </div>
+
   <div class="psh-tables">
-    <section class="wqc-sheet{% if report.branch_cols|length > 1 %} psh-wide{% endif %}" aria-label="الفواتير بالساعة">
+    <section class="wqc-sheet{% if report.branch_cols|length > 1 %} psh-wide{% endif %}" aria-label="الفواتير بالساعة" data-psh-table="hours">
       <div class="wqc-sheet-head">
         <div class="wqc-sheet-actions">
-          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm js-fit-print" data-print-scope="panel" title="حفظ هذا الجدول PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm psh-pdf-btn" data-psh-pdf="hours" title="حفظ هذا الجدول PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
         </div>
       </div>
       <div class="table-wrap wqc-scroll" tabindex="0" aria-label="الفواتير بالساعة">
-        <table class="wqc-table">
+        <table class="wqc-table" data-name-col="0">
           <caption class="psh-caption">
             <strong>الفواتير بالساعة</strong>
             <span class="psh-period">الفترة: من <bdi dir="ltr">{{ report.from }}</bdi>{% if report.to != report.from %} إلى <bdi dir="ltr">{{ report.to }}</bdi>{% endif %} · الساعة <bdi dir="ltr">{{ report.time_from }} – {{ report.time_to }}</bdi>{% if report.branch_name %} · {{ report.branch_name }}{% endif %}</span>
             <span>مجموع كل الأيام المختارة لكل ساعة{% if report.branch_cols|length > 1 %} · عدد فواتير كل فرع في الساعة{% endif %}</span>
           </caption>
           <thead>
+            <tr class="psh-print-gap" aria-hidden="true" data-tc-ignore><th colspan="99"></th></tr>
             <tr>
               <th scope="col">الساعة</th>
               {% if report.branch_cols|length > 1 %}{% for col in report.branch_cols %}<th scope="col" class="psh-brn" title="عدد فواتير {{ col.name }}">{{ col.name }}</th>{% endfor %}{% endif %}
@@ -169,7 +213,12 @@
       {% if report.crosses_midnight %}<p class="psh-note">الساعات بعد منتصف الليل تُحسب ضمن تاريخ الفاتورة نفسه.</p>{% endif %}
     </section>
 
-    <section class="wqc-sheet" aria-label="الفواتير بالفرع">
+    <section class="wqc-sheet" aria-label="الفواتير بالفرع" data-psh-table="branches">
+      <div class="wqc-sheet-head">
+        <div class="wqc-sheet-actions">
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm psh-pdf-btn" data-psh-pdf="branches" title="حفظ هذا الجدول PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
+        </div>
+      </div>
       <div class="table-wrap wqc-scroll" tabindex="0" aria-label="الفواتير بالفرع">
         <table class="wqc-table">
           <caption class="psh-caption">
@@ -178,6 +227,7 @@
             <span>في الساعات المختارة فقط{% if report.days > 1 %} · متوسط اليوم = إجمالي الفترة ÷ {{ report.days_elapsed }} يوم{% endif %}</span>
           </caption>
           <thead>
+            <tr class="psh-print-gap" aria-hidden="true" data-tc-ignore><th colspan="99"></th></tr>
             <tr>
               <th scope="col">#</th>
               <th scope="col">الفرع</th>
@@ -222,15 +272,21 @@
   </div>
 
   {% if report.days_rows %}
-    <section class="wqc-sheet" aria-label="الفواتير باليوم" style="margin-top: 1rem;">
+    <section class="wqc-sheet" aria-label="الفواتير باليوم" style="margin-top: 1rem;" data-psh-table="days">
+      <div class="wqc-sheet-head">
+        <div class="wqc-sheet-actions">
+          <button type="button" class="dash-pdf-btn dash-pdf-btn-sm psh-pdf-btn" data-psh-pdf="days" title="حفظ هذا الجدول PDF"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg> PDF</button>
+        </div>
+      </div>
       <div class="table-wrap wqc-scroll" tabindex="0" aria-label="الفواتير باليوم">
-        <table class="wqc-table">
+        <table class="wqc-table" data-name-col="0">
           <caption class="psh-caption">
             <strong>الفواتير باليوم</strong>
             <span class="psh-period">الفترة: من <bdi dir="ltr">{{ report.from }}</bdi>{% if report.to != report.from %} إلى <bdi dir="ltr">{{ report.to }}</bdi>{% endif %} · الساعة <bdi dir="ltr">{{ report.time_from }} – {{ report.time_to }}</bdi>{% if report.branch_name %} · {{ report.branch_name }}{% endif %}</span>
             <span>في الساعات المختارة من كل يوم{% if report.branch_cols|length > 1 %} · عدد فواتير كل فرع في اليوم{% endif %}</span>
           </caption>
           <thead>
+            <tr class="psh-print-gap" aria-hidden="true" data-tc-ignore><th colspan="99"></th></tr>
             <tr>
               <th scope="col">التاريخ</th>
               {% if report.branch_cols|length > 1 %}{% for col in report.branch_cols %}<th scope="col" class="psh-brn">{{ col.name }}</th>{% endfor %}{% endif %}
@@ -278,4 +334,55 @@
 {% elif run and not error %}
   <p class="psh-scope">لا توجد بيانات للعرض.</p>
 {% endif %}
+<script>
+  // PDF: الجداول فقط، كل جدول في صفحة، بلا ترويسة (بدل مُصدّر الجداول العام)
+  (function () {
+    var btns = document.querySelectorAll('.psh-pdf-btn');
+    if (!btns.length) return;
+    window.addEventListener('beforeprint', function (e) {
+      if (document.body.classList.contains('psh-printing')) e.stopImmediatePropagation();
+    });
+    var oldTitle = document.title;
+    // عرض A4 رأسي ناقص الهامش الداخلي (8mm لكل جانب)
+    var pageW = Math.round((210 - 16) * (96 / 25.4));
+    function tables() { return document.querySelectorAll('[data-psh-table] table'); }
+    function fit() {
+      tables().forEach(function (t) {
+        t.style.zoom = '';
+        t.style.width = 'max-content';
+        var natural = t.offsetWidth;
+        t.style.width = '';
+        if (natural > pageW) t.style.zoom = String(pageW / natural);
+      });
+    }
+    function cleanup() {
+      document.body.classList.remove('psh-printing');
+      document.body.removeAttribute('data-psh-only');
+      document.body.removeAttribute('data-psh-has-days');
+      tables().forEach(function (t) { t.style.zoom = ''; t.style.width = ''; });
+      document.title = oldTitle;
+    }
+    Array.prototype.forEach.call(btns, function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var which = btn.getAttribute('data-psh-pdf') || 'all';
+        var section = document.querySelector('[data-psh-table="' + which + '"]');
+        var name = section ? (section.querySelector('.psh-caption strong') || {}).textContent : 'فواتير نقاط البيع بالساعة';
+        var period = (document.querySelector('.psh-period') || {}).textContent || '';
+        // اسم الملف المقترح عند الحفظ PDF
+        document.title = (name || 'فواتير نقاط البيع بالساعة').trim() + ' — ' + period.replace(/\s+/g, ' ').replace('الفترة: ', '').trim();
+        document.body.classList.add('psh-printing');
+        if (document.querySelector('[data-psh-table="days"]')) document.body.setAttribute('data-psh-has-days', '1');
+        if (which !== 'all') document.body.setAttribute('data-psh-only', which);
+        fit();
+        setTimeout(function () {
+          window.print();
+          setTimeout(cleanup, 300);
+        }, 60);
+      });
+    });
+    window.addEventListener('afterprint', cleanup);
+  })();
+</script>
 {% endblock %}

@@ -50,9 +50,11 @@
   /** رؤوس الأعمدة المنطقية (تفكّ colspan/rowspan وتأخذ الخلية الورقية الأدنى). */
   function headerModel(table) {
     var thead = table.tHead;
-    if (!thead || !thead.rows.length || thead.rows.length > 3) return null;
+    if (!thead) return null;
+    // صفوف ترويسة للتخطيط فقط (مثل فاصل الطباعة) لا تدخل في حساب الأعمدة
+    var rows = Array.prototype.filter.call(thead.rows, function (tr) { return !tr.hasAttribute("data-tc-ignore"); });
+    if (!rows.length || rows.length > 3) return null;
     var grid = [];
-    var rows = thead.rows;
     var ncols = 0;
     for (var r = 0; r < rows.length; r++) {
       grid[r] = grid[r] || [];
