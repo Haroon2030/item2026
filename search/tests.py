@@ -3010,6 +3010,16 @@ class PosHoursReportTests(TestCase):
                 ph.parse_hhmm(bad, '00:00')
         self.assertEqual(ph.window_hours('08:30', '10:15'), [8, 9, 10])
         self.assertEqual(ph.window_hours('22:00', '01:30'), [22, 23, 0, 1])
+        # يعبر منتصف الليل ويبدأ وينتهي في الساعة نفسها: الساعة لا تتكرر
+        self.assertEqual(ph.window_hours('22:30', '22:10'), list(range(22, 24)) + list(range(0, 22)))
+        # عنوان الساعة بمداه الفعلي في الساعتين الأولى والأخيرة
+        self.assertEqual(ph.hour_label(6, '00:00', '06:00'), '06:00 – 06:00')
+        self.assertEqual(ph.hour_label(8, '08:30', '10:15'), '08:30 – 08:59')
+        self.assertEqual(ph.hour_label(10, '08:30', '10:15'), '10:00 – 10:15')
+        self.assertEqual(ph.hour_label(9, '08:30', '10:15'), '09:00 – 09:59')
+        self.assertEqual(ph.hour_label(8, '08:15', '08:45'), '08:15 – 08:45')
+        self.assertEqual(ph.hour_label(22, '22:30', '22:10'), '22:00 – 22:59')
+        self.assertEqual(ph.hour_label(14), '14:00 – 14:59')
         # نفس وقت البداية والنهاية = اليوم كاملاً (لا دقيقة واحدة)
         self.assertEqual(ph.normalize_window('00:00', '00:00'), ('00:00', '23:59'))
         self.assertEqual(ph.normalize_window('08:00', '08:00'), ('00:00', '23:59'))
@@ -3047,6 +3057,7 @@ class PosHoursReportTests(TestCase):
         self.assertEqual(report['avg_display'], '83.33')
         # كل ساعات النطاق تظهر، والساعة 22 بلا فواتير صفر
         self.assertEqual([h['hour'] for h in report['hours']], [20, 21, 22])
+        self.assertEqual([h['label'] for h in report['hours']], ['20:00 – 20:59', '21:00 – 21:59', '22:00 – 22:30'])
         self.assertEqual([h['invoices'] for h in report['hours']], [50, 10, 0])
         self.assertEqual(report['busiest_label'], '20:00 – 20:59')
         self.assertEqual([b['label'] for b in report['branches']], ['سكاي مول', 'المنصورة'])

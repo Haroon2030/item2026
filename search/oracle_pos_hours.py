@@ -32,7 +32,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 120
-_CACHE_VER = "v3"
+_CACHE_VER = "v4"
 MAX_DAYS = 92
 _TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -63,7 +63,8 @@ def window_hours(time_from: str, time_to: str) -> list[int]:
     start, end = int(time_from[:2]), int(time_to[:2])
     if time_from <= time_to:
         return list(range(start, end + 1))
-    return list(range(start, 24)) + list(range(0, end + 1))
+    # يعبر منتصف الليل؛ إن بدأ وانتهى في الساعة نفسها (22:30 → 22:10) لا تتكرر تلك الساعة
+    return list(range(start, 24)) + [h for h in range(0, end + 1) if h < start]
 
 
 def _time_clause(time_from: str, time_to: str) -> str:
@@ -116,8 +117,20 @@ def _per_day(invoices: int, days: int) -> str:
     return f"{avg:,.0f}" if float(avg).is_integer() else f"{avg:,.1f}"
 
 
-def hour_label(hour: int) -> str:
-    return f"{hour:02d}:00 – {hour:02d}:59"
+def hour_label(hour: int, time_from: str = "00:00", time_to: str = "23:59") -> str:
+    """عنوان صف الساعة بمداه الفعلي: الساعة الأولى والأخيرة قد تكونان جزئيتين.
+
+    مثال: من 08:30 إلى 06:00 ← «08:30 – 08:59» … «06:00 – 06:00» بدل «06:00 – 06:59».
+    """
+    start_m, end_m = "00", "59"
+    first, last = int(time_from[:2]), int(time_to[:2])
+    # ساعة يبدأ وينتهي فيها نطاق يعبر منتصف الليل تحوي جزأين — تُعرض كاملة
+    split = time_from > time_to and first == last
+    if hour == first and not split:
+        start_m = time_from[3:5]
+    if hour == last and not split:
+        end_m = time_to[3:5]
+    return f"{hour:02d}:{start_m} – {hour:02d}:{end_m}"
 
 
 def build_pos_hours_report(
@@ -207,7 +220,7 @@ def build_pos_hours_report(
     hours = window_hours(time_from, time_to)
     top_hour = max((by_hour.get(h, [0])[0] for h in hours), default=0)
     hour_rows = [
-        dict(_row(hour_label(h), *by_hour.get(h, [0, 0.0]), total_invoices, top_hour), hour=h)
+        dict(_row(hour_label(h, time_from, time_to), *by_hour.get(h, [0, 0.0]), total_invoices, top_hour), hour=h)
         for h in hours
     ]
     busiest = max(hour_rows, key=lambda x: x["invoices"], default=None)
