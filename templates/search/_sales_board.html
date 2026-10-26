@@ -2,7 +2,7 @@
   <div class="sales-ov-board">
   <section class="sales-ov-kpis" aria-label="ملخص نقاط البيع">
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-total sales-ov-grand">
-      <span class="dash-kpi-label" title="المبيعات قبل خصم المرتجعات — الصافي بعد المرتجع في السطر السفلي">
+      <span class="dash-kpi-label" title="المبيعات بدون ضريبة قبل خصم المرتجعات — الصافي بعد المرتجع في السطر السفلي">
         <span class="dash-kpi-ico dash-kpi-ico-total" aria-hidden="true">
           <svg viewBox="0 0 48 48"><rect x="5" y="8" width="33" height="31" rx="3"/><path d="M5 15h33M9.5 11.5h.01M13 11.5h.01M16.5 11.5h.01"/><rect x="9.5" y="19" width="8" height="7"/><path d="M21 21h12M21 25h8M10 33h14"/><path d="M31.5 42l-4.2.9.9-4.2L38.5 28.4a2.2 2.2 0 0 1 3.1 3.1z"/></svg>
         </span>
@@ -19,7 +19,7 @@
         مبيعات نقاط البيع
       </span>
       <strong class="dash-kpi-value mono">{% money dashboard.kpis.pos_gross_before_returns %}</strong>
-      <span class="dash-kpi-hint mono" title="شامل الضريبة · بعد خصم مرتجعات {{ dashboard.kpis.pos_returns }} — قبل الخصم {{ dashboard.kpis.pos_gross_before_returns }} (يطابق تقرير أونكس)">{{ dashboard.kpis.pos_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.pos_sales }}</span>
+      <span class="dash-kpi-hint mono" title="بدون ضريبة · بعد خصم مرتجعات {{ dashboard.kpis.pos_returns }} — قبل الخصم {{ dashboard.kpis.pos_gross_before_returns }}">{{ dashboard.kpis.pos_invoices }} فاتورة · الصافي بعد المرتجع {{ dashboard.kpis.pos_sales }}</span>
     </article>
     <article class="dash-kpi-card dash-kpi-glass dash-kpi-glass-returns">
       <span class="dash-kpi-label">

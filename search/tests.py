@@ -3290,3 +3290,34 @@ class CombinedSalesTotalTests(TestCase):
         # 1000 + 40 + 60 (سكاي مول) + 300 + 700 (الربوة) + 500
         self.assertEqual(sales, 2600.0)
         self.assertEqual(invoices, 131)
+
+
+class SalesExcludeVatTests(TestCase):
+    """المبيعات في كل الشاشات بدون ضريبة القيمة المضافة (مثل قائمة الدخل)."""
+
+    def test_branch_rows_and_line_formula_exclude_vat(self):
+        from search import oracle_stock as os_
+
+        self.assertFalse(os_.SALES_INCLUDE_VAT)
+        self.assertEqual(os_._sales_amount(100, 15), 100.0)
+        with patch('search.oracle_stock._branch_names', return_value={'6': 'سكاي مول'}):
+            rows = os_._assemble_branch_rows(
+                [{'BRANCH_CODE': 6, 'INVOICE_COUNT': 10, 'NET_TOTAL': 1000, 'VAT_TOTAL': 150, 'GROSS_TOTAL': 1150}],
+                {'6': (1, 100.0, 15.0)},
+            )
+        row = rows[0]
+        # المبيعات والمرتجع والإجمالي قبل المرتجع كلها بدون ضريبة؛ الضريبة تبقى في حقلها للمرجع
+        self.assertEqual((row['sales_total'], row['return_total'], row['gross_total']), (900.0, 100.0, 1000.0))
+        self.assertEqual(row['avg_basket'], 90.0)
+        self.assertEqual(row['vat_total'], 135.0)
+        # بند الفاتورة: المبلغ الشامل ÷ (1 + نسبة ضريبة البند)
+        sql = os_._pos_dtl_net_sql('d')
+        self.assertIn('I_PRICE_VAT', sql)
+        self.assertIn('/ (1 + NVL(d.VAT_PER, 0) / 100)', sql)
+
+    def test_switch_back_to_vat_inclusive(self):
+        from search import oracle_stock as os_
+
+        with patch('search.oracle_stock.SALES_INCLUDE_VAT', True):
+            self.assertEqual(os_._sales_amount(100, 15), 115.0)
+            self.assertNotIn('VAT_PER', os_._pos_dtl_net_sql('d'))

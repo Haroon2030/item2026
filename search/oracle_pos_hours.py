@@ -2,7 +2,7 @@
 
 قراءة فقط (SELECT) من رأس فاتورة نقاط البيع IAS_POS_BILL_MST:
 - BILL_DATE تاريخ بلا وقت (كل الفواتير 00:00)، والوقت في BILL_TIME نصاً بصيغة HH24:MI:SS.
-- القيمة = BILL_AMT + VAT_AMT (شاملة الضريبة) بنفس شروط تحليل المبيعات: غير معلّقة ومبلغ منطقي،
+- القيمة = BILL_AMT (بدون ضريبة، أو + VAT_AMT إن فُعّل SALES_INCLUDE_VAT) بنفس شروط تحليل المبيعات: غير معلّقة ومبلغ منطقي،
   فيطابق عدد الفواتير ما يظهر في تحليل المبيعات للفترة نفسها (قبل المرتجع).
 - نطاق ساعات يعبر منتصف الليل (مثل 22:00 → 02:00) يُحسب ضمن تاريخ الفاتورة نفسه.
 """
@@ -17,6 +17,7 @@ from typing import Any
 from django.core.cache import cache
 
 from .oracle_stock import (
+    SALES_INCLUDE_VAT,
     OracleStockError,
     _as_date,
     _bill_amt_ok,
@@ -32,7 +33,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 120
-_CACHE_VER = "v4"
+_CACHE_VER = "v5"
 MAX_DAYS = 92
 _TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -171,6 +172,8 @@ def build_pos_hours_report(
         params["brn"] = int(brn) if brn.isdigit() else brn
         brn_sql = "AND m.BRN_NO = :brn"
 
+    # بدون ضريبة كباقي شاشات المبيعات (الإعداد المركزي في oracle_stock)
+    vat_sql = " + NVL(m.VAT_AMT, 0)" if SALES_INCLUDE_VAT else ""
     rows = _fetch_all(
         f"""
         SELECT
@@ -178,7 +181,7 @@ def build_pos_hours_report(
             m.BRN_NO AS BRN,
             SUBSTR(m.BILL_TIME, 1, 2) AS HH,
             COUNT(DISTINCT m.BILL_NO) AS INVOICES,
-            ROUND(SUM(NVL(m.BILL_AMT, 0) + NVL(m.VAT_AMT, 0)), 2) AS VALUE_TOTAL
+            ROUND(SUM(NVL(m.BILL_AMT, 0){vat_sql}), 2) AS VALUE_TOTAL
         FROM {pos}.IAS_POS_BILL_MST m
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
           AND {_hung_ok("m")}

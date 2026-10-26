@@ -3,7 +3,8 @@
 - الرصيد: حالي (لا يعتمد على التاريخ) من IAS_ITM_WCODE للمخازن المختارة.
 - المبيعات: نقاط البيع غير المعلّقة + فواتير أونكس (أنواع 1 و5)، مجمّعة حسب المخزن.
 - المرتجعات: مرتجعات نقاط البيع + مرتجعات الفواتير (أنواع 1 و5)، بنفس الأساس.
-- الأساس: شامل الضريبة للمصدرين (I_PRICE_VAT × الكمية − الخصم)، كما في «صافي المبيعات» بتقرير أونكس.
+- الأساس: بدون ضريبة كباقي شاشات المبيعات (مبلغ البند الشامل ÷ (1 + نسبة ضريبته))؛
+  وشامل الضريبة كتقرير أونكس إن فُعّل SALES_INCLUDE_VAT.
 SELECT فقط.
 """
 
@@ -16,6 +17,7 @@ from django.core.cache import cache
 from django.http import HttpResponse
 
 from .oracle_stock import (
+    SALES_INCLUDE_VAT,
     _ONIX_ITEM_SALES_DOC_TYPES,
     OracleStockError,
     _as_date,
@@ -42,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 _SALES_TTL = 60 * 60 * 2  # ساعتان للمبيعات (الرصيد حي دائماً)
 _WHOLESALE_DOC_TYPES = (4, 8)  # الآجل (الجملة) كما في تحليل المبيعات
-_CACHE_VER = "v7"
+_CACHE_VER = "v8"
 
 
 def _bill_net_sql(alias: str = "d") -> str:
@@ -51,11 +53,14 @@ def _bill_net_sql(alias: str = "d") -> str:
     يطابق عمود «صافي المبيعات» في تقرير أونكس. إن كان I_PRICE_VAT فارغاً/صفراً (صفوف قليلة)
     يُستعاض عنه بـ I_PRICE × الكمية + VAT_AMT."""
     a = alias
-    return (
+    incl = (
         f"(CASE WHEN NVL({a}.I_PRICE_VAT, 0) = 0 "
         f"THEN NVL({a}.I_PRICE, 0) * NVL({a}.I_QTY, 0) + NVL({a}.VAT_AMT, 0) "
         f"ELSE {a}.I_PRICE_VAT * NVL({a}.I_QTY, 0) END - NVL({a}.DIS_AMT, 0))"
     )
+    if SALES_INCLUDE_VAT:
+        return incl
+    return f"({incl} / (1 + NVL({a}.VAT_PER, 0) / 100))"
 
 
 def _pct_display(sold: float, stock: float) -> str:

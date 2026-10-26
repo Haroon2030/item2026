@@ -811,6 +811,16 @@ def _hung_ok(alias: str = "p") -> str:
     return f"({alias}.HUNG IS NULL OR {alias}.HUNG = 0)"
 
 
+# المبيعات في كل الشاشات بدون ضريبة القيمة المضافة (مثل قائمة الدخل): الضريبة أمانة للهيئة لا إيراد.
+# True يعيد الأرقام شاملة الضريبة كما في تقرير أونكس لنقاط البيع.
+SALES_INCLUDE_VAT = False
+
+
+def _sales_amount(net: float, vat: float) -> float:
+    """مبلغ المبيعات المعروض: الصافي بدون ضريبة (أو شاملاً لها إن فُعّل SALES_INCLUDE_VAT)."""
+    return round(float(net or 0) + (float(vat or 0) if SALES_INCLUDE_VAT else 0.0), 2)
+
+
 def _pos_dtl_net_sql(alias: str = "d") -> str:
     """إجمالي بند POS بأسلوب أونكس (شامل الضريبة): I_PRICE_VAT×QTY − DIS_AMT.
 
@@ -818,7 +828,12 @@ def _pos_dtl_net_sql(alias: str = "d") -> str:
     sales_total = NET + VAT — هكذا نطابق تقرير أونكس بدون فرق تقريب.
     """
     a = alias
-    return f"(NVL({a}.I_PRICE_VAT, 0) * NVL({a}.I_QTY, 0) - NVL({a}.DIS_AMT, 0))"
+    incl = f"(NVL({a}.I_PRICE_VAT, 0) * NVL({a}.I_QTY, 0) - NVL({a}.DIS_AMT, 0))"
+    if SALES_INCLUDE_VAT:
+        return incl
+    # بدون ضريبة: الخصم على السعر الشامل، فنقسم مبلغ البند على (1 + نسبة ضريبته)؛ المعفى نسبته صفر.
+    # يطابق رأس الفاتورة BILL_AMT بفرق تقريب (56.82 ريال على 60 مليون في أكتوبر 2026).
+    return f"({incl} / (1 + NVL({a}.VAT_PER, 0) / 100))"
 
 
 def _pos_mst_ok(alias: str = "p") -> str:
@@ -852,7 +867,7 @@ def _django_lookup_get(key: str):
     if hit:
         return True, cached
     try:
-        val = cache.get(f"sales:lookup:{key}")
+        val = cache.get(f"salesx:lookup:{key}")
     except Exception:
         val = None
     if val is not None:
@@ -864,7 +879,7 @@ def _django_lookup_get(key: str):
 def _django_lookup_set(key: str, value: Any) -> Any:
     _lookup_cache_set(key, value)
     try:
-        cache.set(f"sales:lookup:{key}", value, _LOOKUP_CACHE_TTL)
+        cache.set(f"salesx:lookup:{key}", value, _LOOKUP_CACHE_TTL)
     except Exception:
         pass
     return value
@@ -2961,10 +2976,10 @@ def fetch_posted_item_sales_by_warehouses(
         qty = round(float(sale.get("qty") or 0) - float(ret.get("qty") or 0), 2)
         net = round(float(sale.get("net") or 0) - float(ret.get("net") or 0), 2)
         vat = round(float(sale.get("vat") or 0) - float(ret.get("vat") or 0), 2)
-        sales_total = round(net + vat, 2)
+        sales_total = _sales_amount(net, vat)
         inv_count = int(sale.get("invoice_count") or 0)
         ret_qty = round(float(ret.get("qty") or 0), 2)
-        ret_total = round(float(ret.get("net") or 0) + float(ret.get("vat") or 0), 2)
+        ret_total = _sales_amount(float(ret.get("net") or 0), float(ret.get("vat") or 0))
         st = stock_by_wh.get(wh) or stock_by_wh.get(str(wh_raw).strip()) or {}
         avg_cost = None
         raw_cost = str(st.get("avg_cost") or "").strip().replace(",", "")
@@ -3020,7 +3035,7 @@ def fetch_posted_item_sales_by_warehouses(
             cost_weight += w
             cost_sum += avg_cost * w
 
-    tot_sales = round(tot_net + tot_vat, 2)
+    tot_sales = _sales_amount(tot_net, tot_vat)
     tot_avg = round(cost_sum / cost_weight, 4) if cost_weight > 1e-9 else None
     return {
         "item_code": code,
@@ -3351,10 +3366,10 @@ def _assemble_branch_rows(sales_rows, returns_by_brn) -> list[dict]:
         sales_count = int(row.get("INVOICE_COUNT") or 0)
         gross_net = float(row.get("NET_TOTAL") or 0)
         gross_vat = float(row.get("VAT_TOTAL") or 0)
-        gross_total = float(row.get("GROSS_TOTAL") or (gross_net + gross_vat))
+        gross_total = _sales_amount(gross_net, gross_vat)
         net = gross_net - ret_net
         vat = gross_vat - ret_vat
-        sales_total = round(net + vat, 2)
+        sales_total = _sales_amount(net, vat)
         avg_basket = round(sales_total / sales_count, 2) if sales_count else 0.0
         out.append(
             {
@@ -3362,7 +3377,7 @@ def _assemble_branch_rows(sales_rows, returns_by_brn) -> list[dict]:
                 "branch_name": names.get(code) or code,
                 "invoice_count": sales_count,
                 "return_count": ret_count,
-                "return_total": round(ret_net + ret_vat, 2),
+                "return_total": _sales_amount(ret_net, ret_vat),
                 "net_invoice_count": sales_count - ret_count,
                 "gross_total": round(gross_total, 2),
                 "net_total": round(net, 2),
@@ -3503,7 +3518,7 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not _skip_mst_returns(date_from, date_to))}"
     )
     # فترة تنتهي اليوم: لا تُعرض أرقام كاش قديمة مكان الحيّ
@@ -3536,7 +3551,7 @@ def fetch_branch_return_totals(
     gcode = str(group_code or "").strip()
     lim = max(1, min(int(limit or 15), 40))
     cache_key = (
-        f"sales:ret_branches:v1:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:ret_branches:v1:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3652,7 +3667,7 @@ def fetch_branch_return_totals(
             continue
         ret_net = float(row.get("RET_NET") or 0)
         ret_vat = float(row.get("RET_VAT") or 0)
-        total = round(ret_net + ret_vat, 2)
+        total = _sales_amount(ret_net, ret_vat)
         if total <= 0:
             continue
         out.append(
@@ -3690,7 +3705,7 @@ def fetch_group_return_totals(
     gcode = str(group_code or "").strip()
     lim = max(1, min(int(limit or 40), 200))
     cache_key = (
-        f"sales:ret_groups:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:ret_groups:v4:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:b{int(bool(by_branch))}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3812,7 +3827,7 @@ def fetch_group_return_totals(
         code = str(row.get("GROUP_CODE") or "").strip() or "(بلا)"
         ret_net = float(row.get("RET_NET") or 0)
         ret_vat = float(row.get("RET_VAT") or 0)
-        total = round(ret_net + ret_vat, 2)
+        total = _sales_amount(ret_net, ret_vat)
         if total <= 0:
             continue
         out.append(
@@ -3857,7 +3872,7 @@ def fetch_sales_mst_bundle(
     fast_split = False
     lim = max(1, min(int(top_users_limit or 8), 50))
     cache_key = (
-        f"sales:mst_bundle:v8:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:mst_bundle:v8:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:L{int(light)}:u{lim}:r{int(not skip_ret)}:f{int(fast_split)}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3986,19 +4001,19 @@ def fetch_sales_mst_bundle(
 
     # مزامنة كاش الفروع المنفصل لواجهات أخرى
     br_cache = (
-        f"sales:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not skip_ret)}"
     )
     _sales_cache_set(br_cache, branches, date_from=date_from, date_to=date_to)
     _sales_cache_set(
-        f"sales:seller_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:seller_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}",
         seller_count,
         date_from=date_from,
         date_to=date_to,
     )
     _sales_cache_set(
-        f"sales:device_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:device_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}",
         device_count,
         date_from=date_from,
@@ -4028,10 +4043,10 @@ def _assemble_daily_rows(sales_rows, returns_by_day) -> list[dict]:
         sales_count = int(row.get("INVOICE_COUNT") or 0)
         gross_net = float(row.get("NET_TOTAL") or 0)
         gross_vat = float(row.get("VAT_TOTAL") or 0)
-        gross_total = float(row.get("GROSS_TOTAL") or (gross_net + gross_vat))
+        gross_total = _sales_amount(gross_net, gross_vat)
         net = gross_net - ret_net
         vat = gross_vat - ret_vat
-        sales_total = round(net + vat, 2)
+        sales_total = _sales_amount(net, vat)
         avg_basket = round(sales_total / sales_count, 2) if sales_count else 0.0
         out.append(
             {
@@ -4217,7 +4232,7 @@ def fetch_daily_sales_totals(
     brn = str(branch_code or "").strip()
     fast = _skip_mst_returns(date_from, date_to)
     cache_key = (
-        f"sales:daily:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:daily:v2:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{'fast' if fast else 'net'}"
     )
     cached = _sales_cache_get(cache_key)
@@ -4445,7 +4460,7 @@ def _assemble_group_rows(sales_rows, returns_by_key, *, by_branch: bool = True) 
         gross_vat = float(row.get("VAT_TOTAL") or 0)
         net = gross_net - ret_net
         vat = gross_vat - ret_vat
-        sales_total = round(net + vat, 2)
+        sales_total = _sales_amount(net, vat)
         if by_branch:
             branch_name = names.get(b_code) or b_code
         elif b_code:
@@ -4461,7 +4476,7 @@ def _assemble_group_rows(sales_rows, returns_by_key, *, by_branch: bool = True) 
                 "invoice_count": inv_count,
                 "return_count": int(ret_count),
                 "qty_total": round(qty, 2),
-                "gross_total": round(gross_net + gross_vat, 2),
+                "gross_total": _sales_amount(gross_net, gross_vat),
                 "net_total": round(net, 2),
                 "vat_total": round(vat, 2),
                 "sales_total": sales_total,
@@ -5115,7 +5130,7 @@ def _groups_cache_key(
     version: str = "v24",
 ) -> str:
     return (
-        f"sales:groups:{version}{'b' if system != 'pos' else ''}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:groups:{version}{'b' if system != 'pos' else ''}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
 
@@ -5191,7 +5206,7 @@ def _groups_month_json_key(
 ) -> str:
     """مفتاح JSON لشهر واحد: نتيجة SQL مخزّنة ثم تُجمَّع لاحقاً."""
     return (
-        f"sales:groups:monthjson:{'v3' if system != 'pos' else 'v2'}:{system}:"
+        f"salesx:groups:monthjson:{'v3' if system != 'pos' else 'v2'}:{system}:"
         f"{_as_date(date_from).isoformat()}:{_as_date(date_to).isoformat()}:"
         f"{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
@@ -5656,7 +5671,7 @@ def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
     merged: dict[tuple[str, str], dict] = {}
     today = date.today()
     for a, b in _month_spans(date_from, date_to):
-        key = f"sales:pos_all_groups_br_raw:v2:{a.isoformat()}:{b.isoformat()}"
+        key = f"salesx:pos_all_groups_br_raw:v2:{a.isoformat()}:{b.isoformat()}"
         raw = cache.get(key)
         if raw is None:
             raw = _fetch_pos_all_groups_by_branch_raw(a, b)
@@ -5814,7 +5829,7 @@ def _fetch_pos_one_group_by_branch_months(
     brn = _norm_brn_code(branch_code) if str(branch_code or "").strip() else ""
     gcode = str(group_code or "").strip()
     key = (
-        f"sales:pos_all_groups_br:v2:{_as_date(date_from).isoformat()}:"
+        f"salesx:pos_all_groups_br:v2:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}"
     )
     rows = cache.get(key)
@@ -5827,7 +5842,7 @@ def _fetch_pos_one_group_by_branch_months(
         ]
         return _merge_group_total_parts([picked], by_branch=True)
     result = _single_flight(
-        f"sales:pos_group_br:v1:{_as_date(date_from).isoformat()}:"
+        f"salesx:pos_group_br:v1:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}",
         lambda: _fetch_pos_one_group_by_branch(
             date_from, date_to, group_code=gcode, branch_code=brn
@@ -6407,7 +6422,7 @@ def _assemble_top_item_rows(
         qty = float(row.get("QTY_TOTAL") or 0) - ret_qty
         net = float(row.get("NET_TOTAL") or 0) - ret_net
         vat = float(row.get("VAT_TOTAL") or 0) - ret_vat
-        sales_total = round(net + vat, 2)
+        sales_total = _sales_amount(net, vat)
         if sales_total <= 0 and qty <= 0:
             continue
         merged.append(
@@ -6949,7 +6964,7 @@ def fetch_top_sales_items(
     qtag = "q1" if quick else "q0"
     stag = "s1" if fast_sample else "s0"
     cache_key = (
-        f"sales:items:v15:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:items:v15:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:"
         f"{mode}:{order}:{qtag}:{stag}"
     )
@@ -7085,7 +7100,7 @@ def _assemble_top_return_rows(rows, limit: int) -> list[dict]:
         qty = float(row.get("QTY_TOTAL") or 0)
         net = float(row.get("NET_TOTAL") or 0)
         vat = float(row.get("VAT_TOTAL") or 0)
-        total = round(net + vat, 2)
+        total = _sales_amount(net, vat)
         merged.append(
             {
                 "item_code": code,
@@ -7126,7 +7141,7 @@ def fetch_top_returned_items(
     lim = max(1, min(int(limit or 20), 50))
     qtag = "q1" if quick else "q0"
     cache_key = (
-        f"sales:ret_items:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:ret_items:v2:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:{qtag}"
     )
     cached = _sales_cache_get(cache_key)
@@ -7292,7 +7307,7 @@ def _assemble_user_rows(sales_rows, returns_by_user, limit: int) -> list[dict]:
         ret_count, ret_net, ret_vat = returns_by_user.get(code, (0, 0.0, 0.0))
         net = float(row.get("NET_TOTAL") or 0) - ret_net
         vat = float(row.get("VAT_TOTAL") or 0) - ret_vat
-        total = round(net + vat, 2)
+        total = _sales_amount(net, vat)
         out.append(
             {
                 "user_code": code,
@@ -7322,7 +7337,7 @@ def fetch_active_sales_user_count(
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:seller_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:seller_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}"
     )
     cached = _sales_cache_get(cache_key)
@@ -7372,7 +7387,7 @@ def fetch_active_sales_device_count(
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"sales:device_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:device_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}"
     )
     cached = _sales_cache_get(cache_key)
@@ -7427,7 +7442,7 @@ def fetch_top_sales_users(
     brn = str(branch_code or "").strip()
     lim = max(1, min(int(limit or 10), 50))
     cache_key = (
-        f"sales:users:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:users:v4:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{lim}:gross"
     )
     cached = _sales_cache_get(cache_key)
@@ -8164,7 +8179,7 @@ def fetch_margin_ranks(
     mode = "gross" if fast else "net"
     qtag = "q1" if quick else "q0"
     cache_key = (
-        f"sales:margin:v18:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesx:margin:v18:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:{mode}:{qtag}:brn"
     )
     cached = _sales_cache_get(cache_key)

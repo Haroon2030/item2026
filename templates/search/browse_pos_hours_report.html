@@ -65,7 +65,7 @@
 <section class="dash-head" aria-label="فواتير نقاط البيع بالساعة">
   <div class="dash-head-copy">
     <h2>فواتير نقاط البيع بالساعة</h2>
-    <p>عدد فواتير نقاط البيع وقيمتها في تاريخ وساعات تختارها، موزّعة بالساعة والفرع. القيمة شاملة الضريبة وقبل المرتجع، بنفس احتساب تحليل المبيعات.</p>
+    <p>عدد فواتير نقاط البيع وقيمتها في تاريخ وساعات تختارها، موزّعة بالساعة والفرع. القيمة بدون ضريبة القيمة المضافة وقبل المرتجع، بنفس احتساب تحليل المبيعات.</p>
   </div>
 </section>
 
@@ -136,7 +136,7 @@
         <h3>قيمة الفواتير</h3>
       </header>
       <p class="wqc-kpi-value mono">{{ report.value_display }}</p>
-      <small>شاملة الضريبة{% if report.days > 1 %} · {{ report.per_day_value_display }} في اليوم{% endif %}</small>
+      <small>بدون ضريبة{% if report.days > 1 %} · {{ report.per_day_value_display }} في اليوم{% endif %}</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-avg">
       <header>

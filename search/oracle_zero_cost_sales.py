@@ -216,7 +216,7 @@ def build_zero_cost_sales(
     brn = _norm_brn_code(branch_code)
     grp = str(group_code or "").strip()
 
-    key = f"sales:zero_cost:v1:{d_from}:{d_to}:{brn}:{grp}"
+    key = f"salesx:zero_cost:v1:{d_from}:{d_to}:{brn}:{grp}"
     cached = cache.get(key)
     if cached is not None:
         return cached
