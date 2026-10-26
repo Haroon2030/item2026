@@ -3321,3 +3321,84 @@ class SalesExcludeVatTests(TestCase):
         with patch('search.oracle_stock.SALES_INCLUDE_VAT', True):
             self.assertEqual(os_._sales_amount(100, 15), 115.0)
             self.assertNotIn('VAT_PER', os_._pos_dtl_net_sql('d'))
+
+
+class UnpostedByBranchTests(TestCase):
+    """بطاقة «مبيعات غير مرحّلة» في قائمة الدخل: تفصيل كل فرع مع مصدر المبلغ (نقاط البيع / الآجل)."""
+
+    def test_branches_keep_pos_and_bill_split(self):
+        from datetime import date
+
+        from search import oracle_income as oi
+
+        pos = {'by_branch': {'6': {'amount': 500.0, 'cost': 300.0, 'bills': 4, 'returns': 0, 'oldest': date(2026, 9, 3)}}}
+        bill = {'by_branch': {
+            '6': {'amount': -200.0, 'cost': -150.0, 'bills': 1, 'returns': 2, 'oldest': date(2026, 9, 1)},
+            '7': {'amount': -2_000.0, 'cost': -1_200.0, 'bills': 0, 'returns': 9, 'oldest': date(2026, 8, 20)},
+        }}
+        merged = oi._merge_unposted_sources(pos, bill)
+        self.assertEqual((merged['by_branch']['6']['pos_amount'], merged['by_branch']['6']['bill_amount']), (500.0, -200.0))
+        with patch('search.oracle_income._branch_names', return_value={'6': 'سكاي مول', '7': 'فرع الدمام'}):
+            summary = oi._unposted_summary(merged, '')
+        rows = summary['branches']
+        # الأكبر أثراً أولاً حتى لو كان سالباً
+        self.assertEqual([r['branch_name'] for r in rows], ['فرع الدمام', 'سكاي مول'])
+        sky = rows[1]
+        self.assertEqual((sky['pos_amount_display'], sky['bill_amount_display'], sky['amount_display']), ('500.00', '-200.00', '300.00'))
+        self.assertEqual((sky['bills_display'], sky['returns_display'], sky['oldest']), ('5', '2', '2026-09-01'))
+        self.assertEqual(sky['gross_display'], '150.00')
+        self.assertEqual(summary['amount'], -1_700.0)
+        self.assertEqual(summary['branch_count'], 2)
+        # فلتر فرع: يظهر ذلك الفرع فقط
+        with patch('search.oracle_income._branch_names', return_value={'6': 'سكاي مول', '7': 'فرع الدمام'}):
+            only = oi._unposted_summary(merged, '6')
+        self.assertEqual([r['branch_code'] for r in only['branches']], ['6'])
+
+
+class UnpostedSalesReportTests(TestCase):
+    """تقرير «المبيعات غير المرحّلة» في قسم التقارير."""
+
+    def test_screen_is_registered_under_reports_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, section_for_screen
+
+        self.assertIn('browse_unposted_sales_report', ALL_SCREEN_KEYS)
+        self.assertEqual(section_for_screen('browse_unposted_sales_report'), 'reports')
+        self.assertEqual(self.client.get(reverse('browse_unposted_sales_report')).status_code, 302)
+
+    def test_screen_renders_branches_and_passes_filters(self):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _session():
+            yield
+
+        admin = get_user_model().objects.create_user('ups_admin', password='x-Test-123', is_staff=True, is_superuser=True)
+        self.client.force_login(admin)
+        row = {
+            'branch_code': '7', 'branch_name': 'فرع الدمام', 'amount': -2000.0, 'amount_display': '-2,000.00',
+            'pos_amount_display': '0.00', 'bill_amount_display': '-2,000.00', 'bills_display': '0',
+            'returns_display': '9', 'cost_display': '-1,200.00', 'gross': -800.0, 'gross_display': '-800.00',
+            'oldest': '2026-08-20',
+        }
+        report = {
+            'available': True, 'has_data': True, 'from': '2026-01-01', 'to': '2026-09-30', 'branch_name': '',
+            'amount': -2000.0, 'amount_display': '-2,000.00', 'pos_amount_display': '0.00',
+            'bill_amount_display': '-2,000.00', 'bills_display': '0', 'returns_display': '9', 'branch_count': 1,
+            'oldest': '2026-08-20', 'cost_display': '-1,200.00', 'missing_cost_items': 0, 'gross': -800.0,
+            'gross_display': '-800.00', 'margin_pct_display': '40.00%', 'branches': [row],
+        }
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), \
+                patch('search.oracle_stock.oracle_session', _session), \
+                patch('search.oracle_income.fetch_income_branches', return_value=[{'code': '7', 'name': 'فرع الدمام'}]), \
+                patch('search.oracle_income.build_unposted_sales', return_value=report) as build:
+            page = self.client.get(reverse('browse_unposted_sales_report'))
+            self.assertContains(page, 'المبيعات غير المرحّلة')
+            build.assert_not_called()
+            page = self.client.get(reverse('browse_unposted_sales_report'), {
+                'run': '1', 'date_from': '2026-01-01', 'date_to': '2026-09-30', 'branch': '7',
+            })
+            self.assertContains(page, 'فرع الدمام')
+            self.assertContains(page, '-2,000.00')
+            self.assertContains(page, 'ups-neg')
+            args, kwargs = build.call_args
+            self.assertEqual((str(args[0]), str(args[1]), kwargs['branch_code']), ('2026-01-01', '2026-09-30', '7'))

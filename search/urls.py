@@ -213,6 +213,11 @@ urlpatterns = [
         name='browse_pos_hours_report',
     ),
     path(
+        'reports/unposted-sales/',
+        views.browse_unposted_sales_report,
+        name='browse_unposted_sales_report',
+    ),
+    path(
         'warehouses/no-transfer/',
         views.browse_wh_no_transfer,
         name='browse_wh_no_transfer',

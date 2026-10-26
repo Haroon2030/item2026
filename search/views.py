@@ -6689,6 +6689,62 @@ def browse_pos_hours_report(request):
 @login_required
 @require_GET
 @never_cache
+def browse_unposted_sales_report(request):
+    """المبيعات غير المرحّلة حسب الفرع (نقاط البيع + الآجل) — نفس أرقام بطاقة قائمة الدخل."""
+    from datetime import date as date_cls
+
+    from .oracle_income import build_unposted_sales, fetch_income_branches
+    from .oracle_stock import oracle_enabled, oracle_session
+
+    today = date_cls.today()
+    branch = str(request.GET.get('branch') or '').strip()
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes')
+    error = ''
+    report = None
+    branches: list[dict] = []
+    try:
+        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or '').strip()) \
+            if request.GET.get('date_from') else today.replace(month=1, day=1)
+        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or '').strip()) \
+            if request.GET.get('date_to') else today
+    except ValueError:
+        date_from, date_to = today.replace(month=1, day=1), today
+        error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
+
+    if not error:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    if branch not in {b['code'] for b in branches}:
+                        branch = ''
+                    if run:
+                        report = build_unposted_sales(date_from, date_to, branch_code=branch)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_unposted_sales_report failed: %s', exc)
+            error = f'تعذّر تحميل التقرير: {exc}'
+            report = None
+
+    return render(
+        request,
+        'search/browse_unposted_sales_report.html',
+        {
+            'branches': branches,
+            'selected_branch': branch,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'report': report,
+            'run': run,
+            'error': error,
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_wh_qty_compare(request):
     """مقارنة كميات الأصناف بين مستودعين (رصيد IAS_ITM_WCODE)."""
     selected_wh_a = str(

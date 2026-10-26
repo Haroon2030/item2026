@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}المبيعات غير المرحّلة{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .ups-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
+  .ups-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
+  .ups-caption strong { display: block; font-size: 1rem; font-weight: 800; }
+  .ups-caption span { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  .ups-neg { color: #C24545 !important; }
+  .ups-ok { margin: 0; padding: 0.9rem 1rem; border-radius: 14px; background: rgba(52, 199, 89, 0.10); color: #1f7a3d; font-weight: 600; }
+</style>
+
+<section class="dash-head" aria-label="المبيعات غير المرحّلة">
+  <div class="dash-head-copy">
+    <h2>المبيعات غير المرحّلة</h2>
+    <p>فواتير نقاط البيع والآجل التي لم تُرحَّل إلى دفتر الأستاذ بعد، حسب الفرع. هذه المبالغ خارج قائمة الدخل حتى تُرحَّل.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_unposted_sales_report' %}" class="dash-panel-glass wqc-filter ups-filter" role="search">
+  <input type="hidden" name="run" value="1">
+  <div class="field">
+    <label for="ups-from">من تاريخ</label>
+    <input id="ups-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+  <div class="field">
+    <label for="ups-to">إلى تاريخ</label>
+    <input id="ups-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+  <div class="field">
+    <label for="ups-branch">الفرع</label>
+    <select id="ups-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض التقرير</button>
+  </div>
+</form>
+
+{% if report %}
+  <p class="ups-scope">
+    {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
+    · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi>
+  </p>
+
+  {% if report.has_data %}
+    <section class="income-kpi-grid ibr-kpi-grid" aria-label="ملخص">
+      <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-value">
+        <header>
+          <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg></span>
+          <h3>المبيعات غير المرحّلة</h3>
+        </header>
+        <p class="wqc-kpi-value mono{% if report.amount < 0 %} ups-neg{% endif %}" dir="ltr">{{ report.amount_display }}</p>
+        <small>نقاط بيع {{ report.pos_amount_display }} · آجل {{ report.bill_amount_display }}</small>
+      </article>
+      <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count">
+        <header>
+          <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></span>
+          <h3>الفواتير والمرتجعات</h3>
+        </header>
+        <p class="wqc-kpi-value mono">{{ report.bills_display }} · {{ report.returns_display }}</p>
+        <small>{{ report.branch_count }} فرع · أقدمها <bdi dir="ltr">{{ report.oldest|default:"—" }}</bdi></small>
+      </article>
+      <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-cost">
+        <header>
+          <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg></span>
+          <h3>التكلفة التقديرية</h3>
+        </header>
+        <p class="wqc-kpi-value mono" dir="ltr">{{ report.cost_display }}</p>
+        <small>بمتوسط التكلفة الحالي{% if report.missing_cost_items %} · {{ report.missing_cost_items }} صنف بلا تكلفة{% endif %}</small>
+      </article>
+      <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-margin">
+        <header>
+          <span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg></span>
+          <h3>الربح التقديري</h3>
+        </header>
+        <p class="wqc-kpi-value mono{% if report.gross < 0 %} ups-neg{% endif %}" dir="ltr">{{ report.gross_display }}</p>
+        <small>الهامش {{ report.margin_pct_display }}</small>
+      </article>
+    </section>
+
+    <section class="wqc-sheet" aria-label="المبيعات غير المرحّلة حسب الفرع">
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-label="المبيعات غير المرحّلة حسب الفرع">
+        <table class="wqc-table" data-name-col="0">
+          <caption class="ups-caption">
+            <strong>المبيعات غير المرحّلة حسب الفرع</strong>
+            <span>من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · خارج أرقام قائمة الدخل حتى تُرحَّل · المبلغ السالب = المرتجعات أكثر من المبيعات</span>
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">الفرع</th>
+              <th scope="col">الفواتير</th>
+              <th scope="col">المرتجعات</th>
+              <th scope="col">نقاط البيع</th>
+              <th scope="col">الآجل</th>
+              <th scope="col">الإجمالي</th>
+              <th scope="col">التكلفة التقديرية</th>
+              <th scope="col">الربح التقديري</th>
+              <th scope="col">أقدم فاتورة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in report.branches %}
+              <tr>
+                <td title="{{ b.branch_code }}">{{ b.branch_name }}</td>
+                <td class="mono">{{ b.bills_display }}</td>
+                <td class="mono">{{ b.returns_display }}</td>
+                <td class="mono" dir="ltr">{{ b.pos_amount_display }}</td>
+                <td class="mono" dir="ltr">{{ b.bill_amount_display }}</td>
+                <td class="mono{% if b.amount < 0 %} ups-neg{% endif %}" dir="ltr">{{ b.amount_display }}</td>
+                <td class="mono" dir="ltr">{{ b.cost_display }}</td>
+                <td class="mono{% if b.gross < 0 %} ups-neg{% endif %}" dir="ltr">{{ b.gross_display }}</td>
+                <td class="mono" dir="ltr">{{ b.oldest|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td>الإجمالي</td>
+              <td class="mono">{{ report.bills_display }}</td>
+              <td class="mono">{{ report.returns_display }}</td>
+              <td class="mono" dir="ltr">{{ report.pos_amount_display }}</td>
+              <td class="mono" dir="ltr">{{ report.bill_amount_display }}</td>
+              <td class="mono{% if report.amount < 0 %} ups-neg{% endif %}" dir="ltr">{{ report.amount_display }}</td>
+              <td class="mono" dir="ltr">{{ report.cost_display }}</td>
+              <td class="mono{% if report.gross < 0 %} ups-neg{% endif %}" dir="ltr">{{ report.gross_display }}</td>
+              <td class="mono" dir="ltr">{{ report.oldest|default:"—" }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    <p class="ups-ok" role="status">كل مبيعات نقاط البيع وفواتير الآجل في هذه الفترة مرحّلة.</p>
+  {% endif %}
+{% elif run and not error %}
+  <p class="ups-scope">لا توجد بيانات للعرض.</p>
+{% endif %}
+{% endblock %}

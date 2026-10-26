@@ -2215,9 +2215,12 @@ def _merge_unposted_sources(pos_unposted: dict, bill_unposted: dict) -> dict:
         for brn, b in (source.get("by_branch") or {}).items():
             merged = by_branch.setdefault(
                 brn,
-                {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
+                {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None,
+                 "pos_amount": 0.0, "bill_amount": 0.0},
             )
             merged["amount"] += _f(b.get("amount"))
+            # مصدر المبلغ لكل فرع (يظهر في تفصيل الفروع عند الضغط على البطاقة)
+            merged[f"{total_key}_amount"] += _f(b.get("amount"))
             merged["cost"] += _f(b.get("cost"))
             merged["bills"] += int(b.get("bills") or 0)
             merged["returns"] += int(b.get("returns") or 0)
@@ -2230,8 +2233,8 @@ def _merge_unposted_sources(pos_unposted: dict, bill_unposted: dict) -> dict:
                 bill_total += _f(b.get("amount"))
 
     for b in by_branch.values():
-        b["amount"] = round(b["amount"], 2)
-        b["cost"] = round(b["cost"], 2)
+        for k in ("amount", "cost", "pos_amount", "bill_amount"):
+            b[k] = round(b[k], 2)
     return {
         "by_branch": by_branch,
         "missing_cost_items": int(pos_unposted.get("missing_cost_items") or 0),
@@ -2259,15 +2262,25 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
         returns += b["returns"]
         if b["oldest"] and (oldest is None or b["oldest"] < oldest):
             oldest = b["oldest"]
+        b_gross = round(b["amount"] - b["cost"], 2)
         rows.append(
             {
                 "branch_code": code,
                 "branch_name": names.get(code, code),
                 "amount": b["amount"],
                 "amount_display": _fmt_money(b["amount"]),
+                "pos_amount_display": _fmt_money(_f(b.get("pos_amount"))),
+                "bill_amount_display": _fmt_money(_f(b.get("bill_amount"))),
+                "bills_display": f"{int(b['bills']):,}",
+                "returns_display": f"{int(b['returns']):,}",
+                "cost_display": _fmt_money(b["cost"]),
+                "gross": b_gross,
+                "gross_display": _fmt_money(b_gross),
+                "oldest": b["oldest"].isoformat() if b["oldest"] else "",
             }
         )
-    rows.sort(key=lambda r: -r["amount"])
+    # الأكبر أثراً أولاً (المبلغ قد يكون سالباً حين تزيد المرتجعات)، ثم رقم الفرع
+    rows.sort(key=lambda r: (-abs(r["amount"]), r["branch_code"]))
     amount = round(amount, 2)
     cost = round(cost, 2)
     gross = round(amount - cost, 2)
@@ -2292,11 +2305,33 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
         "returns_display": f"{returns:,}",
         "branch_count": len(rows),
         "top_branches": rows[:3],
+        "branches": rows,
         "pos_amount": pos_amount,
         "pos_amount_display": _fmt_money(pos_amount),
         "bill_amount": bill_amount,
         "bill_amount_display": _fmt_money(bill_amount),
     }
+
+
+def build_unposted_sales(date_from, date_to, *, branch_code: str = "") -> dict:
+    """المبيعات غير المرحّلة (نقاط البيع + الآجل) لكل فرع — نفس أرقام بطاقة قائمة الدخل.
+
+    يستخدمها تقرير «المبيعات غير المرحّلة» وبطاقة قائمة الدخل معاً حتى لا يختلف الرقمان.
+    """
+    d_from = _as_date(date_from)
+    d_to = _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد النهاية.")
+    merged = _merge_unposted_sources(
+        fetch_unposted_pos_sales(d_from, d_to),
+        fetch_unposted_bill_sales(d_from, d_to),
+    )
+    summary = _unposted_summary(merged, branch_code)
+    summary["from"] = d_from.isoformat()
+    summary["to"] = d_to.isoformat()
+    brn = _norm_brn_code(branch_code)
+    summary["branch_name"] = _branch_names().get(brn, brn) if brn else ""
+    return summary
 
 
 def _cache_key(
@@ -2307,7 +2342,7 @@ def _cache_key(
     posted_only: bool,
 ) -> str:
     return (
-        f"income:stmt:v57:{d_from}:{d_to}:"
+        f"income:stmt:v58:{d_from}:{d_to}:"
         f"{branch_code or '-'}:"
         f"{cc_code or '-'}:"
         f"{int(bool(posted_only))}"
@@ -2384,11 +2419,7 @@ def build_income_statement(
         unposted["reason"] = "المبيعات غير المرحّلة بلا مركز تكلفة"
     else:
         try:
-            merged = _merge_unposted_sources(
-                fetch_unposted_pos_sales(d_from, d_to),
-                fetch_unposted_bill_sales(d_from, d_to),
-            )
-            unposted = _unposted_summary(merged, brn)
+            unposted = build_unposted_sales(d_from, d_to, branch_code=brn)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Unposted sales unavailable: %s", exc)
             unposted["error"] = "تعذّرت قراءة المبيعات غير المرحّلة."
