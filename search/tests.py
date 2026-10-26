@@ -3402,3 +3402,21 @@ class UnpostedSalesReportTests(TestCase):
             self.assertContains(page, 'ups-neg')
             args, kwargs = build.call_args
             self.assertEqual((str(args[0]), str(args[1]), kwargs['branch_code']), ('2026-01-01', '2026-09-30', '7'))
+
+
+class PosSummaryReturnsFilterTests(TestCase):
+    """مرتجعات نقاط البيع المرحّلة لنظام المبيعات لا تُخصم مرة ثانية من مرتجعات النقدي."""
+
+    def test_sales_and_returns_exclude_pos_summaries(self):
+        from search.oracle_stock import SALES_SYSTEMS, _doc_type_filter
+
+        onix = SALES_SYSTEMS['onix']
+        params = {}
+        sales = _doc_type_filter(onix, 'b', 'BILL_DOC_TYPE', params)
+        returns = _doc_type_filter(onix, 'r', 'RT_BILL_DOC_TYPE', params)
+        self.assertIn("NOT LIKE 'خلاصة مبيعات رقم نقطة البيع%'", sales)
+        self.assertIn("NVL(r.C_NAME, ' ') NOT LIKE 'رقم نقطة البيع =%'", returns)
+        self.assertNotIn('خلاصة', returns)
+        # الآجل (4/8) لا خلاصات فيه: لا شرط اسم
+        credit = _doc_type_filter(SALES_SYSTEMS['wholesale'], 'r', 'RT_BILL_DOC_TYPE', {})
+        self.assertNotIn('C_NAME', credit)

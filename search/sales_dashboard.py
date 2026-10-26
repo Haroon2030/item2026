@@ -599,7 +599,7 @@ def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
     )
 
     key = (
-        f"salesx:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:"
         f"r{int(not _skip_mst_returns(date_from, date_to))}"
     )
@@ -609,7 +609,7 @@ def _cached_branch_totals(date_from, date_to, system: str) -> list[dict] | None:
     # توافق مع مفاتيح أقدم كُتبت قبل توحيد رقم الفرع
     for ver in (("v8", "v7") if system != "onix" else ()):  # الأونكس تغيّر تعريفه، لا نرجع لمفاتيح قديمة
         legacy = (
-            f"salesx:branches:{ver}:{system}:{_as_date(date_from).isoformat()}:"
+            f"salesr:branches:{ver}:{system}:{_as_date(date_from).isoformat()}:"
             f"{_as_date(date_to).isoformat()}:"
             f"r{int(not _skip_mst_returns(date_from, date_to))}"
         )
@@ -827,7 +827,7 @@ def peek_sales_groups(
     raw_total = round(sum(float(r.get("sales_total") or 0) for r in raw), 2)
     if not by_branch and raw:
         br_key = (
-            f"salesx:branches:v9:pos:{_as_date(date_from).isoformat()}:"
+            f"salesr:branches:v9:pos:{_as_date(date_from).isoformat()}:"
             f"{_as_date(date_to).isoformat()}:"
             f"r{int(not _skip_mst_returns(date_from, date_to))}"
         )
@@ -835,7 +835,7 @@ def peek_sales_groups(
         if br_rows is None:
             for ver in ("v8", "v7"):
                 legacy = (
-                    f"salesx:branches:{ver}:pos:{_as_date(date_from).isoformat()}:"
+                    f"salesr:branches:{ver}:pos:{_as_date(date_from).isoformat()}:"
                     f"{_as_date(date_to).isoformat()}:"
                     f"r{int(not _skip_mst_returns(date_from, date_to))}"
                 )
@@ -1544,7 +1544,7 @@ def _group_window_totals(date_from, date_to, branch_code: str) -> list[dict]:
     )
 
     brn = str(branch_code or "").strip()
-    key = f"salesx:group_growth:v1:{date_from}:{date_to}:{brn}"
+    key = f"salesr:group_growth:v1:{date_from}:{date_to}:{brn}"
     hit = cache.get(key)
     if hit is not None:
         return hit
@@ -1665,7 +1665,7 @@ def _group_branch_window_rows(date_from, date_to, branch_code: str, group_code: 
 
     brn = str(branch_code or "").strip()
     gcode = str(group_code or "").strip()
-    key = f"salesx:group_branch_growth:v2:{date_from}:{date_to}:{brn}:{gcode}"
+    key = f"salesr:group_branch_growth:v2:{date_from}:{date_to}:{brn}:{gcode}"
     hit = cache.get(key)
     if hit is not None:
         return hit
@@ -1793,7 +1793,7 @@ def build_sales_branches_for_group(
     gcode = str(group_code or "").strip()
     if not gcode:
         raise ValueError("المجموعة مطلوبة.")
-    key = f"salesx:group_mode:v7:{date_from}:{date_to}:{brn}:{gcode}"
+    key = f"salesr:group_mode:v7:{date_from}:{date_to}:{brn}:{gcode}"
     cached = cache.get(key)
     if cached is not None:
         return cached

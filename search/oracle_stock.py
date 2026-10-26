@@ -867,7 +867,7 @@ def _django_lookup_get(key: str):
     if hit:
         return True, cached
     try:
-        val = cache.get(f"salesx:lookup:{key}")
+        val = cache.get(f"salesr:lookup:{key}")
     except Exception:
         val = None
     if val is not None:
@@ -879,7 +879,7 @@ def _django_lookup_get(key: str):
 def _django_lookup_set(key: str, value: Any) -> Any:
     _lookup_cache_set(key, value)
     try:
-        cache.set(f"salesx:lookup:{key}", value, _LOOKUP_CACHE_TTL)
+        cache.set(f"salesr:lookup:{key}", value, _LOOKUP_CACHE_TTL)
     except Exception:
         pass
     return value
@@ -3346,6 +3346,10 @@ def _doc_type_filter(conf: dict, alias: str, column: str, params: dict) -> str:
     if conf.get("exclude_pos_summary") and alias == "b":
         # ترحيل نقاط البيع يُنشئ فواتير خلاصة باسم "خلاصة مبيعات رقم نقطة البيع"، وهي مبيعات POS لا جملة
         clause += " AND NVL(b.C_NAME, ' ') NOT LIKE 'خلاصة مبيعات رقم نقطة البيع%'"
+    elif conf.get("exclude_pos_summary") and alias == "r":
+        # ومرتجعات نقاط البيع تُرحَّل كفواتير مرتجع باسم "رقم نقطة البيع = … - رقم المستخدم = …"؛
+        # هي نفسها مرتجعات جدول نقاط البيع (تطابقه بالهللة)، فخصمها هنا يكرر خصمها من نقاط البيع
+        clause += " AND NVL(r.C_NAME, ' ') NOT LIKE 'رقم نقطة البيع =%'"
     return clause
 
 
@@ -3518,7 +3522,7 @@ def fetch_branch_sales_totals(date_from, date_to, system: str = "pos") -> list[d
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"salesx:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not _skip_mst_returns(date_from, date_to))}"
     )
     # فترة تنتهي اليوم: لا تُعرض أرقام كاش قديمة مكان الحيّ
@@ -3551,7 +3555,7 @@ def fetch_branch_return_totals(
     gcode = str(group_code or "").strip()
     lim = max(1, min(int(limit or 15), 40))
     cache_key = (
-        f"salesx:ret_branches:v1:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:ret_branches:v1:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3705,7 +3709,7 @@ def fetch_group_return_totals(
     gcode = str(group_code or "").strip()
     lim = max(1, min(int(limit or 40), 200))
     cache_key = (
-        f"salesx:ret_groups:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:ret_groups:v4:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:b{int(bool(by_branch))}"
     )
     cached = _sales_cache_get(cache_key)
@@ -3872,7 +3876,7 @@ def fetch_sales_mst_bundle(
     fast_split = False
     lim = max(1, min(int(top_users_limit or 8), 50))
     cache_key = (
-        f"salesx:mst_bundle:v8:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:mst_bundle:v8:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:L{int(light)}:u{lim}:r{int(not skip_ret)}:f{int(fast_split)}"
     )
     cached = _sales_cache_get(cache_key)
@@ -4001,19 +4005,19 @@ def fetch_sales_mst_bundle(
 
     # مزامنة كاش الفروع المنفصل لواجهات أخرى
     br_cache = (
-        f"salesx:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:branches:{'v10' if system == 'onix' else 'v9'}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:r{int(not skip_ret)}"
     )
     _sales_cache_set(br_cache, branches, date_from=date_from, date_to=date_to)
     _sales_cache_set(
-        f"salesx:seller_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:seller_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}",
         seller_count,
         date_from=date_from,
         date_to=date_to,
     )
     _sales_cache_set(
-        f"salesx:device_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:device_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}",
         device_count,
         date_from=date_from,
@@ -4232,7 +4236,7 @@ def fetch_daily_sales_totals(
     brn = str(branch_code or "").strip()
     fast = _skip_mst_returns(date_from, date_to)
     cache_key = (
-        f"salesx:daily:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:daily:v2:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{'fast' if fast else 'net'}"
     )
     cached = _sales_cache_get(cache_key)
@@ -5130,7 +5134,7 @@ def _groups_cache_key(
     version: str = "v24",
 ) -> str:
     return (
-        f"salesx:groups:{version}{'b' if system != 'pos' else ''}:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:groups:{version}{'b' if system != 'pos' else ''}:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
 
@@ -5206,7 +5210,7 @@ def _groups_month_json_key(
 ) -> str:
     """مفتاح JSON لشهر واحد: نتيجة SQL مخزّنة ثم تُجمَّع لاحقاً."""
     return (
-        f"salesx:groups:monthjson:{'v3' if system != 'pos' else 'v2'}:{system}:"
+        f"salesr:groups:monthjson:{'v3' if system != 'pos' else 'v2'}:{system}:"
         f"{_as_date(date_from).isoformat()}:{_as_date(date_to).isoformat()}:"
         f"{brn}:{gcode}:{int(split_by_branch)}:{mode}"
     )
@@ -5671,7 +5675,7 @@ def _fetch_pos_all_groups_by_branch(date_from, date_to) -> list[dict]:
     merged: dict[tuple[str, str], dict] = {}
     today = date.today()
     for a, b in _month_spans(date_from, date_to):
-        key = f"salesx:pos_all_groups_br_raw:v2:{a.isoformat()}:{b.isoformat()}"
+        key = f"salesr:pos_all_groups_br_raw:v2:{a.isoformat()}:{b.isoformat()}"
         raw = cache.get(key)
         if raw is None:
             raw = _fetch_pos_all_groups_by_branch_raw(a, b)
@@ -5829,7 +5833,7 @@ def _fetch_pos_one_group_by_branch_months(
     brn = _norm_brn_code(branch_code) if str(branch_code or "").strip() else ""
     gcode = str(group_code or "").strip()
     key = (
-        f"salesx:pos_all_groups_br:v2:{_as_date(date_from).isoformat()}:"
+        f"salesr:pos_all_groups_br:v2:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}"
     )
     rows = cache.get(key)
@@ -5842,7 +5846,7 @@ def _fetch_pos_one_group_by_branch_months(
         ]
         return _merge_group_total_parts([picked], by_branch=True)
     result = _single_flight(
-        f"salesx:pos_group_br:v1:{_as_date(date_from).isoformat()}:"
+        f"salesr:pos_group_br:v1:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}",
         lambda: _fetch_pos_one_group_by_branch(
             date_from, date_to, group_code=gcode, branch_code=brn
@@ -6964,7 +6968,7 @@ def fetch_top_sales_items(
     qtag = "q1" if quick else "q0"
     stag = "s1" if fast_sample else "s0"
     cache_key = (
-        f"salesx:items:v15:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:items:v15:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{int(limit or 8)}:"
         f"{mode}:{order}:{qtag}:{stag}"
     )
@@ -7141,7 +7145,7 @@ def fetch_top_returned_items(
     lim = max(1, min(int(limit or 20), 50))
     qtag = "q1" if quick else "q0"
     cache_key = (
-        f"salesx:ret_items:v2:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:ret_items:v2:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:{qtag}"
     )
     cached = _sales_cache_get(cache_key)
@@ -7337,7 +7341,7 @@ def fetch_active_sales_user_count(
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"salesx:seller_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:seller_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}"
     )
     cached = _sales_cache_get(cache_key)
@@ -7387,7 +7391,7 @@ def fetch_active_sales_device_count(
     if not oracle_enabled():
         raise OracleStockError("أوراكل غير مفعّل.")
     cache_key = (
-        f"salesx:device_count:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:device_count:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}"
     )
     cached = _sales_cache_get(cache_key)
@@ -7442,7 +7446,7 @@ def fetch_top_sales_users(
     brn = str(branch_code or "").strip()
     lim = max(1, min(int(limit or 10), 50))
     cache_key = (
-        f"salesx:users:v4:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:users:v4:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{lim}:gross"
     )
     cached = _sales_cache_get(cache_key)
@@ -8179,7 +8183,7 @@ def fetch_margin_ranks(
     mode = "gross" if fast else "net"
     qtag = "q1" if quick else "q0"
     cache_key = (
-        f"salesx:margin:v18:{system}:{_as_date(date_from).isoformat()}:"
+        f"salesr:margin:v18:{system}:{_as_date(date_from).isoformat()}:"
         f"{_as_date(date_to).isoformat()}:{brn}:{gcode}:{lim}:{mode}:{qtag}:brn"
     )
     cached = _sales_cache_get(cache_key)

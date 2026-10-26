@@ -313,7 +313,7 @@ def home_today_api(request):
         return JsonResponse({'ok': False, 'error': 'غير مصرّح.'}, status=403)
 
     today = timezone.localdate()
-    cache_key = f'home_today:x:{today.isoformat()}'
+    cache_key = f'home_today:r:{today.isoformat()}'
     cached = cache.get(cache_key)
     if cached:
         return JsonResponse({'ok': True, **cached})
