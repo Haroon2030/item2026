@@ -3236,3 +3236,35 @@ class PosHoursReportTests(TestCase):
             self.assertContains(page, 'export=excel')
             self.assertContains(page, 'data-psh-pdf="all"')
             self.assertContains(page, 'data-psh-table="days"')
+
+
+class IncomeRevenueSignTests(TestCase):
+    """الإيراد في قائمة الدخل = دائن − مدين لكل حسابات الإيراد، بغض النظر عن طبيعة الحساب في الدليل."""
+
+    def test_revenue_ignores_account_nature_flag(self):
+        from search import oracle_income as oi
+
+        rows = [
+            # مبيعات (طبيعة دائنة)
+            {'A_CODE': '31101001', 'A_NAME': 'مبيعات', 'DR': 0, 'OPEN_NET': 0,
+             'MV_DR': 100, 'MV_CR': 10_000, 'NORM_AMT': 9_900, 'LINE_COUNT': 3},
+            # خصم مسموح به معلَّم «مدين»: حركته مدينة فيُنقص الإيراد (كان يُضاف)
+            {'A_CODE': '31102001', 'A_NAME': 'خصم مسموح به', 'DR': 1, 'OPEN_NET': 0,
+             'MV_DR': 500, 'MV_CR': 0, 'NORM_AMT': 500, 'LINE_COUNT': 1},
+            # إيجارات التعاقدات معلَّمة «مدين»: حركتها دائنة فتزيد الإيراد (كانت تُطرح)
+            {'A_CODE': '32101009', 'A_NAME': 'ايجارات دائنة (التعاقدات )', 'DR': 1, 'OPEN_NET': 0,
+             'MV_DR': 0, 'MV_CR': 1_200, 'NORM_AMT': -1_200, 'LINE_COUNT': 1},
+        ]
+        _by_account, kpis = oi._aggregate_accounts(rows)
+        self.assertEqual(kpis['revenue'], 10_600.0)  # 9,900 − 500 + 1,200
+
+        # نفس القاعدة في الملخص حسب جذر الحساب وفي الاتجاه الشهري
+        from datetime import date
+
+        kind_rows = [{'ROOT': '3', 'NORM_AMT': -999, 'MV_DR': 600, 'MV_CR': 11_200}]
+        self.assertEqual(oi._kpis_from_kind_rows(kind_rows)['revenue'], 10_600.0)
+        month = oi._build_monthly_trend(
+            date(2026, 1, 1), date(2026, 1, 31),
+            [dict(kind_rows[0], YM=date(2026, 1, 1))],
+        )
+        self.assertIn(10_600.0, [m.get('revenue') for m in month.get('months', month.get('series', []))])

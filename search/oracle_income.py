@@ -299,7 +299,9 @@ def _aggregate_accounts(base_rows: list[dict]) -> tuple[list[dict], dict]:
         gross_mv_cr = round(gross_mv_cr + mv_cr, 2)
         kind = _kind_for_code(code)
         if kind == "revenue":
-            revenue = round(revenue + norm, 2)
+            # الإيراد = دائن − مدين لكل حسابات الإيراد بغض النظر عن «طبيعة» الحساب في الدليل:
+            # حسابات إيراد معلَّمة مدينة (خصم مسموح به، إيجارات التعاقدات) كانت تُقلب إشارتها
+            revenue = round(revenue + (mv_cr - mv_dr), 2)
         elif kind == "cogs":
             cogs = round(cogs + norm, 2)
         elif kind == "expense":
@@ -435,7 +437,8 @@ def _kpis_from_kind_rows(rows: list[dict]) -> dict:
         gross_dr = round(gross_dr + _f(row.get("MV_DR")), 2)
         gross_cr = round(gross_cr + _f(row.get("MV_CR")), 2)
         if root == "3":
-            revenue = round(revenue + norm, 2)
+            # دائن − مدين بغض النظر عن طبيعة الحساب (انظر _aggregate_accounts)
+            revenue = round(revenue + _f(row.get("MV_CR")) - _f(row.get("MV_DR")), 2)
         elif root == "4":
             cogs = round(cogs + norm, 2)
         elif root == "5":
@@ -585,7 +588,8 @@ def _build_monthly_trend(d_from: date, d_to: date, rows: list[dict]) -> dict:
         bucket["dr"] = round(bucket["dr"] + _f(row.get("MV_DR")), 2)
         bucket["cr"] = round(bucket["cr"] + _f(row.get("MV_CR")), 2)
         if root == "3":
-            bucket["revenue"] = round(bucket["revenue"] + norm, 2)
+            # دائن − مدين بغض النظر عن طبيعة الحساب (انظر _aggregate_accounts)
+            bucket["revenue"] = round(bucket["revenue"] + _f(row.get("MV_CR")) - _f(row.get("MV_DR")), 2)
         elif root == "4":
             bucket["cogs"] = round(bucket["cogs"] + norm, 2)
         elif root == "5":
@@ -2303,7 +2307,7 @@ def _cache_key(
     posted_only: bool,
 ) -> str:
     return (
-        f"income:stmt:v56:{d_from}:{d_to}:"
+        f"income:stmt:v57:{d_from}:{d_to}:"
         f"{branch_code or '-'}:"
         f"{cc_code or '-'}:"
         f"{int(bool(posted_only))}"
