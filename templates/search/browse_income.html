@@ -86,14 +86,8 @@
 
   {% with u=statement.unposted %}
   {% if u.has_data %}
-  <style>
-    .unposted-link { text-decoration: none; color: inherit; }
-    .unposted-link:hover { box-shadow: 0 0 0 2px rgba(74, 127, 181, 0.45) !important; }
-    .unposted-more { font-weight: 700; color: #4A7FB5; white-space: nowrap; }
-  </style>
   <section class="income-kpi-grid" aria-label="مبيعات لم تُرحّل — خارج أرقام القائمة">
-    <a class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev unposted-link" href="{% url 'browse_unposted_sales_report' %}?run=1&amp;date_from={{ date_from|default:default_from }}&amp;date_to={{ date_to|default:default_to }}{% if selected_branch %}&amp;branch={{ selected_branch }}{% endif %}"
-       title="إجمالي المبيعات (نقاط البيع + فواتير الآجل) التي لم تُنقل إلى دفتر الترحيل بعد — اضغط لعرض التقرير حسب الفرع">
+    <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-rev" title="إجمالي المبيعات (نقاط البيع + فواتير الآجل) التي لم تُنقل إلى دفتر الترحيل بعد">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico income-kpi-ico-rev" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M12 19V5M12 5l-4 4M12 5l4 4"/></svg>
@@ -101,8 +95,8 @@
         مبيعات غير مرحّلة
       </span>
       <strong class="dash-kpi-value mono">{{ u.amount_display }}</strong>
-      <span class="dash-kpi-hint">{{ u.bills_display }} فاتورة{% if u.returns %} · {{ u.returns_display }} مرتجع{% endif %} · نقاط بيع {{ u.pos_amount_display }} + آجل {{ u.bill_amount_display }} · <span class="unposted-more">{{ u.branch_count }} فرع ←</span></span>
-    </a>
+      <span class="dash-kpi-hint">{{ u.bills_display }} فاتورة{% if u.returns %} · {{ u.returns_display }} مرتجع{% endif %} · نقاط بيع {{ u.pos_amount_display }} + آجل {{ u.bill_amount_display }}</span>
+    </article>
     <article class="dash-kpi-card dash-kpi-glass income-kpi income-kpi-cogs" title="الكمية × متوسط التكلفة الحالي للصنف في المخزن{% if u.missing_cost_items %} — {{ u.missing_cost_items }} صنف بلا تكلفة{% endif %}">
       <span class="dash-kpi-label">
         <span class="dash-kpi-ico income-kpi-ico-cogs" aria-hidden="true">
