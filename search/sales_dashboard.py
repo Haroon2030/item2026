@@ -354,7 +354,12 @@ def _combined_channel_totals(
     credit_raw: list[dict],
     cash_raw: list[dict],
 ) -> tuple[float, int]:
-    """إجمالي بلا تكرار: لكل فرع max(POS، نقدي الفواتير) + الآجل."""
+    """الإجمالي = نقاط البيع + النقدي المباشر + الآجل لكل فرع.
+
+    النقدي (أونيكس 1/5) يستبعد خلاصات ترحيل نقاط البيع («خلاصة مبيعات رقم نقطة البيع»)،
+    فهو مبيعات نظام المبيعات المباشرة فقط ولا تكرار مع نقاط البيع — يُجمع ولا يؤخذ الأكبر.
+    (قاعدة «الأكبر» كانت تُسقط الأصغر: نقدي سكاي مول المباشر، أو نقاط بيع الربوة.)
+    """
     pos_map = {
         str(r.get("branch_code") or "").strip(): r for r in (pos_raw or [])
     }
@@ -374,14 +379,12 @@ def _combined_channel_totals(
         pos_sales = float(p.get("sales_total") or 0)
         cash_sales = float(c.get("sales_total") or 0)
         credit_sales = float(w.get("sales_total") or 0)
-        sales += max(pos_sales, cash_sales) + credit_sales
-        pos_inv = int(p.get("invoice_count") or 0)
-        cash_inv = int(c.get("invoice_count") or 0)
-        credit_inv = int(w.get("invoice_count") or 0)
-        if pos_inv > 0:
-            invoices += pos_inv + credit_inv
-        else:
-            invoices += cash_inv + credit_inv
+        sales += pos_sales + cash_sales + credit_sales
+        invoices += (
+            int(p.get("invoice_count") or 0)
+            + int(c.get("invoice_count") or 0)
+            + int(w.get("invoice_count") or 0)
+        )
     return round(sales, 2), invoices
 
 

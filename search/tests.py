@@ -3268,3 +3268,25 @@ class IncomeRevenueSignTests(TestCase):
             [dict(kind_rows[0], YM=date(2026, 1, 1))],
         )
         self.assertIn(10_600.0, [m.get('revenue') for m in month.get('months', month.get('series', []))])
+
+
+class CombinedSalesTotalTests(TestCase):
+    """إجمالي المبيعات = نقاط البيع + النقدي المباشر + الآجل (لا الأكبر بين نقاط البيع والنقدي)."""
+
+    def test_pos_and_direct_cash_are_added_per_branch(self):
+        from search.sales_dashboard import _combined_channel_totals
+
+        pos = [
+            {'branch_code': '6', 'sales_total': 1000.0, 'invoice_count': 50},   # سكاي مول
+            {'branch_code': '1', 'sales_total': 300.0, 'invoice_count': 20},    # الربوة: النقدي أكبر
+        ]
+        cash = [
+            {'branch_code': '6', 'sales_total': 40.0, 'invoice_count': 4},
+            {'branch_code': '1', 'sales_total': 700.0, 'invoice_count': 30},
+            {'branch_code': '9', 'sales_total': 500.0, 'invoice_count': 25},    # فرع بلا نقاط بيع
+        ]
+        credit = [{'branch_code': '6', 'sales_total': 60.0, 'invoice_count': 2}]
+        sales, invoices = _combined_channel_totals(pos, credit, cash)
+        # 1000 + 40 + 60 (سكاي مول) + 300 + 700 (الربوة) + 500
+        self.assertEqual(sales, 2600.0)
+        self.assertEqual(invoices, 131)
