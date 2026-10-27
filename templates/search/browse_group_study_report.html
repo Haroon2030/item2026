@@ -9,7 +9,8 @@
   .gs-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
   .gs-scope strong { color: #1F2A37; }
   .gs-pack { white-space: nowrap; font-weight: 600; }
-  .gs-filter #wqc-subgroup { min-width: 12rem; }
+  /* لا عرض أدنى للقائمة: كان 12rem يتجاوز الحقل فيغطي «من تاريخ»؛ الاسم الطويل يُقصّ بـ «…» داخل حقله */
+  .gs-filter .field > select, .gs-filter .field > input { min-width: 0 !important; max-width: 100%; text-overflow: ellipsis; }
   .gs-export { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 999px; background: #E3F4EC; color: #1E6B47; font-weight: 600; text-decoration: none; }
   .gs-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
   .gs-readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
@@ -52,7 +53,8 @@
 <form method="get" action="{% url 'browse_group_study_report' %}" class="dash-panel-glass wqc-filter gs-filter" role="search">
   {{ subgroups|json_script:"wqc-subgroup-data" }}
   <input type="hidden" name="run" value="1">
-  <div class="field">
+  {# المجموعة والفرعية أسماؤهما طويلة: عرض أكبر من حقلي التاريخ (style مضمّن يتغلّب على flex الثيم) #}
+  <div class="field" style="flex: 2 1 16rem !important">
     <label for="wqc-group">المجموعة</label>
     <select id="wqc-group" name="group" required>
       <option value="">اختر المجموعة</option>
@@ -61,7 +63,7 @@
       {% endfor %}
     </select>
   </div>
-  <div class="field">
+  <div class="field" style="flex: 2 1 18rem !important">
     <label for="wqc-subgroup">المجموعة الفرعية</label>
     <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
       <option value="">كل المجموعات الفرعية</option>
