@@ -1741,8 +1741,9 @@ def _group_system_rows(date_from, date_to, system: str, branch_code: str, group_
             ]
         # مرتجعات كل الفروع باستعلام واحد مجمّع حسب الفرع (بدل استعلام لكل فرع)
         ret_by_branch: dict[str, list[dict]] = {}
-        # مرتجعات أونيكس (1/5) تشمل مرتجعات ترحيل نقاط البيع ولا يمكن فصلها، فلا تُخصم من نقدي الجملة
-        if raw and system != "onix":
+        # مرتجعات أونيكس (1/5) تُخصم أيضاً: خلاصات مرتجعات نقاط البيع («رقم نقطة البيع = …») تُستبعد
+        # بالاسم في _doc_type_filter، فالباقي مرتجعات مباشرة حقيقية بلا تكرار مع نقاط البيع
+        if raw:
             try:
                 for x in fetch_group_return_totals(
                     date_from, date_to, system=system, branch_code=brn, group_code=group_code,
@@ -1793,7 +1794,7 @@ def build_sales_branches_for_group(
     gcode = str(group_code or "").strip()
     if not gcode:
         raise ValueError("المجموعة مطلوبة.")
-    key = f"salesr:group_mode:v7:{date_from}:{date_to}:{brn}:{gcode}"
+    key = f"salesr:group_mode:v8:{date_from}:{date_to}:{brn}:{gcode}"
     cached = cache.get(key)
     if cached is not None:
         return cached
