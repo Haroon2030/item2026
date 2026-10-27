@@ -43,7 +43,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v14"
+_CACHE_VER = "v15"
 MAX_DAYS = 400
 
 WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
@@ -711,25 +711,28 @@ def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incomin
 
     # المؤشرات المالية
     fin = [
-        f"صافي المبيعات {kpis['net_v_display']}؛ تكلفة المبيعات {kpis['cost_display']} بمتوسط التكلفة الحالي؛ "
-        f"مجمل الربح {kpis['gross_display']}؛ نسبة مجمل الربح {kpis['margin_display']}."
+        f"صافي المبيعات: {kpis['net_v_display']}",
+        f"تكلفة المبيعات (بمتوسط التكلفة الحالي): {kpis['cost_display']}",
+        f"مجمل الربح: {kpis['gross_display']}",
+        f"نسبة مجمل الربح: {kpis['margin_display']}",
     ]
     neg = [r for r in top if r["gross"] < 0]
     low = [r for r in top if r["margin"] is not None and 0 <= r["margin"] < 5]
     if neg:
-        fin.append(f"أصناف بمجمل ربح سالب: {len(neg)} صنف، أكبرها «{neg[0]['name']}» بخسارة {_money(-neg[0]['gross'])}.")
+        fin.append(f"أصناف بمجمل ربح سالب: {len(neg)} صنف، أكبرها «{neg[0]['name']}» بخسارة {_money(-neg[0]['gross'])}")
     if low:
-        fin.append(f"أصناف نسبة مجمل ربحها أقل من 5%: {len(low)} صنف.")
+        fin.append(f"أصناف نسبة مجمل ربحها أقل من 5%: {len(low)} صنف")
     by_profit = sorted(top, key=lambda r: -r["gross"])[:5]
     if gross > 0 and by_profit:
         share = sum(r["gross"] for r in by_profit) * 100.0 / gross
-        fin.append(f"مساهمة أعلى 5 أصناف في مجمل الربح: {share:.0f}%.")
+        fin.append(f"مساهمة أعلى 5 أصناف في مجمل الربح: {share:.0f}%")
     out.append({"title": "المؤشرات المالية", "level": "risk" if (margin is not None and margin < 5) or neg else "ok", "points": fin})
 
     # مؤشرات المبيعات
     sales = [
-        f"عدد الفواتير {kpis['invoices_display']}؛ الكمية المباعة الصافية {kpis['net_q_display']} وحدة؛ "
-        f"متوسط المبيعات اليومية {kpis['per_day_display']} عن {days_elapsed} يوماً."
+        f"عدد الفواتير: {kpis['invoices_display']}",
+        f"الكمية المباعة الصافية: {kpis['net_q_display']} وحدة",
+        f"متوسط المبيعات اليومية: {kpis['per_day_display']} (عن {days_elapsed} يوماً)",
     ]
     if net_v > 0 and top:
         run, n80 = 0.0, 0
@@ -738,48 +741,54 @@ def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incomin
             n80 += 1
             if run >= 0.8 * net_v:
                 break
-        sales.append(f"80% من صافي المبيعات من {n80} صنف من أصل {len(top)} صنف مباع.")
-        sales.append(f"نسبة مبيعات نقاط البيع {kpis['pos_share_display']}؛ نسبة المرتجعات إلى إجمالي المبيعات {kpis['ret_pct_display']}.")
+        sales.append(f"أصناف تحقق 80% من صافي المبيعات: {n80} من {len(top)} صنف مباع")
+        sales.append(f"نسبة مبيعات نقاط البيع: {kpis['pos_share_display']}")
+        sales.append(f"نسبة المرتجعات إلى إجمالي المبيعات: {kpis['ret_pct_display']}")
     out.append({"title": "مؤشرات المبيعات", "level": "ok", "points": sales})
 
     # المخزون والصرف
-    ops = [f"رصيد المخزون الحالي {kpis['stock_q_display']} وحدة بتكلفة {kpis['stock_v_display']}؛ مدة التغطية {kpis['cover_display']} بمتوسط البيع اليومي."]
+    ops = [
+        f"رصيد المخزون الحالي: {kpis['stock_q_display']} وحدة بتكلفة {kpis['stock_v_display']}",
+        f"مدة تغطية المخزون: {kpis['cover_display']} (بمتوسط البيع اليومي)",
+    ]
     if T["waste_q"]:
-        ops.append(f"التوالف {kpis['waste_q_display']} وحدة بتكلفة {kpis['waste_c_display']}، بنسبة {kpis['waste_pct_display']} من تكلفة المبيعات، في {kpis['waste_orders']} أمر صرف.")
+        ops.append(f"التوالف: {kpis['waste_q_display']} وحدة بتكلفة {kpis['waste_c_display']} ({kpis['waste_pct_display']} من تكلفة المبيعات) في {kpis['waste_orders']} أمر صرف")
     if T["vret_q"]:
-        ops.append(f"المصروف للمورد {kpis['vret_q_display']} وحدة بتكلفة {kpis['vret_c_display']}، في {kpis['vret_orders']} أمر صرف.")
+        ops.append(f"المصروف للمورد: {kpis['vret_q_display']} وحدة بتكلفة {kpis['vret_c_display']} في {kpis['vret_orders']} أمر صرف")
     dead = [r for r in rows if r["stock_q"] > 0 and r["net_q"] <= 0]
     if dead:
         dead_v = sum(r["stock_v"] for r in dead)
-        ops.append(f"أصناف لها رصيد دون حركة بيع خلال الفترة: {len(dead)} صنف بتكلفة {_money(dead_v)}.")
+        ops.append(f"أصناف لها رصيد دون حركة بيع خلال الفترة: {len(dead)} صنف بتكلفة {_money(dead_v)}")
     short = [r for r in rows if r["cover_days"] is not None and r["cover_days"] < 7 and r["net_q"] > 0]
     if short:
-        ops.append(f"أصناف رصيدها يغطي أقل من 7 أيام: {len(short)} صنف، منها «{short[0]['name']}».")
+        ops.append(f"أصناف رصيدها يغطي أقل من 7 أيام: {len(short)} صنف، منها «{short[0]['name']}»")
     level = "risk" if (cover is not None and cover > 90) or dead else "watch" if short else "ok"
     out.append({"title": "المخزون والصرف", "level": level, "points": ops})
 
     # تشكيلة الأصناف
-    com = [f"الأصناف المباعة خلال الفترة {kpis['items_active']} من أصل {kpis['items_total']} صنف في المجموعة."]
+    com = [f"الأصناف المباعة خلال الفترة: {kpis['items_active']} من {kpis['items_total']} صنف في المجموعة"]
     if top:
         best = top[0]
-        com.append(f"الصنف الأعلى مبيعاً «{best['name']}»: صافي مبيعات {best['net_v_display']}، بنسبة {best['share_display']} من المجموعة، ونسبة مجمل ربح {best['margin_display']}.")
+        com.append(f"الصنف الأعلى مبيعاً: «{best['name']}»")
+        com.append(f"صافي مبيعاته: {best['net_v_display']} ({best['share_display']} من المجموعة) بنسبة مجمل ربح {best['margin_display']}")
     idle = kpis["items_total"] - kpis["items_active"]
     if idle > 0:
-        com.append(f"أصناف دون مبيعات خلال الفترة: {idle} صنف.")
+        com.append(f"أصناف دون مبيعات خلال الفترة: {idle} صنف")
     out.append({"title": "تشكيلة الأصناف", "level": "watch" if idle > kpis["items_total"] * 0.3 else "ok", "points": com})
 
     # المشتريات والتوريد
     sup = []
     if kpis["pi_n"]:
-        sup.append(f"فواتير الشراء {kpis['pi_n']:,} فاتورة بكمية {kpis['pi_q_display']} وقيمة {kpis['pi_v_display']}؛ مرتجعات الشراء {kpis['pr_v_display']}.")
+        sup.append(f"فواتير الشراء: {kpis['pi_n']:,} فاتورة بكمية {kpis['pi_q_display']} وقيمة {kpis['pi_v_display']}")
+        sup.append(f"مرتجعات الشراء: {kpis['pr_v_display']}")
     else:
-        sup.append("لا توجد فواتير شراء لأصناف المجموعة خلال الفترة.")
+        sup.append("فواتير الشراء: لا توجد فواتير شراء لأصناف المجموعة خلال الفترة")
     if T["sup_q"]:
-        sup.append(f"سندات التوريد {kpis['sup_n']} سند بكمية {kpis['sup_q_display']} وحدة.")
+        sup.append(f"سندات التوريد: {kpis['sup_n']} سند بكمية {kpis['sup_q_display']} وحدة")
     if net_q > 0:
         cov = incoming_q * 100.0 / net_q
-        gap = "والفرق مسحوب من المخزون" if cov < 90 else "وهو متوازن مع المبيعات" if cov <= 120 else "والزيادة مضافة إلى المخزون"
-        sup.append(f"الوارد {kpis['incoming_q_display']} وحدة مقابل كمية مباعة صافية {kpis['net_q_display']} وحدة، بنسبة {cov:.0f}%، {gap}.")
+        gap = "الفرق مسحوب من المخزون" if cov < 90 else "متوازن مع المبيعات" if cov <= 120 else "الزيادة مضافة إلى المخزون"
+        sup.append(f"الوارد مقابل المباع: {kpis['incoming_q_display']} مقابل {kpis['net_q_display']} وحدة ({cov:.0f}%)، {gap}")
     out.append({"title": "المشتريات والتوريد", "level": "watch" if not kpis["pi_n"] else "ok", "points": sup})
     return out
 
