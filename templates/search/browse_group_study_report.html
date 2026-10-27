@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}دراسة مجموعة{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .gs-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
+  .gs-scope strong { color: #1F2A37; }
+  .gs-pack { white-space: nowrap; font-weight: 600; }
+  .gs-filter #wqc-subgroup { min-width: 12rem; }
+  .gs-export { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 999px; background: #E3F4EC; color: #1E6B47; font-weight: 600; text-decoration: none; }
+  .gs-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
+  .gs-readings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
+  .gs-reading { background: #fff; border-radius: 16px; padding: 0.85rem 1rem; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); border-inline-start: 4px solid #4A7FB5; }
+  .gs-reading.is-risk { border-inline-start-color: #C24545; }
+  .gs-reading.is-watch { border-inline-start-color: #E0A030; }
+  .gs-reading.is-ok { border-inline-start-color: #2E9E5B; }
+  .gs-reading h3 { margin: 0 0 0.4rem; font-size: 0.98rem; font-weight: 800; color: #1F2A37; display: flex; align-items: center; gap: 0.45rem; }
+  .gs-reading h3 .gs-dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; background: currentColor; }
+  .gs-reading.is-risk h3 .gs-dot { color: #C24545; }
+  .gs-reading.is-watch h3 .gs-dot { color: #E0A030; }
+  .gs-reading.is-ok h3 .gs-dot { color: #2E9E5B; }
+  .gs-reading ul { margin: 0; padding-inline-start: 1.1rem; color: #2b3644; font-size: 0.88rem; line-height: 1.7; }
+  .gs-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
+  .gs-caption strong { display: block; font-size: 1rem; font-weight: 800; }
+  .gs-caption span { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  .gs-bar { display: inline-block; width: 110px; height: 8px; border-radius: 4px; background: #e3e8ef; vertical-align: middle; margin-inline-start: 6px; overflow: hidden; }
+  .gs-bar > i { display: block; height: 100%; background: #4a7fb5; }
+  .gs-neg { color: #C24545 !important; }
+  .gs-warn { color: #B26A00 !important; }
+  .gs-note { margin: 0.25rem 0 1rem; color: #6B7785; font-size: 0.82rem; }
+  .gs-sheets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; align-items: start; margin-bottom: 1rem; }
+  .gs-sheets .wqc-sheet { margin: 0; }
+</style>
+
+<section class="dash-head" aria-label="دراسة مجموعة">
+  <div class="dash-head-copy">
+    <h2>دراسة مجموعة</h2>
+    <p>قراءة مالية وتشغيلية ومبيعاتية وتجارية وتوريدية لمجموعة أصناف في فترة وفرع: المبيعات، الربح، الفواتير، الوارد، التوالف، المرتجع للمورد والرصيد لكل صنف. المبالغ بدون ضريبة.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_group_study_report' %}" class="dash-panel-glass wqc-filter gs-filter" role="search">
+  {{ subgroups|json_script:"wqc-subgroup-data" }}
+  <input type="hidden" name="run" value="1">
+  <div class="field">
+    <label for="wqc-group">المجموعة</label>
+    <select id="wqc-group" name="group" required>
+      <option value="">اختر المجموعة</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code|stringformat:"s" == selected_group %}selected{% endif %}>{{ g.code }} - {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="wqc-subgroup">المجموعة الفرعية</label>
+    <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
+      <option value="">كل المجموعات الفرعية</option>
+      {% for s in subgroups %}{% if s.group_code == selected_group %}
+        <option value="{{ s.code }}" {% if s.code == selected_subgroup %}selected{% endif %}>{{ s.code }}- {{ s.name }}</option>
+      {% endif %}{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="gs-from">من تاريخ</label>
+    <input id="gs-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+  <div class="field">
+    <label for="gs-to">إلى تاريخ</label>
+    <input id="gs-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+  <div class="field">
+    <label for="gs-branch">الفرع</label>
+    <select id="gs-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض الدراسة</button>
+  </div>
+</form>
+
+{% if report %}
+  {% with k=report.kpis %}
+  <p class="gs-scope">
+    <strong>{{ report.group_code }} - {{ report.group_name }}{% if report.subgroup_code %} · فرعية {{ report.subgroup_code }} - {{ report.subgroup_name }}{% endif %}</strong>
+    · {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
+    · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> ({{ report.days_elapsed }} يوم)
+    · <a class="btn-ghost gs-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
+  </p>
+
+  <section class="gs-kpis" aria-label="المؤشرات">
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-value">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg></span><h3>صافي المبيعات</h3></header>
+      <p class="wqc-kpi-value mono" dir="ltr">{{ k.net_v_display }}</p>
+      <small>قبل المرتجع {{ k.sold_v_display }} · مرتجع {{ k.ret_pct_display }}</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-margin">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14l4-4 4 3 6-7"/><path d="M14 6h6v6"/></svg></span><h3>الربح الإجمالي</h3></header>
+      <p class="wqc-kpi-value mono{% if k.gross < 0 %} gs-neg{% endif %}" dir="ltr">{{ k.gross_display }}</p>
+      <small>الهامش {{ k.margin_display }} · التكلفة {{ k.cost_display }}</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></span><h3>الفواتير والكمية</h3></header>
+      <p class="wqc-kpi-value mono">{{ k.invoices_display }}</p>
+      <small>{{ k.net_q_display }} عبوة · نقاط البيع {{ k.pos_share_display }}</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-in">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/></svg></span><h3>الوارد (عبوة)</h3></header>
+      <p class="wqc-kpi-value mono">{{ k.incoming_q_display }}</p>
+      <small>توريد {{ k.sup_n }} سند · شراء {{ k.pi_n }} فاتورة{% if k.pi_n %} ({{ k.pi_v_display }}){% endif %}</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-waste">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></span><h3>التوالف</h3></header>
+      <p class="wqc-kpi-value mono" dir="ltr">{{ k.waste_c_display }}</p>
+      <small>{{ k.waste_q_display }} عبوة · {{ k.waste_orders }} أمر صرف · {{ k.waste_pct_display }} من التكلفة</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-vret">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 14l-5-5 5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></span><h3>المصروف للمورد</h3></header>
+      <p class="wqc-kpi-value mono" dir="ltr">{{ k.vret_c_display }}</p>
+      <small>{{ k.vret_q_display }} عبوة · {{ k.vret_orders }} أمر صرف</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-stock">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg></span><h3>الرصيد الحالي</h3></header>
+      <p class="wqc-kpi-value mono" dir="ltr">{{ k.stock_v_display }}</p>
+      <small>{{ k.stock_q_display }} عبوة · يغطي {{ k.cover_display }}</small>
+    </article>
+    <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-items">
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><h3>الأصناف</h3></header>
+      <p class="wqc-kpi-value mono">{{ k.items_active }} / {{ k.items_total }}</p>
+      <small>صنف نشط من أصناف المجموعة</small>
+    </article>
+  </section>
+
+  <section class="gs-readings" aria-label="القراءات">
+    {% for g in report.readings %}
+      <article class="gs-reading is-{{ g.level }}">
+        <h3><span class="gs-dot" aria-hidden="true"></span>{{ g.title }}</h3>
+        <ul>{% for p in g.points %}<li>{{ p }}</li>{% endfor %}</ul>
+      </article>
+    {% endfor %}
+  </section>
+
+  {% if not report.has_purchase_invoices %}
+    <p class="gs-note">ملاحظة: لا توجد فواتير شراء لأصناف هذه المجموعة في الفترة، فالوارد من سندات التوريد كميةً فقط. التحويلات بين المخازن لا تُحسب وارداً.</p>
+  {% endif %}
+
+  <div class="gs-sheets">
+    <section class="wqc-sheet" aria-label="المبيعات الشهرية">
+      <div class="table-wrap wqc-scroll" tabindex="0">
+        <table class="wqc-table" data-name-col="0">
+          <caption class="gs-caption"><strong>المبيعات الشهرية</strong><span>صافي قبل المرتجع، بدون ضريبة</span></caption>
+          <thead><tr><th scope="col">الشهر</th><th scope="col">الكمية</th><th scope="col">المبيعات</th></tr></thead>
+          <tbody>
+            {% for m in report.trend %}
+              <tr>
+                <td>{{ m.label }}</td>
+                <td class="mono">{{ m.q_display }}</td>
+                <td class="mono">{{ m.v_display }}<span class="gs-bar" aria-hidden="true"><i style="width: {{ m.bar }}%"></i></span></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="wqc-empty">لا مبيعات في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="wqc-sheet" aria-label="قنوات البيع">
+      <div class="table-wrap wqc-scroll" tabindex="0">
+        <table class="wqc-table" data-name-col="0">
+          <caption class="gs-caption"><strong>قنوات البيع</strong><span>قبل المرتجع، بدون ضريبة</span></caption>
+          <thead><tr><th scope="col">القناة</th><th scope="col">المبيعات</th></tr></thead>
+          <tbody>
+            <tr><td>نقاط البيع</td><td class="mono">{{ k.pos_v_display }}</td></tr>
+            <tr><td>نقدي مباشر</td><td class="mono">{{ k.cash_v_display }}</td></tr>
+            <tr><td>آجل</td><td class="mono">{{ k.credit_v_display }}</td></tr>
+            <tr><td>المرتجعات</td><td class="mono gs-neg">-{{ k.ret_v_display }}</td></tr>
+          </tbody>
+          <tfoot><tr class="wqc-tfoot"><td>الصافي</td><td class="mono">{{ k.net_v_display }}</td></tr></tfoot>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="wqc-sheet" aria-label="تحليل الأصناف">
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="تحليل الأصناف">
+      <table class="wqc-table" data-name-col="1">
+        <caption class="gs-caption">
+          <strong>تحليل الأصناف</strong>
+          <span>{{ report.group_code }} - {{ report.group_name }} · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · الكميات بعبوة الصنف (كرتون/ربطة) · التكلفة بمتوسط التكلفة الحالي للصنف</span>
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">الكود</th>
+            <th scope="col">الصنف</th>
+            <th scope="col">العبوة</th>
+            <th scope="col">الفواتير</th>
+            <th scope="col">الكمية المباعة</th>
+            <th scope="col">سعر البيع</th>
+            <th scope="col">صافي المبيعات</th>
+            <th scope="col">الحصة</th>
+            <th scope="col">تكلفة العبوة</th>
+            <th scope="col">التكلفة</th>
+            <th scope="col">الربح</th>
+            <th scope="col">الهامش</th>
+            <th scope="col">الوارد</th>
+            <th scope="col">التوالف</th>
+            <th scope="col">للمورد</th>
+            <th scope="col">الرصيد</th>
+            <th scope="col">التغطية</th>
+            <th scope="col">التصريف</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in report.rows %}
+            <tr>
+              <td class="mono" dir="ltr">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td class="gs-pack">{{ r.pack_label }}</td>
+              <td class="mono">{{ r.invoices_display }}</td>
+              <td class="mono">{{ r.net_q_display }}</td>
+              <td class="mono">{{ r.price_display }}</td>
+              <td class="mono">{{ r.net_v_display }}</td>
+              <td class="mono">{{ r.share_display }}</td>
+              <td class="mono">{{ r.unit_cost_display }}</td>
+              <td class="mono">{{ r.cost_display }}</td>
+              <td class="mono{% if r.gross < 0 %} gs-neg{% endif %}">{{ r.gross_display }}</td>
+              <td class="mono{% if r.gross < 0 %} gs-neg{% elif r.margin is not None and r.margin < 5 %} gs-warn{% endif %}">{{ r.margin_display }}</td>
+              <td class="mono">{{ r.incoming_q_display }}</td>
+              <td class="mono">{{ r.waste_q_display }}</td>
+              <td class="mono">{{ r.vret_q_display }}</td>
+              <td class="mono">{{ r.stock_q_display }}</td>
+              <td class="mono{% if r.cover_days is not None and r.cover_days < 7 %} gs-warn{% endif %}">{{ r.cover_display }}</td>
+              <td class="mono">{{ r.sell_through_display }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="wqc-tfoot">
+            <td></td>
+            <td>الإجمالي</td>
+            <td></td>
+            <td class="mono">{{ k.invoices_display }}</td>
+            <td class="mono">{{ k.net_q_display }}</td>
+            <td></td>
+            <td class="mono">{{ k.net_v_display }}</td>
+            <td class="mono">100.0%</td>
+            <td></td>
+            <td class="mono">{{ k.cost_display }}</td>
+            <td class="mono{% if k.gross < 0 %} gs-neg{% endif %}">{{ k.gross_display }}</td>
+            <td class="mono">{{ k.margin_display }}</td>
+            <td class="mono">{{ k.incoming_q_display }}</td>
+            <td class="mono">{{ k.waste_q_display }}</td>
+            <td class="mono">{{ k.vret_q_display }}</td>
+            <td class="mono">{{ k.stock_q_display }}</td>
+            <td class="mono">{{ k.cover_display }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </section>
+  {% endwith %}
+{% elif run and not error %}
+  <p class="gs-scope">لا توجد بيانات للعرض.</p>
+{% endif %}
+<script src="/static/js/wqc-subgroup.js?v={{ app_client_version }}" defer></script>
+{% endblock %}

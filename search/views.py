@@ -6745,6 +6745,90 @@ def browse_unposted_sales_report(request):
 @login_required
 @require_GET
 @never_cache
+def browse_group_study_report(request):
+    """دراسة مجموعة: لوحة مالية وتشغيلية ومبيعاتية وتجارية وتوريدية لفترة وفرع."""
+    from datetime import date as date_cls
+
+    from .oracle_group_study import build_group_study, build_group_study_excel
+    from .oracle_income import fetch_income_branches
+    from .oracle_stock import fetch_main_subgroup_options, fetch_sales_group_options, oracle_enabled, oracle_session
+
+    today = date_cls.today()
+    branch = str(request.GET.get('branch') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    subgroup = str(request.GET.get('subgroup') or '').strip()
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes') or want_excel
+    error = ''
+    report = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    subgroups: list[dict] = []
+    try:
+        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or '').strip()) \
+            if request.GET.get('date_from') else today.replace(month=1, day=1)
+        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or '').strip()) \
+            if request.GET.get('date_to') else today
+    except ValueError:
+        date_from, date_to = today.replace(month=1, day=1), today
+        error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
+
+    if not error:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    groups = fetch_sales_group_options() or []
+                    if branch not in {b['code'] for b in branches}:
+                        branch = ''
+                    if group and group not in {str(g.get('code') or '').strip() for g in groups}:
+                        group = ''
+                    subgroups = fetch_main_subgroup_options() or []
+                    if subgroup and not any(
+                        str(s.get('group_code') or '').strip() == group and str(s.get('code') or '').strip() == subgroup
+                        for s in subgroups
+                    ):
+                        subgroup = ''
+                if run:
+                    if not group:
+                        error = 'اختر المجموعة أولاً.'
+                    else:
+                        report = build_group_study(
+                            date_from, date_to, group_code=group, branch_code=branch, subgroup_code=subgroup,
+                        )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_group_study_report failed: %s', exc)
+            error = f'تعذّر تحميل الدراسة: {exc}'
+            report = None
+
+    if report and want_excel:
+        return build_group_study_excel(report)
+
+    return render(
+        request,
+        'search/browse_group_study_report.html',
+        {
+            'branches': branches,
+            'groups': groups,
+            'subgroups': subgroups,
+            'selected_branch': branch,
+            'selected_group': group,
+            'selected_subgroup': subgroup,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'report': report,
+            'run': run,
+            'error': error,
+            'export_query': _query_without(request.GET, 'export'),
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_wh_qty_compare(request):
     """مقارنة كميات الأصناف بين مستودعين (رصيد IAS_ITM_WCODE)."""
     selected_wh_a = str(

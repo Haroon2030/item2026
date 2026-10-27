@@ -1,0 +1,830 @@
+"""دراسة مجموعة أصناف — لوحة تحليل مالية وتشغيلية ومبيعاتية وتجارية وتوريدية لفترة وفرع.
+
+قراءة فقط (SELECT). المصادر:
+- المبيعات: نقاط البيع (IAS_POS_BILL_*) + نظام المبيعات النقدي المباشر 1/5 (بلا خلاصات ترحيل نقاط البيع)
+  + الآجل 4/8 (IAS_BILL_*)، ومرتجعاتها (IAS_POS_RT_BILL_* / IAS_RT_BILL_* بلا خلاصات مرتجعات نقاط البيع).
+  المبالغ بدون ضريبة كباقي شاشات المبيعات.
+- الوارد: سندات التوريد (IAS_GR_INCOMING_*) + فواتير الشراء (IAS_PI_BILL_*) ومرتجعاتها (IAS_PR_BILL_*).
+  التحويلات بين المخازن ليست وارداً.
+- أوامر الصرف (IAS_OUTGOING_*): التوالف (41101006 توالف، 41101008 الأصناف المفقودة والتالفة)،
+  والمرتجع للمورد (21101001 موردين) منفصلاً، والباقي «صرف آخر».
+- الرصيد الحالي (IAS_ITM_WCODE) لمخازن الفرع المختار.
+الكميات بعبوة الصنف الكبرى (وحدة المخزون ÷ حجم العبوة)؛ تكلفة المبيعات والرصيد = الكمية × متوسط التكلفة الحالي للصنف (كما في شاشة تحليل المبيعات)،
+والصرف (توالف/مورد) بتكلفة أمر الصرف نفسه (كما في تقرير أوامر الصرف)، والبيع بسعر البيع.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import date
+from typing import Any
+
+from django.core.cache import cache
+
+from .oracle_item_branch_report import _bill_net_sql
+from .oracle_stock import (
+    OracleStockError,
+    _as_date,
+    _bind_gcode,
+    _branch_names,
+    _date_params,
+    _fetch_all,
+    _norm_brn_code,
+    _pos_dtl_net_sql,
+    _pos_owner,
+    _run_parallel,
+    _schema,
+    fetch_item_max_pack_map,
+    fetch_warehouse_options,
+    oracle_enabled,
+    oracle_session,
+)
+
+logger = logging.getLogger(__name__)
+
+_CACHE_TTL = 600
+_CACHE_VER = "v10"
+MAX_DAYS = 400
+
+WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
+SUPPLIER_RETURN_ACCOUNTS = ("21101001",)  # موردين — صرف بضاعة للمورد
+POS_SALES_SUMMARY = "خلاصة مبيعات رقم نقطة البيع%"
+POS_RETURNS_SUMMARY = "رقم نقطة البيع =%"
+STOCK_QTY = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(NULLIF(d.P_SIZE, 0), 1))"
+
+_AR_MONTHS = ("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+              "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر")
+
+
+def _f(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _money(value: float) -> str:
+    return f"{value:,.2f}"
+
+
+def _qty(value: float) -> str:
+    v = round(float(value or 0), 2)
+    return f"{v:,.0f}" if v.is_integer() else f"{v:,.2f}"
+
+
+def _pct(part: float, whole: float) -> float | None:
+    return round(part * 100.0 / whole, 1) if whole else None
+
+
+def _pct_display(value: float | None) -> str:
+    return "—" if value is None else f"{value:.1f}%"
+
+
+def _code(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.endswith(".0") and text[:-2].isdigit():
+        text = text[:-2]
+    return text
+
+
+# ===== الاستعلامات =====
+
+def _brn_filter(alias: str, brn: str, params: dict) -> str:
+    if not brn:
+        return ""
+    params["brn"] = int(brn) if brn.isdigit() else brn
+    return f"AND {alias}.BRN_NO = :brn"
+
+
+def _pos_sales(params: dict, brn_sql: str) -> list[dict]:
+    pos, sch = _pos_owner(), _schema()
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(m.BILL_DATE, 'MM') AS M,
+               SUM({STOCK_QTY}) AS Q, ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS V,
+               COUNT(DISTINCT m.BRN_NO || '-' || m.BILL_NO) AS N
+        FROM {pos}.IAS_POS_BILL_DTL d
+        JOIN {pos}.IAS_POS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO AND m.BRN_NO = d.BRN_NO AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+          AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+        GROUP BY TO_CHAR(d.I_CODE), TRUNC(m.BILL_DATE, 'MM')
+        """,
+        params,
+    )
+
+
+def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary: bool) -> list[dict]:
+    sch = _schema()
+    types = ", ".join(str(int(t)) for t in doc_types)
+    summ = f"AND NVL(b.C_NAME, ' ') NOT LIKE '{POS_SALES_SUMMARY}'" if exclude_summary else ""
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(b.BILL_DATE, 'MM') AS M,
+               SUM({STOCK_QTY}) AS Q, ROUND(SUM({_bill_net_sql("d")}), 2) AS V,
+               COUNT(DISTINCT b.BILL_SER) AS N
+        FROM {sch}.IAS_BILL_DTL d
+        JOIN {sch}.IAS_BILL_MST b
+          ON b.BILL_NO = d.BILL_NO AND b.BILL_SER = d.BILL_SER AND b.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
+          AND (b.CNCL_FLG IS NULL OR b.CNCL_FLG = 0) AND ABS(NVL(b.BILL_AMT, 0)) <= 5000000
+          AND b.BILL_DOC_TYPE IN ({types}) {summ}
+          AND i.G_CODE = :g {brn_sql.replace('{a}', 'b')}
+        GROUP BY TO_CHAR(d.I_CODE), TRUNC(b.BILL_DATE, 'MM')
+        """,
+        params,
+    )
+
+
+def _pos_returns(params: dict, brn_sql: str) -> list[dict]:
+    pos, sch = _pos_owner(), _schema()
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS V
+        FROM {pos}.IAS_POS_RT_BILL_DTL d
+        JOIN {pos}.IAS_POS_RT_BILL_MST m ON m.RT_BILL_NO = d.RT_BILL_NO AND m.BRN_NO = d.BRN_NO
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
+          AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        params,
+    )
+
+
+def _bill_returns(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary: bool) -> list[dict]:
+    sch = _schema()
+    types = ", ".join(str(int(t)) for t in doc_types)
+    summ = f"AND NVL(r.C_NAME, ' ') NOT LIKE '{POS_RETURNS_SUMMARY}'" if exclude_summary else ""
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, ROUND(SUM({_bill_net_sql("d")}), 2) AS V
+        FROM {sch}.IAS_RT_BILL_DTL d
+        JOIN {sch}.IAS_RT_BILL_MST r ON r.RT_BILL_SER = d.RT_BILL_SER AND r.BRN_NO = d.BRN_NO
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
+          AND (r.CNCL_FLG IS NULL OR r.CNCL_FLG = 0) AND ABS(NVL(r.BILL_AMT, 0)) <= 5000000
+          AND r.RT_BILL_DOC_TYPE IN ({types}) {summ}
+          AND i.G_CODE = :g {brn_sql.replace('{a}', 'r')}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        params,
+    )
+
+
+def _supply_vouchers(params: dict, brn_sql: str) -> list[dict]:
+    sch = _schema()
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, COUNT(DISTINCT m.INC_SER) AS N, MAX(m.INC_DATE) AS LAST_D
+        FROM {sch}.IAS_GR_INCOMING_DTL d
+        JOIN {sch}.IAS_GR_INCOMING_MST m ON m.INC_SER = d.INC_SER AND m.INCOM_TYPE = d.INCOM_TYPE
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.INC_DATE >= :d_from AND m.INC_DATE < :d_to_excl
+          AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        params,
+    )
+
+
+def _purchases(params: dict, brn_sql: str) -> list[dict]:
+    sch = _schema()
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q,
+               ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.I_PRICE, 0) - NVL(d.DIS_AMT, 0)), 2) AS V,
+               COUNT(DISTINCT m.BILL_SER) AS N, COUNT(DISTINCT m.V_CODE) AS VENDORS, MAX(m.BILL_DATE) AS LAST_D
+        FROM {sch}.IAS_PI_BILL_DTL d
+        JOIN {sch}.IAS_PI_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO AND m.BILL_SER = d.BILL_SER AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
+          AND NVL(m.HUNG, 0) = 0 AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        params,
+    )
+
+
+def _purchase_returns(params: dict, brn_sql: str) -> list[dict]:
+    sch = _schema()
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q,
+               ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.I_PRICE, 0) - NVL(d.DIS_AMT, 0)), 2) AS V
+        FROM {sch}.IAS_PR_BILL_DTL d
+        JOIN {sch}.IAS_PR_BILL_MST r
+          ON r.RT_BILL_NO = d.RT_BILL_NO AND r.RT_BILL_SER = d.RT_BILL_SER AND r.RT_BILL_DOC_TYPE = d.RT_BILL_DOC_TYPE
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
+          AND NVL(r.HUNG, 0) = 0 AND i.G_CODE = :g {brn_sql.replace('{a}', 'r')}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        params,
+    )
+
+
+def _issues(params: dict, brn_sql: str) -> list[dict]:
+    sch = _schema()
+    return _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(m.A_CODE) AS A,
+               SUM({STOCK_QTY}) AS Q, ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)), 2) AS C,
+               COUNT(DISTINCT m.OUT_SER) AS N
+        FROM {sch}.IAS_OUTGOING_DTL d
+        JOIN {sch}.IAS_OUTGOING_MST m ON m.OUT_SER = d.OUT_SER AND m.OUT_TYPE = d.OUT_TYPE
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.OUT_TYPE = 1 AND m.OUT_DATE >= :d_from AND m.OUT_DATE < :d_to_excl
+          AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.A_CODE)
+        """,
+        params,
+    )
+
+
+def _distinct_counts(params: dict, brn_sql: str) -> dict[str, int]:
+    """عدد المستندات المميّزة للمجموعة: فاتورة فيها 3 أصناف من المجموعة تُعدّ مرة واحدة."""
+    pos, sch = _pos_owner(), _schema()
+    waste = ", ".join(f"'{a}'" for a in WASTE_ACCOUNTS)
+    vret = ", ".join(f"'{a}'" for a in SUPPLIER_RETURN_ACCOUNTS)
+    row = _fetch_all(
+        f"""
+        SELECT
+          (SELECT COUNT(DISTINCT m.BRN_NO || '-' || m.BILL_NO) FROM {pos}.IAS_POS_BILL_DTL d
+             JOIN {pos}.IAS_POS_BILL_MST m ON m.BILL_NO = d.BILL_NO AND m.BRN_NO = d.BRN_NO AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+             JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl AND (m.HUNG IS NULL OR m.HUNG = 0)
+              AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}) AS POS_N,
+          (SELECT COUNT(DISTINCT b.BILL_SER || '-' || b.BILL_DOC_TYPE) FROM {sch}.IAS_BILL_DTL d
+             JOIN {sch}.IAS_BILL_MST b ON b.BILL_NO = d.BILL_NO AND b.BILL_SER = d.BILL_SER AND b.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+             JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl AND (b.CNCL_FLG IS NULL OR b.CNCL_FLG = 0)
+              AND ABS(NVL(b.BILL_AMT, 0)) <= 5000000 AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
+              AND NVL(b.C_NAME, ' ') NOT LIKE '{POS_SALES_SUMMARY}'
+              AND i.G_CODE = :g {brn_sql.replace('{a}', 'b')}) AS BILL_N,
+          (SELECT COUNT(DISTINCT m.INC_SER || '-' || m.INCOM_TYPE) FROM {sch}.IAS_GR_INCOMING_DTL d
+             JOIN {sch}.IAS_GR_INCOMING_MST m ON m.INC_SER = d.INC_SER AND m.INCOM_TYPE = d.INCOM_TYPE
+             JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE m.INC_DATE >= :d_from AND m.INC_DATE < :d_to_excl AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}) AS SUP_N,
+          (SELECT COUNT(DISTINCT m.BILL_SER || '-' || m.BILL_DOC_TYPE) FROM {sch}.IAS_PI_BILL_DTL d
+             JOIN {sch}.IAS_PI_BILL_MST m ON m.BILL_NO = d.BILL_NO AND m.BILL_SER = d.BILL_SER AND m.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+             JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl AND NVL(m.HUNG, 0) = 0
+              AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}) AS PI_N,
+          (SELECT COUNT(DISTINCT m.OUT_SER) FROM {sch}.IAS_OUTGOING_DTL d
+             JOIN {sch}.IAS_OUTGOING_MST m ON m.OUT_SER = d.OUT_SER AND m.OUT_TYPE = d.OUT_TYPE
+             JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE m.OUT_TYPE = 1 AND m.OUT_DATE >= :d_from AND m.OUT_DATE < :d_to_excl AND (m.HUNG IS NULL OR m.HUNG = 0)
+              AND TO_CHAR(m.A_CODE) IN ({waste}) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}) AS WASTE_N,
+          (SELECT COUNT(DISTINCT m.OUT_SER) FROM {sch}.IAS_OUTGOING_DTL d
+             JOIN {sch}.IAS_OUTGOING_MST m ON m.OUT_SER = d.OUT_SER AND m.OUT_TYPE = d.OUT_TYPE
+             JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE m.OUT_TYPE = 1 AND m.OUT_DATE >= :d_from AND m.OUT_DATE < :d_to_excl AND (m.HUNG IS NULL OR m.HUNG = 0)
+              AND TO_CHAR(m.A_CODE) IN ({vret}) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}) AS VRET_N
+        FROM DUAL
+        """,
+        params,
+    )[0]
+    return {k.lower(): int(_f(v)) for k, v in row.items()}
+
+
+def _items_and_stock(group: Any, brn: str, sub: str = "") -> tuple[dict[str, dict], dict[str, tuple[float, float]]]:
+    """أصناف المجموعة (الاسم) + رصيدها الحالي وقيمته بمتوسط التكلفة لمخازن الفرع (أو كل المخازن)."""
+    sch = _schema()
+    sub_sql = "AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""
+    base: dict[str, Any] = {"g": group} | ({"mng": sub} if sub else {})
+    items = {
+        _code(r["I"]): {"name": str(r.get("N") or "").strip()}
+        for r in _fetch_all(f"SELECT TO_CHAR(i.I_CODE) AS I, i.I_NAME AS N FROM {sch}.IAS_ITM_MST i WHERE i.G_CODE = :g {sub_sql}", base)
+    }
+    params: dict[str, Any] = dict(base)
+    wh_sql = ""
+    if brn:
+        # مخازن الفرع من قائمة المخازن المعتمدة في التطبيق (جدول المخازن نفسه بلا عمود فرع)
+        whs = [
+            _code(w.get("code")) for w in fetch_warehouse_options(active_only=False) or []
+            if _norm_brn_code(w.get("branch_code")) == brn and _code(w.get("code"))
+        ]
+        if not whs:
+            return items, {}
+        for n, wh in enumerate(whs):
+            params[f"w{n}"] = int(wh) if wh.isdigit() else wh
+        wh_sql = f"AND w.W_CODE IN ({', '.join(f':w{n}' for n in range(len(whs)))})"
+    stock = {
+        _code(r["I"]): (_f(r["Q"]), _f(r["UC"]))
+        for r in _fetch_all(
+            f"""
+            SELECT TO_CHAR(w.I_CODE) AS I, SUM(NVL(w.AVL_QTY, 0)) AS Q,
+                   AVG(CASE WHEN NVL(w.I_CWTAVG, w.PRIMARY_COST) > 0 THEN NVL(w.I_CWTAVG, w.PRIMARY_COST) END) AS UC
+            FROM {sch}.IAS_ITM_WCODE w
+            JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = w.I_CODE
+            WHERE i.G_CODE = :g {sub_sql} {wh_sql}
+            GROUP BY TO_CHAR(w.I_CODE)
+            """,
+            params,
+        )
+    }
+    return items, stock
+
+
+def _group_name(group: Any) -> str:
+    rows = _fetch_all(f"SELECT G_A_NAME AS N FROM {_schema()}.GROUP_DETAILS WHERE G_CODE = :g", {"g": group})
+    return str((rows[0].get("N") if rows else "") or "").strip()
+
+
+def _subgroup_name(group: Any, sub: str) -> str:
+    rows = _fetch_all(
+        f"SELECT MNG_A_NAME AS N FROM {_schema()}.IAS_MAINSUB_GRP_DTL WHERE G_CODE = :g AND TO_CHAR(MNG_CODE) = :mng",
+        {"g": group, "mng": sub},
+    )
+    return str((rows[0].get("N") if rows else "") or "").strip()
+
+
+def _base_units(group: Any, sub: str = "") -> dict[str, str]:
+    """أصغر وحدة لكل صنف في المجموعة (حبة، علبة...) لعرض العبوة «كرتون (12 حبة)»."""
+    rows = _fetch_all(
+        f"""
+        SELECT I, U FROM (
+            SELECT TO_CHAR(d.I_CODE) AS I, TRIM(d.ITM_UNT) AS U,
+                   ROW_NUMBER() OVER (PARTITION BY d.I_CODE ORDER BY NVL(d.P_SIZE, 0), d.ITM_UNT) AS RN
+            FROM {_schema()}.IAS_ITM_DTL d
+            JOIN {_schema()}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+            WHERE i.G_CODE = :g AND NVL(d.P_SIZE, 0) > 0 {"AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""}
+        ) WHERE RN = 1
+        """,
+        {"g": group} | ({"mng": sub} if sub else {}),
+    )
+    return {_code(r["I"]): str(r.get("U") or "").replace("ـ", "").strip() for r in rows}
+
+
+def _pack_label(pack: float, unit: str, base: str) -> str:
+    """«كرتون (12 حبة)»: الوحدة الكبرى ثم ما تحويه من الوحدة الصغرى."""
+    unit = unit.replace("ـ", "").strip().rstrip("0123456789").strip()  # «كرتون1» في الكرت = كرتون
+    if pack <= 1:
+        return unit or base or "—"
+    inner = f"{_qty(pack)} {base}".strip()
+    return f"{unit} ({inner})" if unit else inner
+
+
+# ===== التجميع =====
+
+def build_group_study(date_from, date_to, *, group_code: str, branch_code: str = "", subgroup_code: str = "") -> dict[str, Any]:
+    """دراسة المجموعة: مؤشرات، جدول الأصناف، اتجاه شهري، وقراءات (مالية، مبيعاتية، تشغيلية، تجارية، توريدية)."""
+    if not oracle_enabled():
+        raise OracleStockError("أوراكل غير مفعّل.")
+    gcode = str(group_code or "").strip()
+    if not gcode:
+        raise OracleStockError("اختر المجموعة.")
+    d_from, d_to = _as_date(date_from), _as_date(date_to)
+    if d_from > d_to:
+        raise OracleStockError("تاريخ البداية بعد تاريخ النهاية.")
+    days = (d_to - d_from).days + 1
+    if days > MAX_DAYS:
+        raise OracleStockError(f"الفترة أطول من {MAX_DAYS} يوماً — اختر فترة أقصر.")
+    days_elapsed = max(1, (min(d_to, date.today()) - d_from).days + 1)
+    brn = _norm_brn_code(branch_code)
+    sub = str(subgroup_code or "").strip()
+
+    key = f"group_study:{_CACHE_VER}:{d_from}:{d_to}:{gcode}:{sub}:{brn}"
+    try:
+        cached = cache.get(key)
+    except Exception:  # noqa: BLE001
+        cached = None
+    if cached is not None:
+        return cached
+
+    group = _bind_gcode(gcode)
+    params: dict[str, Any] = dict(_date_params(d_from, d_to), g=group)
+    brn_sql = _brn_filter("{a}", brn, params)
+    if sub:  # كل استعلامات الدراسة تربط الصنف بالاسم المستعار i
+        params["mng"] = sub
+        brn_sql += " AND TO_CHAR(i.MNG_CODE) = :mng"
+
+    def job(fn, *args, **kwargs):
+        def run():
+            with oracle_session():
+                return fn(*args, **kwargs)
+        return run
+
+    (pos_rows, cash_rows, credit_rows, pos_ret, cash_ret, credit_ret,
+     supply, pi, pr, issues, counts, items_stock) = _run_parallel(
+        [
+            job(_pos_sales, params, brn_sql),
+            job(_bill_sales, params, brn_sql, (1, 5), exclude_summary=True),
+            job(_bill_sales, params, brn_sql, (4, 8), exclude_summary=False),
+            job(_pos_returns, params, brn_sql),
+            job(_bill_returns, params, brn_sql, (1, 5), exclude_summary=True),
+            job(_bill_returns, params, brn_sql, (4, 8), exclude_summary=False),
+            job(_supply_vouchers, params, brn_sql),
+            job(_purchases, params, brn_sql),
+            job(_purchase_returns, params, brn_sql),
+            job(_issues, params, brn_sql),
+            job(_distinct_counts, params, brn_sql),
+            job(_items_and_stock, group, brn, sub),
+        ],
+        max_workers=6,
+        timeout_sec=240,
+    )
+    items, stock = items_stock
+    group_name = _group_name(group) or gcode
+    names = _branch_names()
+
+    def blank() -> dict[str, float]:
+        return {k: 0.0 for k in (
+            "pos_q", "pos_v", "cash_q", "cash_v", "credit_q", "credit_v", "inv",
+            "ret_q", "ret_v", "sup_q", "sup_n", "pi_q", "pi_v", "pi_n", "pr_q", "pr_v",
+            "waste_q", "waste_c", "vret_q", "vret_c", "other_q", "other_c",
+        )}
+
+    per: dict[str, dict[str, float]] = {}
+    monthly: dict[date, dict[str, float]] = {}
+    month_q: dict[tuple[date, str], float] = {}
+
+    def acc(code: str) -> dict[str, float]:
+        return per.setdefault(code, blank())
+
+    for rows, qk, vk in ((pos_rows, "pos_q", "pos_v"), (cash_rows, "cash_q", "cash_v"), (credit_rows, "credit_q", "credit_v")):
+        for r in rows:
+            a = acc(_code(r["I"]))
+            a[qk] += _f(r["Q"])
+            a[vk] += _f(r["V"])
+            a["inv"] += _f(r["N"])
+            m = _as_date(r["M"])
+            mb = monthly.setdefault(m, {"v": 0.0, "q": 0.0})
+            mb["v"] += _f(r["V"])
+            month_q[(m, _code(r["I"]))] = month_q.get((m, _code(r["I"])), 0.0) + _f(r["Q"])
+    for rows in (pos_ret, cash_ret, credit_ret):
+        for r in rows:
+            a = acc(_code(r["I"]))
+            a["ret_q"] += _f(r["Q"])
+            a["ret_v"] += _f(r["V"])
+    for r in supply:
+        a = acc(_code(r["I"]))
+        a["sup_q"] += _f(r["Q"])
+        a["sup_n"] += _f(r["N"])
+    for r in pi:
+        a = acc(_code(r["I"]))
+        a["pi_q"] += _f(r["Q"])
+        a["pi_v"] += _f(r["V"])
+        a["pi_n"] += _f(r["N"])
+    for r in pr:
+        a = acc(_code(r["I"]))
+        a["pr_q"] += _f(r["Q"])
+        a["pr_v"] += _f(r["V"])
+    for r in issues:
+        a = acc(_code(r["I"]))
+        acct = str(r.get("A") or "").strip()
+        kind = "waste" if acct in WASTE_ACCOUNTS else "vret" if acct in SUPPLIER_RETURN_ACCOUNTS else "other"
+        a[f"{kind}_q"] += _f(r["Q"])
+        a[f"{kind}_c"] += _f(r["C"])
+    for code in stock:
+        acc(code)
+
+    codes = sorted(per)
+    packs = fetch_item_max_pack_map(codes) if codes else {}
+    bases = _base_units(gcode, sub) if codes else {}
+
+    # كل الكميات بعبوة الصنف الكبرى (كرتون/ربطة): الكمية ÷ حجم العبوة، والتكلفة للعبوة × حجمها
+    def pack_of(code: str) -> float:
+        return max(_f((packs.get(code) or {}).get("pack")), 1.0)
+
+    for code, a in per.items():
+        for qk in [k for k in a if k.endswith("_q")]:
+            a[qk] /= pack_of(code)
+    stock = {code: (q / pack_of(code), c * pack_of(code)) for code, (q, c) in stock.items()}
+    for (m, code), q in month_q.items():
+        monthly[m]["q"] += q / pack_of(code)
+
+    rows_out: list[dict[str, Any]] = []
+    T = blank() | {"cost": 0.0, "stock_q": 0.0, "stock_v": 0.0}
+    for code in codes:
+        a = per[code]
+        sold_q = a["pos_q"] + a["cash_q"] + a["credit_q"]
+        sold_v = a["pos_v"] + a["cash_v"] + a["credit_v"]
+        net_q = sold_q - a["ret_q"]
+        net_v = sold_v - a["ret_v"]
+        st_q, unit_cost = stock.get(code, (0.0, 0.0))
+        cost = net_q * unit_cost  # متوسط التكلفة الحالي للصنف — كما في شاشة تحليل المبيعات
+        # الصرف (توالف/مورد/أخرى) يبقى بتكلفة أمر الصرف نفسه (الكمية × STK_COST يوم الصرف)
+        # كما في تقرير أوامر الصرف والقيد المحاسبي، لا بمتوسط التكلفة الحالي
+        gross = net_v - cost
+        incoming_q = a["sup_q"] + a["pi_q"] - a["pr_q"]
+        daily = net_q / days_elapsed if days_elapsed else 0.0
+        cover = (st_q / daily) if daily > 0 else None
+        pk = packs.get(code) or {}
+        row = {
+            "code": code,
+            "name": (items.get(code) or {}).get("name") or code,
+            "pack": _qty(_f(pk.get("pack"))) if pk.get("pack") else "—",
+            "unit": str(pk.get("unit") or "").strip(),
+            "base_unit": bases.get(code, ""),
+            "pack_label": _pack_label(_f(pk.get("pack")), str(pk.get("unit") or ""), bases.get(code, ""))
+            if pk.get("pack") else (bases.get(code) or "—"),
+            "invoices": int(a["inv"]),
+            "net_q": net_q, "net_v": net_v, "cost": cost, "gross": gross,
+            "price": (net_v / net_q) if net_q > 0 else None,  # متوسط سعر بيع العبوة بدون ضريبة
+            "margin": _pct(gross, net_v),
+            "ret_v": a["ret_v"],
+            "incoming_q": incoming_q, "sup_q": a["sup_q"], "pi_q": a["pi_q"], "pi_v": a["pi_v"],
+            "waste_q": a["waste_q"], "waste_c": a["waste_c"], "vret_q": a["vret_q"],
+            "stock_q": st_q, "stock_v": st_q * unit_cost, "unit_cost": unit_cost,
+            "cover_days": cover,
+            "sell_through": _pct(net_q, net_q + st_q) if (net_q + st_q) > 0 else None,
+        }
+        rows_out.append(row)
+        for k in a:
+            T[k] += a[k]
+        T["cost"] += cost
+        T["stock_q"] += st_q
+        T["stock_v"] += st_q * unit_cost
+
+    for r in rows_out:
+        r.update({
+            "net_q_display": _qty(r["net_q"]), "net_v_display": _money(r["net_v"]),
+            "cost_display": _money(r["cost"]), "gross_display": _money(r["gross"]),
+            "margin_display": _pct_display(r["margin"]), "invoices_display": f"{r['invoices']:,}",
+            "incoming_q_display": _qty(r["incoming_q"]), "waste_q_display": _qty(r["waste_q"]),
+            "waste_c_display": _money(r["waste_c"]), "vret_q_display": _qty(r["vret_q"]),
+            "stock_q_display": _qty(r["stock_q"]), "stock_v_display": _money(r["stock_v"]),
+            "unit_cost_display": _money(r["unit_cost"]),
+            "price_display": "—" if r["price"] is None else _money(r["price"]),
+            "cover_display": "—" if r["cover_days"] is None else f"{r['cover_days']:,.0f} يوم",
+            "sell_through_display": _pct_display(r["sell_through"]),
+            "share": _pct(r["net_v"], T["pos_v"] + T["cash_v"] + T["credit_v"] - T["ret_v"]),
+        })
+        r["share_display"] = _pct_display(r["share"])
+    rows_out.sort(key=lambda r: (-r["net_v"], r["code"]))
+
+    sold_v = T["pos_v"] + T["cash_v"] + T["credit_v"]
+    net_v = sold_v - T["ret_v"]
+    net_q = T["pos_q"] + T["cash_q"] + T["credit_q"] - T["ret_q"]
+    gross = net_v - T["cost"]
+    margin = _pct(gross, net_v)
+    incoming_q = T["sup_q"] + T["pi_q"] - T["pr_q"]
+    daily_q = net_q / days_elapsed if days_elapsed else 0.0
+    cover = (T["stock_q"] / daily_q) if daily_q > 0 else None
+    active = [r for r in rows_out if r["net_q"] > 0]
+
+    kpis = {
+        "net_v": net_v, "net_v_display": _money(net_v),
+        "sold_v_display": _money(sold_v), "ret_v_display": _money(T["ret_v"]),
+        "ret_pct_display": _pct_display(_pct(T["ret_v"], sold_v)),
+        "net_q_display": _qty(net_q), "invoices_display": f"{counts['pos_n'] + counts['bill_n']:,}",
+        "per_day_display": _money(net_v / days_elapsed),
+        "cost_display": _money(T["cost"]), "gross": gross, "gross_display": _money(gross),
+        "margin_display": _pct_display(margin),
+        "pos_v_display": _money(T["pos_v"]), "cash_v_display": _money(T["cash_v"]), "credit_v_display": _money(T["credit_v"]),
+        "pos_share_display": _pct_display(_pct(T["pos_v"], sold_v)),
+        "incoming_q_display": _qty(incoming_q), "sup_q_display": _qty(T["sup_q"]), "sup_n": counts["sup_n"],
+        "pi_q_display": _qty(T["pi_q"]), "pi_v_display": _money(T["pi_v"]), "pi_n": counts["pi_n"],
+        "pr_v_display": _money(T["pr_v"]),
+        "waste_q_display": _qty(T["waste_q"]), "waste_c_display": _money(T["waste_c"]),
+        "waste_pct_display": _pct_display(_pct(T["waste_c"], T["cost"])),
+        "waste_orders": counts["waste_n"],
+        "vret_q_display": _qty(T["vret_q"]), "vret_c_display": _money(T["vret_c"]), "vret_orders": counts["vret_n"],
+        "stock_q_display": _qty(T["stock_q"]), "stock_v_display": _money(T["stock_v"]),
+        "cover_display": "—" if cover is None else f"{cover:,.0f} يوم",
+        "items_total": len(items), "items_active": len(active),
+    }
+
+    # الاتجاه الشهري
+    peak = max((m["v"] for m in monthly.values()), default=0.0)
+    trend = [
+        {
+            "label": f"{_AR_MONTHS[m.month - 1]} {m.year}", "v_display": _money(v["v"]), "q_display": _qty(v["q"]),
+            "bar": f"{(v['v'] * 100.0 / peak) if peak else 0:.1f}",
+        }
+        for m, v in sorted(monthly.items())
+    ]
+
+    readings = _readings(rows_out, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed)
+
+    report = {
+        "from": d_from.isoformat(), "to": d_to.isoformat(), "days": days, "days_elapsed": days_elapsed,
+        "group_code": gcode, "group_name": group_name,
+        "subgroup_code": sub, "subgroup_name": (_subgroup_name(group, sub) or sub) if sub else "",
+        "branch": brn, "branch_name": names.get(brn, brn) if brn else "",
+        "kpis": kpis, "rows": rows_out, "trend": trend, "readings": readings,
+        "has_purchase_invoices": counts["pi_n"] > 0,
+    }
+    try:
+        cache.set(key, report, _CACHE_TTL)
+    except Exception:  # noqa: BLE001
+        pass
+    return report
+
+
+def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed) -> list[dict]:
+    """قراءات نصية مختصرة من الأرقام نفسها — كل قراءة: عنوان، نقاط، ومستوى (ok / watch / risk)."""
+    out: list[dict] = []
+    top = [r for r in rows if r["net_v"] > 0]
+
+    # مالية
+    fin = [f"صافي المبيعات {kpis['net_v_display']} بمتوسط التكلفة الحالي {kpis['cost_display']}، فالربح الإجمالي {kpis['gross_display']} بهامش {kpis['margin_display']}."]
+    neg = [r for r in top if r["gross"] < 0]
+    low = [r for r in top if r["margin"] is not None and 0 <= r["margin"] < 5]
+    if neg:
+        fin.append(f"{len(neg)} صنف يُباع بخسارة (أكبرها «{neg[0]['name']}»): راجع سعر البيع أو تكلفة الصنف.")
+    if low:
+        fin.append(f"{len(low)} صنف هامشه أقل من 5%.")
+    by_profit = sorted(top, key=lambda r: -r["gross"])[:5]
+    if gross > 0 and by_profit:
+        share = sum(r["gross"] for r in by_profit) * 100.0 / gross
+        fin.append(f"أعلى 5 أصناف ربحاً تصنع {share:.0f}% من ربح المجموعة.")
+    out.append({"title": "القراءة المالية", "level": "risk" if (margin is not None and margin < 5) or neg else "ok", "points": fin})
+
+    # مبيعاتية
+    sales = [f"{kpis['invoices_display']} فاتورة و{kpis['net_q_display']} عبوة صافية، بمعدل {kpis['per_day_display']} في اليوم على {days_elapsed} يوم."]
+    if net_v > 0 and top:
+        run, n80 = 0.0, 0
+        for r in top:
+            run += r["net_v"]
+            n80 += 1
+            if run >= 0.8 * net_v:
+                break
+        sales.append(f"{n80} صنف من {len(top)} تصنع 80% من المبيعات — تركيز {'عالٍ' if n80 <= max(1, len(top) // 5) else 'متوسط'}.")
+        sales.append(f"نقاط البيع {kpis['pos_share_display']} من المبيعات؛ والمرتجعات {kpis['ret_pct_display']}.")
+    out.append({"title": "القراءة المبيعاتية", "level": "ok", "points": sales})
+
+    # تشغيلية
+    ops = []
+    ops.append(f"الرصيد الحالي {kpis['stock_q_display']} عبوة بقيمة {kpis['stock_v_display']}، يغطي {kpis['cover_display']} بمعدل البيع الحالي.")
+    if T["waste_q"]:
+        ops.append(f"التوالف {kpis['waste_q_display']} عبوة بتكلفة {kpis['waste_c_display']} ({kpis['waste_pct_display']} من تكلفة المبيعات) في {kpis['waste_orders']} أمر صرف.")
+    if T["vret_q"]:
+        ops.append(f"صُرف للمورد {kpis['vret_q_display']} عبوة بتكلفة {kpis['vret_c_display']} في {kpis['vret_orders']} أمر صرف.")
+    dead = [r for r in rows if r["stock_q"] > 0 and r["net_q"] <= 0]
+    if dead:
+        dead_v = sum(r["stock_v"] for r in dead)
+        ops.append(f"{len(dead)} صنف لديه رصيد ({_money(dead_v)}) دون أي بيع في الفترة — مرشّح للتصريف أو الإيقاف.")
+    short = [r for r in rows if r["cover_days"] is not None and r["cover_days"] < 7 and r["net_q"] > 0]
+    if short:
+        ops.append(f"{len(short)} صنف رصيده يكفي أقل من أسبوع (منها «{short[0]['name']}») — خطر نفاد.")
+    level = "risk" if (cover is not None and cover > 90) or dead else "watch" if short else "ok"
+    out.append({"title": "القراءة التشغيلية", "level": level, "points": ops})
+
+    # تجارية
+    com = [f"{kpis['items_active']} صنف نشط من {kpis['items_total']} صنف في المجموعة."]
+    if top:
+        best = top[0]
+        com.append(f"الصنف الأول «{best['name']}» بـ {best['net_v_display']} ({best['share_display']} من المجموعة) وهامش {best['margin_display']}.")
+    idle = kpis["items_total"] - kpis["items_active"]
+    if idle > 0:
+        com.append(f"{idle} صنف بلا مبيعات في الفترة — راجع جدوى بقائها في التشكيلة.")
+    out.append({"title": "القراءة التجارية", "level": "watch" if idle > kpis["items_total"] * 0.3 else "ok", "points": com})
+
+    # توريدية / استيرادية
+    sup = []
+    if kpis["pi_n"]:
+        sup.append(f"{kpis['pi_n']:,} فاتورة شراء بكمية {kpis['pi_q_display']} وقيمة {kpis['pi_v_display']} (مرتجع شراء {kpis['pr_v_display']}).")
+    else:
+        sup.append("لا توجد فواتير شراء لأصناف المجموعة في الفترة — قد تُشترى بأكواد أخرى أو من جهة أخرى.")
+    if T["sup_q"]:
+        sup.append(f"{kpis['sup_n']} سند توريد بكمية {kpis['sup_q_display']} عبوة.")
+    if net_q > 0:
+        cov = incoming_q * 100.0 / net_q
+        sup.append(f"الوارد ({kpis['incoming_q_display']}) يغطي {cov:.0f}% من الكمية المباعة ({kpis['net_q_display']}) — {'أقل من المبيعات: يُسحب من الرصيد' if cov < 90 else 'متوازن' if cov <= 120 else 'أكثر من المبيعات: يتراكم مخزون'}.")
+    out.append({"title": "قراءة التوريد والاستيراد", "level": "watch" if not kpis["pi_n"] else "ok", "points": sup})
+    return out
+
+
+# ===== تصدير Excel: ملخص وقراءات وأصناف وشهري وقنوات — كل جدول في ورقة بتنسيق الشاشة =====
+
+def _num_text(text: Any) -> float:
+    return _f(str(text or "").replace(",", ""))
+
+
+def build_group_study_excel(report: dict[str, Any]):
+    """ملف xlsx منظم للدراسة: الملخص، القراءات، تحليل الأصناف، المبيعات الشهرية، قنوات البيع."""
+    from io import BytesIO
+
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    from .oracle_pos_hours import _XL_COLORS, _xl_sheet
+
+    k = report["kpis"]
+    sub = f" · فرعية {report['subgroup_code']} - {report['subgroup_name']}" if report.get("subgroup_code") else ""
+    scope = f"{report['group_code']} - {report['group_name']}{sub} · {report.get('branch_name') or 'كل الفروع'}"
+    period = f"{scope} · من {report['from']} إلى {report['to']} ({report['days_elapsed']} يوم) · بدون ضريبة"
+    wb = Workbook()
+    wb.remove(wb.active)
+    hair = Side(style="thin", color="D9DCE3")
+    border = Border(left=hair, right=hair, top=hair, bottom=hair)
+    right = Alignment(horizontal="right", vertical="center", wrap_text=True)
+
+    # 1) الملخص: المؤشر والقيمة والتفصيل
+    summary = [
+        ["صافي المبيعات", k["net_v_display"], f"قبل المرتجع {k['sold_v_display']} · المرتجع {k['ret_v_display']} ({k['ret_pct_display']})"],
+        ["الربح الإجمالي", k["gross_display"], f"الهامش {k['margin_display']} · التكلفة {k['cost_display']}"],
+        ["الفواتير", k["invoices_display"], f"{k['net_q_display']} عبوة · نقاط البيع {k['pos_share_display']}"],
+        ["قنوات البيع", "", f"نقاط البيع {k['pos_v_display']} · نقدي مباشر {k['cash_v_display']} · آجل {k['credit_v_display']}"],
+        ["الوارد (عبوة)", k["incoming_q_display"], f"سندات توريد {k['sup_n']} ({k['sup_q_display']}) · فواتير شراء {k['pi_n']} ({k['pi_v_display']})"],
+        ["التوالف", k["waste_c_display"], f"{k['waste_q_display']} عبوة · {k['waste_orders']} أمر صرف · {k['waste_pct_display']} من التكلفة"],
+        ["المصروف للمورد", k["vret_c_display"], f"{k['vret_q_display']} عبوة · {k['vret_orders']} أمر صرف"],
+        ["الرصيد الحالي", k["stock_v_display"], f"{k['stock_q_display']} عبوة · يغطي {k['cover_display']}"],
+        ["الأصناف", f"{k['items_active']} / {k['items_total']}", "صنف نشط من أصناف المجموعة"],
+    ]
+    ws = _xl_sheet(wb, "الملخص", period, [("المؤشر", "name", 22), ("القيمة", "text", 22), ("التفصيل", "text", 80)], summary, [])
+    for row in ws.iter_rows(min_row=5, max_row=ws.max_row):
+        row[2].alignment = right
+
+    # 2) القراءات: عنوان كل قراءة ومستواها ثم نقاطها
+    levels = {"risk": ("تحتاج إجراء", "FBE7E7"), "watch": ("للمتابعة", "FCEBD3"), "ok": ("جيد", "E3F4EC")}
+    ws = wb.create_sheet("القراءات")
+    ws.sheet_view.rightToLeft = True
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 110
+    for cell_ref, text, size, color in (("A1", "قراءات الدراسة", 14, "1F2A37"), ("A2", period, 10, "5A6675")):
+        ws.merge_cells(f"{cell_ref}:C{cell_ref[1]}")
+        ws[cell_ref] = text
+        ws[cell_ref].font = Font(name="Arial", size=size, bold=True, color=color)
+        ws[cell_ref].alignment = Alignment(horizontal="center")
+    r = 4
+    for g in report["readings"]:
+        label, color = levels.get(g["level"], ("", "EEF3F9"))
+        for i, point in enumerate(g["points"]):
+            ws.cell(row=r, column=1, value=g["title"] if i == 0 else None)
+            ws.cell(row=r, column=2, value=label if i == 0 else None)
+            ws.cell(row=r, column=3, value=point)
+            for c in range(1, 4):
+                cell = ws.cell(row=r, column=c)
+                cell.border = border
+                cell.alignment = right
+                cell.font = Font(name="Arial", size=10, bold=c < 3, color="1F2A37")
+                if c < 3:
+                    cell.fill = PatternFill("solid", fgColor=color)
+            r += 1
+        r += 1
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+    # 3) تحليل الأصناف: نفس أعمدة الشاشة بأرقام قابلة للحساب
+    columns = [
+        ("الكود", "name", 18), ("الصنف", "name", 36), ("العبوة", "text", 12), ("الفواتير", "count", 11),
+        ("الكمية المباعة", "count", 13), ("سعر البيع", "avg", 12), ("صافي المبيعات", "money", 15), ("الحصة", "share", 9),
+        ("تكلفة العبوة", "avg", 12), ("التكلفة", "money", 15), ("الربح", "money", 14), ("الهامش", "share", 9),
+        ("الوارد", "count", 11), ("التوالف", "count", 10), ("للمورد", "count", 10), ("الرصيد", "count", 11),
+        ("التغطية (يوم)", "count", 12), ("التصريف", "share", 10),
+    ]
+    items = report["rows"]
+    rows = []
+    for x in items:
+        rows.append([
+            x["code"], x["name"], x["pack_label"], x["invoices"],
+            round(x["net_q"], 2), None if x["price"] is None else round(x["price"], 2), round(x["net_v"], 2), (x["share"] or 0) / 100.0, round(x["unit_cost"], 2),
+            round(x["cost"], 2), round(x["gross"], 2), None if x["margin"] is None else x["margin"] / 100.0,
+            round(x["incoming_q"], 2), round(x["waste_q"], 2), round(x["vret_q"], 2), round(x["stock_q"], 2),
+            None if x["cover_days"] is None else round(x["cover_days"]),
+            None if x["sell_through"] is None else x["sell_through"] / 100.0,
+        ])
+    net_v = sum(x["net_v"] for x in items)
+    gross = sum(x["gross"] for x in items)
+    total = [
+        "", "الإجمالي", "", None, round(sum(x["net_q"] for x in items), 2), None, round(net_v, 2), 1 if net_v else 0,
+        None, round(sum(x["cost"] for x in items), 2), round(gross, 2), (gross / net_v) if net_v else None,
+        round(sum(x["incoming_q"] for x in items), 2), round(sum(x["waste_q"] for x in items), 2),
+        round(sum(x["vret_q"] for x in items), 2), round(sum(x["stock_q"] for x in items), 2), None, None,
+    ]
+    ws = _xl_sheet(wb, "تحليل الأصناف", period, columns, rows, [(total, _XL_COLORS["total"])])
+    ws.page_setup.orientation = "landscape"
+    for row in ws.iter_rows(min_row=5, max_row=ws.max_row):
+        cell = row[10]  # الربح السالب بالأحمر
+        if isinstance(cell.value, (int, float)) and cell.value < 0:
+            cell.font = Font(name="Arial", size=10, bold=True, color="C24545")
+
+    # 4) المبيعات الشهرية
+    _xl_sheet(
+        wb, "المبيعات الشهرية", period,
+        [("الشهر", "name", 18), ("الكمية", "count", 14), ("المبيعات", "money", 18)],
+        [[m["label"], _num_text(m["q_display"]), _num_text(m["v_display"])] for m in report["trend"]],
+        [],
+    )
+
+    # 5) قنوات البيع
+    _xl_sheet(
+        wb, "قنوات البيع", period,
+        [("القناة", "name", 20), ("المبيعات", "money", 20)],
+        [["نقاط البيع", _num_text(k["pos_v_display"])], ["نقدي مباشر", _num_text(k["cash_v_display"])],
+         ["آجل", _num_text(k["credit_v_display"])], ["المرتجعات", -_num_text(k["ret_v_display"])]],
+        [(["الصافي", _num_text(k["net_v_display"])], _XL_COLORS["total"])],
+    )
+
+    buf = BytesIO()
+    wb.save(buf)
+    stamp = f"{report['from']}_{report['to']}".replace("-", "")
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    code = f"{report['group_code']}_{report['subgroup_code']}" if report.get("subgroup_code") else report["group_code"]
+    response["Content-Disposition"] = f'attachment; filename="group_study_{code}_{stamp}.xlsx"'
+    return response

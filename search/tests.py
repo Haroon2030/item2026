@@ -3420,3 +3420,157 @@ class PosSummaryReturnsFilterTests(TestCase):
         # الآجل (4/8) لا خلاصات فيه: لا شرط اسم
         credit = _doc_type_filter(SALES_SYSTEMS['wholesale'], 'r', 'RT_BILL_DOC_TYPE', {})
         self.assertNotIn('C_NAME', credit)
+
+
+class GroupStudyReportTests(TestCase):
+    """دراسة مجموعة: الشاشة في قسم التقارير ومنطق التجميع."""
+
+    def test_screen_is_registered_under_reports_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, section_for_screen
+
+        self.assertIn('browse_group_study_report', ALL_SCREEN_KEYS)
+        self.assertEqual(section_for_screen('browse_group_study_report'), 'reports')
+        self.assertEqual(self.client.get(reverse('browse_group_study_report')).status_code, 302)
+
+    def test_study_aggregates_sales_cost_waste_and_counts(self):
+        from contextlib import nullcontext
+        from datetime import date
+
+        from search import oracle_group_study as gs
+
+        m = date(2026, 9, 1)
+        rows = {
+            '_pos_sales': [{'I': '1', 'M': m, 'Q': 100, 'V': 1000, 'N': 80}],
+            '_bill_sales': [{'I': '1', 'M': m, 'Q': 10, 'V': 100, 'N': 5}],
+            '_pos_returns': [{'I': '1', 'Q': 5, 'V': 50}],
+            '_bill_returns': [],
+            '_supply_vouchers': [{'I': '1', 'Q': 60, 'N': 1, 'LAST_D': m}],
+            '_purchases': [],
+            '_purchase_returns': [],
+            '_issues': [
+                {'I': '1', 'A': '41101006', 'Q': 2, 'C': 16, 'N': 1},
+                {'I': '1', 'A': '21101001', 'Q': 3, 'C': 24, 'N': 1},
+                {'I': '2', 'A': '11601001', 'Q': 1, 'C': 8, 'N': 1},
+            ],
+        }
+        counts = {'pos_n': 70, 'bill_n': 6, 'sup_n': 1, 'pi_n': 0, 'waste_n': 1, 'vret_n': 1}
+        items = ({'1': {'name': 'لبنة'}, '2': {'name': 'جبنة'}}, {'1': (20.0, 8.0), '2': (5.0, 4.0)})
+
+        def fake(name):
+            def f(*a, **k):
+                # المبيعات النقدية تُستدعى مرتين (1/5 و4/8): الأولى بيانات والثانية فارغة
+                if name == '_bill_sales':
+                    return rows[name] if k.get('exclude_summary') else []
+                return rows[name]
+            return f
+
+        with patch.multiple(
+                'search.oracle_group_study',
+                oracle_enabled=lambda: True, oracle_session=nullcontext,
+                _pos_sales=fake('_pos_sales'), _bill_sales=fake('_bill_sales'),
+                _pos_returns=fake('_pos_returns'), _bill_returns=fake('_bill_returns'),
+                _supply_vouchers=fake('_supply_vouchers'), _purchases=fake('_purchases'),
+                _purchase_returns=fake('_purchase_returns'), _issues=fake('_issues'),
+                _distinct_counts=lambda *a, **k: counts, _items_and_stock=lambda *a, **k: items,
+                _group_name=lambda g: 'البان مستورده', _branch_names=lambda: {},
+                _base_units=lambda *a: {'1': 'حبة'},
+                fetch_item_max_pack_map=lambda codes: {'1': {'pack': 12, 'unit': 'كرتون'}}), \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            r = gs.build_group_study('2026-09-01', '2026-09-30', group_code='39')
+
+        k = r['kpis']
+        # صافي = 1000 + 100 − 50؛ التكلفة = 105 وحدة × متوسط التكلفة الحالي 8 = 840؛ الربح 210
+        self.assertEqual(k['net_v_display'], '1,050.00')
+        self.assertEqual(k['cost_display'], '840.00')
+        self.assertEqual(k['gross_display'], '210.00')
+        self.assertEqual(k['margin_display'], '20.0%')
+        # العدّ المميّز لا مجموع عدّ الأصناف (80 + 5)
+        self.assertEqual(k['invoices_display'], '76')
+        # الكميات بعبوة الصنف (كرتون 12): 2 ÷ 12 و 3 ÷ 12 و 60 ÷ 12 — والتكلفة لا تتغير
+        self.assertEqual((k['waste_q_display'], k['waste_c_display'], k['vret_q_display']), ('0.17', '16.00', '0.25'))
+        self.assertEqual(k['incoming_q_display'], '5')
+        self.assertEqual(k['net_q_display'], '8.75')
+        self.assertEqual(r['rows'][0]['price_display'], '120.00')  # 1,050 ÷ 8.75 كرتون
+        self.assertEqual(k['items_active'], 1)
+        row = r['rows'][0]
+        self.assertEqual((row['name'], row['pack'], row['unit']), ('لبنة', '12', 'كرتون'))
+        self.assertEqual(row['pack_label'], 'كرتون (12 حبة)')
+        # الرصيد 20 ÷ (105 / 30 يوم) ≈ 6 أيام → خطر نفاد
+        self.assertEqual(row['cover_display'], '6 يوم')
+        self.assertFalse(r['has_purchase_invoices'])
+        texts = ' '.join(p for g in r['readings'] for p in g['points'])
+        self.assertIn('لا توجد فواتير شراء', texts)
+        self.assertIn('رصيده يكفي أقل من أسبوع', texts)
+        self.assertIn('دون أي بيع', texts)  # الصنف 2 لديه رصيد بلا بيع
+
+    def test_screen_requires_group_and_passes_filters(self):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _session():
+            yield
+
+        admin = get_user_model().objects.create_user('gs_admin', password='x-Test-123', is_staff=True, is_superuser=True)
+        self.client.force_login(admin)
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), \
+                patch('search.oracle_stock.oracle_session', _session), \
+                patch('search.oracle_income.fetch_income_branches', return_value=[{'code': '6', 'name': 'سكاي مول'}]), \
+                patch('search.oracle_stock.fetch_sales_group_options', return_value=[{'code': '39', 'name': 'البان مستورده'}]),                 patch('search.oracle_stock.fetch_main_subgroup_options',
+                      return_value=[{'group_code': '39', 'code': '3901', 'name': 'البان ايكر'}]), \
+                patch('search.oracle_group_study.build_group_study') as build:
+            page = self.client.get(reverse('browse_group_study_report'), {'run': '1'})
+            self.assertContains(page, 'اختر المجموعة أولاً')
+            build.assert_not_called()
+            self.client.get(reverse('browse_group_study_report'), {
+                'run': '1', 'group': '39', 'subgroup': '3901', 'branch': '6', 'date_from': '2026-01-01', 'date_to': '2026-09-30',
+            })
+            kwargs = build.call_args.kwargs
+            self.assertEqual((kwargs['group_code'], kwargs['branch_code'], kwargs['subgroup_code']), ('39', '6', '3901'))
+            # فرعية لا تتبع المجموعة المختارة تُهمل
+            self.client.get(reverse('browse_group_study_report'), {'run': '1', 'group': '39', 'subgroup': '999'})
+            self.assertEqual(build.call_args.kwargs['subgroup_code'], '')
+
+
+class GroupStudyExcelTests(TestCase):
+    """تصدير دراسة المجموعة: ورقة لكل جدول وأرقام قابلة للحساب."""
+
+    def test_workbook_has_organised_sheets_and_numeric_items(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from search.oracle_group_study import build_group_study_excel
+
+        disp = {key: '1,000.00' for key in (
+            'net_v_display', 'sold_v_display', 'ret_v_display', 'gross_display', 'cost_display', 'pos_v_display',
+            'cash_v_display', 'credit_v_display', 'pi_v_display', 'waste_c_display', 'vret_c_display', 'stock_v_display')}
+        disp.update({key: '5' for key in (
+            'ret_pct_display', 'margin_display', 'invoices_display', 'net_q_display', 'pos_share_display',
+            'incoming_q_display', 'sup_q_display', 'waste_q_display', 'waste_pct_display', 'vret_q_display',
+            'stock_q_display', 'cover_display')})
+        disp.update({'sup_n': 1, 'pi_n': 0, 'waste_orders': 1, 'vret_orders': 0, 'items_active': 1, 'items_total': 2})
+        row = {
+            'code': '1', 'name': 'لبنة', 'pack': '12', 'unit': 'كرتون', 'pack_label': 'كرتون (12 حبة)', 'invoices': 3, 'net_q': 10.0, 'net_v': 100.0, 'price': 10.0,
+            'share': 100.0, 'unit_cost': 12.0, 'cost': 120.0, 'gross': -20.0, 'margin': -20.0, 'incoming_q': 5.0,
+            'waste_q': 1.0, 'vret_q': 0.0, 'stock_q': 4.0, 'cover_days': 12.0, 'sell_through': 50.0,
+        }
+        report = {
+            'from': '2026-09-01', 'to': '2026-09-30', 'days_elapsed': 30, 'group_code': '39',
+            'group_name': 'البان مستورده', 'branch_name': '', 'kpis': disp, 'rows': [row],
+            'trend': [{'label': 'سبتمبر 2026', 'q_display': '10', 'v_display': '100.00'}],
+            'readings': [{'title': 'القراءة المالية', 'level': 'risk', 'points': ['هامش سالب']}],
+        }
+        resp = build_group_study_excel(report)
+        self.assertIn('group_study_39_20260901_20260930.xlsx', resp['Content-Disposition'])
+        wb = load_workbook(BytesIO(resp.content))
+        self.assertEqual(wb.sheetnames, ['الملخص', 'القراءات', 'تحليل الأصناف', 'المبيعات الشهرية', 'قنوات البيع'])
+        ws = wb['تحليل الأصناف']
+        values = [[c.value for c in r] for r in ws.iter_rows()]
+        header = next(r for r in values if r[0] == 'الكود')
+        self.assertEqual(header[1], 'الصنف')
+        item = next(r for r in values if r[0] == '1')
+        self.assertEqual(header[5], 'سعر البيع')
+        self.assertEqual((item[5], item[6], item[10]), (10.0, 100.0, -20.0))
+        self.assertEqual(item[2], 'كرتون (12 حبة)')
+        self.assertTrue(ws.sheet_view.rightToLeft)

@@ -218,6 +218,11 @@ urlpatterns = [
         name='browse_unposted_sales_report',
     ),
     path(
+        'reports/group-study/',
+        views.browse_group_study_report,
+        name='browse_group_study_report',
+    ),
+    path(
         'warehouses/no-transfer/',
         views.browse_wh_no_transfer,
         name='browse_wh_no_transfer',
