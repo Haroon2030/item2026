@@ -272,18 +272,14 @@
             <th scope="col">الفرع</th>
             <th scope="col">الفواتير</th>
             <th scope="col">نقاط البيع</th>
-            <th scope="col">نقدي مباشر</th>
+            <th scope="col">نظام الجملة</th>
             <th scope="col">آجل</th>
             <th scope="col">المرتجع</th>
             <th scope="col">صافي المبيعات</th>
             <th scope="col">الحصة</th>
             <th scope="col">الكمية</th>
             <th scope="col">التكلفة</th>
-            <th scope="col">الربح</th>
-            <th scope="col">الهامش</th>
             <th scope="col">الوارد</th>
-            <th scope="col">التوالف</th>
-            <th scope="col">للمورد</th>
           </tr>
         </thead>
         <tbody>
@@ -300,11 +296,7 @@
               <td class="mono">{{ b.share_display }}</td>
               <td class="mono">{{ b.net_q_display }}</td>
               <td class="mono">{{ b.cost_display }}</td>
-              <td class="mono{% if b.gross < 0 %} gs-neg{% endif %}">{{ b.gross_display }}</td>
-              <td class="mono{% if b.gross < 0 %} gs-neg{% elif b.margin is not None and b.margin < 5 %} gs-warn{% endif %}">{{ b.margin_display }}</td>
               <td class="mono">{{ b.incoming_q_display }}</td>
-              <td class="mono" title="{{ b.waste_q_display }} وحدة">{{ b.waste_c_display }}</td>
-              <td class="mono" title="{{ b.vret_q_display }} وحدة">{{ b.vret_c_display }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -322,11 +314,7 @@
             <td class="mono">{{ t.share_display }}</td>
             <td class="mono">{{ t.net_q_display }}</td>
             <td class="mono">{{ t.cost_display }}</td>
-            <td class="mono{% if t.gross < 0 %} gs-neg{% endif %}">{{ t.gross_display }}</td>
-            <td class="mono">{{ t.margin_display }}</td>
             <td class="mono">{{ t.incoming_q_display }}</td>
-            <td class="mono">{{ t.waste_c_display }}</td>
-            <td class="mono">{{ t.vret_c_display }}</td>
           </tr>
         </tfoot>
         {% endwith %}

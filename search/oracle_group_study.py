@@ -884,16 +884,14 @@ def build_group_study_excel(report: dict[str, Any]):
             return [
                 code, x["name"], x["invoices"], round(x["pos_v"], 2), round(x["cash_v"], 2), round(x["credit_v"], 2),
                 round(x["ret_v"], 2), round(x["net_v"], 2), (x["share"] or 0) / 100.0, round(x["net_q"], 2),
-                round(x["cost"], 2), round(x["gross"], 2), None if x["margin"] is None else x["margin"] / 100.0,
-                round(x["incoming_q"], 2), round(x["waste_c"], 2), round(x["vret_c"], 2),
+                round(x["cost"], 2), round(x["incoming_q"], 2),
             ]
 
         ws = _xl_sheet(
             wb, "الفروع", period,
             [("الرقم", "name", 9), ("الفرع", "name", 26), ("الفواتير", "count", 11), ("نقاط البيع", "money", 15),
              ("نقدي مباشر", "money", 14), ("آجل", "money", 12), ("المرتجع", "money", 12), ("صافي المبيعات", "money", 15),
-             ("الحصة", "share", 9), ("الكمية", "count", 12), ("التكلفة", "money", 15), ("الربح", "money", 14),
-             ("الهامش", "share", 9), ("الوارد", "count", 11), ("التوالف", "money", 12), ("للمورد", "money", 12)],
+             ("الحصة", "share", 9), ("الكمية", "count", 12), ("التكلفة", "money", 15), ("الوارد", "count", 11)],
             [brow(x, x["code"]) for x in br["rows"]],
             [(brow(br["total"], ""), _XL_COLORS["total"])],
         )
