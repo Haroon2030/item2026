@@ -3504,8 +3504,8 @@ class GroupStudyReportTests(TestCase):
         self.assertFalse(r['has_purchase_invoices'])
         texts = ' '.join(p for g in r['readings'] for p in g['points'])
         self.assertIn('لا توجد فواتير شراء', texts)
-        self.assertIn('رصيده يكفي أقل من أسبوع', texts)
-        self.assertIn('دون أي بيع', texts)  # الصنف 2 لديه رصيد بلا بيع
+        self.assertIn('رصيدها يغطي أقل من 7 أيام', texts)
+        self.assertIn('دون حركة بيع', texts)  # الصنف 2 لديه رصيد بلا بيع
         # تفصيل الفروع: سكاي مول 600 + 100 = 700 (70 وحدة × 8)، العليا 400 − 50 = 350 (35 × 8)
         br = r['branches']
         self.assertEqual([b['name'] for b in br['rows']], ['سكاي مول', 'العليا'])
