@@ -9,7 +9,7 @@
 - أوامر الصرف (IAS_OUTGOING_*): التوالف (41101006 توالف، 41101008 الأصناف المفقودة والتالفة)،
   والمرتجع للمورد (21101001 موردين) منفصلاً، والباقي «صرف آخر».
 - الرصيد الحالي (IAS_ITM_WCODE) لمخازن الفرع المختار.
-الكميات بعبوة الصنف الكبرى (وحدة المخزون ÷ حجم العبوة)؛ تكلفة المبيعات والرصيد = الكمية × متوسط التكلفة الحالي للصنف (كما في شاشة تحليل المبيعات)،
+الكميات بالوحدة الرئيسية للصنف (MAIN_UNIT في أونكس: كيلو للموزون، علبة/برطمان/حبة/تنك…)؛ تكلفة المبيعات والرصيد = الكمية × متوسط التكلفة الحالي للصنف (كما في شاشة تحليل المبيعات)،
 والصرف (توالف/مورد) بتكلفة أمر الصرف نفسه (كما في تقرير أوامر الصرف)، والبيع بسعر البيع.
 """
 
@@ -43,7 +43,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v10"
+_CACHE_VER = "v11"
 MAX_DAYS = 400
 
 WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
@@ -344,12 +344,16 @@ def _subgroup_name(group: Any, sub: str) -> str:
 
 
 def _base_units(group: Any, sub: str = "") -> dict[str, str]:
-    """أصغر وحدة لكل صنف في المجموعة (حبة، علبة...) لعرض العبوة «كرتون (12 حبة)»."""
+    """الوحدة الرئيسية لكل صنف (MAIN_UNIT = 1 في أونكس، حجمها 1): كيلو للموزون، علبة، حبة، تنك…
+    وإن لم تُعلَّم وحدة رئيسية فأصغر وحدة."""
     rows = _fetch_all(
         f"""
         SELECT I, U FROM (
             SELECT TO_CHAR(d.I_CODE) AS I, TRIM(d.ITM_UNT) AS U,
-                   ROW_NUMBER() OVER (PARTITION BY d.I_CODE ORDER BY NVL(d.P_SIZE, 0), d.ITM_UNT) AS RN
+                   ROW_NUMBER() OVER (
+                       PARTITION BY d.I_CODE
+                       ORDER BY CASE WHEN d.MAIN_UNIT = 1 THEN 0 ELSE 1 END, NVL(d.P_SIZE, 0), d.ITM_UNT
+                   ) AS RN
             FROM {_schema()}.IAS_ITM_DTL d
             JOIN {_schema()}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
             WHERE i.G_CODE = :g AND NVL(d.P_SIZE, 0) > 0 {"AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""}
@@ -487,16 +491,10 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
     packs = fetch_item_max_pack_map(codes) if codes else {}
     bases = _base_units(gcode, sub) if codes else {}
 
-    # كل الكميات بعبوة الصنف الكبرى (كرتون/ربطة): الكمية ÷ حجم العبوة، والتكلفة للعبوة × حجمها
-    def pack_of(code: str) -> float:
-        return max(_f((packs.get(code) or {}).get("pack")), 1.0)
-
-    for code, a in per.items():
-        for qk in [k for k in a if k.endswith("_q")]:
-            a[qk] /= pack_of(code)
-    stock = {code: (q / pack_of(code), c * pack_of(code)) for code, (q, c) in stock.items()}
+    # الكميات بالوحدة الرئيسية للصنف (وحدة المخزون، حجمها 1): كيلو للموزون، علبة، حبة…
+    # فلا تحويل؛ العبوة الكبرى («كرتون (11 كيلو)») تُعرض تلميحاً فقط
     for (m, code), q in month_q.items():
-        monthly[m]["q"] += q / pack_of(code)
+        monthly[m]["q"] += q
 
     rows_out: list[dict[str, Any]] = []
     T = blank() | {"cost": 0.0, "stock_q": 0.0, "stock_v": 0.0}
@@ -521,11 +519,13 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
             "pack": _qty(_f(pk.get("pack"))) if pk.get("pack") else "—",
             "unit": str(pk.get("unit") or "").strip(),
             "base_unit": bases.get(code, ""),
-            "pack_label": _pack_label(_f(pk.get("pack")), str(pk.get("unit") or ""), bases.get(code, ""))
-            if pk.get("pack") else (bases.get(code) or "—"),
+            # الوحدة الرئيسية هي ما يُعرض (الكميات بها)؛ العبوة الكبرى «كرتون (11 كيلو)» تلميح فقط
+            "pack_label": bases.get(code) or "—",
+            "pack_hint": _pack_label(_f(pk.get("pack")), str(pk.get("unit") or ""), bases.get(code, ""))
+            if _f(pk.get("pack")) > 1 else "",
             "invoices": int(a["inv"]),
             "net_q": net_q, "net_v": net_v, "cost": cost, "gross": gross,
-            "price": (net_v / net_q) if net_q > 0 else None,  # متوسط سعر بيع العبوة بدون ضريبة
+            "price": (net_v / net_q) if net_q > 0 else None,  # متوسط سعر بيع الوحدة الرئيسية بدون ضريبة
             "margin": _pct(gross, net_v),
             "ret_v": a["ret_v"],
             "incoming_q": incoming_q, "sup_q": a["sup_q"], "pi_q": a["pi_q"], "pi_v": a["pi_v"],
@@ -637,7 +637,7 @@ def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incomin
     out.append({"title": "القراءة المالية", "level": "risk" if (margin is not None and margin < 5) or neg else "ok", "points": fin})
 
     # مبيعاتية
-    sales = [f"{kpis['invoices_display']} فاتورة و{kpis['net_q_display']} عبوة صافية، بمعدل {kpis['per_day_display']} في اليوم على {days_elapsed} يوم."]
+    sales = [f"{kpis['invoices_display']} فاتورة و{kpis['net_q_display']} وحدة صافية، بمعدل {kpis['per_day_display']} في اليوم على {days_elapsed} يوم."]
     if net_v > 0 and top:
         run, n80 = 0.0, 0
         for r in top:
@@ -651,11 +651,11 @@ def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incomin
 
     # تشغيلية
     ops = []
-    ops.append(f"الرصيد الحالي {kpis['stock_q_display']} عبوة بقيمة {kpis['stock_v_display']}، يغطي {kpis['cover_display']} بمعدل البيع الحالي.")
+    ops.append(f"الرصيد الحالي {kpis['stock_q_display']} وحدة بقيمة {kpis['stock_v_display']}، يغطي {kpis['cover_display']} بمعدل البيع الحالي.")
     if T["waste_q"]:
-        ops.append(f"التوالف {kpis['waste_q_display']} عبوة بتكلفة {kpis['waste_c_display']} ({kpis['waste_pct_display']} من تكلفة المبيعات) في {kpis['waste_orders']} أمر صرف.")
+        ops.append(f"التوالف {kpis['waste_q_display']} وحدة بتكلفة {kpis['waste_c_display']} ({kpis['waste_pct_display']} من تكلفة المبيعات) في {kpis['waste_orders']} أمر صرف.")
     if T["vret_q"]:
-        ops.append(f"صُرف للمورد {kpis['vret_q_display']} عبوة بتكلفة {kpis['vret_c_display']} في {kpis['vret_orders']} أمر صرف.")
+        ops.append(f"صُرف للمورد {kpis['vret_q_display']} وحدة بتكلفة {kpis['vret_c_display']} في {kpis['vret_orders']} أمر صرف.")
     dead = [r for r in rows if r["stock_q"] > 0 and r["net_q"] <= 0]
     if dead:
         dead_v = sum(r["stock_v"] for r in dead)
@@ -683,7 +683,7 @@ def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incomin
     else:
         sup.append("لا توجد فواتير شراء لأصناف المجموعة في الفترة — قد تُشترى بأكواد أخرى أو من جهة أخرى.")
     if T["sup_q"]:
-        sup.append(f"{kpis['sup_n']} سند توريد بكمية {kpis['sup_q_display']} عبوة.")
+        sup.append(f"{kpis['sup_n']} سند توريد بكمية {kpis['sup_q_display']} وحدة.")
     if net_q > 0:
         cov = incoming_q * 100.0 / net_q
         sup.append(f"الوارد ({kpis['incoming_q_display']}) يغطي {cov:.0f}% من الكمية المباعة ({kpis['net_q_display']}) — {'أقل من المبيعات: يُسحب من الرصيد' if cov < 90 else 'متوازن' if cov <= 120 else 'أكثر من المبيعات: يتراكم مخزون'}.")
@@ -721,12 +721,12 @@ def build_group_study_excel(report: dict[str, Any]):
     summary = [
         ["صافي المبيعات", k["net_v_display"], f"قبل المرتجع {k['sold_v_display']} · المرتجع {k['ret_v_display']} ({k['ret_pct_display']})"],
         ["الربح الإجمالي", k["gross_display"], f"الهامش {k['margin_display']} · التكلفة {k['cost_display']}"],
-        ["الفواتير", k["invoices_display"], f"{k['net_q_display']} عبوة · نقاط البيع {k['pos_share_display']}"],
+        ["الفواتير", k["invoices_display"], f"{k['net_q_display']} وحدة · نقاط البيع {k['pos_share_display']}"],
         ["قنوات البيع", "", f"نقاط البيع {k['pos_v_display']} · نقدي مباشر {k['cash_v_display']} · آجل {k['credit_v_display']}"],
-        ["الوارد (عبوة)", k["incoming_q_display"], f"سندات توريد {k['sup_n']} ({k['sup_q_display']}) · فواتير شراء {k['pi_n']} ({k['pi_v_display']})"],
-        ["التوالف", k["waste_c_display"], f"{k['waste_q_display']} عبوة · {k['waste_orders']} أمر صرف · {k['waste_pct_display']} من التكلفة"],
-        ["المصروف للمورد", k["vret_c_display"], f"{k['vret_q_display']} عبوة · {k['vret_orders']} أمر صرف"],
-        ["الرصيد الحالي", k["stock_v_display"], f"{k['stock_q_display']} عبوة · يغطي {k['cover_display']}"],
+        ["الوارد (وحدة)", k["incoming_q_display"], f"سندات توريد {k['sup_n']} ({k['sup_q_display']}) · فواتير شراء {k['pi_n']} ({k['pi_v_display']})"],
+        ["التوالف", k["waste_c_display"], f"{k['waste_q_display']} وحدة · {k['waste_orders']} أمر صرف · {k['waste_pct_display']} من التكلفة"],
+        ["المصروف للمورد", k["vret_c_display"], f"{k['vret_q_display']} وحدة · {k['vret_orders']} أمر صرف"],
+        ["الرصيد الحالي", k["stock_v_display"], f"{k['stock_q_display']} وحدة · يغطي {k['cover_display']}"],
         ["الأصناف", f"{k['items_active']} / {k['items_total']}", "صنف نشط من أصناف المجموعة"],
     ]
     ws = _xl_sheet(wb, "الملخص", period, [("المؤشر", "name", 22), ("القيمة", "text", 22), ("التفصيل", "text", 80)], summary, [])
@@ -769,9 +769,9 @@ def build_group_study_excel(report: dict[str, Any]):
 
     # 3) تحليل الأصناف: نفس أعمدة الشاشة بأرقام قابلة للحساب
     columns = [
-        ("الكود", "name", 18), ("الصنف", "name", 36), ("العبوة", "text", 12), ("الفواتير", "count", 11),
+        ("الكود", "name", 18), ("الصنف", "name", 36), ("الوحدة الرئيسية", "text", 14), ("الفواتير", "count", 11),
         ("الكمية المباعة", "count", 13), ("سعر البيع", "avg", 12), ("صافي المبيعات", "money", 15), ("الحصة", "share", 9),
-        ("تكلفة العبوة", "avg", 12), ("التكلفة", "money", 15), ("الربح", "money", 14), ("الهامش", "share", 9),
+        ("تكلفة الوحدة", "avg", 12), ("التكلفة", "money", 15), ("الربح", "money", 14), ("الهامش", "share", 9),
         ("الوارد", "count", 11), ("التوالف", "count", 10), ("للمورد", "count", 10), ("الرصيد", "count", 11),
         ("التغطية (يوم)", "count", 12), ("التصريف", "share", 10),
     ]

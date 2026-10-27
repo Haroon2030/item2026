@@ -3487,15 +3487,16 @@ class GroupStudyReportTests(TestCase):
         self.assertEqual(k['margin_display'], '20.0%')
         # العدّ المميّز لا مجموع عدّ الأصناف (80 + 5)
         self.assertEqual(k['invoices_display'], '76')
-        # الكميات بعبوة الصنف (كرتون 12): 2 ÷ 12 و 3 ÷ 12 و 60 ÷ 12 — والتكلفة لا تتغير
-        self.assertEqual((k['waste_q_display'], k['waste_c_display'], k['vret_q_display']), ('0.17', '16.00', '0.25'))
-        self.assertEqual(k['incoming_q_display'], '5')
-        self.assertEqual(k['net_q_display'], '8.75')
-        self.assertEqual(r['rows'][0]['price_display'], '120.00')  # 1,050 ÷ 8.75 كرتون
+        # الكميات بالوحدة الرئيسية (حبة) بلا تحويل للكرتون — والتكلفة لا تتغير
+        self.assertEqual((k['waste_q_display'], k['waste_c_display'], k['vret_q_display']), ('2', '16.00', '3'))
+        self.assertEqual(k['incoming_q_display'], '60')
+        self.assertEqual(k['net_q_display'], '105')
+        self.assertEqual(r['rows'][0]['price_display'], '10.00')  # 1,050 ÷ 105 حبة
         self.assertEqual(k['items_active'], 1)
         row = r['rows'][0]
         self.assertEqual((row['name'], row['pack'], row['unit']), ('لبنة', '12', 'كرتون'))
-        self.assertEqual(row['pack_label'], 'كرتون (12 حبة)')
+        # تُعرض الوحدة الرئيسية، والعبوة الكبرى تلميح
+        self.assertEqual((row['pack_label'], row['pack_hint']), ('حبة', 'كرتون (12 حبة)'))
         # الرصيد 20 ÷ (105 / 30 يوم) ≈ 6 أيام → خطر نفاد
         self.assertEqual(row['cover_display'], '6 يوم')
         self.assertFalse(r['has_purchase_invoices'])

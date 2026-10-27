@@ -115,27 +115,27 @@
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-count">
       <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></span><h3>الفواتير والكمية</h3></header>
       <p class="wqc-kpi-value mono">{{ k.invoices_display }}</p>
-      <small>{{ k.net_q_display }} عبوة · نقاط البيع {{ k.pos_share_display }}</small>
+      <small>{{ k.net_q_display }} وحدة · نقاط البيع {{ k.pos_share_display }}</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-in">
-      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/></svg></span><h3>الوارد (عبوة)</h3></header>
+      <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/></svg></span><h3>الوارد (وحدة)</h3></header>
       <p class="wqc-kpi-value mono">{{ k.incoming_q_display }}</p>
       <small>توريد {{ k.sup_n }} سند · شراء {{ k.pi_n }} فاتورة{% if k.pi_n %} ({{ k.pi_v_display }}){% endif %}</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-waste">
       <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></span><h3>التوالف</h3></header>
       <p class="wqc-kpi-value mono" dir="ltr">{{ k.waste_c_display }}</p>
-      <small>{{ k.waste_q_display }} عبوة · {{ k.waste_orders }} أمر صرف · {{ k.waste_pct_display }} من التكلفة</small>
+      <small>{{ k.waste_q_display }} وحدة · {{ k.waste_orders }} أمر صرف · {{ k.waste_pct_display }} من التكلفة</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-vret">
       <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 14l-5-5 5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></span><h3>المصروف للمورد</h3></header>
       <p class="wqc-kpi-value mono" dir="ltr">{{ k.vret_c_display }}</p>
-      <small>{{ k.vret_q_display }} عبوة · {{ k.vret_orders }} أمر صرف</small>
+      <small>{{ k.vret_q_display }} وحدة · {{ k.vret_orders }} أمر صرف</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-stock">
       <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg></span><h3>الرصيد الحالي</h3></header>
       <p class="wqc-kpi-value mono" dir="ltr">{{ k.stock_v_display }}</p>
-      <small>{{ k.stock_q_display }} عبوة · يغطي {{ k.cover_display }}</small>
+      <small>{{ k.stock_q_display }} وحدة · يغطي {{ k.cover_display }}</small>
     </article>
     <article class="dash-kpi-card dash-kpi-glass wqc-kpi is-items">
       <header><span class="dash-kpi-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><h3>الأصناف</h3></header>
@@ -199,19 +199,19 @@
       <table class="wqc-table" data-name-col="1">
         <caption class="gs-caption">
           <strong>تحليل الأصناف</strong>
-          <span>{{ report.group_code }} - {{ report.group_name }} · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · الكميات بعبوة الصنف (كرتون/ربطة) · التكلفة بمتوسط التكلفة الحالي للصنف</span>
+          <span>{{ report.group_code }} - {{ report.group_name }} · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · الكميات بالوحدة الرئيسية للصنف (كيلو للموزون) · التكلفة بمتوسط التكلفة الحالي للصنف</span>
         </caption>
         <thead>
           <tr>
             <th scope="col">الكود</th>
             <th scope="col">الصنف</th>
-            <th scope="col">العبوة</th>
+            <th scope="col">الوحدة الرئيسية</th>
             <th scope="col">الفواتير</th>
             <th scope="col">الكمية المباعة</th>
             <th scope="col">سعر البيع</th>
             <th scope="col">صافي المبيعات</th>
             <th scope="col">الحصة</th>
-            <th scope="col">تكلفة العبوة</th>
+            <th scope="col">تكلفة الوحدة</th>
             <th scope="col">التكلفة</th>
             <th scope="col">الربح</th>
             <th scope="col">الهامش</th>
@@ -228,7 +228,7 @@
             <tr>
               <td class="mono" dir="ltr">{{ r.code }}</td>
               <td>{{ r.name }}</td>
-              <td class="gs-pack">{{ r.pack_label }}</td>
+              <td class="gs-pack"{% if r.pack_hint %} title="العبوة الكبرى: {{ r.pack_hint }}"{% endif %}>{{ r.pack_label }}</td>
               <td class="mono">{{ r.invoices_display }}</td>
               <td class="mono">{{ r.net_q_display }}</td>
               <td class="mono">{{ r.price_display }}</td>
