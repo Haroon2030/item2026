@@ -43,7 +43,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v15"
+_CACHE_VER = "v16"
 MAX_DAYS = 400
 
 WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
@@ -563,6 +563,8 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
             "pack_hint": _pack_label(_f(pk.get("pack")), str(pk.get("unit") or ""), bases.get(code, ""))
             if _f(pk.get("pack")) > 1 else "",
             "invoices": int(a["inv"]),
+            # قبل المرتجع = رقم تقرير أونكس «المبيعات حسب الأصناف»؛ الصافي بعد خصم المرتجع
+            "sold_q": sold_q, "sold_v": sold_v, "ret_q": a["ret_q"],
             "net_q": net_q, "net_v": net_v, "cost": cost, "gross": gross,
             "price": (net_v / net_q) if net_q > 0 else None,  # متوسط سعر بيع الوحدة الرئيسية بدون ضريبة
             "margin": _pct(gross, net_v),
@@ -583,6 +585,8 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
     for r in rows_out:
         r.update({
             "net_q_display": _qty(r["net_q"]), "net_v_display": _money(r["net_v"]),
+            "sold_q_display": _qty(r["sold_q"]), "sold_v_display": _money(r["sold_v"]),
+            "ret_q_display": _qty(r["ret_q"]), "ret_v_display": _money(r["ret_v"]),
             "cost_display": _money(r["cost"]), "gross_display": _money(r["gross"]),
             "margin_display": _pct_display(r["margin"]), "invoices_display": f"{r['invoices']:,}",
             "incoming_q_display": _qty(r["incoming_q"]), "waste_q_display": _qty(r["waste_q"]),
@@ -610,6 +614,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
     kpis = {
         "net_v": net_v, "net_v_display": _money(net_v),
         "sold_v_display": _money(sold_v), "ret_v_display": _money(T["ret_v"]),
+        "sold_q_display": _qty(T["pos_q"] + T["cash_q"] + T["credit_q"]), "ret_q_display": _qty(T["ret_q"]),
         "ret_pct_display": _pct_display(_pct(T["ret_v"], sold_v)),
         "net_q_display": _qty(net_q), "invoices_display": f"{counts['pos_n'] + counts['bill_n']:,}",
         "per_day_display": _money(net_v / days_elapsed),
@@ -872,7 +877,8 @@ def build_group_study_excel(report: dict[str, Any]):
     # 3) تحليل الأصناف: نفس أعمدة الشاشة بأرقام قابلة للحساب
     columns = [
         ("الكود", "name", 18), ("الصنف", "name", 36), ("الوحدة الرئيسية", "text", 14), ("الفواتير", "count", 11),
-        ("الكمية المباعة", "count", 13), ("سعر البيع", "avg", 12), ("صافي المبيعات", "money", 15), ("الحصة", "share", 9),
+        ("الكمية قبل المرتجع", "count", 13), ("المبيعات قبل المرتجع", "money", 15), ("كمية المرتجع", "count", 11),
+        ("قيمة المرتجع", "money", 12), ("الكمية المباعة", "count", 13), ("سعر البيع", "avg", 12), ("صافي المبيعات", "money", 15), ("الحصة", "share", 9),
         ("تكلفة الوحدة", "avg", 12), ("التكلفة", "money", 15), ("الوارد", "count", 11), ("الرصيد", "count", 11),
     ]
     items = report["rows"]
@@ -880,12 +886,16 @@ def build_group_study_excel(report: dict[str, Any]):
     for x in items:
         rows.append([
             x["code"], x["name"], x["pack_label"], x["invoices"],
+            round(x["sold_q"], 2), round(x["sold_v"], 2), round(x["ret_q"], 2), round(x["ret_v"], 2),
             round(x["net_q"], 2), None if x["price"] is None else round(x["price"], 2), round(x["net_v"], 2), (x["share"] or 0) / 100.0, round(x["unit_cost"], 2),
             round(x["cost"], 2), round(x["incoming_q"], 2), round(x["stock_q"], 2),
         ])
     net_v = sum(x["net_v"] for x in items)
     total = [
-        "", "الإجمالي", "", None, round(sum(x["net_q"] for x in items), 2), None, round(net_v, 2), 1 if net_v else 0,
+        "", "الإجمالي", "", None,
+        round(sum(x["sold_q"] for x in items), 2), round(sum(x["sold_v"] for x in items), 2),
+        round(sum(x["ret_q"] for x in items), 2), round(sum(x["ret_v"] for x in items), 2),
+        round(sum(x["net_q"] for x in items), 2), None, round(net_v, 2), 1 if net_v else 0,
         None, round(sum(x["cost"] for x in items), 2),
         round(sum(x["incoming_q"] for x in items), 2), round(sum(x["stock_q"] for x in items), 2),
     ]

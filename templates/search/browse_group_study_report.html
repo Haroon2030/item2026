@@ -210,6 +210,10 @@
             <th scope="col">الصنف</th>
             <th scope="col">الوحدة الرئيسية</th>
             <th scope="col">الفواتير</th>
+            <th scope="col">الكمية قبل المرتجع</th>
+            <th scope="col">المبيعات قبل المرتجع</th>
+            <th scope="col">كمية المرتجع</th>
+            <th scope="col">قيمة المرتجع</th>
             <th scope="col">الكمية المباعة</th>
             <th scope="col">سعر البيع</th>
             <th scope="col">صافي المبيعات</th>
@@ -227,6 +231,10 @@
               <td>{{ r.name }}</td>
               <td class="gs-pack"{% if r.pack_hint %} title="العبوة الكبرى: {{ r.pack_hint }}"{% endif %}>{{ r.pack_label }}</td>
               <td class="mono">{{ r.invoices_display }}</td>
+              <td class="mono">{{ r.sold_q_display }}</td>
+              <td class="mono">{{ r.sold_v_display }}</td>
+              <td class="mono">{{ r.ret_q_display }}</td>
+              <td class="mono">{{ r.ret_v_display }}</td>
               <td class="mono">{{ r.net_q_display }}</td>
               <td class="mono">{{ r.price_display }}</td>
               <td class="mono">{{ r.net_v_display }}</td>
@@ -244,6 +252,10 @@
             <td>الإجمالي</td>
             <td></td>
             <td class="mono">{{ k.invoices_display }}</td>
+            <td class="mono">{{ k.sold_q_display }}</td>
+            <td class="mono">{{ k.sold_v_display }}</td>
+            <td class="mono">{{ k.ret_q_display }}</td>
+            <td class="mono">{{ k.ret_v_display }}</td>
             <td class="mono">{{ k.net_q_display }}</td>
             <td></td>
             <td class="mono">{{ k.net_v_display }}</td>

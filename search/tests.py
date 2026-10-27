@@ -3565,7 +3565,7 @@ class GroupStudyExcelTests(TestCase):
             'stock_q_display', 'cover_display')})
         disp.update({'sup_n': 1, 'pi_n': 0, 'waste_orders': 1, 'vret_orders': 0, 'items_active': 1, 'items_total': 2})
         row = {
-            'code': '1', 'name': 'لبنة', 'pack': '12', 'unit': 'كرتون', 'pack_label': 'كرتون (12 حبة)', 'invoices': 3, 'net_q': 10.0, 'net_v': 100.0, 'price': 10.0,
+            'code': '1', 'name': 'لبنة', 'pack': '12', 'unit': 'كرتون', 'pack_label': 'كرتون (12 حبة)', 'invoices': 3, 'sold_q': 12.0, 'sold_v': 120.0, 'ret_q': 2.0, 'ret_v': 20.0, 'net_q': 10.0, 'net_v': 100.0, 'price': 10.0,
             'share': 100.0, 'unit_cost': 12.0, 'cost': 120.0, 'gross': -20.0, 'margin': -20.0, 'incoming_q': 5.0,
             'waste_q': 1.0, 'vret_q': 0.0, 'stock_q': 4.0, 'cover_days': 12.0, 'sell_through': 50.0,
         }
@@ -3584,8 +3584,10 @@ class GroupStudyExcelTests(TestCase):
         header = next(r for r in values if r[0] == 'الكود')
         self.assertEqual(header[1], 'الصنف')
         item = next(r for r in values if r[0] == '1')
-        self.assertEqual(header[5], 'سعر البيع')
-        self.assertEqual((item[5], item[6], item[9], item[10]), (10.0, 100.0, 120.0, 5.0))
+        self.assertEqual((header[4], header[5], header[9]), ('الكمية قبل المرتجع', 'المبيعات قبل المرتجع', 'سعر البيع'))
+        # قبل المرتجع 12 / 120، المرتجع 2 / 20، الصافي 10 / 100
+        self.assertEqual(item[4:9], [12.0, 120.0, 2.0, 20.0, 10.0])
+        self.assertEqual((item[9], item[10], item[13], item[14]), (10.0, 100.0, 120.0, 5.0))
         self.assertNotIn('الربح', header)  # أُلغيت أعمدة الربح والهامش والتوالف والتغطية من جدول الأصناف
         self.assertEqual(item[2], 'كرتون (12 حبة)')
         self.assertTrue(ws.sheet_view.rightToLeft)
