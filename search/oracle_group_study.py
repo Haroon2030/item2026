@@ -858,9 +858,7 @@ def build_group_study_excel(report: dict[str, Any]):
     columns = [
         ("الكود", "name", 18), ("الصنف", "name", 36), ("الوحدة الرئيسية", "text", 14), ("الفواتير", "count", 11),
         ("الكمية المباعة", "count", 13), ("سعر البيع", "avg", 12), ("صافي المبيعات", "money", 15), ("الحصة", "share", 9),
-        ("تكلفة الوحدة", "avg", 12), ("التكلفة", "money", 15), ("الربح", "money", 14), ("الهامش", "share", 9),
-        ("الوارد", "count", 11), ("التوالف", "count", 10), ("للمورد", "count", 10), ("الرصيد", "count", 11),
-        ("التغطية (يوم)", "count", 12), ("التصريف", "share", 10),
+        ("تكلفة الوحدة", "avg", 12), ("التكلفة", "money", 15), ("الوارد", "count", 11), ("الرصيد", "count", 11),
     ]
     items = report["rows"]
     rows = []
@@ -868,25 +866,16 @@ def build_group_study_excel(report: dict[str, Any]):
         rows.append([
             x["code"], x["name"], x["pack_label"], x["invoices"],
             round(x["net_q"], 2), None if x["price"] is None else round(x["price"], 2), round(x["net_v"], 2), (x["share"] or 0) / 100.0, round(x["unit_cost"], 2),
-            round(x["cost"], 2), round(x["gross"], 2), None if x["margin"] is None else x["margin"] / 100.0,
-            round(x["incoming_q"], 2), round(x["waste_q"], 2), round(x["vret_q"], 2), round(x["stock_q"], 2),
-            None if x["cover_days"] is None else round(x["cover_days"]),
-            None if x["sell_through"] is None else x["sell_through"] / 100.0,
+            round(x["cost"], 2), round(x["incoming_q"], 2), round(x["stock_q"], 2),
         ])
     net_v = sum(x["net_v"] for x in items)
-    gross = sum(x["gross"] for x in items)
     total = [
         "", "الإجمالي", "", None, round(sum(x["net_q"] for x in items), 2), None, round(net_v, 2), 1 if net_v else 0,
-        None, round(sum(x["cost"] for x in items), 2), round(gross, 2), (gross / net_v) if net_v else None,
-        round(sum(x["incoming_q"] for x in items), 2), round(sum(x["waste_q"] for x in items), 2),
-        round(sum(x["vret_q"] for x in items), 2), round(sum(x["stock_q"] for x in items), 2), None, None,
+        None, round(sum(x["cost"] for x in items), 2),
+        round(sum(x["incoming_q"] for x in items), 2), round(sum(x["stock_q"] for x in items), 2),
     ]
     ws = _xl_sheet(wb, "تحليل الأصناف", period, columns, rows, [(total, _XL_COLORS["total"])])
     ws.page_setup.orientation = "landscape"
-    for row in ws.iter_rows(min_row=5, max_row=ws.max_row):
-        cell = row[10]  # الربح السالب بالأحمر
-        if isinstance(cell.value, (int, float)) and cell.value < 0:
-            cell.font = Font(name="Arial", size=10, bold=True, color="C24545")
 
     # 4) تفصيل الفروع
     br = report.get("branches") or {"rows": [], "total": None}

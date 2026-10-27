@@ -216,14 +216,8 @@
             <th scope="col">الحصة</th>
             <th scope="col">تكلفة الوحدة</th>
             <th scope="col">التكلفة</th>
-            <th scope="col">الربح</th>
-            <th scope="col">الهامش</th>
             <th scope="col">الوارد</th>
-            <th scope="col">التوالف</th>
-            <th scope="col">للمورد</th>
             <th scope="col">الرصيد</th>
-            <th scope="col">التغطية</th>
-            <th scope="col">التصريف</th>
           </tr>
         </thead>
         <tbody>
@@ -239,14 +233,8 @@
               <td class="mono">{{ r.share_display }}</td>
               <td class="mono">{{ r.unit_cost_display }}</td>
               <td class="mono">{{ r.cost_display }}</td>
-              <td class="mono{% if r.gross < 0 %} gs-neg{% endif %}">{{ r.gross_display }}</td>
-              <td class="mono{% if r.gross < 0 %} gs-neg{% elif r.margin is not None and r.margin < 5 %} gs-warn{% endif %}">{{ r.margin_display }}</td>
               <td class="mono">{{ r.incoming_q_display }}</td>
-              <td class="mono">{{ r.waste_q_display }}</td>
-              <td class="mono">{{ r.vret_q_display }}</td>
               <td class="mono">{{ r.stock_q_display }}</td>
-              <td class="mono{% if r.cover_days is not None and r.cover_days < 7 %} gs-warn{% endif %}">{{ r.cover_display }}</td>
-              <td class="mono">{{ r.sell_through_display }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -262,14 +250,8 @@
             <td class="mono">100.0%</td>
             <td></td>
             <td class="mono">{{ k.cost_display }}</td>
-            <td class="mono{% if k.gross < 0 %} gs-neg{% endif %}">{{ k.gross_display }}</td>
-            <td class="mono">{{ k.margin_display }}</td>
             <td class="mono">{{ k.incoming_q_display }}</td>
-            <td class="mono">{{ k.waste_q_display }}</td>
-            <td class="mono">{{ k.vret_q_display }}</td>
             <td class="mono">{{ k.stock_q_display }}</td>
-            <td class="mono">{{ k.cover_display }}</td>
-            <td></td>
           </tr>
         </tfoot>
       </table>

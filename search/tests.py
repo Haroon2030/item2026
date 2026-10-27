@@ -3585,6 +3585,7 @@ class GroupStudyExcelTests(TestCase):
         self.assertEqual(header[1], 'الصنف')
         item = next(r for r in values if r[0] == '1')
         self.assertEqual(header[5], 'سعر البيع')
-        self.assertEqual((item[5], item[6], item[10]), (10.0, 100.0, -20.0))
+        self.assertEqual((item[5], item[6], item[9], item[10]), (10.0, 100.0, 120.0, 5.0))
+        self.assertNotIn('الربح', header)  # أُلغيت أعمدة الربح والهامش والتوالف والتغطية من جدول الأصناف
         self.assertEqual(item[2], 'كرتون (12 حبة)')
         self.assertTrue(ws.sheet_view.rightToLeft)
