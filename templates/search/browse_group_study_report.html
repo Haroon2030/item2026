@@ -34,6 +34,7 @@
   .gs-note { margin: 0.25rem 0 1rem; color: #6B7785; font-size: 0.82rem; }
   .gs-sheets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; align-items: start; margin-bottom: 1rem; }
   .gs-sheets .wqc-sheet { margin: 0; }
+  .gs-branches { margin-top: 18px; }
 </style>
 
 <section class="dash-head" aria-label="دراسة مجموعة">
@@ -274,6 +275,89 @@
       </table>
     </div>
   </section>
+
+  {% with br=report.branches %}{% if br.rows %}
+  <section class="wqc-sheet gs-branches" aria-label="تفصيل الفروع">
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="تفصيل الفروع">
+      <table class="wqc-table" data-name-col="1">
+        <caption class="gs-caption">
+          <strong>تفصيل الفروع</strong>
+          <span>{{ report.group_code }} - {{ report.group_name }} · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · المبيعات بدون ضريبة · الرصيد الحالي لمخازن كل فرع</span>
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">الرقم</th>
+            <th scope="col">الفرع</th>
+            <th scope="col">الفواتير</th>
+            <th scope="col">نقاط البيع</th>
+            <th scope="col">نقدي مباشر</th>
+            <th scope="col">آجل</th>
+            <th scope="col">المرتجع</th>
+            <th scope="col">صافي المبيعات</th>
+            <th scope="col">الحصة</th>
+            <th scope="col">الكمية</th>
+            <th scope="col">التكلفة</th>
+            <th scope="col">الربح</th>
+            <th scope="col">الهامش</th>
+            <th scope="col">الوارد</th>
+            <th scope="col">التوالف</th>
+            <th scope="col">للمورد</th>
+            <th scope="col">الرصيد</th>
+            <th scope="col">قيمة الرصيد</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in br.rows %}
+            <tr>
+              <td class="mono" dir="ltr">{{ b.code|default:"—" }}</td>
+              <td>{{ b.name }}</td>
+              <td class="mono">{{ b.invoices_display }}</td>
+              <td class="mono">{{ b.pos_v_display }}</td>
+              <td class="mono">{{ b.cash_v_display }}</td>
+              <td class="mono">{{ b.credit_v_display }}</td>
+              <td class="mono">{{ b.ret_v_display }}</td>
+              <td class="mono">{{ b.net_v_display }}</td>
+              <td class="mono">{{ b.share_display }}</td>
+              <td class="mono">{{ b.net_q_display }}</td>
+              <td class="mono">{{ b.cost_display }}</td>
+              <td class="mono{% if b.gross < 0 %} gs-neg{% endif %}">{{ b.gross_display }}</td>
+              <td class="mono{% if b.gross < 0 %} gs-neg{% elif b.margin is not None and b.margin < 5 %} gs-warn{% endif %}">{{ b.margin_display }}</td>
+              <td class="mono">{{ b.incoming_q_display }}</td>
+              <td class="mono" title="{{ b.waste_q_display }} وحدة">{{ b.waste_c_display }}</td>
+              <td class="mono" title="{{ b.vret_q_display }} وحدة">{{ b.vret_c_display }}</td>
+              <td class="mono">{{ b.stock_q_display }}</td>
+              <td class="mono">{{ b.stock_v_display }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% with t=br.total %}
+        <tfoot>
+          <tr class="wqc-tfoot">
+            <td></td>
+            <td>الإجمالي</td>
+            <td class="mono">{{ t.invoices_display }}</td>
+            <td class="mono">{{ t.pos_v_display }}</td>
+            <td class="mono">{{ t.cash_v_display }}</td>
+            <td class="mono">{{ t.credit_v_display }}</td>
+            <td class="mono">{{ t.ret_v_display }}</td>
+            <td class="mono">{{ t.net_v_display }}</td>
+            <td class="mono">{{ t.share_display }}</td>
+            <td class="mono">{{ t.net_q_display }}</td>
+            <td class="mono">{{ t.cost_display }}</td>
+            <td class="mono{% if t.gross < 0 %} gs-neg{% endif %}">{{ t.gross_display }}</td>
+            <td class="mono">{{ t.margin_display }}</td>
+            <td class="mono">{{ t.incoming_q_display }}</td>
+            <td class="mono">{{ t.waste_c_display }}</td>
+            <td class="mono">{{ t.vret_c_display }}</td>
+            <td class="mono">{{ t.stock_q_display }}</td>
+            <td class="mono">{{ t.stock_v_display }}</td>
+          </tr>
+        </tfoot>
+        {% endwith %}
+      </table>
+    </div>
+  </section>
+  {% endif %}{% endwith %}
   {% endwith %}
 {% elif run and not error %}
   <p class="gs-scope">لا توجد بيانات للعرض.</p>

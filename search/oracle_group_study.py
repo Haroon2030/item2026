@@ -43,7 +43,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v11"
+_CACHE_VER = "v12"
 MAX_DAYS = 400
 
 WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
@@ -100,7 +100,7 @@ def _pos_sales(params: dict, brn_sql: str) -> list[dict]:
     pos, sch = _pos_owner(), _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(m.BILL_DATE, 'MM') AS M,
+        SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(m.BILL_DATE, 'MM') AS M, TO_CHAR(m.BRN_NO) AS B,
                SUM({STOCK_QTY}) AS Q, ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS V,
                COUNT(DISTINCT m.BRN_NO || '-' || m.BILL_NO) AS N
         FROM {pos}.IAS_POS_BILL_DTL d
@@ -109,7 +109,7 @@ def _pos_sales(params: dict, brn_sql: str) -> list[dict]:
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
           AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
-        GROUP BY TO_CHAR(d.I_CODE), TRUNC(m.BILL_DATE, 'MM')
+        GROUP BY TO_CHAR(d.I_CODE), TRUNC(m.BILL_DATE, 'MM'), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
@@ -121,7 +121,7 @@ def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary
     summ = f"AND NVL(b.C_NAME, ' ') NOT LIKE '{POS_SALES_SUMMARY}'" if exclude_summary else ""
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(b.BILL_DATE, 'MM') AS M,
+        SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(b.BILL_DATE, 'MM') AS M, TO_CHAR(b.BRN_NO) AS B,
                SUM({STOCK_QTY}) AS Q, ROUND(SUM({_bill_net_sql("d")}), 2) AS V,
                COUNT(DISTINCT b.BILL_SER) AS N
         FROM {sch}.IAS_BILL_DTL d
@@ -132,7 +132,7 @@ def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary
           AND (b.CNCL_FLG IS NULL OR b.CNCL_FLG = 0) AND ABS(NVL(b.BILL_AMT, 0)) <= 5000000
           AND b.BILL_DOC_TYPE IN ({types}) {summ}
           AND i.G_CODE = :g {brn_sql.replace('{a}', 'b')}
-        GROUP BY TO_CHAR(d.I_CODE), TRUNC(b.BILL_DATE, 'MM')
+        GROUP BY TO_CHAR(d.I_CODE), TRUNC(b.BILL_DATE, 'MM'), TO_CHAR(b.BRN_NO)
         """,
         params,
     )
@@ -142,13 +142,14 @@ def _pos_returns(params: dict, brn_sql: str) -> list[dict]:
     pos, sch = _pos_owner(), _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS V
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(m.BRN_NO) AS B,
+               SUM({STOCK_QTY}) AS Q, ROUND(SUM({_pos_dtl_net_sql("d")}), 2) AS V
         FROM {pos}.IAS_POS_RT_BILL_DTL d
         JOIN {pos}.IAS_POS_RT_BILL_MST m ON m.RT_BILL_NO = d.RT_BILL_NO AND m.BRN_NO = d.BRN_NO
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
           AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
-        GROUP BY TO_CHAR(d.I_CODE)
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
@@ -160,7 +161,8 @@ def _bill_returns(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summa
     summ = f"AND NVL(r.C_NAME, ' ') NOT LIKE '{POS_RETURNS_SUMMARY}'" if exclude_summary else ""
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, ROUND(SUM({_bill_net_sql("d")}), 2) AS V
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(r.BRN_NO) AS B,
+               SUM({STOCK_QTY}) AS Q, ROUND(SUM({_bill_net_sql("d")}), 2) AS V
         FROM {sch}.IAS_RT_BILL_DTL d
         JOIN {sch}.IAS_RT_BILL_MST r ON r.RT_BILL_SER = d.RT_BILL_SER AND r.BRN_NO = d.BRN_NO
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
@@ -168,7 +170,7 @@ def _bill_returns(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summa
           AND (r.CNCL_FLG IS NULL OR r.CNCL_FLG = 0) AND ABS(NVL(r.BILL_AMT, 0)) <= 5000000
           AND r.RT_BILL_DOC_TYPE IN ({types}) {summ}
           AND i.G_CODE = :g {brn_sql.replace('{a}', 'r')}
-        GROUP BY TO_CHAR(d.I_CODE)
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(r.BRN_NO)
         """,
         params,
     )
@@ -178,13 +180,14 @@ def _supply_vouchers(params: dict, brn_sql: str) -> list[dict]:
     sch = _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, COUNT(DISTINCT m.INC_SER) AS N, MAX(m.INC_DATE) AS LAST_D
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(m.BRN_NO) AS B,
+               SUM({STOCK_QTY}) AS Q, COUNT(DISTINCT m.INC_SER) AS N, MAX(m.INC_DATE) AS LAST_D
         FROM {sch}.IAS_GR_INCOMING_DTL d
         JOIN {sch}.IAS_GR_INCOMING_MST m ON m.INC_SER = d.INC_SER AND m.INCOM_TYPE = d.INCOM_TYPE
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.INC_DATE >= :d_from AND m.INC_DATE < :d_to_excl
           AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
-        GROUP BY TO_CHAR(d.I_CODE)
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
@@ -194,7 +197,7 @@ def _purchases(params: dict, brn_sql: str) -> list[dict]:
     sch = _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q,
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(m.BRN_NO) AS B, SUM({STOCK_QTY}) AS Q,
                ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.I_PRICE, 0) - NVL(d.DIS_AMT, 0)), 2) AS V,
                COUNT(DISTINCT m.BILL_SER) AS N, COUNT(DISTINCT m.V_CODE) AS VENDORS, MAX(m.BILL_DATE) AS LAST_D
         FROM {sch}.IAS_PI_BILL_DTL d
@@ -203,7 +206,7 @@ def _purchases(params: dict, brn_sql: str) -> list[dict]:
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
           AND NVL(m.HUNG, 0) = 0 AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
-        GROUP BY TO_CHAR(d.I_CODE)
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
@@ -213,7 +216,7 @@ def _purchase_returns(params: dict, brn_sql: str) -> list[dict]:
     sch = _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q,
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(r.BRN_NO) AS B, SUM({STOCK_QTY}) AS Q,
                ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.I_PRICE, 0) - NVL(d.DIS_AMT, 0)), 2) AS V
         FROM {sch}.IAS_PR_BILL_DTL d
         JOIN {sch}.IAS_PR_BILL_MST r
@@ -221,7 +224,7 @@ def _purchase_returns(params: dict, brn_sql: str) -> list[dict]:
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
           AND NVL(r.HUNG, 0) = 0 AND i.G_CODE = :g {brn_sql.replace('{a}', 'r')}
-        GROUP BY TO_CHAR(d.I_CODE)
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(r.BRN_NO)
         """,
         params,
     )
@@ -231,7 +234,7 @@ def _issues(params: dict, brn_sql: str) -> list[dict]:
     sch = _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(m.A_CODE) AS A,
+        SELECT TO_CHAR(d.I_CODE) AS I, TO_CHAR(m.A_CODE) AS A, TO_CHAR(m.BRN_NO) AS B,
                SUM({STOCK_QTY}) AS Q, ROUND(SUM(NVL(d.I_QTY, 0) * NVL(d.STK_COST, 0)), 2) AS C,
                COUNT(DISTINCT m.OUT_SER) AS N
         FROM {sch}.IAS_OUTGOING_DTL d
@@ -239,7 +242,7 @@ def _issues(params: dict, brn_sql: str) -> list[dict]:
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.OUT_TYPE = 1 AND m.OUT_DATE >= :d_from AND m.OUT_DATE < :d_to_excl
           AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
-        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.A_CODE)
+        GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.A_CODE), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
@@ -289,6 +292,61 @@ def _distinct_counts(params: dict, brn_sql: str) -> dict[str, int]:
         params,
     )[0]
     return {k.lower(): int(_f(v)) for k, v in row.items()}
+
+
+def _branch_invoices(params: dict, brn_sql: str) -> dict[str, int]:
+    """عدد فواتير البيع المميّزة لكل فرع (نقاط البيع + النقدي المباشر والآجل بلا خلاصات الترحيل)."""
+    pos, sch = _pos_owner(), _schema()
+    rows = _fetch_all(
+        f"""
+        SELECT B, SUM(N) AS N FROM (
+          SELECT TO_CHAR(m.BRN_NO) AS B, COUNT(DISTINCT m.BILL_NO) AS N
+          FROM {pos}.IAS_POS_BILL_DTL d
+          JOIN {pos}.IAS_POS_BILL_MST m ON m.BILL_NO = d.BILL_NO AND m.BRN_NO = d.BRN_NO AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+          JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+          WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl AND (m.HUNG IS NULL OR m.HUNG = 0)
+            AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+          GROUP BY TO_CHAR(m.BRN_NO)
+          UNION ALL
+          SELECT TO_CHAR(b.BRN_NO) AS B, COUNT(DISTINCT b.BILL_SER || '-' || b.BILL_DOC_TYPE) AS N
+          FROM {sch}.IAS_BILL_DTL d
+          JOIN {sch}.IAS_BILL_MST b ON b.BILL_NO = d.BILL_NO AND b.BILL_SER = d.BILL_SER AND b.BILL_DOC_TYPE = d.BILL_DOC_TYPE
+          JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+          WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl AND (b.CNCL_FLG IS NULL OR b.CNCL_FLG = 0)
+            AND ABS(NVL(b.BILL_AMT, 0)) <= 5000000 AND b.BILL_DOC_TYPE IN (1, 4, 5, 8)
+            AND NVL(b.C_NAME, ' ') NOT LIKE '{POS_SALES_SUMMARY}'
+            AND i.G_CODE = :g {brn_sql.replace('{a}', 'b')}
+          GROUP BY TO_CHAR(b.BRN_NO)
+        ) GROUP BY B
+        """,
+        params,
+    )
+    return {_norm_brn_code(r["B"]): int(_f(r["N"])) for r in rows}
+
+
+def _stock_by_branch(group: Any, sub: str = "") -> dict[tuple[str, str], float]:
+    """رصيد كل صنف في مخازن كل فرع (فرع المخزن CONN_BRN_NO)؛ مخزن بلا فرع يُجمع تحت «»."""
+    sch = _schema()
+    sub_sql = "AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""
+    wh_brn = {
+        _code(w.get("code")): _norm_brn_code(w.get("branch_code"))
+        for w in fetch_warehouse_options(active_only=False) or [] if _code(w.get("code"))
+    }
+    out: dict[tuple[str, str], float] = {}
+    for r in _fetch_all(
+        f"""
+        SELECT TO_CHAR(w.I_CODE) AS I, TO_CHAR(w.W_CODE) AS W, SUM(NVL(w.AVL_QTY, 0)) AS Q
+        FROM {sch}.IAS_ITM_WCODE w
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = w.I_CODE
+        WHERE i.G_CODE = :g {sub_sql}
+        GROUP BY TO_CHAR(w.I_CODE), TO_CHAR(w.W_CODE)
+        HAVING SUM(NVL(w.AVL_QTY, 0)) <> 0
+        """,
+        {"g": group} | ({"mng": sub} if sub else {}),
+    ):
+        key = (_code(r["I"]), wh_brn.get(_code(r["W"]), ""))
+        out[key] = out.get(key, 0.0) + _f(r["Q"])
+    return out
 
 
 def _items_and_stock(group: Any, brn: str, sub: str = "") -> tuple[dict[str, dict], dict[str, tuple[float, float]]]:
@@ -414,7 +472,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         return run
 
     (pos_rows, cash_rows, credit_rows, pos_ret, cash_ret, credit_ret,
-     supply, pi, pr, issues, counts, items_stock) = _run_parallel(
+     supply, pi, pr, issues, counts, items_stock, brn_inv, brn_stock) = _run_parallel(
         [
             job(_pos_sales, params, brn_sql),
             job(_bill_sales, params, brn_sql, (1, 5), exclude_summary=True),
@@ -428,6 +486,9 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
             job(_issues, params, brn_sql),
             job(_distinct_counts, params, brn_sql),
             job(_items_and_stock, group, brn, sub),
+            job(_branch_invoices, params, brn_sql),
+            # فرع محدد: رصيده هو رصيد الدراسة نفسه
+            (lambda: {}) if brn else job(_stock_by_branch, group, sub),
         ],
         max_workers=6,
         timeout_sec=240,
@@ -444,46 +505,51 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         )}
 
     per: dict[str, dict[str, float]] = {}
+    # (الفرع، الصنف) ← الكميات والقيم، لجدول الفروع: التكلفة = صافي كمية الصنف في الفرع × متوسط تكلفته
+    per_brn: dict[tuple[str, str], dict[str, float]] = {}
     monthly: dict[date, dict[str, float]] = {}
     month_q: dict[tuple[date, str], float] = {}
 
     def acc(code: str) -> dict[str, float]:
         return per.setdefault(code, blank())
 
+    def bacc(r: dict) -> dict[str, float]:
+        return per_brn.setdefault((_norm_brn_code(r.get("B")) or brn, _code(r["I"])), blank())
+
     for rows, qk, vk in ((pos_rows, "pos_q", "pos_v"), (cash_rows, "cash_q", "cash_v"), (credit_rows, "credit_q", "credit_v")):
         for r in rows:
-            a = acc(_code(r["I"]))
-            a[qk] += _f(r["Q"])
-            a[vk] += _f(r["V"])
-            a["inv"] += _f(r["N"])
+            for a in (acc(_code(r["I"])), bacc(r)):
+                a[qk] += _f(r["Q"])
+                a[vk] += _f(r["V"])
+                a["inv"] += _f(r["N"])
             m = _as_date(r["M"])
             mb = monthly.setdefault(m, {"v": 0.0, "q": 0.0})
             mb["v"] += _f(r["V"])
             month_q[(m, _code(r["I"]))] = month_q.get((m, _code(r["I"])), 0.0) + _f(r["Q"])
     for rows in (pos_ret, cash_ret, credit_ret):
         for r in rows:
-            a = acc(_code(r["I"]))
-            a["ret_q"] += _f(r["Q"])
-            a["ret_v"] += _f(r["V"])
+            for a in (acc(_code(r["I"])), bacc(r)):
+                a["ret_q"] += _f(r["Q"])
+                a["ret_v"] += _f(r["V"])
     for r in supply:
-        a = acc(_code(r["I"]))
-        a["sup_q"] += _f(r["Q"])
-        a["sup_n"] += _f(r["N"])
+        for a in (acc(_code(r["I"])), bacc(r)):
+            a["sup_q"] += _f(r["Q"])
+            a["sup_n"] += _f(r["N"])
     for r in pi:
-        a = acc(_code(r["I"]))
-        a["pi_q"] += _f(r["Q"])
-        a["pi_v"] += _f(r["V"])
-        a["pi_n"] += _f(r["N"])
+        for a in (acc(_code(r["I"])), bacc(r)):
+            a["pi_q"] += _f(r["Q"])
+            a["pi_v"] += _f(r["V"])
+            a["pi_n"] += _f(r["N"])
     for r in pr:
-        a = acc(_code(r["I"]))
-        a["pr_q"] += _f(r["Q"])
-        a["pr_v"] += _f(r["V"])
+        for a in (acc(_code(r["I"])), bacc(r)):
+            a["pr_q"] += _f(r["Q"])
+            a["pr_v"] += _f(r["V"])
     for r in issues:
-        a = acc(_code(r["I"]))
         acct = str(r.get("A") or "").strip()
         kind = "waste" if acct in WASTE_ACCOUNTS else "vret" if acct in SUPPLIER_RETURN_ACCOUNTS else "other"
-        a[f"{kind}_q"] += _f(r["Q"])
-        a[f"{kind}_c"] += _f(r["C"])
+        for a in (acc(_code(r["I"])), bacc(r)):
+            a[f"{kind}_q"] += _f(r["Q"])
+            a[f"{kind}_c"] += _f(r["C"])
     for code in stock:
         acc(code)
 
@@ -600,6 +666,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         for m, v in sorted(monthly.items())
     ]
 
+    branches = _branch_rows(per_brn, stock, brn_stock, brn_inv, names, brn, net_v, T["stock_q"])
     readings = _readings(rows_out, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed)
 
     report = {
@@ -607,7 +674,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         "group_code": gcode, "group_name": group_name,
         "subgroup_code": sub, "subgroup_name": (_subgroup_name(group, sub) or sub) if sub else "",
         "branch": brn, "branch_name": names.get(brn, brn) if brn else "",
-        "kpis": kpis, "rows": rows_out, "trend": trend, "readings": readings,
+        "kpis": kpis, "rows": rows_out, "branches": branches, "trend": trend, "readings": readings,
         "has_purchase_invoices": counts["pi_n"] > 0,
     }
     try:
@@ -615,6 +682,60 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
     except Exception:  # noqa: BLE001
         pass
     return report
+
+
+def _branch_rows(per_brn, stock, brn_stock, brn_inv, names, brn, total_net_v, total_stock_q) -> dict[str, Any]:
+    """تفصيل كل فرع: قنوات البيع والمرتجع والصافي والتكلفة والربح والوارد والصرف والرصيد، مع سطر الإجمالي."""
+    if brn:  # فرع واحد: رصيده هو رصيد الدراسة
+        brn_stock = {(code, brn): q for code, (q, _uc) in stock.items() if q}
+    agg: dict[str, dict[str, float]] = {}
+    keys = ("pos_v", "cash_v", "credit_v", "ret_v", "net_q", "net_v", "cost", "incoming_q",
+            "waste_q", "waste_c", "vret_q", "vret_c", "stock_q", "stock_v")
+
+    def slot(b: str) -> dict[str, float]:
+        return agg.setdefault(b, {k: 0.0 for k in keys})
+
+    for (b, code), a in per_brn.items():
+        unit_cost = stock.get(code, (0.0, 0.0))[1]
+        net_q = a["pos_q"] + a["cash_q"] + a["credit_q"] - a["ret_q"]
+        s = slot(b)
+        s["pos_v"] += a["pos_v"]
+        s["cash_v"] += a["cash_v"]
+        s["credit_v"] += a["credit_v"]
+        s["ret_v"] += a["ret_v"]
+        s["net_q"] += net_q
+        s["net_v"] += a["pos_v"] + a["cash_v"] + a["credit_v"] - a["ret_v"]
+        s["cost"] += net_q * unit_cost
+        s["incoming_q"] += a["sup_q"] + a["pi_q"] - a["pr_q"]
+        for k in ("waste_q", "waste_c", "vret_q", "vret_c"):
+            s[k] += a[k]
+    for (code, b), q in brn_stock.items():
+        s = slot(b)
+        s["stock_q"] += q
+        s["stock_v"] += q * stock.get(code, (0.0, 0.0))[1]
+
+    def finish(label: str, s: dict[str, float], invoices: int) -> dict[str, Any]:
+        gross = s["net_v"] - s["cost"]
+        margin = _pct(gross, s["net_v"])
+        share = _pct(s["net_v"], total_net_v)
+        return s | {
+            "name": label, "invoices": invoices, "gross": gross, "margin": margin, "share": share,
+            "stock_share": _pct(s["stock_q"], total_stock_q),
+            "invoices_display": f"{invoices:,}", "gross_display": _money(gross),
+            "margin_display": _pct_display(margin), "share_display": _pct_display(share),
+            "net_q_display": _qty(s["net_q"]), "incoming_q_display": _qty(s["incoming_q"]),
+            "waste_q_display": _qty(s["waste_q"]), "vret_q_display": _qty(s["vret_q"]),
+            "stock_q_display": _qty(s["stock_q"]),
+        } | {f"{k}_display": _money(s[k]) for k in ("pos_v", "cash_v", "credit_v", "ret_v", "net_v", "cost", "waste_c", "vret_c", "stock_v")}
+
+    rows = [
+        finish(names.get(b, b) if b else "مخازن بلا فرع", s, brn_inv.get(b, 0)) | {"code": b}
+        for b, s in agg.items()
+        if any(abs(v) > 0.005 for v in s.values())
+    ]
+    rows.sort(key=lambda r: (-r["net_v"], -r["stock_v"], r["code"]))
+    total = {k: sum(r[k] for r in rows) for k in keys}
+    return {"rows": rows, "total": finish("الإجمالي", total, sum(r["invoices"] for r in rows))}
 
 
 def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed) -> list[dict]:
@@ -801,7 +922,31 @@ def build_group_study_excel(report: dict[str, Any]):
         if isinstance(cell.value, (int, float)) and cell.value < 0:
             cell.font = Font(name="Arial", size=10, bold=True, color="C24545")
 
-    # 4) المبيعات الشهرية
+    # 4) تفصيل الفروع
+    br = report.get("branches") or {"rows": [], "total": None}
+    if br["rows"]:
+        def brow(x: dict, code: str) -> list:
+            return [
+                code, x["name"], x["invoices"], round(x["pos_v"], 2), round(x["cash_v"], 2), round(x["credit_v"], 2),
+                round(x["ret_v"], 2), round(x["net_v"], 2), (x["share"] or 0) / 100.0, round(x["net_q"], 2),
+                round(x["cost"], 2), round(x["gross"], 2), None if x["margin"] is None else x["margin"] / 100.0,
+                round(x["incoming_q"], 2), round(x["waste_c"], 2), round(x["vret_c"], 2),
+                round(x["stock_q"], 2), round(x["stock_v"], 2),
+            ]
+
+        ws = _xl_sheet(
+            wb, "الفروع", period,
+            [("الرقم", "name", 9), ("الفرع", "name", 26), ("الفواتير", "count", 11), ("نقاط البيع", "money", 15),
+             ("نقدي مباشر", "money", 14), ("آجل", "money", 12), ("المرتجع", "money", 12), ("صافي المبيعات", "money", 15),
+             ("الحصة", "share", 9), ("الكمية", "count", 12), ("التكلفة", "money", 15), ("الربح", "money", 14),
+             ("الهامش", "share", 9), ("الوارد", "count", 11), ("التوالف", "money", 12), ("للمورد", "money", 12),
+             ("الرصيد", "count", 12), ("قيمة الرصيد", "money", 15)],
+            [brow(x, x["code"]) for x in br["rows"]],
+            [(brow(br["total"], ""), _XL_COLORS["total"])],
+        )
+        ws.page_setup.orientation = "landscape"
+
+    # 5) المبيعات الشهرية
     _xl_sheet(
         wb, "المبيعات الشهرية", period,
         [("الشهر", "name", 18), ("الكمية", "count", 14), ("المبيعات", "money", 18)],
@@ -809,7 +954,7 @@ def build_group_study_excel(report: dict[str, Any]):
         [],
     )
 
-    # 5) قنوات البيع
+    # 6) قنوات البيع
     _xl_sheet(
         wb, "قنوات البيع", period,
         [("القناة", "name", 20), ("المبيعات", "money", 20)],
