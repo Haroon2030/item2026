@@ -3474,7 +3474,6 @@ class GroupStudyReportTests(TestCase):
                 _purchase_returns=fake('_purchase_returns'), _issues=fake('_issues'),
                 _distinct_counts=lambda *a, **k: counts, _items_and_stock=lambda *a, **k: items,
                 _branch_invoices=lambda *a, **k: {'6': 46, '7': 30},
-                _stock_by_branch=lambda *a, **k: {('1', '6'): 15.0, ('1', '7'): 5.0, ('2', ''): 5.0},
                 _group_name=lambda g: 'البان مستورده', _branch_names=lambda: {'6': 'سكاي مول', '7': 'العليا'},
                 _base_units=lambda *a: {'1': 'حبة'},
                 fetch_item_max_pack_map=lambda codes: {'1': {'pack': 12, 'unit': 'كرتون'}}), \
@@ -3509,15 +3508,15 @@ class GroupStudyReportTests(TestCase):
         self.assertIn('دون أي بيع', texts)  # الصنف 2 لديه رصيد بلا بيع
         # تفصيل الفروع: سكاي مول 600 + 100 = 700 (70 وحدة × 8)، العليا 400 − 50 = 350 (35 × 8)
         br = r['branches']
-        self.assertEqual([b['name'] for b in br['rows']], ['سكاي مول', 'العليا', 'مخازن بلا فرع'])
-        sky, ulaya, nowh = br['rows']
+        self.assertEqual([b['name'] for b in br['rows']], ['سكاي مول', 'العليا'])
+        sky, ulaya = br['rows']
         self.assertEqual((sky['net_v_display'], sky['cost_display'], sky['invoices']), ('700.00', '560.00', 46))
         self.assertEqual((ulaya['net_v_display'], ulaya['ret_v_display'], ulaya['waste_c_display']), ('350.00', '50.00', '16.00'))
-        self.assertEqual((sky['stock_v_display'], nowh['stock_v_display']), ('120.00', '20.00'))
+        self.assertNotIn('stock_v', sky)  # لا رصيد في جدول الفروع
         # الإجمالي = إجمالي الدراسة
         t = br['total']
         self.assertEqual((t['net_v_display'], t['cost_display'], t['gross_display']), (k['net_v_display'], k['cost_display'], k['gross_display']))
-        self.assertEqual((t['stock_v_display'], t['invoices']), (k['stock_v_display'], 76))
+        self.assertEqual(t['invoices'], 76)
 
     def test_screen_requires_group_and_passes_filters(self):
         from contextlib import contextmanager

@@ -282,7 +282,7 @@
       <table class="wqc-table" data-name-col="1">
         <caption class="gs-caption">
           <strong>تفصيل الفروع</strong>
-          <span>{{ report.group_code }} - {{ report.group_name }} · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · المبيعات بدون ضريبة · الرصيد الحالي لمخازن كل فرع</span>
+          <span>{{ report.group_code }} - {{ report.group_name }} · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> · المبيعات بدون ضريبة · التكلفة بتكلفة الصنف نفسها في كل الفروع</span>
         </caption>
         <thead>
           <tr>
@@ -302,8 +302,6 @@
             <th scope="col">الوارد</th>
             <th scope="col">التوالف</th>
             <th scope="col">للمورد</th>
-            <th scope="col">الرصيد</th>
-            <th scope="col">قيمة الرصيد</th>
           </tr>
         </thead>
         <tbody>
@@ -325,8 +323,6 @@
               <td class="mono">{{ b.incoming_q_display }}</td>
               <td class="mono" title="{{ b.waste_q_display }} وحدة">{{ b.waste_c_display }}</td>
               <td class="mono" title="{{ b.vret_q_display }} وحدة">{{ b.vret_c_display }}</td>
-              <td class="mono">{{ b.stock_q_display }}</td>
-              <td class="mono">{{ b.stock_v_display }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -349,8 +345,6 @@
             <td class="mono">{{ t.incoming_q_display }}</td>
             <td class="mono">{{ t.waste_c_display }}</td>
             <td class="mono">{{ t.vret_c_display }}</td>
-            <td class="mono">{{ t.stock_q_display }}</td>
-            <td class="mono">{{ t.stock_v_display }}</td>
           </tr>
         </tfoot>
         {% endwith %}

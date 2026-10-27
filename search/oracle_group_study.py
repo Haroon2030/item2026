@@ -43,7 +43,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v12"
+_CACHE_VER = "v13"
 MAX_DAYS = 400
 
 WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
@@ -324,31 +324,6 @@ def _branch_invoices(params: dict, brn_sql: str) -> dict[str, int]:
     return {_norm_brn_code(r["B"]): int(_f(r["N"])) for r in rows}
 
 
-def _stock_by_branch(group: Any, sub: str = "") -> dict[tuple[str, str], float]:
-    """رصيد كل صنف في مخازن كل فرع (فرع المخزن CONN_BRN_NO)؛ مخزن بلا فرع يُجمع تحت «»."""
-    sch = _schema()
-    sub_sql = "AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""
-    wh_brn = {
-        _code(w.get("code")): _norm_brn_code(w.get("branch_code"))
-        for w in fetch_warehouse_options(active_only=False) or [] if _code(w.get("code"))
-    }
-    out: dict[tuple[str, str], float] = {}
-    for r in _fetch_all(
-        f"""
-        SELECT TO_CHAR(w.I_CODE) AS I, TO_CHAR(w.W_CODE) AS W, SUM(NVL(w.AVL_QTY, 0)) AS Q
-        FROM {sch}.IAS_ITM_WCODE w
-        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = w.I_CODE
-        WHERE i.G_CODE = :g {sub_sql}
-        GROUP BY TO_CHAR(w.I_CODE), TO_CHAR(w.W_CODE)
-        HAVING SUM(NVL(w.AVL_QTY, 0)) <> 0
-        """,
-        {"g": group} | ({"mng": sub} if sub else {}),
-    ):
-        key = (_code(r["I"]), wh_brn.get(_code(r["W"]), ""))
-        out[key] = out.get(key, 0.0) + _f(r["Q"])
-    return out
-
-
 def _items_and_stock(group: Any, brn: str, sub: str = "") -> tuple[dict[str, dict], dict[str, tuple[float, float]]]:
     """أصناف المجموعة (الاسم) + رصيدها الحالي وقيمته بمتوسط التكلفة لمخازن الفرع (أو كل المخازن)."""
     sch = _schema()
@@ -472,7 +447,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         return run
 
     (pos_rows, cash_rows, credit_rows, pos_ret, cash_ret, credit_ret,
-     supply, pi, pr, issues, counts, items_stock, brn_inv, brn_stock) = _run_parallel(
+     supply, pi, pr, issues, counts, items_stock, brn_inv) = _run_parallel(
         [
             job(_pos_sales, params, brn_sql),
             job(_bill_sales, params, brn_sql, (1, 5), exclude_summary=True),
@@ -487,8 +462,6 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
             job(_distinct_counts, params, brn_sql),
             job(_items_and_stock, group, brn, sub),
             job(_branch_invoices, params, brn_sql),
-            # فرع محدد: رصيده هو رصيد الدراسة نفسه
-            (lambda: {}) if brn else job(_stock_by_branch, group, sub),
         ],
         max_workers=6,
         timeout_sec=240,
@@ -666,7 +639,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         for m, v in sorted(monthly.items())
     ]
 
-    branches = _branch_rows(per_brn, stock, brn_stock, brn_inv, names, brn, net_v, T["stock_q"])
+    branches = _branch_rows(per_brn, stock, brn_inv, names, net_v)
     readings = _readings(rows_out, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed)
 
     report = {
@@ -684,13 +657,12 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
     return report
 
 
-def _branch_rows(per_brn, stock, brn_stock, brn_inv, names, brn, total_net_v, total_stock_q) -> dict[str, Any]:
-    """تفصيل كل فرع: قنوات البيع والمرتجع والصافي والتكلفة والربح والوارد والصرف والرصيد، مع سطر الإجمالي."""
-    if brn:  # فرع واحد: رصيده هو رصيد الدراسة
-        brn_stock = {(code, brn): q for code, (q, _uc) in stock.items() if q}
+def _branch_rows(per_brn, stock, brn_inv, names, total_net_v) -> dict[str, Any]:
+    """تفصيل كل فرع: قنوات البيع والمرتجع والصافي والتكلفة والربح والوارد والصرف، مع سطر الإجمالي.
+    بلا رصيد للفروع: تكلفة الصنف واحدة في كل الفروع، ولا يُعرض رصيد بمتوسط مخازن الفرع."""
     agg: dict[str, dict[str, float]] = {}
     keys = ("pos_v", "cash_v", "credit_v", "ret_v", "net_q", "net_v", "cost", "incoming_q",
-            "waste_q", "waste_c", "vret_q", "vret_c", "stock_q", "stock_v")
+            "waste_q", "waste_c", "vret_q", "vret_c")
 
     def slot(b: str) -> dict[str, float]:
         return agg.setdefault(b, {k: 0.0 for k in keys})
@@ -709,10 +681,6 @@ def _branch_rows(per_brn, stock, brn_stock, brn_inv, names, brn, total_net_v, to
         s["incoming_q"] += a["sup_q"] + a["pi_q"] - a["pr_q"]
         for k in ("waste_q", "waste_c", "vret_q", "vret_c"):
             s[k] += a[k]
-    for (code, b), q in brn_stock.items():
-        s = slot(b)
-        s["stock_q"] += q
-        s["stock_v"] += q * stock.get(code, (0.0, 0.0))[1]
 
     def finish(label: str, s: dict[str, float], invoices: int) -> dict[str, Any]:
         gross = s["net_v"] - s["cost"]
@@ -720,20 +688,18 @@ def _branch_rows(per_brn, stock, brn_stock, brn_inv, names, brn, total_net_v, to
         share = _pct(s["net_v"], total_net_v)
         return s | {
             "name": label, "invoices": invoices, "gross": gross, "margin": margin, "share": share,
-            "stock_share": _pct(s["stock_q"], total_stock_q),
             "invoices_display": f"{invoices:,}", "gross_display": _money(gross),
             "margin_display": _pct_display(margin), "share_display": _pct_display(share),
             "net_q_display": _qty(s["net_q"]), "incoming_q_display": _qty(s["incoming_q"]),
             "waste_q_display": _qty(s["waste_q"]), "vret_q_display": _qty(s["vret_q"]),
-            "stock_q_display": _qty(s["stock_q"]),
-        } | {f"{k}_display": _money(s[k]) for k in ("pos_v", "cash_v", "credit_v", "ret_v", "net_v", "cost", "waste_c", "vret_c", "stock_v")}
+        } | {f"{k}_display": _money(s[k]) for k in ("pos_v", "cash_v", "credit_v", "ret_v", "net_v", "cost", "waste_c", "vret_c")}
 
     rows = [
-        finish(names.get(b, b) if b else "مخازن بلا فرع", s, brn_inv.get(b, 0)) | {"code": b}
+        finish(names.get(b, b), s, brn_inv.get(b, 0)) | {"code": b}
         for b, s in agg.items()
         if any(abs(v) > 0.005 for v in s.values())
     ]
-    rows.sort(key=lambda r: (-r["net_v"], -r["stock_v"], r["code"]))
+    rows.sort(key=lambda r: (-r["net_v"], r["code"]))
     total = {k: sum(r[k] for r in rows) for k in keys}
     return {"rows": rows, "total": finish("الإجمالي", total, sum(r["invoices"] for r in rows))}
 
@@ -931,7 +897,6 @@ def build_group_study_excel(report: dict[str, Any]):
                 round(x["ret_v"], 2), round(x["net_v"], 2), (x["share"] or 0) / 100.0, round(x["net_q"], 2),
                 round(x["cost"], 2), round(x["gross"], 2), None if x["margin"] is None else x["margin"] / 100.0,
                 round(x["incoming_q"], 2), round(x["waste_c"], 2), round(x["vret_c"], 2),
-                round(x["stock_q"], 2), round(x["stock_v"], 2),
             ]
 
         ws = _xl_sheet(
@@ -939,8 +904,7 @@ def build_group_study_excel(report: dict[str, Any]):
             [("الرقم", "name", 9), ("الفرع", "name", 26), ("الفواتير", "count", 11), ("نقاط البيع", "money", 15),
              ("نقدي مباشر", "money", 14), ("آجل", "money", 12), ("المرتجع", "money", 12), ("صافي المبيعات", "money", 15),
              ("الحصة", "share", 9), ("الكمية", "count", 12), ("التكلفة", "money", 15), ("الربح", "money", 14),
-             ("الهامش", "share", 9), ("الوارد", "count", 11), ("التوالف", "money", 12), ("للمورد", "money", 12),
-             ("الرصيد", "count", 12), ("قيمة الرصيد", "money", 15)],
+             ("الهامش", "share", 9), ("الوارد", "count", 11), ("التوالف", "money", 12), ("للمورد", "money", 12)],
             [brow(x, x["code"]) for x in br["rows"]],
             [(brow(br["total"], ""), _XL_COLORS["total"])],
         )
