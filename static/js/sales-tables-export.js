@@ -1,4 +1,5 @@
-/* تصدير جداول تحليل المبيعات PDF: الصفحة الأولى نقاط البيع ونظام المبيعات، والثانية المجموعات.
+/* تصدير جداول تحليل المبيعات PDF رأسي: الصفحة الأولى نقاط البيع ونظام المبيعات، والثانية المجموعات،
+   وكل صفحة تُصغَّر لتتسع في ورقة واحدة. زر PDF داخل أي من اللوحات الثلاث يصدّر لوحته وحدها بالشكل نفسه.
    محتوى الجداول فقط (مع الإجماليات) في مستند طباعة مستقل داخل iframe مخفي، فلا تتأثر الشاشة. */
 (function () {
   'use strict';
@@ -86,10 +87,19 @@
       '<p class="note">كل المبالغ بدون ضريبة القيمة المضافة.</p></section>';
   }
 
-  function build() {
+  /* only: لوحة واحدة (زر PDF داخلها) — وإلا الجداول الثلاثة */
+  function build(only) {
     var slot = document.querySelector('[data-gm-slot="tables"]');
+    var groupsPanel = document.getElementById('sales-groups-panel');
     var branchPanels = slot ? Array.prototype.map.call(slot.querySelectorAll('.dash-panel'), panelTable).filter(Boolean) : [];
-    var groups = panelTable(document.getElementById('sales-groups-panel'));
+    var groups = panelTable(groupsPanel);
+    if (only) {
+      if (only === groupsPanel) branchPanels = [];
+      else {
+        groups = null;
+        branchPanels = [panelTable(only)].filter(Boolean);
+      }
+    }
     if (!branchPanels.length && !groups) return null;
     if (groups && groups.table.querySelector('.sales-ov-loading')) {
       window.alert('جدول المجموعات لم يكتمل تحميله بعد — انتظر قليلاً ثم أعد التصدير.');
@@ -97,7 +107,8 @@
     }
     var sub = filters().join(' · ');
     var pages = [];
-    if (branchPanels.length) pages.push(page('مبيعات الفروع', sub, branchPanels));
+    if (branchPanels.length === 1) pages.push(page(branchPanels[0].title, sub, branchPanels));
+    else if (branchPanels.length) pages.push(page('مبيعات الفروع', sub, branchPanels));
     if (groups) pages.push(page(groups.title || 'مبيعات المجموعات', sub, [groups]));
     var from = document.getElementById('sales-from');
     var to = document.getElementById('sales-to');
@@ -106,22 +117,39 @@
       '<style>' + CSS + '</style></head><body>' + pages.join('') + '</body></html>';
   }
 
-  function exportTables(ev) {
+  /* A4 رأسي بعد الهوامش (12+14 مم رأسياً، 10+10 أفقياً) بالبكسل */
+  var MM = 96 / 25.4;
+  var PAGE_W = Math.floor(190 * MM);
+  var PAGE_H = Math.floor(262 * MM); /* 270 مم مع هامش أمان لفروق محرّك الطباعة */
+
+  /* كل صفحة تُصغَّر حتى تتسع في ورقة واحدة: لا جدول مقصوص ولا صفحة إضافية */
+  function fitPages(doc) {
+    doc.querySelectorAll('.page').forEach(function (pg) {
+      var h = pg.scrollHeight;
+      var w = pg.scrollWidth;
+      var scale = Math.min(1, PAGE_H / h, PAGE_W / w);
+      if (scale < 1) pg.style.zoom = String(Math.floor(scale * 1000) / 1000);
+    });
+  }
+
+  function exportTables(ev, only) {
     ev.preventDefault();
     ev.stopPropagation(); /* لا يلتقطه fit-print.js (يستمع لكل .dash-pdf-btn على مستوى المستند) */
-    var html = build();
+    var html = build(only);
     if (!html) return;
     var old = document.getElementById('sales-tables-print');
     if (old) old.remove();
     var frame = document.createElement('iframe');
     frame.id = 'sales-tables-print';
     frame.setAttribute('aria-hidden', 'true');
-    frame.style.cssText = 'position:fixed;width:0;height:0;border:0;left:-9999px;top:0;';
+    /* بعرض الورقة نفسها حتى يكون القياس كالطباعة */
+    frame.style.cssText = 'position:fixed;width:' + PAGE_W + 'px;height:' + PAGE_H + 'px;border:0;left:-10000px;top:0;visibility:hidden;';
     document.body.appendChild(frame);
     var doc = frame.contentDocument;
     doc.open();
     doc.write(html);
     doc.close();
+    fitPages(doc);
     /* عنوان الصفحة الأم يصبح اسم ملف PDF المقترح في بعض المتصفحات */
     var oldTitle = document.title;
     document.title = doc.title;
@@ -134,8 +162,17 @@
 
   function boot() {
     document.querySelectorAll('.js-sales-tables-pdf').forEach(function (btn) {
-      btn.addEventListener('click', exportTables);
+      btn.addEventListener('click', function (ev) { exportTables(ev, null); });
     });
+    /* أزرار PDF داخل لوحات الجداول الثلاثة (يضيفها fit-print.js لاحقاً) تصدّر لوحتها بالشكل نفسه:
+       مرحلة الالتقاط على المستند تسبق مستمع fit-print */
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target.closest('.dash-pdf-btn');
+      if (!btn || btn.classList.contains('js-sales-tables-pdf')) return;
+      var panel = btn.closest('#sales-groups-panel, [data-gm-slot="tables"] .dash-panel');
+      if (!panel || !panel.querySelector('table')) return;
+      exportTables(ev, panel);
+    }, true);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
