@@ -43,7 +43,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v16"
+_CACHE_VER = "v17"
 MAX_DAYS = 400
 
 WASTE_ACCOUNTS = ("41101006", "41101008")  # توالف · الأصناف المفقودة والتالفة
@@ -646,6 +646,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
 
     branches = _branch_rows(per_brn, stock, brn_inv, names, net_v)
     readings = _readings(rows_out, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed)
+    assessment = _assessment(rows_out, kpis, T, sold_v, net_q, margin, cover, incoming_q)
 
     report = {
         "from": d_from.isoformat(), "to": d_to.isoformat(), "days": days, "days_elapsed": days_elapsed,
@@ -653,6 +654,7 @@ def build_group_study(date_from, date_to, *, group_code: str, branch_code: str =
         "subgroup_code": sub, "subgroup_name": (_subgroup_name(group, sub) or sub) if sub else "",
         "branch": brn, "branch_name": names.get(brn, brn) if brn else "",
         "kpis": kpis, "rows": rows_out, "branches": branches, "trend": trend, "readings": readings,
+        "assessment": assessment,
         "has_purchase_invoices": counts["pi_n"] > 0,
     }
     try:
@@ -707,6 +709,72 @@ def _branch_rows(per_brn, stock, brn_inv, names, total_net_v) -> dict[str, Any]:
     rows.sort(key=lambda r: (-r["net_v"], r["code"]))
     total = {k: sum(r[k] for r in rows) for k in keys}
     return {"rows": rows, "total": finish("الإجمالي", total, sum(r["invoices"] for r in rows))}
+
+
+def _assessment(rows, kpis, T, sold_v, net_q, margin, cover, incoming_q) -> dict[str, list[tuple[str, str, str]]]:
+    """ملخص التحليل: نقاط القوة ونقاط تحتاج متابعة — كل نقطة (البند، القيمة، المعيار) بمعايير ثابتة معلنة."""
+    good: list[tuple[str, str, str]] = []
+    watch: list[tuple[str, str, str]] = []
+    top = [r for r in rows if r["net_v"] > 0]
+
+    if margin is not None:
+        if margin >= 15:
+            good.append(("نسبة مجمل الربح", kpis["margin_display"], "15% فأكثر"))
+        elif margin < 10:
+            watch.append(("نسبة مجمل الربح", kpis["margin_display"], "أقل من 10%"))
+    neg = [r for r in top if r["gross"] < 0]
+    low = [r for r in top if r["margin"] is not None and 0 <= r["margin"] < 5]
+    if top and not neg:
+        good.append(("أصناف بمجمل ربح سالب", "لا يوجد", "صفر"))
+    if neg:
+        watch.append(("أصناف بمجمل ربح سالب", f"{len(neg)} صنف، أكبرها «{neg[0]['name']}»", "يجب أن تكون صفراً"))
+    if low:
+        watch.append(("أصناف نسبة مجمل ربحها أقل من 5%", f"{len(low)} صنف", "أقل من 5% للصنف"))
+
+    ret_pct = _pct(T["ret_v"], sold_v)
+    if ret_pct is not None:
+        if ret_pct < 2:
+            good.append(("نسبة المرتجعات إلى إجمالي المبيعات", kpis["ret_pct_display"], "أقل من 2%"))
+        elif ret_pct >= 3:
+            watch.append(("نسبة المرتجعات إلى إجمالي المبيعات", kpis["ret_pct_display"], "3% فأكثر"))
+
+    waste_pct = _pct(T["waste_c"], T["cost"])
+    if waste_pct is not None:
+        if waste_pct < 1:
+            good.append(("نسبة التوالف إلى تكلفة المبيعات", kpis["waste_pct_display"], "أقل من 1%"))
+        else:
+            watch.append(("نسبة التوالف إلى تكلفة المبيعات", f"{kpis['waste_pct_display']} ({kpis['waste_c_display']})", "1% فأكثر"))
+
+    if cover is not None:
+        if 7 <= cover <= 60:
+            good.append(("مدة تغطية المخزون", kpis["cover_display"], "بين 7 و60 يوماً"))
+        elif cover > 90:
+            watch.append(("مدة تغطية المخزون", kpis["cover_display"], "أكثر من 90 يوماً"))
+        elif cover < 7:
+            watch.append(("مدة تغطية المخزون", kpis["cover_display"], "أقل من 7 أيام"))
+    dead = [r for r in rows if r["stock_q"] > 0 and r["net_q"] <= 0]
+    if dead:
+        watch.append(("أصناف لها رصيد دون حركة بيع", f"{len(dead)} صنف بتكلفة {_money(sum(r['stock_v'] for r in dead))}", "صفر"))
+    short = [r for r in rows if r["cover_days"] is not None and r["cover_days"] < 7 and r["net_q"] > 0]
+    if short:
+        watch.append(("أصناف رصيدها يغطي أقل من 7 أيام", f"{len(short)} صنف", "7 أيام فأكثر"))
+
+    total, active = kpis["items_total"], kpis["items_active"]
+    if total:
+        if active >= total * 0.7:
+            good.append(("الأصناف المباعة من أصناف المجموعة", f"{active} من {total}", "70% فأكثر"))
+        elif total - active > total * 0.3:
+            watch.append(("أصناف دون مبيعات خلال الفترة", f"{total - active} من {total}", "أكثر من 30% من الأصناف"))
+
+    if net_q > 0:
+        cov = incoming_q * 100.0 / net_q
+        if 90 <= cov <= 120:
+            good.append(("الوارد مقابل الكمية المباعة", f"{cov:.0f}%", "بين 90% و120%"))
+        elif cov < 90:
+            watch.append(("الوارد مقابل الكمية المباعة", f"{cov:.0f}%", "أقل من 90% (سحب من المخزون)"))
+        else:
+            watch.append(("الوارد مقابل الكمية المباعة", f"{cov:.0f}%", "أكثر من 120% (تراكم مخزون)"))
+    return {"good": good, "watch": watch}
 
 
 def _readings(rows, kpis, T, net_v, sold_v, net_q, gross, margin, cover, incoming_q, days_elapsed) -> list[dict]:
@@ -938,6 +1006,58 @@ def build_group_study_excel(report: dict[str, Any]):
          ["آجل", _num_text(k["credit_v_display"])], ["المرتجعات", -_num_text(k["ret_v_display"])]],
         [(["الصافي", _num_text(k["net_v_display"])], _XL_COLORS["total"])],
     )
+
+    # 7) ملخص التحليل: نقاط القوة ونقاط تحتاج متابعة — البند والقيمة والمعيار
+    a = report.get("assessment") or {"good": [], "watch": []}
+    ws = wb.create_sheet("ملخص التحليل")
+    ws.sheet_view.rightToLeft = True
+    ws.sheet_view.showGridLines = False
+    for col, width in (("A", 6), ("B", 40), ("C", 34), ("D", 30)):
+        ws.column_dimensions[col].width = width
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for row, text, size, color in ((1, "ملخص التحليل", 14, "1F2A37"), (2, period, 10, "5A6675")):
+        ws.merge_cells(f"A{row}:D{row}")
+        ws[f"A{row}"] = text
+        ws[f"A{row}"].font = Font(name="Arial", size=size, bold=True, color=color)
+        ws[f"A{row}"].alignment = center
+    ws.merge_cells("A3:D3")
+    ws["A3"] = f"نقاط القوة: {len(a['good'])} · نقاط تحتاج متابعة: {len(a['watch'])}"
+    ws["A3"].font = Font(name="Arial", size=10, bold=True, color="1F2A37")
+    ws["A3"].alignment = center
+    r = 5
+    for title, items, color, empty in (
+        ("نقاط القوة", a["good"], "E3F4EC", "لا توجد بنود تحقق معايير القوة."),
+        ("نقاط تحتاج متابعة", a["watch"], "FCEBD3", "لا توجد بنود تحتاج متابعة."),
+    ):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        c = ws.cell(row=r, column=1, value=title)
+        c.font = Font(name="Arial", size=12, bold=True, color="1F2A37")
+        c.fill = PatternFill("solid", fgColor=color)
+        c.alignment = right
+        r += 1
+        for i, label in enumerate(("م", "البند", "القيمة", "المعيار"), start=1):
+            c = ws.cell(row=r, column=i, value=label)
+            c.font = Font(name="Arial", size=10, bold=True, color="5A6675")
+            c.fill = PatternFill("solid", fgColor=_XL_COLORS["head"])
+            c.alignment = center
+            c.border = border
+        r += 1
+        if not items:
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+            ws.cell(row=r, column=1, value=empty).alignment = right
+            r += 1
+        for n, (label, value, rule) in enumerate(items, start=1):
+            for i, v in enumerate((n, label, value, rule), start=1):
+                c = ws.cell(row=r, column=i, value=v)
+                c.font = Font(name="Arial", size=10, bold=i == 2, color="1F2A37")
+                c.alignment = center if i in (1, 3) else right
+                c.border = border
+            r += 1
+        r += 1
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
 
     buf = BytesIO()
     wb.save(buf)

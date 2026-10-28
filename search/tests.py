@@ -3505,7 +3505,12 @@ class GroupStudyReportTests(TestCase):
         texts = ' '.join(p for g in r['readings'] for p in g['points'])
         self.assertIn('لا توجد فواتير شراء', texts)
         self.assertIn('رصيدها يغطي أقل من 7 أيام', texts)
-        self.assertIn('دون حركة بيع', texts)  # الصنف 2 لديه رصيد بلا بيع
+        self.assertIn('دون حركة بيع', texts)
+        # ملخص التحليل: الهامش 20% قوة، والصنف 2 (رصيد بلا بيع) يحتاج متابعة
+        good = {g[0]: g[1] for g in r['assessment']['good']}
+        watch = {w[0]: w[1] for w in r['assessment']['watch']}
+        self.assertEqual(good['نسبة مجمل الربح'], '20.0%')
+        self.assertIn('أصناف لها رصيد دون حركة بيع', watch)  # الصنف 2 لديه رصيد بلا بيع
         # تفصيل الفروع: سكاي مول 600 + 100 = 700 (70 وحدة × 8)، العليا 400 − 50 = 350 (35 × 8)
         br = r['branches']
         self.assertEqual([b['name'] for b in br['rows']], ['سكاي مول', 'العليا'])
@@ -3574,11 +3579,16 @@ class GroupStudyExcelTests(TestCase):
             'group_name': 'البان مستورده', 'branch_name': '', 'kpis': disp, 'rows': [row],
             'trend': [{'label': 'سبتمبر 2026', 'q_display': '10', 'v_display': '100.00'}],
             'readings': [{'title': 'القراءة المالية', 'level': 'risk', 'points': ['هامش سالب']}],
+            'assessment': {'good': [('نسبة المرتجعات إلى إجمالي المبيعات', '1.0%', 'أقل من 2%')],
+                           'watch': [('أصناف بمجمل ربح سالب', '1 صنف، أكبرها «لبنة»', 'يجب أن تكون صفراً')]},
         }
         resp = build_group_study_excel(report)
         self.assertIn('group_study_39_20260901_20260930.xlsx', resp['Content-Disposition'])
         wb = load_workbook(BytesIO(resp.content))
-        self.assertEqual(wb.sheetnames, ['الملخص', 'القراءات', 'تحليل الأصناف', 'المبيعات الشهرية', 'قنوات البيع'])
+        self.assertEqual(wb.sheetnames, ['الملخص', 'القراءات', 'تحليل الأصناف', 'المبيعات الشهرية', 'قنوات البيع', 'ملخص التحليل'])
+        summary = [[c.value for c in r] for r in wb['ملخص التحليل'].iter_rows()]
+        self.assertIn([1, 'نسبة المرتجعات إلى إجمالي المبيعات', '1.0%', 'أقل من 2%'], summary)
+        self.assertIn([1, 'أصناف بمجمل ربح سالب', '1 صنف، أكبرها «لبنة»', 'يجب أن تكون صفراً'], summary)
         ws = wb['تحليل الأصناف']
         values = [[c.value for c in r] for r in ws.iter_rows()]
         header = next(r for r in values if r[0] == 'الكود')
