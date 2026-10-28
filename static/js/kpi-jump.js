@@ -9,7 +9,7 @@
   var TARGETS = [
     ["dash-kpi-glass-total", "مبيعات نقاط البيع"],
     ["dash-kpi-glass-pos", "مبيعات نقاط البيع"],
-    ["dash-kpi-glass-wholesale", "مبيعات نظام المبيعات"],
+    ["dash-kpi-glass-wholesale", "مبيعات الجملة"],
     ["dash-kpi-glass-returns", "الفروع الأكثر مرتجع"],
     ["dash-kpi-glass-visit", "أكثر المستخدمين بيعا"],
     ["dash-kpi-glass-branches", "مبيعات نقاط البيع"],
