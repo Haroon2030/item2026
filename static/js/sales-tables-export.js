@@ -1,5 +1,5 @@
 /* تصدير جداول تحليل المبيعات PDF رأسي: الصفحة الأولى نقاط البيع ونظام المبيعات، والثانية المجموعات،
-   وكل صفحة تُصغَّر لتتسع في ورقة واحدة. زر PDF داخل أي من اللوحات الثلاث يصدّر لوحته وحدها بالشكل نفسه.
+   وكل صفحة تُصغَّر لتتسع في ورقة واحدة. زر PDF أعلى الشاشة يصدّر الجداول الثلاثة، وزر PDF داخل أي لوحة يصدّر لوحته وحدها.
    محتوى الجداول فقط (مع الإجماليات) في مستند طباعة مستقل داخل iframe مخفي، فلا تتأثر الشاشة. */
 (function () {
   'use strict';
@@ -169,6 +169,11 @@
     document.addEventListener('click', function (ev) {
       var btn = ev.target.closest('.dash-pdf-btn');
       if (!btn || btn.classList.contains('js-sales-tables-pdf')) return;
+      /* زر PDF أعلى الشاشة: الجداول الثلاثة بالشكل نفسه بدل طباعة الصفحة كاملة */
+      if (btn.closest('.dash-head')) {
+        exportTables(ev, null);
+        return;
+      }
       var panel = btn.closest('#sales-groups-panel, [data-gm-slot="tables"] .dash-panel');
       if (!panel || !panel.querySelector('table')) return;
       exportTables(ev, panel);
