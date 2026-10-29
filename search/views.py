@@ -6821,10 +6821,9 @@ def browse_order_qty_report(request):
             'selected_group': group,
             'selected_subgroup': subgroup,
             'all_groups_value': ALL_GROUPS,
-            # فرع محدد: كل أصنافه في الصفحة. كل الفروع مع «كل المجموعات» عشرات آلاف الأصناف:
-            # الصفحة تعرض الأعلى احتياجاً، وExcel فيه الكل
-            'page_rows': (report or {}).get('rows', []) if branch else (report or {}).get('rows', [])[:ORDER_QTY_PAGE_ROWS],
-            'page_limit': (report or {}).get('totals', {}).get('items', 0) if branch else ORDER_QTY_PAGE_ROWS,
+            # الصفحة تعرض الأعلى احتياجاً فقط حتى تبقى خفيفة، وملف Excel فيه كل الأصناف
+            'page_rows': (report or {}).get('rows', [])[:ORDER_QTY_PAGE_ROWS],
+            'page_limit': ORDER_QTY_PAGE_ROWS,
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
             'report': report,
