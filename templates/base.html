@@ -496,13 +496,13 @@
             </div>
           </div>
           <div
-            class="sidebar-group{% if request.resolver_match.url_name == 'browse_employees_report' or request.resolver_match.url_name == 'browse_issue_orders_report' or request.resolver_match.url_name == 'browse_pos_hours_report' or request.resolver_match.url_name == 'browse_unposted_sales_report' or request.resolver_match.url_name == 'browse_group_study_report' %} is-open is-current{% endif %}"
+            class="sidebar-group{% if request.resolver_match.url_name == 'browse_employees_report' or request.resolver_match.url_name == 'browse_issue_orders_report' or request.resolver_match.url_name == 'browse_pos_hours_report' or request.resolver_match.url_name == 'browse_unposted_sales_report' or request.resolver_match.url_name == 'browse_group_study_report' or request.resolver_match.url_name == 'browse_order_qty_report' %} is-open is-current{% endif %}"
             data-sidebar-group
           >
             <button
               type="button"
               class="sidebar-link sidebar-group-toggle"
-              aria-expanded="{% if request.resolver_match.url_name == 'browse_employees_report' or request.resolver_match.url_name == 'browse_issue_orders_report' or request.resolver_match.url_name == 'browse_pos_hours_report' or request.resolver_match.url_name == 'browse_unposted_sales_report' or request.resolver_match.url_name == 'browse_group_study_report' %}true{% else %}false{% endif %}"
+              aria-expanded="{% if request.resolver_match.url_name == 'browse_employees_report' or request.resolver_match.url_name == 'browse_issue_orders_report' or request.resolver_match.url_name == 'browse_pos_hours_report' or request.resolver_match.url_name == 'browse_unposted_sales_report' or request.resolver_match.url_name == 'browse_group_study_report' or request.resolver_match.url_name == 'browse_order_qty_report' %}true{% else %}false{% endif %}"
               title="التقارير"
             >
               <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>
@@ -538,6 +538,12 @@
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_group_study_report' %}is-active{% endif %}" href="{% url 'browse_group_study_report' %}" title="دراسة كاملة لمجموعة أصناف: مبيعات وربح ووارد وتوالف ورصيد">
                 <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><circle cx="16" cy="9" r="2"/></svg>
                 <span>دراسة مجموعة</span>
+              </a>
+              {% endif %}
+              {% if nav_access.screens.browse_order_qty_report %}
+              <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_order_qty_report' %}is-active{% endif %}" href="{% url 'browse_order_qty_report' %}" title="احتياج الشهر القادم لكل صنف من متوسط بيعه اليومي">
+                <svg class="sidebar-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>
+                <span>كمية الطلب</span>
               </a>
               {% endif %}
               <a class="sidebar-link sidebar-sublink {% if request.resolver_match.url_name == 'browse_employees_report' %}is-active{% endif %}" href="{% url 'browse_employees_report' %}" title="الموظفون النشطون بحركة أو قيد في شهر">

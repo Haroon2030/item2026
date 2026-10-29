@@ -223,6 +223,11 @@ urlpatterns = [
         name='browse_group_study_report',
     ),
     path(
+        'reports/order-qty/',
+        views.browse_order_qty_report,
+        name='browse_order_qty_report',
+    ),
+    path(
         'warehouses/no-transfer/',
         views.browse_wh_no_transfer,
         name='browse_wh_no_transfer',

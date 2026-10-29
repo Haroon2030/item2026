@@ -6745,6 +6745,102 @@ def browse_unposted_sales_report(request):
 @login_required
 @require_GET
 @never_cache
+def browse_order_qty_report(request):
+    """كمية الطلب: احتياج الشهر القادم لكل صنف من متوسط بيعه اليومي في الفترة."""
+    from datetime import date as date_cls, timedelta
+
+    from .oracle_income import fetch_income_branches
+    from .oracle_order_qty import ALL_GROUPS, EXCLUDED_GROUPS, ORDER_QTY_PAGE_ROWS, build_order_qty, build_order_qty_excel
+    from .oracle_stock import fetch_main_subgroup_options, fetch_sales_group_options, oracle_enabled, oracle_session
+
+    today = date_cls.today()
+    # الافتراضي: آخر 6 أشهر كاملة (تنتهي بالشهر الماضي)
+    default_to = today.replace(day=1) - timedelta(days=1)
+    default_from = default_to.replace(day=1)
+    for _ in range(5):
+        default_from = (default_from - timedelta(days=1)).replace(day=1)
+    branch = str(request.GET.get('branch') or '').strip()
+    group = str(request.GET.get('group') or '').strip()
+    subgroup = str(request.GET.get('subgroup') or '').strip()
+    want_excel = str(request.GET.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(request.GET.get('run') or '') in ('1', 'true', 'yes') or want_excel
+    error = ''
+    report = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    subgroups: list[dict] = []
+    try:
+        date_from = date_cls.fromisoformat(str(request.GET.get('date_from') or '').strip())             if request.GET.get('date_from') else default_from
+        date_to = date_cls.fromisoformat(str(request.GET.get('date_to') or '').strip())             if request.GET.get('date_to') else default_to
+    except ValueError:
+        date_from, date_to = default_from, default_to
+        error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
+
+    if not error:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    groups = fetch_sales_group_options() or []
+                    if branch not in {b['code'] for b in branches}:
+                        branch = ''
+                    # «all» = كل المجموعات عدا المستثناة (الطازج وما يُطلب يومياً)، بلا مجموعة فرعية
+                    if group and group != ALL_GROUPS and group not in {str(g.get('code') or '').strip() for g in groups}:
+                        group = ''
+                    subgroups = fetch_main_subgroup_options() or []
+                    if subgroup and not any(
+                        str(s.get('group_code') or '').strip() == group and str(s.get('code') or '').strip() == subgroup
+                        for s in subgroups
+                    ):
+                        subgroup = ''
+                if run:
+                    if not group:
+                        error = 'اختر المجموعة أولاً.'
+                    else:
+                        report = build_order_qty(
+                            date_from, date_to, group_code=group, branch_code=branch, subgroup_code=subgroup,
+                        )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_order_qty_report failed: %s', exc)
+            error = f'تعذّر تحميل التقرير: {exc}'
+            report = None
+
+    if report and want_excel:
+        return build_order_qty_excel(report)
+
+    return render(
+        request,
+        'search/browse_order_qty_report.html',
+        {
+            'branches': branches,
+            'groups': groups,
+            'subgroups': subgroups,
+            'selected_branch': branch,
+            'selected_group': group,
+            'selected_subgroup': subgroup,
+            'all_groups_value': ALL_GROUPS,
+            # فرع محدد: كل أصنافه في الصفحة. كل الفروع مع «كل المجموعات» عشرات آلاف الأصناف:
+            # الصفحة تعرض الأعلى احتياجاً، وExcel فيه الكل
+            'page_rows': (report or {}).get('rows', []) if branch else (report or {}).get('rows', [])[:ORDER_QTY_PAGE_ROWS],
+            'page_limit': (report or {}).get('totals', {}).get('items', 0) if branch else ORDER_QTY_PAGE_ROWS,
+            'excluded_groups': [
+                g for g in groups if str(g.get('code') or '').strip() in {str(c) for c in EXCLUDED_GROUPS}
+            ],
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'report': report,
+            'run': run,
+            'error': error,
+            'export_query': _query_without(request.GET, 'export'),
+        },
+    )
+
+
+@login_required
+@require_GET
+@never_cache
 def browse_group_study_report(request):
     """دراسة مجموعة: لوحة مالية وتشغيلية ومبيعاتية وتجارية وتوريدية لفترة وفرع."""
     from datetime import date as date_cls

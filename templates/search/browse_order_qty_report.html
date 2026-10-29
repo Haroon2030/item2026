@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}كمية الطلب{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .oq-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
+  .oq-scope strong { color: #1F2A37; }
+  .oq-filter .field > select, .oq-filter .field > input { min-width: 0 !important; max-width: 100%; text-overflow: ellipsis; }
+  .oq-export { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 999px; background: #E3F4EC; color: #1E6B47; font-weight: 600; text-decoration: none; }
+  .oq-method { margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; }
+  .oq-method b { color: #1F2A37; }
+  .oq-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
+  .oq-caption strong { display: block; font-size: 1rem; font-weight: 800; }
+  .oq-caption span { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  .oq-unit { white-space: nowrap; font-weight: 600; }
+  .oq-order { font-weight: 800 !important; color: #1F3B63 !important; }
+</style>
+
+<section class="dash-head" aria-label="كمية الطلب">
+  <div class="dash-head-copy">
+    <h2>كمية الطلب</h2>
+    <p>احتياج الشهر القادم لكل صنف من متوسط بيعه اليومي في الفترة المختارة، حتى يكون الطلب على قدر البيع دون مخزون عالٍ.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_order_qty_report' %}" class="dash-panel-glass wqc-filter oq-filter" role="search">
+  {{ subgroups|json_script:"wqc-subgroup-data" }}
+  <input type="hidden" name="run" value="1">
+  <div class="field" style="flex: 2 1 16rem !important">
+    <label for="wqc-group">المجموعة</label>
+    <select id="wqc-group" name="group" required>
+      <option value="">اختر المجموعة</option>
+      <option value="{{ all_groups_value }}" {% if selected_group == all_groups_value %}selected{% endif %}>كل المجموعات (عدا الطازج والمستثناة)</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code|stringformat:"s" == selected_group %}selected{% endif %}>{{ g.code }} - {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="flex: 2 1 18rem !important">
+    <label for="wqc-subgroup">المجموعة الفرعية</label>
+    <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
+      <option value="">كل المجموعات الفرعية</option>
+      {% for s in subgroups %}{% if s.group_code == selected_group %}
+        <option value="{{ s.code }}" {% if s.code == selected_subgroup %}selected{% endif %}>{{ s.code }}- {{ s.name }}</option>
+      {% endif %}{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="oq-branch">الفرع</label>
+    <select id="oq-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="oq-from">من تاريخ</label>
+    <input id="oq-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+  <div class="field">
+    <label for="oq-to">إلى تاريخ</label>
+    <input id="oq-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report %}
+  {% with t=report.totals %}
+  <p class="oq-scope">
+    <strong>{% if report.all_groups %}{{ report.group_name }}{% else %}{{ report.group_code }} - {{ report.group_name }}{% endif %}{% if report.subgroup_code %} · فرعية {{ report.subgroup_code }} - {{ report.subgroup_name }}{% endif %}</strong>
+    · {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
+    · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> ({{ report.days }} يوم)
+    · <a class="btn-ghost oq-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
+    <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+  </p>
+
+  {% if report.all_groups %}
+  <p class="oq-method"><b>المجموعات المستثناة:</b> {% for g in excluded_groups %}{{ g.code }} - {{ g.name }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  {% endif %}
+  <p class="oq-method">
+    <b>طريقة الحساب:</b> صافي الكمية المباعة (بعد المرتجع) ÷ {{ report.days }} يوم = المتوسط اليومي ·
+    المتوسط اليومي × {{ report.next_days }} يوماً = احتياج الشهر القادم ·
+    كمية الطلب = الاحتياج مقرّباً لأعلى. كل الكميات بأكبر وحدة للصنف (كرتون، ربطة…)، والصنف بلا وحدة كبرى بوحدته الرئيسية. الرصيد الحالي (مخازن الفرع المختار أو كل المخازن) للمقارنة ولا يُخصم من كمية الطلب.
+  </p>
+
+  <section class="wqc-sheet" aria-label="كمية الطلب">
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="كمية الطلب">
+      <table class="wqc-table" data-name-col="1">
+        <caption class="oq-caption">
+          <strong>كمية الطلب للشهر القادم</strong>
+          <span>{{ t.items }} صنف مباع{% if t.items > page_limit %} · يُعرض أعلى {{ page_limit }} صنف احتياجاً، والكل في Excel{% endif %} · الكميات بأكبر وحدة للصنف</span>
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">الكود</th>
+            <th scope="col">الصنف</th>
+            <th scope="col">الوحدة</th>
+            <th scope="col">المجموعة</th>
+            <th scope="col">الكمية المباعة</th>
+            <th scope="col">المرتجع</th>
+            <th scope="col">صافي الكمية</th>
+            <th scope="col">المتوسط اليومي</th>
+            <th scope="col">احتياج {{ report.next_days }} يوماً</th>
+            <th scope="col">كمية الطلب</th>
+            <th scope="col">الرصيد الحالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in page_rows %}
+            <tr>
+              <td class="mono" dir="ltr">{{ r.code }}</td>
+              <td>{{ r.name }}</td>
+              <td class="oq-unit">{{ r.unit }}</td>
+              <td class="oq-unit">{{ r.group }}</td>
+              <td class="mono">{{ r.sold_q_display }}</td>
+              <td class="mono">{{ r.ret_q_display }}</td>
+              <td class="mono">{{ r.net_q_display }}</td>
+              <td class="mono">{{ r.daily_display }}</td>
+              <td class="mono">{{ r.need_display }}</td>
+              <td class="mono oq-order">{{ r.order_q_display }}</td>
+              <td class="mono">{{ r.stock_q_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11" class="wqc-empty">لا مبيعات لأصناف المجموعة في الفترة.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if report.rows %}
+        <tfoot>
+          <tr class="wqc-tfoot">
+            <td></td>
+            <td>الإجمالي: عدد العبوات المطلوبة{% if t.items > page_limit %} (كل الأصناف){% endif %}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="mono">{{ t.order_q_display }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </section>
+  {% endwith %}
+{% elif run and not error %}
+  <p class="oq-scope">لا توجد بيانات للعرض.</p>
+{% endif %}
+<script src="/static/js/wqc-subgroup.js?v={{ app_client_version }}" defer></script>
+{% endblock %}

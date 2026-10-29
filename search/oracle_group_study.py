@@ -51,6 +51,7 @@ SUPPLIER_RETURN_ACCOUNTS = ("21101001",)  # موردين — صرف بضاعة �
 POS_SALES_SUMMARY = "خلاصة مبيعات رقم نقطة البيع%"
 POS_RETURNS_SUMMARY = "رقم نقطة البيع =%"
 STOCK_QTY = "NVL(d.P_QTY, NVL(d.I_QTY, 0) * NVL(NULLIF(d.P_SIZE, 0), 1))"
+GROUP_SQL = "i.G_CODE = :g"  # شرط الأصناف؛ «كمية الطلب» تمرّر بدله «كل المجموعات عدا…»
 
 _AR_MONTHS = ("يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
               "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر")
@@ -96,7 +97,7 @@ def _brn_filter(alias: str, brn: str, params: dict) -> str:
     return f"AND {alias}.BRN_NO = :brn"
 
 
-def _pos_sales(params: dict, brn_sql: str) -> list[dict]:
+def _pos_sales(params: dict, brn_sql: str, grp: str = GROUP_SQL) -> list[dict]:
     pos, sch = _pos_owner(), _schema()
     return _fetch_all(
         f"""
@@ -108,14 +109,14 @@ def _pos_sales(params: dict, brn_sql: str) -> list[dict]:
           ON m.BILL_NO = d.BILL_NO AND m.BRN_NO = d.BRN_NO AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
-          AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+          AND (m.HUNG IS NULL OR m.HUNG = 0) AND {grp} {brn_sql.replace('{a}', 'm')}
         GROUP BY TO_CHAR(d.I_CODE), TRUNC(m.BILL_DATE, 'MM'), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
 
 
-def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary: bool) -> list[dict]:
+def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary: bool, grp: str = GROUP_SQL) -> list[dict]:
     sch = _schema()
     types = ", ".join(str(int(t)) for t in doc_types)
     summ = f"AND NVL(b.C_NAME, ' ') NOT LIKE '{POS_SALES_SUMMARY}'" if exclude_summary else ""
@@ -131,14 +132,14 @@ def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary
         WHERE b.BILL_DATE >= :d_from AND b.BILL_DATE < :d_to_excl
           AND (b.CNCL_FLG IS NULL OR b.CNCL_FLG = 0) AND ABS(NVL(b.BILL_AMT, 0)) <= 5000000
           AND b.BILL_DOC_TYPE IN ({types}) {summ}
-          AND i.G_CODE = :g {brn_sql.replace('{a}', 'b')}
+          AND {grp} {brn_sql.replace('{a}', 'b')}
         GROUP BY TO_CHAR(d.I_CODE), TRUNC(b.BILL_DATE, 'MM'), TO_CHAR(b.BRN_NO)
         """,
         params,
     )
 
 
-def _pos_returns(params: dict, brn_sql: str) -> list[dict]:
+def _pos_returns(params: dict, brn_sql: str, grp: str = GROUP_SQL) -> list[dict]:
     pos, sch = _pos_owner(), _schema()
     return _fetch_all(
         f"""
@@ -148,14 +149,14 @@ def _pos_returns(params: dict, brn_sql: str) -> list[dict]:
         JOIN {pos}.IAS_POS_RT_BILL_MST m ON m.RT_BILL_NO = d.RT_BILL_NO AND m.BRN_NO = d.BRN_NO
         JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
         WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
-          AND (m.HUNG IS NULL OR m.HUNG = 0) AND i.G_CODE = :g {brn_sql.replace('{a}', 'm')}
+          AND (m.HUNG IS NULL OR m.HUNG = 0) AND {grp} {brn_sql.replace('{a}', 'm')}
         GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(m.BRN_NO)
         """,
         params,
     )
 
 
-def _bill_returns(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary: bool) -> list[dict]:
+def _bill_returns(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary: bool, grp: str = GROUP_SQL) -> list[dict]:
     sch = _schema()
     types = ", ".join(str(int(t)) for t in doc_types)
     summ = f"AND NVL(r.C_NAME, ' ') NOT LIKE '{POS_RETURNS_SUMMARY}'" if exclude_summary else ""
@@ -169,7 +170,7 @@ def _bill_returns(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summa
         WHERE r.RT_BILL_DATE >= :d_from AND r.RT_BILL_DATE < :d_to_excl
           AND (r.CNCL_FLG IS NULL OR r.CNCL_FLG = 0) AND ABS(NVL(r.BILL_AMT, 0)) <= 5000000
           AND r.RT_BILL_DOC_TYPE IN ({types}) {summ}
-          AND i.G_CODE = :g {brn_sql.replace('{a}', 'r')}
+          AND {grp} {brn_sql.replace('{a}', 'r')}
         GROUP BY TO_CHAR(d.I_CODE), TO_CHAR(r.BRN_NO)
         """,
         params,
@@ -376,7 +377,7 @@ def _subgroup_name(group: Any, sub: str) -> str:
     return str((rows[0].get("N") if rows else "") or "").strip()
 
 
-def _base_units(group: Any, sub: str = "") -> dict[str, str]:
+def _base_units(group: Any, sub: str = "", grp: str = GROUP_SQL) -> dict[str, str]:
     """الوحدة الرئيسية لكل صنف (MAIN_UNIT = 1 في أونكس، حجمها 1): كيلو للموزون، علبة، حبة، تنك…
     وإن لم تُعلَّم وحدة رئيسية فأصغر وحدة."""
     rows = _fetch_all(
@@ -389,10 +390,10 @@ def _base_units(group: Any, sub: str = "") -> dict[str, str]:
                    ) AS RN
             FROM {_schema()}.IAS_ITM_DTL d
             JOIN {_schema()}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
-            WHERE i.G_CODE = :g AND NVL(d.P_SIZE, 0) > 0 {"AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""}
+            WHERE {grp} AND NVL(d.P_SIZE, 0) > 0 {"AND TO_CHAR(i.MNG_CODE) = :mng" if sub else ""}
         ) WHERE RN = 1
         """,
-        {"g": group} | ({"mng": sub} if sub else {}),
+        ({"g": group} if ":g" in grp else {}) | ({"mng": sub} if sub else {}),
     )
     return {_code(r["I"]): str(r.get("U") or "").replace("ـ", "").strip() for r in rows}
 
