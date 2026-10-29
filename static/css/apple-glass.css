@@ -411,6 +411,68 @@
   /* الشريط الملوّن على طرف البطاقة يكرّر لون الأيقونة */
   html body.theme-navy .hv-card:not(#a1):not(#a2):not(#a3)::before { display: none !important; }
 
+  /* ——— الشريط الجانبي مطويّاً: عمود واحد في المنتصف ———
+     الأيقونات أزرار 40×40 متمركزة، زرّا التحديث والطي فوق بعض بدل التجاور (كانا يُقصّان)،
+     أسماء الأقسام تُخفى ويبقى الفاصل بين المجموعات، ولا تمرير أفقي */
+  html.sidebar-collapsed body.theme-navy aside.sidebar:not(#a1):not(#a2):not(#a3):not(#a4) {
+    padding-inline: 0 !important; align-items: center !important; overflow: visible !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar :is(.sidebar-brand, .sidebar-nav, .sidebar-foot):not(#a1):not(#a2):not(#a3):not(#a4) {
+    width: 100% !important; padding-inline: 0 !important; margin-inline: 0 !important; box-sizing: border-box;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-brand-top:not(#a1):not(#a2):not(#a3):not(#a4) {
+    display: flex !important; flex-direction: column !important; align-items: center !important; gap: 0.5rem !important; width: 100% !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-brand-lockup:not(#a1):not(#a2):not(#a3):not(#a4) {
+    justify-content: center !important; width: auto !important; margin: 0 !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-brand-tools:not(#a1):not(#a2):not(#a3):not(#a4) {
+    display: flex !important; flex-direction: column !important; align-items: center !important; gap: 0.4rem !important;
+    width: 100% !important; padding: 0 !important; margin: 0 !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-brand-tools > button:not([hidden]):not(.sidebar-close):not(#a1):not(#a2):not(#a3):not(#a4) {
+    width: 2.25rem !important; height: 2.25rem !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important;
+    display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-section-label:not(#a1):not(#a2):not(#a3):not(#a4) { display: none !important; }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-nav:not(#a1):not(#a2):not(#a3):not(#a4) {
+    overflow-x: hidden !important; scrollbar-width: none !important;
+    display: flex !important; flex-direction: column !important; align-items: center !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-nav:not(#a1):not(#a2):not(#a3):not(#a4)::-webkit-scrollbar { display: none !important; }
+  html.sidebar-collapsed body.theme-navy aside.sidebar :is(.sidebar-zone, .sidebar-group):not(#a1):not(#a2):not(#a3):not(#a4) {
+    width: 100% !important; padding-inline: 0 !important; margin-inline: 0 !important;
+    display: flex !important; flex-direction: column !important; align-items: center !important; gap: 0.2rem !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-zone + .sidebar-zone:not(#a1):not(#a2):not(#a3):not(#a4) {
+    margin-top: 0.4rem !important; padding-top: 0.4rem !important; border-top: 0.5px solid var(--ag-sep) !important; width: 60% !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-group-toggle):not(.sidebar-sublink):not(#a1):not(#a2):not(#a3):not(#a4) {
+    width: 2.5rem !important; height: 2.5rem !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important;
+    display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 0 !important;
+  }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-nav :is(.sidebar-link, .sidebar-group-toggle) :is(span, .sidebar-group-chevron):not(#a1):not(#a2):not(#a3):not(#a4) { display: none !important; }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-nav .sidebar-ico:not(#a1):not(#a2):not(#a3):not(#a4) { margin: 0 !important; }
+  html.sidebar-collapsed body.theme-navy aside.sidebar .sidebar-foot:not(#a1):not(#a2):not(#a3):not(#a4) {
+    display: flex !important; flex-direction: column !important; align-items: center !important; gap: 0.4rem !important;
+  }
+
+  /* ——— زر الطي على حافة الشريط (جهة المحتوى)، مفتوحاً ومطوياً، على سطح المكتب ——— */
+  @media (min-width: 901px) {
+    html body.theme-navy aside.sidebar:not(#a1):not(#a2):not(#a3):not(#a4) { overflow: visible !important; }
+    html body.theme-navy aside.sidebar #sidebar-collapse:not(#a1):not(#a2):not(#a3):not(#a4) {
+      position: absolute !important; top: 1.6rem !important; inset-inline-end: -0.9rem !important; z-index: 5;
+      width: 1.75rem !important; height: 1.75rem !important; min-width: 0 !important; padding: 0 !important; margin: 0 !important;
+      display: inline-flex !important; align-items: center !important; justify-content: center !important;
+      border-radius: 999px !important; border: 0 !important;
+      background: rgba(255, 255, 255, 0.92) !important;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(60, 60, 67, 0.18) !important;
+      color: var(--ag-label-2) !important;
+    }
+    html body.theme-navy aside.sidebar #sidebar-collapse:hover:not(#a1):not(#a2):not(#a3):not(#a4) { color: var(--ag-label) !important; background: #fff !important; }
+    html body.theme-navy aside.sidebar #sidebar-collapse .sidebar-collapse-ico:not(#a1):not(#a2):not(#a3):not(#a4) { width: 0.95rem !important; height: 0.95rem !important; }
+  }
+
   /* ——— تقليل الحركة ——— */
   @media (prefers-reduced-motion: reduce) {
     html body.theme-navy *:not(#a1):not(#a2):not(#a3) {
