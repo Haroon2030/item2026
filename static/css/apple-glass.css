@@ -457,19 +457,22 @@
     display: flex !important; flex-direction: column !important; align-items: center !important; gap: 0.4rem !important;
   }
 
-  /* ——— زر الطي على حافة الشريط (جهة المحتوى)، مفتوحاً ومطوياً، على سطح المكتب ——— */
+  /* ——— زر الطي لسان من الشريط نفسه على حافته (جهة المحتوى): نفس الزجاج، ملتصق بلا فاصل،
+     زواياه الخارجية فقط مستديرة؛ مفتوحاً ومطوياً، على سطح المكتب ——— */
   @media (min-width: 901px) {
     html body.theme-navy aside.sidebar:not(#a1):not(#a2):not(#a3):not(#a4) { overflow: visible !important; }
     html body.theme-navy aside.sidebar #sidebar-collapse:not(#a1):not(#a2):not(#a3):not(#a4) {
-      position: absolute !important; top: 1.6rem !important; inset-inline-end: -0.9rem !important; z-index: 5;
-      width: 1.75rem !important; height: 1.75rem !important; min-width: 0 !important; padding: 0 !important; margin: 0 !important;
+      position: absolute !important; top: 1.5rem !important; inset-inline-end: -1.1rem !important; z-index: 5;
+      width: 1.15rem !important; height: 2.75rem !important; min-width: 0 !important; padding: 0 !important; margin: 0 !important;
       display: inline-flex !important; align-items: center !important; justify-content: center !important;
-      border-radius: 999px !important; border: 0 !important;
-      background: rgba(255, 255, 255, 0.92) !important;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(60, 60, 67, 0.18) !important;
+      border: 0 !important; border-radius: 0 !important;
+      border-start-end-radius: 12px !important; border-end-end-radius: 12px !important;
+      background: var(--ag-glass-bg) !important;
+      -webkit-backdrop-filter: blur(28px) saturate(180%) !important; backdrop-filter: blur(28px) saturate(180%) !important;
+      box-shadow: 6px 4px 14px rgba(0, 0, 0, 0.06) !important;
       color: var(--ag-label-2) !important;
     }
-    html body.theme-navy aside.sidebar #sidebar-collapse:hover:not(#a1):not(#a2):not(#a3):not(#a4) { color: var(--ag-label) !important; background: #fff !important; }
+    html body.theme-navy aside.sidebar #sidebar-collapse:hover:not(#a1):not(#a2):not(#a3):not(#a4) { color: var(--ag-label) !important; }
     html body.theme-navy aside.sidebar #sidebar-collapse .sidebar-collapse-ico:not(#a1):not(#a2):not(#a3):not(#a4) { width: 0.95rem !important; height: 0.95rem !important; }
   }
 
