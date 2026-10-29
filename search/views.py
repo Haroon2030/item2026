@@ -6750,7 +6750,7 @@ def browse_order_qty_report(request):
     from datetime import date as date_cls, timedelta
 
     from .oracle_income import fetch_income_branches
-    from .oracle_order_qty import ALL_GROUPS, EXCLUDED_GROUPS, ORDER_QTY_PAGE_ROWS, build_order_qty, build_order_qty_excel
+    from .oracle_order_qty import ALL_GROUPS, ORDER_QTY_PAGE_ROWS, build_order_qty, build_order_qty_excel
     from .oracle_stock import fetch_main_subgroup_options, fetch_sales_group_options, oracle_enabled, oracle_session
 
     today = date_cls.today()
@@ -6825,9 +6825,6 @@ def browse_order_qty_report(request):
             # الصفحة تعرض الأعلى احتياجاً، وExcel فيه الكل
             'page_rows': (report or {}).get('rows', []) if branch else (report or {}).get('rows', [])[:ORDER_QTY_PAGE_ROWS],
             'page_limit': (report or {}).get('totals', {}).get('items', 0) if branch else ORDER_QTY_PAGE_ROWS,
-            'excluded_groups': [
-                g for g in groups if str(g.get('code') or '').strip() in {str(c) for c in EXCLUDED_GROUPS}
-            ],
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
             'report': report,

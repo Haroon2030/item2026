@@ -87,9 +87,6 @@
     <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
   </p>
 
-  {% if report.all_groups %}
-  <p class="oq-method"><b>المجموعات المستثناة:</b> {% for g in excluded_groups %}{{ g.code }} - {{ g.name }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
-  {% endif %}
   <p class="oq-method">
     <b>طريقة الحساب:</b> صافي الكمية المباعة (بعد المرتجع) ÷ {{ report.days }} يوم = المتوسط اليومي ·
     المتوسط اليومي × {{ report.next_days }} يوماً = احتياج الشهر القادم ·

@@ -3708,5 +3708,5 @@ class OrderQtyReportTests(TestCase):
         for params, grp in seen:
             self.assertNotIn('g', params)  # لا ربط لمتغيّر مجموعة غير مستخدم
             self.assertEqual(grp, oq.ALL_GROUPS_SQL)
-        for code in (15, 16, 42, 43, 6, 5, 26, 9, 14, 35, 11, 12, 52, 29, 38, 31, 17, 40, 21, 53, 28, 45, 30):
+        for code in (15, 16, 42, 43, 6, 5, 26, 9, 14, 35, 11, 12, 52, 29, 38, 31, 17, 40, 21, 53, 28, 45, 30, 33):
             self.assertIn(str(code), oq.ALL_GROUPS_SQL)
