@@ -52,7 +52,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v7"
+_CACHE_VER = "v8"
 NEXT_DAYS = 30  # الشهر القادم
 ORDER_QTY_PAGE_ROWS = 1000  # صفوف الشاشة؛ ملف Excel فيه كل الأصناف
 ALL_GROUPS = "all"
@@ -255,6 +255,7 @@ def build_order_qty(date_from, date_to, *, group_code: str, branch_code: str = "
         # وحدات الأصناف مختلفة (كرتون 144 وكرتون 12…): الإجمالي عدد العبوات المطلوبة فقط
         "totals": {
             "items": len(rows_out),
+            "items_display": f"{len(rows_out):,}",
             "order_q_display": f"{sum(r['order_q'] for r in rows_out):,}",
         },
     }

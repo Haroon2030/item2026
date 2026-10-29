@@ -9,12 +9,52 @@
   .oq-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
   .oq-scope strong { color: #1F2A37; }
   .oq-filter .field > select, .oq-filter .field > input { min-width: 0 !important; max-width: 100%; text-overflow: ellipsis; }
-  .oq-export { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 999px; background: #E3F4EC; color: #1E6B47; font-weight: 600; text-decoration: none; }
-  .oq-method { margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; }
-  .oq-method b { color: #1F2A37; }
-  .oq-caption { caption-side: top; padding: 6px 4px 8px; text-align: center; color: #1F2A37; }
-  .oq-caption strong { display: block; font-size: 1rem; font-weight: 800; }
-  .oq-caption span { display: block; margin-top: 2px; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  /* فلتر بشبكة ثابتة: العنوان فوق الحقل، كل الحقول بارتفاع واحد، وزر «عرض» في نهاية السطر نفسه.
+     سطح المكتب سطر واحد · الشاشة المتوسطة سطران (3 + 3) · الجوال عمودان.
+     داخل طبقة الثيم وبخصوصية أعلى من compact-v3 (يفرض flex أفقياً على فلاتر sales-dash) */
+  @layer app-components {
+    html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) {
+      display: grid !important; grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) auto !important;
+      gap: 0.75rem 0.85rem !important; align-items: end !important; padding: 0.85rem 1rem !important;
+    }
+    html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .field {
+      display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 0.3rem !important;
+      flex: none !important; min-width: 0 !important; width: auto !important; margin: 0 !important;
+    }
+    html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .field > label {
+      margin: 0 !important; padding: 0 0.3rem !important; font-size: 0.78rem !important; white-space: nowrap; text-align: start;
+    }
+    html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .field > :is(select, input) {
+      width: 100% !important; height: 2.5rem !important; min-height: 2.5rem !important; font-size: 0.86rem !important; border-radius: 10px !important;
+    }
+    /* الثيم يثبّت زر الإجراء في السطر الثاني (grid-row: 2): يعود لنهاية السطر نفسه */
+    html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .wqc-field-actions {
+      grid-column: auto !important; grid-row: auto !important;
+    }
+    html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) .btn-primary {
+      width: 100% !important; height: 2.5rem !important; min-height: 2.5rem !important; min-width: 7rem; padding: 0 1.5rem !important; border-radius: 999px !important;
+    }
+    @media (max-width: 1100px) {
+      html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    }
+    @media (max-width: 640px) {
+      html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+      html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) > :is(.field:nth-of-type(-n+3), .wqc-field-actions) { grid-column: 1 / -1 !important; }
+      html body.theme-navy .page form.oq-filter:not(#q1):not(#q2):not(#q3):not(#q4) .btn-primary { height: 2.75rem !important; }
+    }
+  }
+  .oq-scope-text { margin-inline-end: 0.5rem; }
+  /* زرّا التصدير مجموعة مستقلة تنزل كاملة للسطر التالي، وبحجم لمس مريح على الجوال */
+  .oq-actions { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; vertical-align: middle; }
+  .oq-actions > a, .oq-actions > button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem !important; min-width: 4.5rem; padding: 0 1rem !important; border-radius: 999px; font-weight: 700; text-decoration: none; }
+  .oq-export { background: #E3F4EC; color: #1E6B47; }
+  @media (max-width: 720px) { .oq-actions { display: flex; margin-top: 0.5rem; } .oq-actions > a, .oq-actions > button { min-height: 2.75rem !important; } }
+  .oq-method { margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; font-weight: 400 !important; }
+  .oq-method b { color: #1F2A37; font-weight: 700 !important; }
+  /* عنوان الجدول خارج منطقة التمرير الأفقي: لا يُقص على الجوال */
+  .oq-head { padding: 8px 12px 6px; text-align: center; color: #1F2A37; }
+  .oq-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+  .oq-head p { margin: 2px 0 0; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
   .oq-unit { white-space: nowrap; font-weight: 600; }
   .oq-order { font-weight: 800 !important; color: #1F3B63 !important; }
 </style>
@@ -36,7 +76,7 @@
 <form method="get" action="{% url 'browse_order_qty_report' %}" class="dash-panel-glass wqc-filter oq-filter" role="search">
   {{ subgroups|json_script:"wqc-subgroup-data" }}
   <input type="hidden" name="run" value="1">
-  <div class="field" style="flex: 2 1 16rem !important">
+  <div class="field">
     <label for="wqc-group">المجموعة</label>
     <select id="wqc-group" name="group" required>
       <option value="">اختر المجموعة</option>
@@ -46,7 +86,7 @@
       {% endfor %}
     </select>
   </div>
-  <div class="field" style="flex: 2 1 18rem !important">
+  <div class="field">
     <label for="wqc-subgroup">المجموعة الفرعية</label>
     <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
       <option value="">كل المجموعات الفرعية</option>
@@ -79,27 +119,32 @@
 
 {% if report %}
   {% with t=report.totals %}
-  <p class="oq-scope">
-    <strong>{% if report.all_groups %}{{ report.group_name }}{% else %}{{ report.group_code }} - {{ report.group_name }}{% endif %}{% if report.subgroup_code %} · فرعية {{ report.subgroup_code }} - {{ report.subgroup_name }}{% endif %}</strong>
-    · {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
-    · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> ({{ report.days }} يوم)
-    · <a class="btn-ghost oq-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
-    <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
-  </p>
+  <div class="oq-scope">
+    <span class="oq-scope-text">
+      <strong>{% if report.all_groups %}{{ report.group_name }}{% else %}{{ report.group_code }} - {{ report.group_name }}{% endif %}{% if report.subgroup_code %} · فرعية {{ report.subgroup_code }} - {{ report.subgroup_name }}{% endif %}</strong>
+      · {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
+      · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi> ({{ report.days }} يوم)
+    </span>
+    <span class="oq-actions">
+      <a class="btn-ghost oq-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
+      <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+    </span>
+  </div>
 
   <p class="oq-method">
-    <b>طريقة الحساب:</b> صافي الكمية المباعة (بعد المرتجع) ÷ {{ report.days }} يوم = المتوسط اليومي ·
-    المتوسط اليومي × {{ report.next_days }} يوماً = احتياج الشهر القادم ·
-    كمية الطلب = الاحتياج مقرّباً لأعلى. كل الكميات بأكبر وحدة للصنف (كرتون، ربطة…)، والصنف بلا وحدة كبرى بوحدته الرئيسية. الرصيد الحالي (مخازن الفرع المختار أو كل المخازن) للمقارنة ولا يُخصم من كمية الطلب.
+    <b>طريقة الحساب:</b> صافي الكمية المباعة (بعد المرتجع) ÷ {{ report.days }} يوم = <b>المتوسط اليومي</b> ·
+    المتوسط اليومي × {{ report.next_days }} يوماً = <b>احتياج الشهر القادم</b> ·
+    <b>كمية الطلب</b> = الاحتياج مقرّباً لأعلى. كل الكميات بأكبر وحدة للصنف (كرتون، ربطة…)، والصنف بلا وحدة كبرى بوحدته الرئيسية.
+    <b>الرصيد الحالي</b> (مخازن الفرع المختار أو كل المخازن) للمقارنة ولا يُخصم من كمية الطلب.
   </p>
 
-  <section class="wqc-sheet" aria-label="كمية الطلب">
-    <div class="table-wrap wqc-scroll" tabindex="0" aria-label="كمية الطلب">
-      <table class="wqc-table" data-name-col="1">
-        <caption class="oq-caption">
-          <strong>كمية الطلب للشهر القادم</strong>
-          <span>{{ t.items }} صنف مباع{% if t.items > page_limit %} · يُعرض أعلى {{ page_limit }} صنف احتياجاً، والكل في Excel{% endif %} · الكميات بأكبر وحدة للصنف</span>
-        </caption>
+  <section class="wqc-sheet" aria-labelledby="oq-title">
+    <header class="oq-head">
+      <h3 id="oq-title">كمية الطلب للشهر القادم</h3>
+      <p>{{ t.items_display }} صنف مباع{% if t.items > page_limit %} · يُعرض أعلى {{ page_limit }} صنف احتياجاً، والكل في Excel{% endif %} · الكميات بأكبر وحدة للصنف</p>
+    </header>
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="oq-title">
+      <table class="wqc-table" data-name-col="1" aria-labelledby="oq-title">
         <thead>
           <tr>
             <th scope="col">الكود</th>
