@@ -52,10 +52,10 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v10"
+_CACHE_VER = "v11"
 NEXT_DAYS = 30  # الشهر القادم
-# مخازن البيع فقط (الرصيد الحالي منها لا من مخازن التوريد والمرتجعات والتوالف…)
-SELLING_WAREHOUSES = ("60", "30", "800", "1", "900", "1201", "1901", "1801", "2001", "20", "701")
+# الرصيد الحالي من كل المخازن عدا هذه (مخازن لا تُباع منها البضاعة: توالف، مرتجعات، تحويل…)
+EXCLUDED_WAREHOUSES = (69, 62, 66, 71, 3, 2, 902, 901, 1903)
 ORDER_QTY_PAGE_ROWS = 50  # صفوف الشاشة (الأعلى احتياجاً)؛ ملف Excel فيه كل الأصناف
 ALL_GROUPS = "all"
 # «كل المجموعات» تستثني الطازج وما يُطلب يومياً: الأسماك، اللحوم (الملحمة، ملحمة خارجية، ملحمه بلدي)،
@@ -95,22 +95,22 @@ def _month_windows(d_from: date, d_to: date) -> list[tuple[date, date]]:
 
 
 def _stock(brn: str, sub: str, grp: str, group: Any) -> dict[str, float]:
-    """الرصيد الحالي المرحّل (AVL_QTY بالوحدة الرئيسية) لكل صنف في مخازن البيع فقط (SELLING_WAREHOUSES)،
-    ومع فرع محدد: مخازن البيع التابعة لذلك الفرع."""
+    """الرصيد الحالي المرحّل (AVL_QTY بالوحدة الرئيسية) لكل صنف في كل المخازن عدا EXCLUDED_WAREHOUSES،
+    ومع فرع محدد: مخازن ذلك الفرع عدا المستثناة."""
     sch = _schema()
     params: dict[str, Any] = ({"g": group} if ":g" in grp else {}) | ({"mng": sub} if sub else {})
-    whs = list(SELLING_WAREHOUSES)
+    wh_sql = f"AND w.W_CODE NOT IN ({', '.join(str(int(w)) for w in EXCLUDED_WAREHOUSES)})"
     if brn:
-        branch_whs = {
+        excluded = {str(w) for w in EXCLUDED_WAREHOUSES}
+        whs = [
             _code(w.get("code")) for w in fetch_warehouse_options(active_only=False) or []
-            if _norm_brn_code(w.get("branch_code")) == brn and _code(w.get("code"))
-        }
-        whs = [w for w in whs if w in branch_whs]
+            if _norm_brn_code(w.get("branch_code")) == brn and _code(w.get("code")) and _code(w.get("code")) not in excluded
+        ]
         if not whs:
             return {}
-    for n, wh in enumerate(whs):
-        params[f"w{n}"] = int(wh) if wh.isdigit() else wh
-    wh_sql = f"AND w.W_CODE IN ({', '.join(f':w{n}' for n in range(len(whs)))})"
+        for n, wh in enumerate(whs):
+            params[f"w{n}"] = int(wh) if wh.isdigit() else wh
+        wh_sql += f" AND w.W_CODE IN ({', '.join(f':w{n}' for n in range(len(whs)))})"
     rows = _fetch_all(
         f"""
         SELECT TO_CHAR(w.I_CODE) AS I, SUM(NVL(w.AVL_QTY, 0)) AS Q
