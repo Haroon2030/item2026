@@ -3622,7 +3622,9 @@ class OrderQtyReportTests(TestCase):
         m = date(2026, 4, 1)
         rows = {
             # 1600 كرتون × 12 حبة في 6 أشهر (183 يوماً) بعد مرتجع 100 حبة
-            '_pos_sales': [{'I': '1', 'M': m, 'B': '6', 'Q': 19000, 'V': 0, 'N': 1}],
+            # الصنف 3: عُرّف له كرتون 21 للشراء لكن بيعه بكرتون 18: 3,600 حبة = 200 كرتون مبيعات
+            '_pos_sales': [{'I': '1', 'M': m, 'B': '6', 'Q': 19000, 'V': 0, 'N': 1, 'PS': 12},
+                           {'I': '3', 'M': m, 'B': '6', 'Q': 3600, 'V': 0, 'N': 1, 'PS': 18}],
             '_bill_sales': [{'I': '1', 'M': m, 'B': '6', 'Q': 300, 'V': 0, 'N': 1}],
             '_pos_returns': [{'I': '1', 'B': '6', 'Q': 100, 'V': 0}, {'I': '2', 'B': '6', 'Q': 3, 'V': 0}],
             '_bill_returns': [],
@@ -3642,26 +3644,33 @@ class OrderQtyReportTests(TestCase):
                 oracle_enabled=lambda: True, oracle_session=nullcontext,
                 _pos_qty=fake('_pos_sales'), _bill_sales=fake('_bill_sales'),
                 _pos_returns=fake('_pos_returns'), _bill_returns=fake('_bill_returns'),
-                _item_names=lambda *a: {'1': ('لبنة', '39 - البان مستورده'), '2': ('جبنة', '39 - البان مستورده')},
+                _item_names=lambda *a: {'1': ('لبنة', '39 - البان مستورده'), '2': ('جبنة', '39 - البان مستورده'),
+                                        '3': ('زبادي', '39 - البان مستورده')},
                 _group_name=lambda g: 'البان مستورده',
-                _stock=lambda *a: {'1': 240.0},
-                _branch_names=lambda: {}, _base_units=lambda *a: {'1': 'حبة'},
-                fetch_item_max_pack_map=lambda codes: {'1': {'pack': 12, 'unit': 'كرتون'}}), \
+                _stock=lambda *a: {'1': 240.0, '3': 1800.0},
+                _branch_names=lambda: {}, _base_units=lambda *a: {'1': 'حبة', '3': 'حبة'},
+                _unit_names=lambda codes: {'1': {12.0: 'كرتون'}, '3': {18.0: 'كرتون', 21.0: 'كرتون 2'}},
+                fetch_item_max_pack_map=lambda codes: {'1': {'pack': 12, 'unit': 'كرتون'},
+                                                       '3': {'pack': 21, 'unit': 'كرتون 2'}}), \
                 patch('django.core.cache.cache.get', return_value=None), \
                 patch('django.core.cache.cache.set'):
             r = oq.build_order_qty('2026-04-01', '2026-09-30', group_code='39')
 
         self.assertEqual(r['days'], 183)
         # الصنف 2 مرتجع بلا بيع: لا يظهر
-        self.assertEqual([x['code'] for x in r['rows']], ['1'])
+        self.assertEqual([x['code'] for x in r['rows']], ['1', '3'])
         row = r['rows'][0]
         # بأكبر وحدة: 19,200 حبة ÷ 12 = 1,600 كرتون ÷ 183 يوماً = 8.74 يومياً × 30 = 262.3 → 263 كرتون
         self.assertEqual((row['unit'], row['group']), ('كرتون (12 حبة)', '39 - البان مستورده'))
         self.assertEqual(row['net_q_display'], '1,600')
         self.assertEqual((row['daily_display'], row['need_display']), ('8.74', '262.30'))
         self.assertEqual(row['order_q'], 263)
-        self.assertEqual(r['totals']['order_q_display'], '263')
         self.assertEqual(row['stock_q_display'], '20')  # 240 حبة = 20 كرتون، للمقارنة ولا يُخصم
+        # عبوة المبيعات لا أكبر عبوة معرّفة: 3,600 ÷ 18 = 200 كرتون (لا ÷ 21)، والرصيد 1,800 ÷ 18 = 100
+        row3 = r['rows'][1]
+        self.assertEqual((row3['unit'], row3['pack']), ('كرتون (18 حبة)', 18.0))
+        self.assertEqual((row3['net_q_display'], row3['order_q'], row3['stock_q_display']), ('200', 33, '100'))
+        self.assertEqual(r['totals']['order_q_display'], '296')
 
     def test_excel_has_order_columns(self):
         from io import BytesIO

@@ -3,8 +3,8 @@
 قراءة فقط (SELECT). صافي الكمية المباعة = نقاط البيع + الجملة النقدي 1/5 (بلا خلاصات ترحيل نقاط البيع)
 + الآجل 4/8 ناقص مرتجعاتها — نفس استعلامات «دراسة مجموعة» فتتطابق الكميات.
 المتوسط اليومي = صافي الكمية ÷ أيام الفترة (حتى اليوم إن كانت الفترة ممتدة للمستقبل)،
-واحتياج الشهر القادم = المتوسط اليومي × 30 يوماً. كل الكميات بأكبر وحدة للصنف (كرتون/ربطة: الكمية ÷ حجمها)،
-والصنف بلا وحدة كبرى بوحدته الرئيسية؛ كمية الطلب مقرّبة لأعلى بتلك الوحدة.
+واحتياج الشهر القادم = المتوسط اليومي × 30 يوماً. كل الكميات بعبوة المبيعات (أكبر عبوة بِيع بها الصنف: كرتون/ربطة، الكمية ÷ حجمها)،
+والصنف بلا عبوة كبرى بوحدته الرئيسية؛ كمية الطلب مقرّبة لأعلى بتلك الوحدة.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v11"
+_CACHE_VER = "v12"
 NEXT_DAYS = 30  # الشهر القادم
 # الرصيد الحالي من كل المخازن عدا هذه (مخازن لا تُباع منها البضاعة: توالف، مرتجعات، تحويل…)
 EXCLUDED_WAREHOUSES = (69, 62, 66, 71, 3, 2, 902, 901, 1903)
@@ -66,11 +66,12 @@ ALL_GROUPS_SQL = f"i.G_CODE NOT IN ({', '.join(str(g) for g in EXCLUDED_GROUPS)}
 
 
 def _pos_qty(params: dict, brn_sql: str, grp: str) -> list[dict]:
-    """كمية نقاط البيع لكل صنف فقط (بلا قيمة ولا عدّ فواتير) — أخف من استعلام الدراسة لفترات طويلة وكل المجموعات."""
+    """كمية نقاط البيع لكل صنف فقط (بلا قيمة ولا عدّ فواتير) — أخف من استعلام الدراسة لفترات طويلة وكل المجموعات.
+    PS = أكبر عبوة بِيعت بها الأسطر (حجم الوحدة)."""
     pos, sch = _pos_owner(), _schema()
     return _fetch_all(
         f"""
-        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q
+        SELECT TO_CHAR(d.I_CODE) AS I, SUM({STOCK_QTY}) AS Q, MAX(NVL(d.P_SIZE, 1)) AS PS
         FROM {pos}.IAS_POS_BILL_DTL d
         JOIN {pos}.IAS_POS_BILL_MST m
           ON m.BILL_NO = d.BILL_NO AND m.BRN_NO = d.BRN_NO AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
@@ -122,6 +123,28 @@ def _stock(brn: str, sub: str, grp: str, group: Any) -> dict[str, float]:
         params,
     )
     return {_code(r["I"]): _f(r["Q"]) for r in rows}
+
+
+def _unit_names(codes: list[str]) -> dict[str, dict[float, str]]:
+    """اسم وحدة كل عبوة معرّفة للصنف: {صنف: {حجم العبوة: «كرتون»}} (عند تكرار الحجم أولها بالاسم)."""
+    out: dict[str, dict[float, str]] = {}
+    if not codes:
+        return out
+    sch = _schema()
+    for i in range(0, len(codes), 900):
+        part = codes[i:i + 900]
+        rows = _fetch_all(
+            f"""
+            SELECT TO_CHAR(d.I_CODE) AS I, d.P_SIZE AS PS, TRIM(d.ITM_UNT) AS U
+            FROM {sch}.IAS_ITM_DTL d
+            WHERE d.I_CODE IN ({', '.join(f':c{n}' for n in range(len(part)))}) AND NVL(d.P_SIZE, 0) > 1
+            ORDER BY d.ITM_UNT
+            """,
+            {f"c{n}": c for n, c in enumerate(part)},
+        )
+        for r in rows:
+            out.setdefault(_code(r["I"]), {}).setdefault(_f(r["PS"]), str(r.get("U") or "").strip())
+    return out
 
 
 def _item_names(group: Any, sub: str, grp: str = GROUP_SQL) -> dict[str, tuple[str, str]]:
@@ -205,9 +228,12 @@ def build_order_qty(date_from, date_to, *, group_code: str, branch_code: str = "
 
     sold: dict[str, float] = {}
     returned: dict[str, float] = {}
+    sold_pack: dict[str, float] = {}  # أكبر عبوة بِيع بها الصنف في الفترة (عبوة المبيعات)
     for rows in (pos_rows, cash_rows, credit_rows):
         for r in rows:
-            sold[_code(r["I"])] = sold.get(_code(r["I"]), 0.0) + _f(r["Q"])
+            c = _code(r["I"])
+            sold[c] = sold.get(c, 0.0) + _f(r["Q"])
+            sold_pack[c] = max(sold_pack.get(c, 1.0), _f(r.get("PS")) or 1.0)
     for rows in (pos_ret, cash_ret, credit_ret):
         for r in rows:
             returned[_code(r["I"])] = returned.get(_code(r["I"]), 0.0) + _f(r["Q"])
@@ -215,6 +241,7 @@ def build_order_qty(date_from, date_to, *, group_code: str, branch_code: str = "
     codes = sorted(c for c in set(sold) | set(returned) if sold.get(c, 0.0) - returned.get(c, 0.0) > 0)
     with oracle_session():
         packs = fetch_item_max_pack_map(codes) if codes else {}
+        unit_names = _unit_names(codes)
         bases = _base_units(group, sub, grp) if codes else {}
         group_name = "كل المجموعات" if all_groups else (_group_name(group) or gcode)
         sub_name = (_subgroup_name(group, sub) or sub) if sub else ""
@@ -223,10 +250,15 @@ def build_order_qty(date_from, date_to, *, group_code: str, branch_code: str = "
     rows_out: list[dict[str, Any]] = []
     for code in codes:
         pk = packs.get(code) or {}
-        pack = max(_f(pk.get("pack")), 1.0)
         base = bases.get(code, "")
-        # أكبر وحدة للصنف: «كرتون (144 حبة)»؛ بلا وحدة كبرى تبقى الرئيسية (حجمها 1)
-        unit = _pack_label(pack, str(pk.get("unit") or ""), base) if pack > 1 else (base or "—")
+        # عبوة المبيعات: أكبر عبوة بِيع بها الصنف (كرتون 18 لا كرتون 21 المعرّف للشراء)؛ المخزون يُحوَّل بها أيضاً.
+        # لو بِيع بوحدته الرئيسية فقط تبقى أكبر عبوة معرّفة له، وبلا عبوة كبرى تبقى الوحدة الرئيسية (حجمها 1)
+        pack = sold_pack.get(code, 1.0)
+        unit_name = unit_names.get(code, {}).get(pack, "")
+        if pack <= 1:
+            pack = max(_f(pk.get("pack")), 1.0)
+            unit_name = str(pk.get("unit") or "")
+        unit = _pack_label(pack, unit_name, base) if pack > 1 else (base or "—")
         sold_q = sold.get(code, 0.0) / pack
         ret_q = returned.get(code, 0.0) / pack
         net_q = sold_q - ret_q

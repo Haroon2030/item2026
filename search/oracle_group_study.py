@@ -124,7 +124,7 @@ def _bill_sales(params: dict, brn_sql: str, doc_types: tuple, *, exclude_summary
         f"""
         SELECT TO_CHAR(d.I_CODE) AS I, TRUNC(b.BILL_DATE, 'MM') AS M, TO_CHAR(b.BRN_NO) AS B,
                SUM({STOCK_QTY}) AS Q, ROUND(SUM({_bill_net_sql("d")}), 2) AS V,
-               COUNT(DISTINCT b.BILL_SER) AS N
+               COUNT(DISTINCT b.BILL_SER) AS N, MAX(NVL(d.P_SIZE, 1)) AS PS
         FROM {sch}.IAS_BILL_DTL d
         JOIN {sch}.IAS_BILL_MST b
           ON b.BILL_NO = d.BILL_NO AND b.BILL_SER = d.BILL_SER AND b.BILL_DOC_TYPE = d.BILL_DOC_TYPE

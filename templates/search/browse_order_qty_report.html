@@ -134,14 +134,14 @@
   <p class="oq-method">
     <b>طريقة الحساب:</b> صافي الكمية المباعة (بعد المرتجع) ÷ {{ report.days }} يوم = <b>المتوسط اليومي</b> ·
     المتوسط اليومي × {{ report.next_days }} يوماً = <b>احتياج الشهر القادم</b> ·
-    <b>كمية الطلب</b> = الاحتياج مقرّباً لأعلى. كل الكميات بأكبر وحدة للصنف (كرتون، ربطة…)، والصنف بلا وحدة كبرى بوحدته الرئيسية.
+    <b>كمية الطلب</b> = الاحتياج مقرّباً لأعلى. كل الكميات والرصيد بعبوة المبيعات، أي أكبر عبوة بِيع بها الصنف (كرتون 18 مثلاً ولو عُرّف له كرتون 22 للشراء)، والصنف بلا عبوة كبرى بوحدته الرئيسية.
     <b>الرصيد الحالي</b> (كل المخازن عدا المستثناة، ولفرع محدد مخازنه) للمقارنة ولا يُخصم من كمية الطلب.
   </p>
 
   <section class="wqc-sheet" aria-labelledby="oq-title">
     <header class="oq-head">
       <h3 id="oq-title">كمية الطلب للشهر القادم</h3>
-      <p>{{ t.items_display }} صنف مباع{% if t.items > page_limit %} · يُعرض أعلى {{ page_limit }} صنف احتياجاً، والكل في Excel{% endif %} · الكميات بأكبر وحدة للصنف</p>
+      <p>{{ t.items_display }} صنف مباع{% if t.items > page_limit %} · يُعرض أعلى {{ page_limit }} صنف احتياجاً، والكل في Excel{% endif %} · الكميات بعبوة مبيعات الصنف</p>
     </header>
     <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="oq-title">
       <table class="wqc-table" data-name-col="1" aria-labelledby="oq-title">
