@@ -52,8 +52,10 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v8"
+_CACHE_VER = "v10"
 NEXT_DAYS = 30  # الشهر القادم
+# مخازن البيع فقط (الرصيد الحالي منها لا من مخازن التوريد والمرتجعات والتوالف…)
+SELLING_WAREHOUSES = ("60", "30", "800", "1", "900", "1201", "1901", "1801", "2001", "20", "701")
 ORDER_QTY_PAGE_ROWS = 50  # صفوف الشاشة (الأعلى احتياجاً)؛ ملف Excel فيه كل الأصناف
 ALL_GROUPS = "all"
 # «كل المجموعات» تستثني الطازج وما يُطلب يومياً: الأسماك، اللحوم (الملحمة، ملحمة خارجية، ملحمه بلدي)،
@@ -93,20 +95,22 @@ def _month_windows(d_from: date, d_to: date) -> list[tuple[date, date]]:
 
 
 def _stock(brn: str, sub: str, grp: str, group: Any) -> dict[str, float]:
-    """الرصيد الحالي المرحّل (AVL_QTY بالوحدة الرئيسية) لكل صنف في مخازن الفرع، أو كل المخازن بلا فرع."""
+    """الرصيد الحالي المرحّل (AVL_QTY بالوحدة الرئيسية) لكل صنف في مخازن البيع فقط (SELLING_WAREHOUSES)،
+    ومع فرع محدد: مخازن البيع التابعة لذلك الفرع."""
     sch = _schema()
     params: dict[str, Any] = ({"g": group} if ":g" in grp else {}) | ({"mng": sub} if sub else {})
-    wh_sql = ""
+    whs = list(SELLING_WAREHOUSES)
     if brn:
-        whs = [
+        branch_whs = {
             _code(w.get("code")) for w in fetch_warehouse_options(active_only=False) or []
             if _norm_brn_code(w.get("branch_code")) == brn and _code(w.get("code"))
-        ]
+        }
+        whs = [w for w in whs if w in branch_whs]
         if not whs:
             return {}
-        for n, wh in enumerate(whs):
-            params[f"w{n}"] = int(wh) if wh.isdigit() else wh
-        wh_sql = f"AND w.W_CODE IN ({', '.join(f':w{n}' for n in range(len(whs)))})"
+    for n, wh in enumerate(whs):
+        params[f"w{n}"] = int(wh) if wh.isdigit() else wh
+    wh_sql = f"AND w.W_CODE IN ({', '.join(f':w{n}' for n in range(len(whs)))})"
     rows = _fetch_all(
         f"""
         SELECT TO_CHAR(w.I_CODE) AS I, SUM(NVL(w.AVL_QTY, 0)) AS Q
