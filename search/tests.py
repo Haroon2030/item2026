@@ -3642,6 +3642,7 @@ class ItemCycleReportTests(TestCase):
                 'search.oracle_item_cycle',
                 oracle_enabled=lambda: True, oracle_session=nullcontext,
                 _last_dates=lambda *a: dates, _stock=lambda *a: {'1': 7.0, '2': 0.0},
+                _recent_pos_sales=lambda *a: {},
                 _item_info=lambda *a: info, _group_name=lambda g: 'البان', _branch_names=lambda: {},
                 fetch_warehouse_options=lambda **k: []),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
             r = ic.build_item_cycle(group_code='39')
@@ -3653,6 +3654,33 @@ class ItemCycleReportTests(TestCase):
                          (old.isoformat(), date(today.year, 1, 2).isoformat(), ''))
         self.assertEqual((first['sale_days'], first['barcode']), ((today - old).days, '6281'))
         self.assertEqual(r['rows'][1]['status'], 'نفد وهو يُباع')
+
+    def test_last_sale_includes_unposted_pos_days(self):
+        from contextlib import nullcontext
+        from datetime import date, timedelta
+
+        from search import oracle_item_cycle as ic
+
+        today = date.today()
+        old = today - timedelta(days=40)
+        # الحركة المرحّلة تقف قبل 40 يوماً، ونقاط البيع المباشرة فيها بيع حديث لصنفين (أحدهما بلا حركة)
+        dates = {'1': {'I': '1', 'LS': old, 'LV': None, 'LT': None}}
+        info = {c: {'name': n, 'group': '39 - البان', 'unit': 'حبة', 'barcode': ''}
+                for c, n in (('1', 'لبنة'), ('2', 'جبنة'))}
+        with patch.multiple(
+                'search.oracle_item_cycle',
+                oracle_enabled=lambda: True, oracle_session=nullcontext,
+                _last_dates=lambda *a: dates, _stock=lambda *a: {'1': 7.0, '2': 3.0},
+                _recent_pos_sales=lambda *a: {'1': today, '2': today - timedelta(days=1)},
+                _item_info=lambda *a: info, _group_name=lambda g: 'البان', _branch_names=lambda: {},
+                fetch_warehouse_options=lambda **k: []), \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            r = ic.build_item_cycle(group_code='39')
+
+        by = {y['code']: y for y in r['rows']}
+        self.assertEqual((by['1']['last_sale'], by['1']['sale_days'], by['1']['status']), (today.isoformat(), 0, 'نشط'))
+        self.assertEqual((by['2']['last_sale'], by['2']['status']), ((today - timedelta(days=1)).isoformat(), 'نشط'))
 
     def test_requires_group_or_item_or_barcode(self):
         from search import oracle_item_cycle as ic

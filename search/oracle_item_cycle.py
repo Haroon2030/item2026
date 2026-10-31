@@ -5,13 +5,14 @@
   • آخر توريد من مورد: DOC_TYPE 2 و15 (سند مشتريات/توريد بكود مورد)؛
   • آخر استلام تحويل: DOC_TYPE 8 (وارد من مخزن آخر أو إذن توريد داخلي).
 المرتجعات (3 و4) وتعديل التكلفة (17/18) والتجميع (12) خارج الحساب. الفرع = فرع المستند، والمخزن = مخزن السطر.
+آخر بيع يُكمَّل من نقاط البيع مباشرة لآخر 7 أيام لأن جدول الحركة يتأخر في استقبالها حتى الترحيل.
 الرصيد الحالي من IAS_ITM_WCODE (AVL_QTY بالوحدة الرئيسية) في المخازن نفسها المختارة.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from django.core.cache import cache
@@ -23,6 +24,7 @@ from .oracle_stock import (
     _branch_names,
     _fetch_all,
     _norm_brn_code,
+    _pos_owner,
     _run_parallel,
     _schema,
     fetch_warehouse_options,
@@ -33,7 +35,9 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 300
-_CACHE_VER = "v3"
+_CACHE_VER = "v4"
+# جدول الحركة لا يستقبل بيع نقاط البيع إلا بعد الترحيل (يتأخر نحو 3 أيام)، فنقرأ آخر هذه الأيام من نقاط البيع مباشرة
+POS_LOOKBACK_DAYS = 7
 CYCLE_PAGE_ROWS = 300
 SALE_DOC = (1,)
 VENDOR_DOCS = (2, 15)
@@ -108,6 +112,33 @@ def _last_dates(cond: str, params: dict, brn: str, wh: str) -> dict[str, dict[st
         p,
     )
     return {_code(r["I"]): r for r in rows}
+
+
+def _recent_pos_sales(cond: str, params: dict, brn: str, wh: str, today: date) -> dict[str, Any]:
+    """آخر بيع في نقاط البيع خلال POS_LOOKBACK_DAYS يوماً (يشمل غير المرحّل) {صنف: التاريخ}."""
+    sch, pos = _schema(), _pos_owner()
+    p = dict(params)
+    p["pd"] = datetime.combine(today - timedelta(days=POS_LOOKBACK_DAYS), datetime.min.time())
+    extra = ""
+    if brn:
+        extra += " AND m.BRN_NO = :pb"
+        p["pb"] = _num(brn)
+    if wh:
+        extra += " AND TO_CHAR(d.W_CODE) = :pw"
+        p["pw"] = wh
+    rows = _fetch_all(
+        f"""
+        SELECT TO_CHAR(d.I_CODE) AS I, MAX(m.BILL_DATE) AS LS
+        FROM {pos}.IAS_POS_BILL_DTL d
+        JOIN {pos}.IAS_POS_BILL_MST m
+          ON m.BILL_NO = d.BILL_NO AND m.BRN_NO = d.BRN_NO AND NVL(m.BILL_SRL, 0) = NVL(d.BILL_SRL, 0)
+        JOIN {sch}.IAS_ITM_MST i ON i.I_CODE = d.I_CODE
+        WHERE m.BILL_DATE >= :pd AND (m.HUNG IS NULL OR m.HUNG = 0) AND {cond} {extra}
+        GROUP BY TO_CHAR(d.I_CODE)
+        """,
+        p,
+    )
+    return {_code(r["I"]): r["LS"] for r in rows}
 
 
 def _stock(cond: str, params: dict, whs: list[str]) -> dict[str, float]:
@@ -245,18 +276,21 @@ def build_item_cycle(
         branch_name = _branch_names().get(brn, brn) if brn else ""
         wh_name = next((w["name"] for w in fetch_warehouse_options(active_only=False) or [] if _code(w.get("code")) == wh), wh) if wh else ""
 
-    dates, stock, info = _run_parallel(
-        [job(_last_dates, cond, params, brn, wh), job(_stock, cond, params, whs), job(_item_info, cond, params)],
-        max_workers=3, timeout_sec=300,
+    dates, stock, info, recent = _run_parallel(
+        [job(_last_dates, cond, params, brn, wh), job(_stock, cond, params, whs), job(_item_info, cond, params),
+         job(_recent_pos_sales, cond, params, brn, wh, today)],
+        max_workers=4, timeout_sec=300,
     )
 
     rows: list[dict[str, Any]] = []
-    for code in set(dates) | {c for c, q in stock.items() if q}:
+    for code in set(dates) | set(recent) | {c for c, q in stock.items() if q}:
         meta = info.get(code)
         if meta is None:
             continue
         d, qty = dates.get(code) or {}, stock.get(code, 0.0)
-        sale, vendor, transfer = _as_day(d.get("LS")), _as_day(d.get("LV")), _as_day(d.get("LT"))
+        # أحدث بيع بين جدول الحركة (المرحّل) ونقاط البيع المباشرة (يشمل غير المرحّل)
+        sale = max((x for x in (_as_day(d.get("LS")), _as_day(recent.get(code))) if x), default=None)
+        vendor, transfer = _as_day(d.get("LV")), _as_day(d.get("LT"))
         sale_days = _days_since(sale, today)
         rows.append({
             "code": code, "name": meta["name"] or code, "group": meta["group"] or "—", "unit": meta["unit"] or "—",
