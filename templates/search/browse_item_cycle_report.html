@@ -75,7 +75,8 @@
   .ic-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
   .ic-head p { margin: 2px 0 0; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
   .ic-table td, .ic-table th { text-align: center; }
-  .ic-table td:first-child, .ic-table th:first-child { text-align: start; }
+  .ic-table td.ic-name, .ic-table th.ic-name { text-align: start; }
+  .ic-code { white-space: nowrap; font-weight: 600 !important; color: #3a4452; }
   .ic-item { font-weight: 700; color: #1F2A37; }
   .ic-sub { display: block; margin-top: 1px; font-size: 0.74rem; font-weight: 500 !important; color: #7a8493; }
   .ic-cell { white-space: nowrap; font-weight: 700 !important; line-height: 1.35; }
@@ -200,10 +201,13 @@
       <p>{{ shown_count }} صنف · الأقدم بيعاً أولاً{% if shown_count > page_limit %} · يُعرض أول {{ page_limit }} صنف، والكل في Excel{% endif %}</p>
     </header>
     <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="ic-title">
-      <table class="wqc-table ic-table" data-name-col="0" data-no-colors aria-labelledby="ic-title">
+      <table class="wqc-table ic-table" data-name-col="1" data-no-colors aria-labelledby="ic-title">
         <thead>
           <tr>
-            <th scope="col">الصنف</th>
+            <th scope="col">الكود</th>
+            <th scope="col" class="ic-name">الصنف</th>
+            <th scope="col">الباركود</th>
+            {% if not report.group_code %}<th scope="col">المجموعة</th>{% endif %}
             <th scope="col">الرصيد</th>
             <th scope="col">آخر بيع</th>
             <th scope="col">آخر توريد من مورد</th>
@@ -214,10 +218,10 @@
         <tbody>
           {% for r in page_rows %}
             <tr>
-              <td>
-                <span class="ic-item">{{ r.name }}</span>
-                <span class="ic-sub"><bdi dir="ltr">{{ r.code }}</bdi>{% if r.barcode %} · <bdi dir="ltr">{{ r.barcode }}</bdi>{% endif %}{% if not report.group_code %} · {{ r.group }}{% endif %}</span>
-              </td>
+              <td class="mono ic-code" dir="ltr">{{ r.code }}</td>
+              <td class="ic-name ic-item">{{ r.name }}</td>
+              {% if r.barcode %}<td class="mono ic-code" dir="ltr">{{ r.barcode }}</td>{% else %}<td class="ic-none">—</td>{% endif %}
+              {% if not report.group_code %}<td class="ic-cell">{{ r.group }}</td>{% endif %}
               <td class="mono ic-cell">{{ r.stock_display }}<span class="ic-unit">{{ r.unit }}</span></td>
               {% if r.last_sale %}
                 <td class="mono ic-cell{% if r.sale_days > 90 %} is-old{% endif %}"><bdi dir="ltr">{{ r.last_sale }}</bdi><small>منذ {{ r.sale_days }} يوماً</small></td>
@@ -233,7 +237,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="wqc-empty">لا أصناف بهذه الحالة.</td></tr>
+            <tr><td colspan="8" class="wqc-empty">لا أصناف بهذه الحالة.</td></tr>
           {% endfor %}
         </tbody>
       </table>
