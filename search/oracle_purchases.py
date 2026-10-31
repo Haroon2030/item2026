@@ -255,7 +255,7 @@ def build_purchase_dashboard(
     group = str(group_code or "").strip()
     vendor = str(vendor_code or "").strip()
     cache_key = (
-        f"purchases:dashboard:v17:{d_from}:{d_to}:{branch}:{group}:{vendor}"
+        f"purchases:dashboard:v18:{d_from}:{d_to}:{branch}:{group}:{vendor}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
@@ -599,16 +599,23 @@ def build_purchase_dashboard(
     }
     share_base = abs(total_amount) if total_amount else 0.0
 
+    # الفروع والموردون من رأس الفاتورة (شامل الضريبة) فتُقسَم على الإجمالي الشامل؛
+    # المجموعات والأصناف من سطور الفاتورة (قبل الضريبة) فتُقسَم على الصافي قبل الضريبة،
+    # وإلا جمعت حصصها نحو 87% بدل 100% وبدا كل بند أصغر من حقيقته.
+    net_base = abs(net_amount) if net_amount else 0.0
+
     def amount_rows(
         rows: list[dict],
         *,
         names: dict[str, str] | None = None,
+        base: float | None = None,
     ) -> list[dict]:
+        divisor = share_base if base is None else base
         output: list[dict] = []
         for row in rows:
             code = str(row.get("CODE") or "").strip() or "(بلا)"
             amount = round(float(row.get("AMOUNT") or 0), 2)
-            share = (amount / share_base * 100.0) if share_base else 0.0
+            share = (amount / divisor * 100.0) if divisor else 0.0
             output.append(
                 {
                     "code": code,
@@ -652,8 +659,8 @@ def build_purchase_dashboard(
         },
         "by_branch": amount_rows(branch_rows, names=branch_names),
         "by_vendor": amount_rows(vendor_rows),
-        "by_group": amount_rows(group_rows, names=group_names),
-        "top_items": _attach_rank_bars(amount_rows(item_rows)),
+        "by_group": amount_rows(group_rows, names=group_names, base=net_base),
+        "top_items": _attach_rank_bars(amount_rows(item_rows, base=net_base)),
         "top_request_users": _request_user_chart_rows(request_user_rows),
         "top_request_groups": [
             {
