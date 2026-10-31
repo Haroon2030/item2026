@@ -43,4 +43,41 @@
 
   /* ترتيب الأصول: دائرة داكنة بنص أبيض بدل الأزرق الفاتح القديم */
   html body.theme-navy .assets-top-rank:not(#fx) { background: #4A7FB5 !important; color: #fff !important; border: 0 !important; }
+
+  /* الفروع الأكثر مرتجعاً (تصميم جديد): شريط نسبة المرتجع من المبيعات + خط المتوسط، الأعلى من المتوسط بالعنبري */
+  .sales-ov-returns .rb-board { padding: .6rem 1.2rem .8rem; gap: .7rem; }
+  .sales-ov-returns .rv-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem 1rem; }
+  .sales-ov-returns .rv-insight { margin: 0; font-size: .92rem; font-weight: 600; color: #4a5565; line-height: 1.8; }
+  .sales-ov-returns .rv-insight b { color: #1F2A37; font-weight: 800; }
+  .sales-ov-returns .rv-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: rgba(118, 118, 128, .12); }
+  .sales-ov-returns .rv-seg button { appearance: none; border: 0; cursor: pointer; min-height: 2rem; padding: 0 .9rem; border-radius: 8px; background: transparent; color: #4a4f57; font: inherit; font-size: .82rem; font-weight: 600; white-space: nowrap; transition: background-color .2s ease, box-shadow .2s ease; }
+  .sales-ov-returns .rv-seg button[aria-selected="true"] { background: #fff; color: #1F2A37; font-weight: 800; box-shadow: 0 1px 3px rgba(0, 0, 0, .16), 0 0 0 .5px rgba(0, 0, 0, .04); }
+  .sales-ov-returns .rv-seg button:focus-visible { outline: 2px solid #1F6FEB; outline-offset: 1px; }
+
+  .sales-ov-returns .rv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+  .sales-ov-returns .rb-board { container-type: inline-size; }
+  /* افتراضي (لوحة ضيقة): سطر للاسم والقيمة وسطر للشريط */
+  .sales-ov-returns .rv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .3rem .9rem; }
+  .sales-ov-returns .rv-track { grid-column: 1 / -1; grid-row: 2; }
+  .sales-ov-returns .rv-name { font-size: .9rem; font-weight: 800; color: #1F2A37; line-height: 1.4; }
+  .sales-ov-returns .rv-tag { display: block; width: fit-content; margin-top: 1px; padding: 0 .45rem; border-radius: 999px; background: rgba(118, 118, 128, .14); color: #5a6675; font-size: .68rem; font-style: normal; font-weight: 700; }
+  .sales-ov-returns .rv-track { position: relative; display: block; height: .75rem; border-radius: 999px; background: #EDF0F5; direction: rtl; }
+  .sales-ov-returns .rv-fill { position: absolute; inset-block: 0; inset-inline-start: 0; display: block; border-radius: 999px; background: #4A7FB5; min-width: 6px; }
+  .sales-ov-returns .rv-row.is-high .rv-fill { background: #E8A33D; }
+  .sales-ov-returns .rv-row.is-small .rv-fill { opacity: .55; }
+  .sales-ov-returns .rv-avg { position: absolute; inset-block: -4px; width: 0; border-inline-start: 2px dashed #1F2A37; opacity: .65; }
+  .sales-ov-returns .rv-val { display: grid; gap: 1px; justify-items: end; text-align: end; direction: rtl; min-width: 0; }
+  .sales-ov-returns .rv-val b { font-size: 1rem; font-weight: 800; color: #1F2A37; }
+  .sales-ov-returns .rv-val small { font-size: .72rem; font-weight: 600; color: #6b7482; max-width: 100%; }
+  .sales-ov-returns .rv-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .9rem; margin: 0; font-size: .76rem; font-weight: 600; color: #6b7482; }
+  .sales-ov-returns .rv-key { display: inline-block; width: .8rem; height: .8rem; margin-inline-end: .2rem; border-radius: 3px; background: #4A7FB5; vertical-align: -1px; }
+  .sales-ov-returns .rv-key.is-high { background: #E8A33D; }
+  .sales-ov-returns .rv-key-line { width: 0; height: .9rem; border-radius: 0; background: none; border-inline-start: 2px dashed #1F2A37; }
+  /* لوحة واسعة: كل شيء في سطر واحد (الاسم | الشريط | القيمة) */
+  @container (min-width: 640px) {
+    .sales-ov-returns .rv-row { grid-template-columns: 9.5rem minmax(0, 1fr) 14rem; gap: .9rem; }
+    .sales-ov-returns .rv-track { grid-column: auto; grid-row: auto; }
+    .sales-ov-returns .rv-val small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sales-ov-returns .rv-seg button { transition: none; } }
 }
