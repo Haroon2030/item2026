@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}هامش ربح الصنف{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .im-scope { margin: 0 0 12px; color: #5a6675; font-size: 0.92rem; }
+  .im-scope strong { color: #1F2A37; }
+  .im-filter .field > select, .im-filter .field > input { min-width: 0 !important; max-width: 100%; text-overflow: ellipsis; }
+  /* فلتر بشبكة ثابتة: حقل الصنف الأعرض ثم الوحدة وزر «عرض» (نفس أسلوب «كمية الطلب») */
+  @layer app-components {
+    html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) {
+      display: grid !important; grid-template-columns: minmax(0, 3fr) minmax(0, 1.5fr) auto !important;
+      gap: 0.75rem 0.85rem !important; align-items: end !important; padding: 0.85rem 1rem !important;
+    }
+    html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .field {
+      display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 0.3rem !important;
+      flex: none !important; min-width: 0 !important; width: auto !important; margin: 0 !important;
+    }
+    html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .field > label {
+      margin: 0 !important; padding: 0 0.3rem !important; font-size: 0.78rem !important; white-space: nowrap; text-align: start;
+    }
+    html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .field > :is(select, input) {
+      width: 100% !important; height: 2.5rem !important; min-height: 2.5rem !important; font-size: 0.86rem !important; border-radius: 10px !important;
+    }
+    html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) > .wqc-field-actions {
+      grid-column: auto !important; grid-row: auto !important;
+    }
+    html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) .btn-primary {
+      width: 100% !important; height: 2.5rem !important; min-height: 2.5rem !important; min-width: 7rem; padding: 0 1.5rem !important; border-radius: 999px !important;
+    }
+    @media (max-width: 720px) {
+      html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) { grid-template-columns: minmax(0, 1fr) !important; }
+      html body.theme-navy .page form.im-filter:not(#q1):not(#q2):not(#q3):not(#q4) .btn-primary { height: 2.75rem !important; }
+    }
+  }
+  .im-scope-text { margin-inline-end: 0.5rem; }
+  .im-actions { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; vertical-align: middle; }
+  .im-actions > a, .im-actions > button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem !important; min-width: 4.5rem; padding: 0 1rem !important; border-radius: 999px; font-weight: 700; text-decoration: none; }
+  .im-export { background: #E3F4EC; color: #1E6B47; }
+  @media (max-width: 720px) { .im-actions { display: flex; margin-top: 0.5rem; } .im-actions > a, .im-actions > button { min-height: 2.75rem !important; } }
+  .im-method { margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; font-weight: 400 !important; }
+  .im-method b { color: #1F2A37; font-weight: 700 !important; }
+  .im-sheet { margin-bottom: 1.25rem; }
+  .im-head { padding: 8px 12px 6px; text-align: center; color: #1F2A37; }
+  .im-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+  .im-head p { margin: 2px 0 0; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
+  .im-nowrap { white-space: nowrap; font-weight: 600; }
+  .im-best td { background: rgba(30, 107, 71, 0.07); }
+  .im-worst td { background: rgba(161, 38, 38, 0.07); }
+  .im-tag { display: inline-block; margin-inline-start: 0.4rem; padding: 0.05rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700 !important; }
+  .im-tag-best { background: #E3F4EC; color: #1E6B47; }
+  .im-tag-worst { background: #FCE4E4; color: #A12626; }
+  .im-none td { color: #98a2b3; font-weight: 400 !important; }
+  .im-margin { font-weight: 800 !important; color: #1F3B63 !important; }
+</style>
+
+<section class="dash-head" aria-label="هامش ربح الصنف">
+  <div class="dash-head-copy">
+    <h2>هامش ربح الصنف</h2>
+    <p>مقارنة سعر بيع الصنف بمتوسط تكلفته في مخازن البيع ({{ warehouses_count }} مخزناً)، لكل وحدة مسعّرة، لكشف المخزن الأعلى والأدنى ربحاً.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_item_margin_report' %}" class="dash-panel-glass wqc-filter im-filter" role="search">
+  <input type="hidden" name="run" value="1">
+  <div class="field">
+    <label for="im-q">رقم الصنف أو الباركود</label>
+    <input id="im-q" type="text" name="q" value="{{ query }}" required autocomplete="off" dir="ltr" inputmode="numeric" placeholder="مثال: 106298">
+  </div>
+  <div class="field">
+    <label for="im-unit">الوحدة</label>
+    <select id="im-unit" name="unit">
+      <option value="">كل الوحدات المسعّرة</option>
+      {% if report %}{% for u in report.unit_options %}
+        <option value="{{ u.unit }}" {% if u.unit == selected_unit %}selected{% endif %}>{{ u.unit }}{% if u.pack > 1 %} ({{ u.pack|floatformat:"-2" }}){% endif %}</option>
+      {% endfor %}{% endif %}
+    </select>
+  </div>
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report %}
+  <div class="im-scope">
+    <span class="im-scope-text">
+      <strong><bdi dir="ltr">{{ report.item_code }}</bdi> - {{ report.item_name }}</strong>
+      {% if report.group %}· {{ report.group }}{% endif %}
+    </span>
+    <span class="im-actions">
+      <a class="btn-ghost im-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
+      <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+    </span>
+  </div>
+
+  <p class="im-method">
+    <b>صافي السعر</b> = سعر البيع ÷ (1 + الضريبة) · <b>الربح</b> = صافي السعر − متوسط تكلفة الوحدة ·
+    <b>نسبة الربح على التكلفة</b> = الربح ÷ التكلفة (كما في أونكس) · <b>هامش الربح</b> = الربح ÷ صافي سعر البيع.
+    متوسط التكلفة من المخزن نفسه، وإن لم يكن له متوسط فالمتوسط العام للصنف. الرصيد بالوحدة المعروضة.
+  </p>
+
+  {% for s in report.sections %}
+  <section class="wqc-sheet im-sheet" aria-labelledby="im-title-{{ forloop.counter }}">
+    <header class="im-head">
+      <h3 id="im-title-{{ forloop.counter }}">{{ s.unit }}{% if s.pack > 1 %} ({{ s.pack|floatformat:"-2" }} من الوحدة الرئيسية){% endif %}</h3>
+      <p>
+        متوسط الهامش {{ s.avg_margin_display }}%
+        {% if s.best and s.worst and s.best.wh_code != s.worst.wh_code %}
+          · الأعلى {{ s.best.wh_name }} ({{ s.best.margin_display }}%) · الأدنى {{ s.worst.wh_name }} ({{ s.worst.margin_display }}%) · الفرق {{ s.spread_display }} نقطة
+        {% endif %}
+        {% if s.unpriced %}· {{ s.unpriced }} مخزن بلا سعر لهذه الوحدة{% endif %}
+      </p>
+    </header>
+    <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="im-title-{{ forloop.counter }}">
+      <table class="wqc-table" data-name-col="0" aria-labelledby="im-title-{{ forloop.counter }}">
+        <thead>
+          <tr>
+            <th scope="col">المخزن</th>
+            <th scope="col">الفرع</th>
+            <th scope="col">سعر البيع</th>
+            <th scope="col">الضريبة %</th>
+            <th scope="col">صافي السعر</th>
+            <th scope="col">متوسط التكلفة</th>
+            <th scope="col">الربح</th>
+            <th scope="col">نسبة الربح على التكلفة %</th>
+            <th scope="col">هامش الربح %</th>
+            <th scope="col">الرصيد</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for x in s.rows %}
+            {% if x.priced %}
+            <tr class="{% if x.is_best %}im-best{% elif x.is_worst %}im-worst{% endif %}">
+              <td class="im-nowrap"><bdi dir="ltr">{{ x.wh_code }}</bdi> - {{ x.wh_name }}{% if x.is_best %}<span class="im-tag im-tag-best">الأعلى</span>{% elif x.is_worst %}<span class="im-tag im-tag-worst">الأدنى</span>{% endif %}</td>
+              <td class="im-nowrap">{{ x.branch|default:"—" }}</td>
+              <td class="mono">{{ x.price_display }}</td>
+              <td class="mono">{{ x.vat_display }}</td>
+              <td class="mono">{{ x.net_display }}</td>
+              <td class="mono" title="مصدر التكلفة: {{ x.cost_src }}">{{ x.cost_display }}{% if x.cost_src == "عام" %}*{% endif %}</td>
+              <td class="mono">{{ x.profit_display }}</td>
+              <td class="mono">{{ x.markup_display }}</td>
+              <td class="mono im-margin">{{ x.margin_display }}</td>
+              <td class="mono">{{ x.stock_display }}</td>
+            </tr>
+            {% else %}
+            <tr class="im-none">
+              <td class="im-nowrap"><bdi dir="ltr">{{ x.wh_code }}</bdi> - {{ x.wh_name }}</td>
+              <td class="im-nowrap">{{ x.branch|default:"—" }}</td>
+              <td colspan="8">لا سعر لهذه الوحدة في هذا المخزن</td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% empty %}
+    <p class="im-scope">لا أسعار بيع لهذا الصنف في المخازن المحددة.</p>
+  {% endfor %}
+  <p class="im-scope">* متوسط التكلفة العام للصنف لأن المخزن بلا متوسط خاص به.</p>
+{% elif run and not error %}
+  <p class="im-scope">لا توجد بيانات للعرض.</p>
+{% endif %}
+{% endblock %}

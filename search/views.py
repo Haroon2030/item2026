@@ -8335,3 +8335,47 @@ def browse_item_cycle_report(request):
             'export_query': _query_without(request.GET, 'export'),
         },
     )
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_item_margin_report(request):
+    """هامش ربح الصنف: سعر البيع مقابل متوسط التكلفة في مخازن البيع المحددة."""
+    from .oracle_item_margin import MARGIN_WAREHOUSES, build_item_margin, build_item_margin_excel
+    from .oracle_stock import oracle_enabled
+
+    g = request.GET
+    query = str(g.get('q') or '').strip()
+    unit = str(g.get('unit') or '').strip()
+    want_excel = str(g.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(g.get('run') or '') in ('1', 'true', 'yes') or want_excel
+    error = ''
+    report = None
+    if run:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                report = build_item_margin(query, unit)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_item_margin_report failed: %s', exc)
+            error = str(exc) or 'تعذّر تحميل التقرير.'
+            report = None
+
+    if report and want_excel:
+        return build_item_margin_excel(report)
+
+    return render(
+        request,
+        'search/browse_item_margin_report.html',
+        {
+            'query': query,
+            'selected_unit': (report or {}).get('unit', ''),
+            'report': report,
+            'run': run,
+            'error': error,
+            'warehouses_count': len(MARGIN_WAREHOUSES),
+            'export_query': _query_without(request.GET, 'export'),
+        },
+    )

@@ -3662,6 +3662,63 @@ class ItemCycleReportTests(TestCase):
                 ic.build_item_cycle()
 
 
+class ItemMarginReportTests(TestCase):
+    """هامش ربح الصنف: صافي السعر والتكلفة والمقارنة بين المخازن."""
+
+    def test_screen_is_registered_under_reports_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, section_for_screen
+
+        self.assertIn('browse_item_margin_report', ALL_SCREEN_KEYS)
+        self.assertEqual(section_for_screen('browse_item_margin_report'), 'reports')
+        self.assertEqual(self.client.get(reverse('browse_item_margin_report')).status_code, 302)
+
+    def test_vat_type_decides_not_vat_per(self):
+        from search.oracle_item_margin import _vat_pct
+
+        self.assertEqual(_vat_pct(1, 15), 15.0)
+        self.assertEqual(_vat_pct(1, 0), 15.0)
+        self.assertEqual(_vat_pct(2, 15), 0.0)
+
+    def test_margin_from_net_price_and_unit_cost_with_best_and_worst(self):
+        from contextlib import nullcontext
+
+        from search import oracle_item_margin as im
+
+        def row(w, price, wc):
+            return {'W': w, 'U': 'كرتون', 'PS': 18, 'PR': price, 'WC': wc, 'MC': 0.7, 'VT': 1, 'VP': 15, 'Q': 360, 'MU': 0}
+
+        # 701: صافي 14.95 ÷ 1.15 = 13.00، تكلفة 0.628 × 18 = 11.304، ربح 1.696
+        rows = [row('701', 14.95, 0.628), row('60', 14.996, 0.0), row('30', 17, 0.665619)]
+        with patch.multiple(
+                'search.oracle_item_margin',
+                oracle_enabled=lambda: True, oracle_session=nullcontext, resolve_item=lambda q: '106298',
+                _item_head=lambda i: {'name': 'عصير', 'group': '22 - المشروبات'}, _price_rows=lambda i: rows,
+                fetch_warehouse_options=lambda **k: [{'code': '701', 'name': 'الدمام', 'branch_name': 'الدمام', 'branch_code': '7'}]),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            r = im.build_item_margin('106298')
+
+        sec = r['sections'][0]
+        by = {x['wh_code']: x for x in sec['rows']}
+        self.assertEqual((by['701']['net_display'], by['701']['cost_display'], by['701']['profit_display']), ('13.00', '11.30', '1.70'))
+        self.assertEqual((by['701']['markup_display'], by['701']['margin_display']), ('15.00', '13.05'))
+        self.assertEqual(by['60']['cost_src'], 'عام')  # لا متوسط للمخزن: المتوسط العام 0.7 × 18
+        self.assertEqual(by['60']['cost_display'], '12.60')
+        self.assertTrue(by['30']['is_best'])
+        self.assertTrue(by['60']['is_worst'])
+        self.assertFalse(by['1']['priced'])  # مخزن بلا سعر لهذه الوحدة
+        self.assertEqual(sec['unpriced'], len(im.MARGIN_WAREHOUSES) - 3)
+
+    def test_unknown_item_is_reported(self):
+        from contextlib import nullcontext
+
+        from search import oracle_item_margin as im
+        from search.oracle_stock import OracleStockError
+
+        with patch.multiple('search.oracle_item_margin', oracle_enabled=lambda: True, oracle_session=nullcontext,
+                            resolve_item=lambda q: ''),                 patch('django.core.cache.cache.get', return_value=None):
+            with self.assertRaises(OracleStockError):
+                im.build_item_margin('000')
+
+
 class OrderQtyReportTests(TestCase):
     """كمية الطلب: الشاشة في قسم التقارير ومعادلة الاحتياج."""
 

@@ -173,6 +173,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
             NavScreen("browse_group_study_report", "دراسة مجموعة"),
             NavScreen("browse_order_qty_report", "كمية الطلب"),
             NavScreen("browse_item_cycle_report", "دورة الصنف"),
+            NavScreen("browse_item_margin_report", "هامش ربح الصنف"),
         ),
     ),
 )
