@@ -40,26 +40,55 @@
       html body.theme-navy .page form.ic-filter:not(#q1):not(#q2):not(#q3):not(#q4) .btn-primary { height: 2.75rem !important; }
     }
   }
-  .ic-scope-text { margin-inline-end: 0.5rem; }
-  .ic-actions { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; vertical-align: middle; }
+  /* ترويسة النتيجة: النطاق يميناً والتصدير يساراً */
+  .ic-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem 1rem; margin: 0 0 0.85rem; }
+  .ic-scope-text { margin: 0; font-size: 0.9rem; font-weight: 600; color: #5a6675; line-height: 1.8; }
+  .ic-actions { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; }
   .ic-actions > a, .ic-actions > button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem !important; min-width: 4.5rem; padding: 0 1rem !important; border-radius: 999px; font-weight: 700; text-decoration: none; }
   .ic-export { background: #E3F4EC; color: #1E6B47; }
-  @media (max-width: 720px) { .ic-actions { display: flex; margin-top: 0.5rem; } .ic-actions > a, .ic-actions > button { min-height: 2.75rem !important; } }
-  .ic-method { margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; font-weight: 400 !important; }
+
+  /* طريقة الحساب مطويّة */
+  .ic-method { margin: 0 0 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; font-weight: 400 !important; }
+  .ic-method > summary { cursor: pointer; padding: 0.55rem 1rem; font-weight: 700; color: #1F3B63; list-style: none; }
+  .ic-method > summary::-webkit-details-marker { display: none; }
+  .ic-method > summary::after { content: " ▾"; color: #98a2b3; }
+  .ic-method[open] > summary::after { content: " ▴"; }
+  .ic-method > div { padding: 0 1rem 0.7rem; }
   .ic-method b { color: #1F2A37; font-weight: 700 !important; }
-  .ic-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1rem; }
-  .ic-chip { padding: 0.3rem 0.8rem; border-radius: 999px; font-size: 0.82rem; font-weight: 700; background: #EEF1F5; color: #2b3644; }
+
+  /* بطاقات الملخص: كل بطاقة رابط يفلتر الجدول بالحالة */
+  .ic-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 0.65rem; margin: 0 0 1rem; }
+  .ic-kpi { display: block; padding: 0.65rem 0.9rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); text-decoration: none; color: #1F2A37; transition: box-shadow 0.2s ease; }
+  .ic-kpi:hover { box-shadow: 0 0 0 1px rgba(31, 59, 99, 0.35); }
+  .ic-kpi:focus-visible { outline: 2px solid #1F6FEB; outline-offset: 2px; }
+  .ic-kpi span { display: block; font-size: 0.76rem; font-weight: 600; color: #5a6675; }
+  .ic-kpi strong { display: block; font-size: 1.4rem; font-weight: 800; line-height: 1.5; }
+  .ic-kpi[aria-current="true"] { background: #1F3B63; box-shadow: none; }
+  .ic-kpi[aria-current="true"] span, .ic-kpi[aria-current="true"] strong { color: #fff; }
+  .ic-kpi-active strong { color: #1E6B47; }
+  .ic-kpi-slow strong { color: #8A5A00; }
+  .ic-kpi-dead strong { color: #A12626; }
+  .ic-kpi-out strong { color: #1F4E8C; }
+  @media (prefers-reduced-motion: reduce) { .ic-kpi { transition: none; } }
+
   .ic-head { padding: 8px 12px 6px; text-align: center; color: #1F2A37; }
   .ic-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
   .ic-head p { margin: 2px 0 0; font-size: 0.8rem; font-weight: 600; color: #5a6675; }
-  .ic-nowrap { white-space: nowrap; font-weight: 600; }
-  .ic-date { white-space: nowrap; font-weight: 700 !important; }
-  .ic-none { color: #98a2b3; font-weight: 400 !important; }
+  .ic-table td, .ic-table th { text-align: center; }
+  .ic-table td:first-child, .ic-table th:first-child { text-align: start; }
+  .ic-item { font-weight: 700; color: #1F2A37; }
+  .ic-sub { display: block; margin-top: 1px; font-size: 0.74rem; font-weight: 500 !important; color: #7a8493; }
+  .ic-cell { white-space: nowrap; font-weight: 700 !important; line-height: 1.35; }
+  .ic-cell small { display: block; font-size: 0.72rem; font-weight: 500 !important; color: #7a8493; }
+  .ic-cell.is-old small { color: #A12626; font-weight: 700 !important; }
+  .ic-none { color: #b5bcc8; font-weight: 400 !important; }
+  .ic-unit { font-size: 0.74rem; font-weight: 500 !important; color: #7a8493; margin-inline-start: 0.25rem; }
   .ic-st { display: inline-block; padding: 0.15rem 0.65rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700 !important; white-space: nowrap; background: #EEF1F5; color: #2b3644; }
   .ic-st-active { background: #E3F4EC; color: #1E6B47; }
   .ic-st-slow { background: #FFF3D6; color: #8A5A00; }
   .ic-st-dead { background: #FCE4E4; color: #A12626; }
   .ic-st-out { background: #E4EEFB; color: #1F4E8C; }
+  .ic-note { margin: 0.6rem 0 0; font-size: 0.82rem; font-weight: 400 !important; color: #5a6675; }
 </style>
 
 <section class="dash-head" aria-label="دورة الصنف">
@@ -129,88 +158,89 @@
 </form>
 
 {% if report %}
-  {% with t=report.totals %}
-  <div class="ic-scope">
-    <span class="ic-scope-text">
+  <div class="ic-bar">
+    <p class="ic-scope-text">
       <strong>{% if report.group_code %}{{ report.group_code }} - {{ report.group_name }}{% else %}كل المجموعات{% endif %}{% if report.subgroup_code %} · فرعية {{ report.subgroup_code }} - {{ report.subgroup_name }}{% endif %}</strong>
       {% if report.item_code %}· صنف <bdi dir="ltr">{{ report.item_code }}</bdi>{% endif %}
       {% if report.barcode %}· باركود <bdi dir="ltr">{{ report.barcode }}</bdi>{% endif %}
       · {% if report.branch_name %}{{ report.branch_name }}{% else %}كل الفروع{% endif %}
       · {% if report.warehouse_name %}{{ report.warehouse_name }}{% else %}كل المخازن{% endif %}
       · حتى <bdi dir="ltr">{{ report.as_of }}</bdi>
-    </span>
+    </p>
     <span class="ic-actions">
       <a class="btn-ghost ic-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
       <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
     </span>
   </div>
 
-  <p class="ic-method">
-    <b>آخر بيع</b> من حركة الأصناف (نقاط البيع والجملة والآجل) ·
-    <b>آخر توريد من مورد</b> من سندات التوريد والمشتريات ·
-    <b>آخر استلام تحويل</b> من وارد المخازن (تحويل أو إذن توريد داخلي) · المرتجعات وتعديل التكلفة لا تُحسب.
-    <b>الحالة</b> بآخر بيع: نشط حتى 30 يوماً، بطيء حتى 90، راكد أكثر من ذلك، و«نفد وهو يُباع» رصيده صفر وبيع خلال 30 يوماً، و«لم يُبع منذ وروده» ورد للمخزن (توريد أو تحويل) ولم يُسجَّل له بيع بعده، ومن عمود «آخر توريد» و«آخر استلام» تعرف منذ متى هو عندك.
-    الحركة من بداية السنة المالية الحالية فقط، فالصنف «لم يُبع هذا العام» لا حركة بيع له منذ 1/1. الرصيد بالوحدة الرئيسية.
-  </p>
+  <details class="ic-method">
+    <summary>طريقة الحساب</summary>
+    <div>
+      <b>آخر بيع</b> من حركة الأصناف (نقاط البيع والجملة والآجل) ·
+      <b>آخر توريد من مورد</b> من سندات التوريد والمشتريات ·
+      <b>آخر استلام تحويل</b> من وارد المخازن (تحويل أو إذن توريد داخلي). المرتجعات وتعديل التكلفة لا تُحسب.
+      <b>الحالة</b> بآخر بيع: نشط حتى 30 يوماً، بطيء حتى 90، راكد أكثر من ذلك، «نفد وهو يُباع» رصيده صفر وبيع خلال 30 يوماً،
+      «لم يُبع منذ وروده» ورد للمخزن (توريد أو تحويل) ولم يُسجَّل له بيع بعده، و«لم يُبع هذا العام» لا بيع ولا توريد له منذ 1/1.
+      الحركة من بداية السنة المالية الحالية فقط. الرصيد بالوحدة الرئيسية.
+    </div>
+  </details>
 
-  <div class="ic-chips" aria-label="ملخص الحالات">
-    <span class="ic-chip">{{ t.items_display }} صنف</span>
-    {% for name, n in report.counts.items %}<span class="ic-chip">{{ name }}: {{ n }}</span>{% endfor %}
-  </div>
+  <nav class="ic-kpis" aria-label="ملخص الحالات">
+    {% for c in status_chips %}
+      <a class="ic-kpi{% if c.label == 'نشط' %} ic-kpi-active{% elif c.label == 'بطيء' or c.label == 'لم يُبع منذ وروده' %} ic-kpi-slow{% elif c.label == 'راكد' %} ic-kpi-dead{% elif c.label == 'نفد وهو يُباع' %} ic-kpi-out{% endif %}"
+         href="{{ c.href }}"{% if c.active %} aria-current="true"{% endif %}>
+        <span>{{ c.label }}</span><strong>{{ c.count }}</strong>
+      </a>
+    {% endfor %}
+  </nav>
 
   <section class="wqc-sheet" aria-labelledby="ic-title">
     <header class="ic-head">
-      <h3 id="ic-title">آخر بيع وآخر توريد</h3>
-      <p>الأقدم بيعاً أولاً{% if t.items > page_limit %} · يُعرض أول {{ page_limit }} صنف، والكل في Excel{% endif %}</p>
+      <h3 id="ic-title">{% if selected_status %}{{ selected_status }}{% else %}آخر بيع وآخر توريد{% endif %}</h3>
+      <p>{{ shown_count }} صنف · الأقدم بيعاً أولاً{% if shown_count > page_limit %} · يُعرض أول {{ page_limit }} صنف، والكل في Excel{% endif %}</p>
     </header>
     <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="ic-title">
-      <table class="wqc-table" data-name-col="1" aria-labelledby="ic-title">
+      <table class="wqc-table ic-table" data-name-col="0" data-no-colors aria-labelledby="ic-title">
         <thead>
           <tr>
-            <th scope="col">الكود</th>
             <th scope="col">الصنف</th>
-            <th scope="col">الباركود</th>
-            <th scope="col">المجموعة</th>
-            <th scope="col">الوحدة</th>
-            <th scope="col">الرصيد الحالي</th>
+            <th scope="col">الرصيد</th>
             <th scope="col">آخر بيع</th>
-            <th scope="col">أيام منذ البيع</th>
             <th scope="col">آخر توريد من مورد</th>
-            <th scope="col">أيام منذ التوريد</th>
             <th scope="col">آخر استلام تحويل</th>
-            <th scope="col">أيام منذ الاستلام</th>
             <th scope="col">الحالة</th>
           </tr>
         </thead>
         <tbody>
           {% for r in page_rows %}
             <tr>
-              <td class="mono" dir="ltr">{{ r.code }}</td>
-              <td>{{ r.name }}</td>
-              <td class="mono" dir="ltr">{{ r.barcode|default:"—" }}</td>
-              <td class="ic-nowrap">{{ r.group }}</td>
-              <td class="ic-nowrap">{{ r.unit }}</td>
-              <td class="mono">{{ r.stock_display }}</td>
-              <td class="mono ic-date{% if not r.last_sale %} ic-none{% endif %}" dir="ltr">{{ r.last_sale|default:"—" }}</td>
-              <td class="mono">{% if r.sale_days is not None %}{{ r.sale_days }}{% else %}—{% endif %}</td>
-              <td class="mono ic-date{% if not r.last_vendor %} ic-none{% endif %}" dir="ltr">{{ r.last_vendor|default:"—" }}</td>
-              <td class="mono">{% if r.vendor_days is not None %}{{ r.vendor_days }}{% else %}—{% endif %}</td>
-              <td class="mono ic-date{% if not r.last_transfer %} ic-none{% endif %}" dir="ltr">{{ r.last_transfer|default:"—" }}</td>
-              <td class="mono">{% if r.transfer_days is not None %}{{ r.transfer_days }}{% else %}—{% endif %}</td>
               <td>
-                <span class="ic-st{% if r.status == 'نشط' %} ic-st-active{% elif r.status == 'بطيء' %} ic-st-slow{% elif r.status == 'راكد' %} ic-st-dead{% elif r.status == 'لم يُبع منذ وروده' %} ic-st-slow{% elif r.status == 'نفد وهو يُباع' %} ic-st-out{% endif %}">{{ r.status }}</span>
+                <span class="ic-item">{{ r.name }}</span>
+                <span class="ic-sub"><bdi dir="ltr">{{ r.code }}</bdi>{% if r.barcode %} · <bdi dir="ltr">{{ r.barcode }}</bdi>{% endif %}{% if not report.group_code %} · {{ r.group }}{% endif %}</span>
+              </td>
+              <td class="mono ic-cell">{{ r.stock_display }}<span class="ic-unit">{{ r.unit }}</span></td>
+              {% if r.last_sale %}
+                <td class="mono ic-cell{% if r.sale_days > 90 %} is-old{% endif %}"><bdi dir="ltr">{{ r.last_sale }}</bdi><small>منذ {{ r.sale_days }} يوماً</small></td>
+              {% else %}<td class="ic-none">—</td>{% endif %}
+              {% if r.last_vendor %}
+                <td class="mono ic-cell"><bdi dir="ltr">{{ r.last_vendor }}</bdi><small>منذ {{ r.vendor_days }} يوماً</small></td>
+              {% else %}<td class="ic-none">—</td>{% endif %}
+              {% if r.last_transfer %}
+                <td class="mono ic-cell"><bdi dir="ltr">{{ r.last_transfer }}</bdi><small>منذ {{ r.transfer_days }} يوماً</small></td>
+              {% else %}<td class="ic-none">—</td>{% endif %}
+              <td>
+                <span class="ic-st{% if r.status == 'نشط' %} ic-st-active{% elif r.status == 'بطيء' or r.status == 'لم يُبع منذ وروده' %} ic-st-slow{% elif r.status == 'راكد' %} ic-st-dead{% elif r.status == 'نفد وهو يُباع' %} ic-st-out{% endif %}">{{ r.status }}</span>
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="13" class="wqc-empty">لا حركة بيع أو توريد ولا رصيد لهذا الاختيار.</td></tr>
+            <tr><td colspan="6" class="wqc-empty">لا أصناف بهذه الحالة.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </section>
-  {% endwith %}
 {% elif run and not error %}
-  <p class="ic-scope">لا توجد بيانات للعرض.</p>
+  <p class="ic-note">لا توجد بيانات للعرض.</p>
 {% endif %}
 <script>
   /* المخازن تتبع الفرع المختار: تُخفى مخازن الفروع الأخرى */

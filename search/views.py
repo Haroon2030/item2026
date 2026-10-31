@@ -8310,8 +8310,29 @@ def browse_item_cycle_report(request):
         error = f'تعذّر تحميل التقرير: {exc}'
         report = None
 
+    # فلتر الحالة (من بطاقات الملخص): يشمل الجدول وملف Excel معاً
+    from urllib.parse import urlencode
+
+    from .oracle_item_cycle import STATUS_ORDER
+
+    status = str(request.GET.get('status') or '').strip()
+    status_chips: list[dict] = []
+    shown_rows: list[dict] = []
+    if report:
+        counts = report.get('counts') or {}
+        if status not in counts:
+            status = ''
+        shown_rows = [r for r in report['rows'] if not status or r['status'] == status]
+        base = _query_without(request.GET, 'export', 'status')
+        status_chips = [{'name': '', 'label': 'الكل', 'count': len(report['rows']), 'active': not status,
+                         'href': f'?{base}'}] + [
+            {'name': n, 'label': n, 'count': counts[n], 'active': n == status,
+             'href': f'?{base}&{urlencode({"status": n})}'}
+            for n in STATUS_ORDER if counts.get(n)
+        ]
+
     if report and want_excel:
-        return build_item_cycle_excel(report)
+        return build_item_cycle_excel({**report, 'rows': shown_rows})
 
     return render(
         request,
@@ -8327,7 +8348,10 @@ def browse_item_cycle_report(request):
             'selected_subgroup': subgroup,
             'item_code': item_code,
             'barcode': barcode,
-            'page_rows': (report or {}).get('rows', [])[:CYCLE_PAGE_ROWS],
+            'page_rows': shown_rows[:CYCLE_PAGE_ROWS],
+            'shown_count': len(shown_rows),
+            'status_chips': status_chips,
+            'selected_status': status,
             'page_limit': CYCLE_PAGE_ROWS,
             'report': report,
             'run': run,
