@@ -8249,3 +8249,89 @@ def browse_sold_no_supply_api(request):
         return JsonResponse({'ok': False, 'error': str(exc)}, status=500)
 
     return JsonResponse({'ok': True, 'rows': rows, 'offset': offset, 'limit': limit})
+
+
+@login_required
+@require_GET
+@never_cache
+def browse_item_cycle_report(request):
+    """دورة الصنف: آخر بيع وآخر توريد لكل صنف مع الرصيد والحالة."""
+    from .oracle_income import fetch_income_branches
+    from .oracle_item_cycle import CYCLE_PAGE_ROWS, build_item_cycle, build_item_cycle_excel
+    from .oracle_stock import (
+        fetch_main_subgroup_options, fetch_sales_group_options, fetch_warehouse_options, oracle_enabled, oracle_session,
+    )
+
+    g = request.GET
+    branch = str(g.get('branch') or '').strip()
+    warehouse = str(g.get('warehouse') or '').strip()
+    group = str(g.get('group') or '').strip()
+    subgroup = str(g.get('subgroup') or '').strip()
+    item_code = str(g.get('item_code') or '').strip()
+    barcode = str(g.get('barcode') or '').strip()
+    want_excel = str(g.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(g.get('run') or '') in ('1', 'true', 'yes') or want_excel
+    error = ''
+    report = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    subgroups: list[dict] = []
+    warehouses: list[dict] = []
+    try:
+        if not oracle_enabled():
+            error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+        else:
+            with oracle_session():
+                branches = fetch_income_branches()
+                groups = fetch_sales_group_options() or []
+                subgroups = fetch_main_subgroup_options() or []
+                warehouses = fetch_warehouse_options(active_only=False) or []
+            if branch not in {b['code'] for b in branches}:
+                branch = ''
+            if group not in {str(x.get('code') or '').strip() for x in groups}:
+                group = ''
+            if subgroup and not any(
+                str(s.get('group_code') or '').strip() == group and str(s.get('code') or '').strip() == subgroup
+                for s in subgroups
+            ):
+                subgroup = ''
+            if warehouse not in {str(w.get('code') or '').strip() for w in warehouses}:
+                warehouse = ''
+            if run:
+                if not (group or item_code or barcode):
+                    error = 'اختر المجموعة أو أدخل رقم الصنف أو الباركود.'
+                else:
+                    report = build_item_cycle(
+                        group_code=group, subgroup_code=subgroup, branch_code=branch, warehouse_code=warehouse,
+                        item_code=item_code, barcode=barcode,
+                    )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('browse_item_cycle_report failed: %s', exc)
+        error = f'تعذّر تحميل التقرير: {exc}'
+        report = None
+
+    if report and want_excel:
+        return build_item_cycle_excel(report)
+
+    return render(
+        request,
+        'search/browse_item_cycle_report.html',
+        {
+            'branches': branches,
+            'groups': groups,
+            'subgroups': subgroups,
+            'warehouses': [w for w in warehouses if not w.get('inactive')],
+            'selected_branch': branch,
+            'selected_warehouse': warehouse,
+            'selected_group': group,
+            'selected_subgroup': subgroup,
+            'item_code': item_code,
+            'barcode': barcode,
+            'page_rows': (report or {}).get('rows', [])[:CYCLE_PAGE_ROWS],
+            'page_limit': CYCLE_PAGE_ROWS,
+            'report': report,
+            'run': run,
+            'error': error,
+            'export_query': _query_without(request.GET, 'export'),
+        },
+    )

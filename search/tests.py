@@ -3603,6 +3603,65 @@ class GroupStudyExcelTests(TestCase):
         self.assertTrue(ws.sheet_view.rightToLeft)
 
 
+class ItemCycleReportTests(TestCase):
+    """دورة الصنف: آخر بيع وآخر توريد والحالة."""
+
+    def test_screen_is_registered_under_reports_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, section_for_screen
+
+        self.assertIn('browse_item_cycle_report', ALL_SCREEN_KEYS)
+        self.assertEqual(section_for_screen('browse_item_cycle_report'), 'reports')
+        self.assertEqual(self.client.get(reverse('browse_item_cycle_report')).status_code, 302)
+
+    def test_status_follows_days_since_last_sale_and_stock(self):
+        from search.oracle_item_cycle import _status
+
+        self.assertEqual(_status(None, 5), 'لم يُبع هذا العام')
+        self.assertEqual(_status(10, 5), 'نشط')
+        self.assertEqual(_status(10, 0), 'نفد وهو يُباع')
+        self.assertEqual(_status(45, 5), 'بطيء')
+        self.assertEqual(_status(91, 5), 'راكد')
+        self.assertEqual(_status(200, 0), 'راكد')
+
+    def test_rows_are_oldest_sale_first_and_dates_come_from_movement(self):
+        from contextlib import nullcontext
+        from datetime import date
+
+        from search import oracle_item_cycle as ic
+
+        today = date.today()
+        old, recent = date(today.year, 1, 5), today
+        dates = {
+            '1': {'I': '1', 'LS': old, 'LV': date(today.year, 1, 2), 'LT': None},
+            '2': {'I': '2', 'LS': recent, 'LV': None, 'LT': recent},
+        }
+        info = {c: {'name': n, 'group': '39 - البان', 'unit': 'حبة', 'barcode': b}
+                for c, n, b in (('1', 'لبنة', '6281'), ('2', 'جبنة', ''), ('3', 'بلا حركة', ''))}
+        with patch.multiple(
+                'search.oracle_item_cycle',
+                oracle_enabled=lambda: True, oracle_session=nullcontext,
+                _last_dates=lambda *a: dates, _stock=lambda *a: {'1': 7.0, '2': 0.0},
+                _item_info=lambda *a: info, _group_name=lambda g: 'البان', _branch_names=lambda: {},
+                fetch_warehouse_options=lambda **k: []),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            r = ic.build_item_cycle(group_code='39')
+
+        # الصنف 3 بلا حركة ولا رصيد: لا يظهر؛ الأقدم بيعاً أولاً
+        self.assertEqual([x['code'] for x in r['rows']], ['1', '2'])
+        first = r['rows'][0]
+        self.assertEqual((first['last_sale'], first['last_vendor'], first['last_transfer']),
+                         (old.isoformat(), date(today.year, 1, 2).isoformat(), ''))
+        self.assertEqual((first['sale_days'], first['barcode']), ((today - old).days, '6281'))
+        self.assertEqual(r['rows'][1]['status'], 'نفد وهو يُباع')
+
+    def test_requires_group_or_item_or_barcode(self):
+        from search import oracle_item_cycle as ic
+        from search.oracle_stock import OracleStockError
+
+        with patch('search.oracle_item_cycle.oracle_enabled', return_value=True):
+            with self.assertRaises(OracleStockError):
+                ic.build_item_cycle()
+
+
 class OrderQtyReportTests(TestCase):
     """كمية الطلب: الشاشة في قسم التقارير ومعادلة الاحتياج."""
 
