@@ -97,6 +97,7 @@
   <button type="submit" class="btn-ghost" name="export" value="excel">Excel</button>
   {% endif %}
 </form>
+{% include "search/_await_run.html" %}
 
 <p class="sales-ov-sub turn-rule">
   {% if report %}فواتير {{ report.period_label }} · البيع محسوب {{ report.sales_label }}. {% endif %}لكل الفروع تبدأ الفترة خلال آخر {{ max_back_all }} يوماً، ومع فرع محدد حتى {{ max_back_branch }} يوماً. الكمية بوحدة المخزون وتشمل البونص. رصيد ما قبل الفترة والتحويلات ومرتجعات الشراء خارج الحساب، فما بيع زيادة على المستلم يظهر «من رصيد سابق»، والفرع الذي يشتري ولا يبيع (مستودع يوزّع بالتحويل) يظهر «فرع بلا بيع».

@@ -1,0 +1,7 @@
+{# يظهر عند فتح الشاشة بلا فلاتر: البيانات لا تُجلب حتى يُضغط «عرض» #}
+{% if awaiting_run %}
+<p class="await-run" role="status">اختر الفلاتر ثم اضغط «عرض» لجلب البيانات. لا تُحمَّل عند فتح الشاشة حتى لا تتأخر.</p>
+<style>
+  .await-run { margin: 1rem 0; padding: 0.9rem 1.1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #5a6675; font-size: 0.92rem; font-weight: 600; text-align: center; }
+</style>
+{% endif %}

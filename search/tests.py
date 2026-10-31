@@ -3603,6 +3603,54 @@ class GroupStudyExcelTests(TestCase):
         self.assertTrue(ws.sheet_view.rightToLeft)
 
 
+class HeavyReportsDeferTests(TestCase):
+    """الشاشات الثقيلة لا تجلب بياناتها عند الفتح بلا فلاتر، وتجلبها بعد «عرض»."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(username='defer-admin', password='StrongPassword123!')
+        self.client.force_login(self.user)
+
+    def _open(self, url_name, builder_path, extra_patches, params):
+        from contextlib import ExitStack
+        from unittest.mock import MagicMock
+
+        builder = MagicMock(return_value=None)
+        with ExitStack() as stack:
+            stack.enter_context(patch('search.oracle_stock.oracle_enabled', return_value=True))
+            stack.enter_context(patch('search.oracle_stock.oracle_session', MagicMock()))
+            stack.enter_context(patch('search.oracle_income.fetch_income_branches', return_value=[]))
+            for target, value in extra_patches.items():
+                stack.enter_context(patch(target, **value))
+            stack.enter_context(patch(builder_path, builder))
+            response = self.client.get(reverse(url_name), params)
+        return response, builder
+
+    def test_unsold_waits_for_show_button(self):
+        extra = {
+            'search.oracle_stock.fetch_sales_group_options': {'return_value': []},
+            'search.oracle_unsold.excluded_unsold_group_codes': {'return_value': set()},
+        }
+        response, builder = self._open('browse_unsold', 'search.oracle_unsold.build_unsold_report', extra, {})
+        self.assertEqual(response.status_code, 200)
+        builder.assert_not_called()
+        self.assertTrue(response.context['awaiting_run'])
+        self.assertContains(response, 'اضغط «عرض»')
+
+        response, builder = self._open('browse_unsold', 'search.oracle_unsold.build_unsold_report', extra, {'branch': ''})
+        builder.assert_called_once()
+        self.assertFalse(response.context['awaiting_run'])
+
+    def test_suppliers_waits_for_show_button(self):
+        response, builder = self._open('browse_suppliers', 'search.oracle_suppliers.build_suppliers_report', {}, {})
+        self.assertEqual(response.status_code, 200)
+        builder.assert_not_called()
+        self.assertTrue(response.context['awaiting_run'])
+
+        response, builder = self._open('browse_suppliers', 'search.oracle_suppliers.build_suppliers_report', {}, {'q': 'x'})
+        builder.assert_called_once()
+        self.assertFalse(response.context['awaiting_run'])
+
+
 class ItemCycleReportTests(TestCase):
     """دورة الصنف: آخر بيع وآخر توريد والحالة."""
 

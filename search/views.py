@@ -1744,7 +1744,7 @@ def browse_performance(request):
                 group_codes = {g['code'] for g in groups}
                 if selected_group and selected_group not in group_codes:
                     selected_group = ''
-                insights = build_performance_insights(
+                insights = None if not request.GET else build_performance_insights(
                     date_from,
                     date_to,
                     system=active_system,
@@ -1784,6 +1784,7 @@ def browse_performance(request):
             'groups': groups,
             'insights': insights,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
@@ -2358,7 +2359,7 @@ def browse_suppliers(request):
                 branches = fetch_income_branches()
                 if selected_branch not in {row['code'] for row in branches}:
                     selected_branch = ''
-                report = build_suppliers_report(
+                report = None if not request.GET else build_suppliers_report(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
@@ -2386,6 +2387,7 @@ def browse_suppliers(request):
             'branches': branches,
             'report': report,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
@@ -2476,7 +2478,7 @@ def browse_inventory(request):
                         selected_warehouse = ''
 
             # خارج الجلسة: الاستعلامات الثقيلة تعمل بالتوازي بجلسات مستقلة
-            insights = build_inventory_insights(
+            insights = None if not request.GET else build_inventory_insights(
                 warehouse=selected_warehouse,
                 group_code=selected_group,
                 branch_code=selected_branch,
@@ -2508,6 +2510,7 @@ def browse_inventory(request):
             'branches': branches,
             'insights': insights,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
@@ -2932,7 +2935,7 @@ def browse_vendor_turnover(request):
         else:
             # التقرير يعمل باستعلامات متوازية (اتصالات مستقلة) — خارج جلسة واحدة
             try:
-                report = build_vendor_turnover(
+                report = None if not request.GET else build_vendor_turnover(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
@@ -3028,6 +3031,7 @@ def browse_vendor_turnover(request):
             'item_detail': item_detail,
             'back_list_url': back_list_url,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
@@ -4840,7 +4844,7 @@ def browse_unsold(request):
                     selected_branch = ''
                 if selected_group not in {row['code'] for row in groups}:
                     selected_group = ''
-                report = build_unsold_report(
+                report = None if not request.GET else build_unsold_report(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
@@ -4867,6 +4871,7 @@ def browse_unsold(request):
             'groups': groups,
             'report': report,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
@@ -4951,7 +4956,7 @@ def browse_stock_turnover(request):
                     if selected_group not in {row['code'] for row in groups}:
                         selected_group = ''
                     try:
-                        report = build_stock_turnover_report(
+                        report = None if not request.GET else build_stock_turnover_report(
                             date_from,
                             date_to,
                             branch_code=selected_branch,
@@ -5027,6 +5032,7 @@ def browse_stock_turnover(request):
             'groups': groups,
             'report': report,
             'error': error,
+            'awaiting_run': not request.GET and not error,
             'base_query': base_query,
             'lines_query': lines_query,
             'clear_bill_query': clear_bill_query,
@@ -5795,7 +5801,7 @@ def browse_income(request):
                     selected_branch = ''
                 if selected_cc and selected_cc not in cc_codes:
                     selected_cc = ''
-                statement = build_income_statement(
+                statement = None if not request.GET else build_income_statement(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
@@ -5822,6 +5828,7 @@ def browse_income(request):
             'cost_centers': cost_centers,
             'statement': statement,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
@@ -8173,7 +8180,7 @@ def browse_sold_no_supply(request):
                     selected_branch = ''
                 if selected_group not in {row['code'] for row in groups}:
                     selected_group = ''
-                report = build_sold_no_supply_report(
+                report = None if not request.GET else build_sold_no_supply_report(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
@@ -8200,6 +8207,7 @@ def browse_sold_no_supply(request):
             'groups': groups,
             'report': report,
             'error': error,
+            'awaiting_run': not request.GET and not error,
         },
     )
 
