@@ -1884,7 +1884,7 @@ def _unposted_pos_sql() -> str:
     return f"""
         WITH h AS (
             SELECT /*+ MATERIALIZE INDEX(m POSBILLMST_BILLDATEUSRBRN) */
-                   m.BILL_NO, m.BRN_NO, m.W_CODE, m.BILL_DATE, m.BILL_AMT
+                   m.BILL_NO, m.BRN_NO, m.W_CODE, m.BILL_DATE, m.BILL_AMT, m.VAT_AMT
             FROM {pos}.IAS_POS_BILL_MST m
             WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
               AND {_hung_ok("m")}
@@ -1892,14 +1892,14 @@ def _unposted_pos_sql() -> str:
         )
         SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.BILL_DATE) AS D,
                NULL AS ITEM_CODE, NULL AS W_CODE,
-               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT, 0 AS STOCK_QTY
+               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT, SUM(NVL(h.VAT_AMT, 0)) AS VAT, 0 AS STOCK_QTY
         FROM h
         GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE)
         UNION ALL
         SELECT /*+ LEADING(h d) USE_NL(d) INDEX(d IAS_POS_INDX_BILL_DTL) */
                'L', h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'),
                TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, h.W_CODE)),
-               COUNT(*), 0, SUM({_UNPOSTED_STOCK_QTY})
+               COUNT(*), 0, 0, SUM({_UNPOSTED_STOCK_QTY})
         FROM h
         JOIN {pos}.IAS_POS_BILL_DTL d
           ON d.BILL_NO = h.BILL_NO AND d.BRN_NO = h.BRN_NO
@@ -1914,7 +1914,7 @@ def _unposted_pos_return_sql() -> str:
     return f"""
         WITH h AS (
             SELECT /*+ MATERIALIZE */
-                   m.RT_BILL_NO, m.BRN_NO, m.W_CODE, m.RT_BILL_DATE, m.RT_BILL_AMT
+                   m.RT_BILL_NO, m.BRN_NO, m.W_CODE, m.RT_BILL_DATE, m.RT_BILL_AMT, m.VAT_AMT
             FROM {pos}.IAS_POS_RT_BILL_MST m
             WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
               AND {_hung_ok("m")}
@@ -1922,14 +1922,14 @@ def _unposted_pos_return_sql() -> str:
         )
         SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.RT_BILL_DATE) AS D,
                NULL AS ITEM_CODE, NULL AS W_CODE,
-               COUNT(*) AS N, SUM(NVL(h.RT_BILL_AMT, 0)) AS AMT, 0 AS STOCK_QTY
+               COUNT(*) AS N, SUM(NVL(h.RT_BILL_AMT, 0)) AS AMT, SUM(NVL(h.VAT_AMT, 0)) AS VAT, 0 AS STOCK_QTY
         FROM h
         GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE)
         UNION ALL
         SELECT /*+ LEADING(h d) USE_NL(d) INDEX(d IAS_POS_INDX_RTBILL_DTL) */
                'L', h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'),
                TO_CHAR(d.I_CODE), TO_CHAR(NVL(d.W_CODE, h.W_CODE)),
-               COUNT(*), 0, SUM({_UNPOSTED_STOCK_QTY})
+               COUNT(*), 0, 0, SUM({_UNPOSTED_STOCK_QTY})
         FROM h
         JOIN {pos}.IAS_POS_RT_BILL_DTL d
           ON d.RT_BILL_NO = h.RT_BILL_NO AND d.BRN_NO = h.BRN_NO
@@ -1976,7 +1976,7 @@ def _aggregate_unposted(sales_rows: list[dict], return_rows: list[dict], unit_co
     def bucket(brn: str) -> dict:
         return by_branch.setdefault(
             brn,
-            {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
+            {"amount": 0.0, "vat": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
         )
 
     for rows, sign in ((sales_rows, 1.0), (return_rows, -1.0)):
@@ -1988,6 +1988,7 @@ def _aggregate_unposted(sales_rows: list[dict], return_rows: list[dict], unit_co
             b = bucket(brn)
             if str(row.get("K") or "") == "H":
                 b["amount"] += _f(row.get("AMT")) * sign
+                b["vat"] += _f(row.get("VAT")) * sign
                 if sign > 0:
                     b["bills"] += int(row.get("N") or 0)
                 else:
@@ -2005,6 +2006,7 @@ def _aggregate_unposted(sales_rows: list[dict], return_rows: list[dict], unit_co
 
     for b in by_branch.values():
         b["amount"] = round(b["amount"], 2)
+        b["vat"] = round(b["vat"], 2)
         b["cost"] = round(b["cost"], 2)
     return {"by_branch": by_branch, "missing_cost_items": len(missing_cost)}
 
@@ -2023,7 +2025,7 @@ def fetch_unposted_pos_sales(date_from, date_to, *, today: date | None = None) -
     jobs = []
     job_slots: list[tuple[int, str | None]] = []
     for start, end, cacheable in _unposted_slices(d_from, last_day, today):
-        key = f"income:unposted:v2:{start}:{end}" if cacheable else None
+        key = f"income:unposted:v4:{start}:{end}" if cacheable else None
         hit = cache.get(key) if key else None
         if isinstance(hit, list):
             parts.append(hit)
@@ -2069,6 +2071,12 @@ def fetch_unposted_pos_sales(date_from, date_to, *, today: date | None = None) -
 # النقدي (1/5) مستبعد عمداً لأنه مرآة لمبيعات نقاط البيع ولا توجد حالياً
 # قاعدة موثوقة لربطه بفاتورة POS الأصل دون تكرار.
 _UNPOSTED_BILL_DOC_TYPES = (4, 8)
+# نوع المستند في IAS_POST_DTL لا يساوي نوع الفاتورة: كل الفواتير (1/4/5/8) تُرحَّل بنوع 4،
+# وكل مرتجعاتها بنوع 5 (INV_V_DOC_TYPE: 4 فاتورة مبيعات، 5 مردود مبيعات). فحص 2026-10-31:
+# المطابقة بنوع الفاتورة عدّت كل فواتير النوع 8 (124) وكل المرتجعات (1,437) «غير مرحّلة»
+# وهي كلها مرحّلة فعلاً، فظهر الآجل بالسالب. (رقم + سلسلة) لا يتكرر بين الأنواع.
+_LEDGER_SALES_DOC_TYPE = 4
+_LEDGER_RETURN_DOC_TYPE = 5
 
 
 def _unposted_bill_sql() -> str:
@@ -2079,7 +2087,7 @@ def _unposted_bill_sql() -> str:
         WITH h AS (
             SELECT /*+ MATERIALIZE */
                    m.BILL_NO, m.BILL_SER, m.BILL_DOC_TYPE, m.BRN_NO,
-                   m.BILL_DATE, m.BILL_AMT
+                   m.BILL_DATE, m.BILL_AMT, m.VAT_AMT
             FROM {sch}.IAS_BILL_MST m
             WHERE m.BILL_DATE >= :d_from AND m.BILL_DATE < :d_to_excl
               AND m.BILL_DOC_TYPE IN ({types})
@@ -2088,17 +2096,17 @@ def _unposted_bill_sql() -> str:
                 SELECT 1 FROM {sch}.IAS_POST_DTL p
                 WHERE p.DOC_NO = m.BILL_NO
                   AND p.DOC_SER = m.BILL_SER
-                  AND p.DOC_TYPE = m.BILL_DOC_TYPE
+                  AND p.DOC_TYPE = {_LEDGER_SALES_DOC_TYPE}
               )
         )
         SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.BILL_DATE) AS D,
                NULL AS ITEM_CODE, 0 AS COST,
-               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT
+               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT, SUM(NVL(h.VAT_AMT, 0)) AS VAT
         FROM h
         GROUP BY h.BRN_NO, TRUNC(h.BILL_DATE)
         UNION ALL
         SELECT 'L', h.BRN_NO, TRUNC(h.BILL_DATE, 'MM'), TO_CHAR(d.I_CODE),
-               SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 0, 0
+               SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 0, 0, 0
         FROM h
         JOIN {sch}.IAS_BILL_DTL d
           ON d.BILL_NO = h.BILL_NO
@@ -2117,7 +2125,7 @@ def _unposted_bill_return_sql() -> str:
         WITH h AS (
             SELECT /*+ MATERIALIZE */
                    m.RT_BILL_NO, m.RT_BILL_SER, m.RT_BILL_DOC_TYPE, m.BRN_NO,
-                   m.RT_BILL_DATE, m.BILL_AMT
+                   m.RT_BILL_DATE, m.BILL_AMT, m.VAT_AMT
             FROM {sch}.IAS_RT_BILL_MST m
             WHERE m.RT_BILL_DATE >= :d_from AND m.RT_BILL_DATE < :d_to_excl
               AND m.RT_BILL_DOC_TYPE IN ({types})
@@ -2126,17 +2134,17 @@ def _unposted_bill_return_sql() -> str:
                 SELECT 1 FROM {sch}.IAS_POST_DTL p
                 WHERE p.DOC_NO = m.RT_BILL_NO
                   AND p.DOC_SER = m.RT_BILL_SER
-                  AND p.DOC_TYPE = m.RT_BILL_DOC_TYPE
+                  AND p.DOC_TYPE = {_LEDGER_RETURN_DOC_TYPE}
               )
         )
         SELECT 'H' AS K, h.BRN_NO AS BRN, TRUNC(h.RT_BILL_DATE) AS D,
                NULL AS ITEM_CODE, 0 AS COST,
-               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT
+               COUNT(*) AS N, SUM(NVL(h.BILL_AMT, 0)) AS AMT, SUM(NVL(h.VAT_AMT, 0)) AS VAT
         FROM h
         GROUP BY h.BRN_NO, TRUNC(h.RT_BILL_DATE)
         UNION ALL
         SELECT 'L', h.BRN_NO, TRUNC(h.RT_BILL_DATE, 'MM'), TO_CHAR(d.I_CODE),
-               SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 0, 0
+               SUM(NVL(d.STK_COST, 0) * NVL(d.I_QTY, 0)), 0, 0, 0
         FROM h
         JOIN {sch}.IAS_RT_BILL_DTL d
           ON d.RT_BILL_NO = h.RT_BILL_NO
@@ -2154,7 +2162,7 @@ def _aggregate_unposted_bill(sales_rows: list[dict], return_rows: list[dict]) ->
     def bucket(brn: str) -> dict:
         return by_branch.setdefault(
             brn,
-            {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
+            {"amount": 0.0, "vat": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None},
         )
 
     for rows, sign in ((sales_rows, 1.0), (return_rows, -1.0)):
@@ -2166,6 +2174,7 @@ def _aggregate_unposted_bill(sales_rows: list[dict], return_rows: list[dict]) ->
             b = bucket(brn)
             if str(row.get("K") or "") == "H":
                 b["amount"] += _f(row.get("AMT")) * sign
+                b["vat"] += _f(row.get("VAT")) * sign
                 if sign > 0:
                     b["bills"] += int(row.get("N") or 0)
                 else:
@@ -2177,6 +2186,7 @@ def _aggregate_unposted_bill(sales_rows: list[dict], return_rows: list[dict]) ->
 
     for b in by_branch.values():
         b["amount"] = round(b["amount"], 2)
+        b["vat"] = round(b["vat"], 2)
         b["cost"] = round(b["cost"], 2)
     return {"by_branch": by_branch}
 
@@ -2209,18 +2219,20 @@ def fetch_unposted_bill_sales(date_from, date_to) -> dict:
 def _merge_unposted_sources(pos_unposted: dict, bill_unposted: dict) -> dict:
     """يجمع غير مرحّل نقاط البيع + الآجل في نتيجة واحدة، مع إجمالي كل مصدر لعرضه في التلميح."""
     by_branch: dict[str, dict] = {}
-    pos_total = bill_total = 0.0
+    pos_total = bill_total = pos_vat_total = bill_vat_total = 0.0
 
     for source, total_key in ((pos_unposted, "pos"), (bill_unposted, "bill")):
         for brn, b in (source.get("by_branch") or {}).items():
             merged = by_branch.setdefault(
                 brn,
-                {"amount": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None,
-                 "pos_amount": 0.0, "bill_amount": 0.0},
+                {"amount": 0.0, "vat": 0.0, "cost": 0.0, "bills": 0, "returns": 0, "oldest": None,
+                 "pos_amount": 0.0, "bill_amount": 0.0, "pos_vat": 0.0, "bill_vat": 0.0},
             )
             merged["amount"] += _f(b.get("amount"))
             # مصدر المبلغ لكل فرع (يظهر في تفصيل الفروع عند الضغط على البطاقة)
             merged[f"{total_key}_amount"] += _f(b.get("amount"))
+            merged["vat"] += _f(b.get("vat"))
+            merged[f"{total_key}_vat"] += _f(b.get("vat"))
             merged["cost"] += _f(b.get("cost"))
             merged["bills"] += int(b.get("bills") or 0)
             merged["returns"] += int(b.get("returns") or 0)
@@ -2229,17 +2241,21 @@ def _merge_unposted_sources(pos_unposted: dict, bill_unposted: dict) -> dict:
                 merged["oldest"] = oldest
             if total_key == "pos":
                 pos_total += _f(b.get("amount"))
+                pos_vat_total += _f(b.get("vat"))
             else:
                 bill_total += _f(b.get("amount"))
+                bill_vat_total += _f(b.get("vat"))
 
     for b in by_branch.values():
-        for k in ("amount", "cost", "pos_amount", "bill_amount"):
+        for k in ("amount", "vat", "cost", "pos_amount", "bill_amount", "pos_vat", "bill_vat"):
             b[k] = round(b[k], 2)
     return {
         "by_branch": by_branch,
         "missing_cost_items": int(pos_unposted.get("missing_cost_items") or 0),
         "pos_amount": round(pos_total, 2),
         "bill_amount": round(bill_total, 2),
+        "pos_vat": round(pos_vat_total, 2),
+        "bill_vat": round(bill_vat_total, 2),
     }
 
 
@@ -2247,7 +2263,7 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
     """بيانات بطاقة «مبيعات لم تُرحّل» بعد تصفية الفرع."""
     names = _branch_names()
     brn = _norm_brn_code(branch_code)
-    amount = cost = 0.0
+    amount = cost = vat = 0.0
     bills = returns = 0
     oldest: date | None = None
     rows: list[dict] = []
@@ -2257,6 +2273,7 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
         if not (b["amount"] or b["cost"] or b["bills"] or b["returns"]):
             continue
         amount += b["amount"]
+        vat += _f(b.get("vat"))
         cost += b["cost"]
         bills += b["bills"]
         returns += b["returns"]
@@ -2269,8 +2286,13 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
                 "branch_name": names.get(code, code),
                 "amount": b["amount"],
                 "amount_display": _fmt_money(b["amount"]),
+                "vat_display": _fmt_money(_f(b.get("vat"))),
+                # شاملة الضريبة (كما في تقارير أونكس)؛ التكلفة والربح يبقيان على المبلغ بدون ضريبة
+                "amount_incl_display": _fmt_money(b["amount"] + _f(b.get("vat"))),
                 "pos_amount_display": _fmt_money(_f(b.get("pos_amount"))),
+                "pos_incl_display": _fmt_money(_f(b.get("pos_amount")) + _f(b.get("pos_vat"))),
                 "bill_amount_display": _fmt_money(_f(b.get("bill_amount"))),
+                "bill_incl_display": _fmt_money(_f(b.get("bill_amount")) + _f(b.get("bill_vat"))),
                 "bills_display": f"{int(b['bills']):,}",
                 "returns_display": f"{int(b['returns']):,}",
                 "cost_display": _fmt_money(b["cost"]),
@@ -2281,12 +2303,20 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
         )
     # الأكبر أثراً أولاً (المبلغ قد يكون سالباً حين تزيد المرتجعات)، ثم رقم الفرع
     rows.sort(key=lambda r: (-abs(r["amount"]), r["branch_code"]))
+    # حصة كل فرع من المبيعات الموجبة (شريط العرض) وهامشه
+    positive_total = sum(r["amount"] for r in rows if r["amount"] > 0)
+    for r in rows:
+        r["share_pct"] = round(max(r["amount"], 0.0) / positive_total * 100) if positive_total else 0
+        r["margin_display"] = f"{r['gross'] / r['amount'] * 100:,.2f}%" if r["amount"] > 0 else "—"
     amount = round(amount, 2)
     cost = round(cost, 2)
     gross = round(amount - cost, 2)
     margin_pct = round(gross / amount * 100.0, 2) if amount else 0.0
     pos_amount = round(_f(unposted.get("pos_amount")), 2)
     bill_amount = round(_f(unposted.get("bill_amount")), 2)
+    vat = round(vat, 2)
+    pos_vat = round(_f(unposted.get("pos_vat")), 2)
+    bill_vat = round(_f(unposted.get("bill_vat")), 2)
     return {
         "available": True,
         "has_data": bool(rows),
@@ -2298,6 +2328,11 @@ def _unposted_summary(unposted: dict, branch_code: str) -> dict:
         "oldest": oldest.isoformat() if oldest else "",
         "missing_cost_items": int(unposted.get("missing_cost_items") or 0),
         "amount_display": _fmt_money(amount),
+        "vat": vat,
+        "vat_display": _fmt_money(vat),
+        "amount_incl_display": _fmt_money(amount + vat),
+        "pos_incl_display": _fmt_money(pos_amount + pos_vat),
+        "bill_incl_display": _fmt_money(bill_amount + bill_vat),
         "cost_display": _fmt_money(cost),
         "gross_display": _fmt_money(gross),
         "margin_pct_display": f"{margin_pct:,.2f}%",
@@ -2342,7 +2377,7 @@ def _cache_key(
     posted_only: bool,
 ) -> str:
     return (
-        f"income:stmt:v58:{d_from}:{d_to}:"
+        f"income:stmt:v60:{d_from}:{d_to}:"
         f"{branch_code or '-'}:"
         f"{cc_code or '-'}:"
         f"{int(bool(posted_only))}"

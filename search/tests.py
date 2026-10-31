@@ -1831,6 +1831,18 @@ class IncomeUnpostedCardTests(TestCase):
             self.assertNotIn('TO_CHAR(d.BILL_NO', sql)
             self.assertIn('MATERIALIZE', sql)
 
+    def test_credit_unposted_matches_ledger_doc_type_not_invoice_type(self):
+        """الفواتير (أنواع 1/4/5/8) تُرحَّل في الدفتر بنوع 4 ومرتجعاتها بنوع 5، فالمطابقة بنوع الفاتورة تعدّ المرحّل غير مرحّل."""
+        from search.oracle_income import _unposted_bill_return_sql, _unposted_bill_sql
+
+        with patch('search.oracle_income._schema', return_value='YSIAS'):
+            sales = _unposted_bill_sql()
+            returns = _unposted_bill_return_sql()
+        self.assertIn('p.DOC_TYPE = 4', sales)
+        self.assertNotIn('p.DOC_TYPE = m.BILL_DOC_TYPE', sales)
+        self.assertIn('p.DOC_TYPE = 5', returns)
+        self.assertNotIn('p.DOC_TYPE = m.RT_BILL_DOC_TYPE', returns)
+
     def test_slices_cover_period_contiguously_and_only_old_months_are_cacheable(self):
         from datetime import date, timedelta
 
