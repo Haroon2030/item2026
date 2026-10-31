@@ -33,7 +33,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 300
-_CACHE_VER = "v2"
+_CACHE_VER = "v3"
 CYCLE_PAGE_ROWS = 300
 SALE_DOC = (1,)
 VENDOR_DOCS = (2, 15)
@@ -187,9 +187,10 @@ def _days_since(day: date | None, today: date) -> int | None:
     return None if day is None else max(0, (today - day).days)
 
 
-def _status(sale_days: int | None, stock: float) -> str:
+def _status(sale_days: int | None, stock: float, received: bool = False) -> str:
     if sale_days is None:
-        return "لم يُبع هذا العام"
+        # وردت للمخزن ولم يُسجَّل لها بيع بعد الورود، أو لا حركة بيع ولا توريد لها هذا العام
+        return "لم يُبع منذ وروده" if received else "لم يُبع هذا العام"
     if stock <= 0 and sale_days <= ACTIVE_DAYS:
         return "نفد وهو يُباع"
     if sale_days <= ACTIVE_DAYS:
@@ -261,7 +262,7 @@ def build_item_cycle(
             "last_sale": sale.isoformat() if sale else "", "sale_days": sale_days,
             "last_vendor": vendor.isoformat() if vendor else "", "vendor_days": _days_since(vendor, today),
             "last_transfer": transfer.isoformat() if transfer else "", "transfer_days": _days_since(transfer, today),
-            "status": _status(sale_days, qty),
+            "status": _status(sale_days, qty, received=bool(vendor or transfer)),
             "_sort": sale or date.min,
         })
     # الأقدم بيعاً أولاً (ومن لم يُبع قبله)، ثم الأعلى رصيداً

@@ -149,7 +149,7 @@
     <b>آخر بيع</b> من حركة الأصناف (نقاط البيع والجملة والآجل) ·
     <b>آخر توريد من مورد</b> من سندات التوريد والمشتريات ·
     <b>آخر استلام تحويل</b> من وارد المخازن (تحويل أو إذن توريد داخلي) · المرتجعات وتعديل التكلفة لا تُحسب.
-    <b>الحالة</b> بآخر بيع: نشط حتى 30 يوماً، بطيء حتى 90، راكد أكثر من ذلك، و«نفد وهو يُباع» رصيده صفر وبيع خلال 30 يوماً.
+    <b>الحالة</b> بآخر بيع: نشط حتى 30 يوماً، بطيء حتى 90، راكد أكثر من ذلك، و«نفد وهو يُباع» رصيده صفر وبيع خلال 30 يوماً، و«لم يُبع منذ وروده» ورد للمخزن (توريد أو تحويل) ولم يُسجَّل له بيع بعده، ومن عمود «آخر توريد» و«آخر استلام» تعرف منذ متى هو عندك.
     الحركة من بداية السنة المالية الحالية فقط، فالصنف «لم يُبع هذا العام» لا حركة بيع له منذ 1/1. الرصيد بالوحدة الرئيسية.
   </p>
 
@@ -198,7 +198,7 @@
               <td class="mono ic-date{% if not r.last_transfer %} ic-none{% endif %}" dir="ltr">{{ r.last_transfer|default:"—" }}</td>
               <td class="mono">{% if r.transfer_days is not None %}{{ r.transfer_days }}{% else %}—{% endif %}</td>
               <td>
-                <span class="ic-st{% if r.status == 'نشط' %} ic-st-active{% elif r.status == 'بطيء' %} ic-st-slow{% elif r.status == 'راكد' %} ic-st-dead{% elif r.status == 'نفد وهو يُباع' %} ic-st-out{% endif %}">{{ r.status }}</span>
+                <span class="ic-st{% if r.status == 'نشط' %} ic-st-active{% elif r.status == 'بطيء' %} ic-st-slow{% elif r.status == 'راكد' %} ic-st-dead{% elif r.status == 'لم يُبع منذ وروده' %} ic-st-slow{% elif r.status == 'نفد وهو يُباع' %} ic-st-out{% endif %}">{{ r.status }}</span>
               </td>
             </tr>
           {% empty %}

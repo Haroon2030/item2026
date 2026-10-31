@@ -3617,6 +3617,7 @@ class ItemCycleReportTests(TestCase):
         from search.oracle_item_cycle import _status
 
         self.assertEqual(_status(None, 5), 'لم يُبع هذا العام')
+        self.assertEqual(_status(None, 5, received=True), 'لم يُبع منذ وروده')
         self.assertEqual(_status(10, 5), 'نشط')
         self.assertEqual(_status(10, 0), 'نفد وهو يُباع')
         self.assertEqual(_status(45, 5), 'بطيء')
