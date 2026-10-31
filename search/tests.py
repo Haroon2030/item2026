@@ -3707,6 +3707,34 @@ class ItemMarginReportTests(TestCase):
         self.assertFalse(by['1']['priced'])  # مخزن بلا سعر لهذه الوحدة
         self.assertEqual(sec['unpriced'], len(im.MARGIN_WAREHOUSES) - 3)
 
+    def test_summary_ranks_only_warehouses_with_stock(self):
+        from contextlib import nullcontext
+
+        from search import oracle_item_margin as im
+
+        def row(w, price, wc, qty):
+            return {'W': w, 'U': 'صحن', 'PS': 1, 'PR': price, 'WC': wc, 'MC': 5.0, 'VT': 1, 'VP': 15, 'Q': qty, 'MU': 1}
+
+        # 20 بلا رصيد وهامشه الأعلى (تكلفة قديمة): لا يُختار أعلى؛ 701 الأعلى بين ذوات الرصيد، 2001 الأدنى
+        rows = [row('701', 8.95, 5.3, 800), row('60', 8.25, 6.15, 500), row('2001', 8.5, 7.25, 40), row('20', 9.25, 5.38, 0)]
+        with patch.multiple(
+                'search.oracle_item_margin',
+                oracle_enabled=lambda: True, oracle_session=nullcontext, resolve_item=lambda q: '06101',
+                _item_head=lambda i: {'name': 'طماطم', 'group': '26 - الطازج'}, _price_rows=lambda i: rows,
+                fetch_warehouse_options=lambda **k: []),                 patch('django.core.cache.cache.get', return_value=None),                 patch('django.core.cache.cache.set'):
+            sec = im.build_item_margin('06101')['sections'][0]
+
+        by = {x['wh_code']: x for x in sec['rows'] if x['priced']}
+        self.assertTrue(by['701']['is_best'])
+        self.assertTrue(by['2001']['is_worst'])
+        self.assertFalse(by['20']['is_best'])
+        self.assertTrue(by['20']['zero_stock'])
+        self.assertEqual(sec['ranked_count'], 3)
+        # الأعلى هامشاً أولاً في الجدول، وبلا سعر في الآخر
+        priced_codes = [x['wh_code'] for x in sec['rows'] if x['priced']]
+        self.assertEqual(priced_codes, sorted(priced_codes, key=lambda c: -by[c]['margin']))
+        self.assertFalse(sec['rows'][-1]['priced'])
+
     def test_unknown_item_is_reported(self):
         from contextlib import nullcontext
 

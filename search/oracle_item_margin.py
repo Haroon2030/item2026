@@ -29,7 +29,7 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 300
-_CACHE_VER = "v1"
+_CACHE_VER = "v3"
 # المخازن المقارَن بينها (مخازن البيع)
 MARGIN_WAREHOUSES = (60, 1, 1201, 1801, 1901, 2001, 20, 701, 800, 900, 30)
 _DEFAULT_VAT_PCT = 15.0
@@ -169,8 +169,12 @@ def build_item_margin(query: str, unit: str = "") -> dict[str, Any]:
                 "stock": _f(r["Q"]) / pack,
             })
         priced = [x for x in lines if x["priced"] and x["margin"] is not None]
-        best = max(priced, key=lambda x: x["margin"], default=None)
-        worst = min(priced, key=lambda x: x["margin"], default=None)
+        # الملخص (الأعلى والأدنى والمتوسط) بين المخازن ذات الرصيد: تكلفة المخزن الفارغ قد تكون قديمة فتضلّل
+        ranked = [x for x in priced if x["stock"] > 0]
+        if len(ranked) < 2:
+            ranked = priced
+        best = max(ranked, key=lambda x: x["margin"], default=None)
+        worst = min(ranked, key=lambda x: x["margin"], default=None)
         for x in lines:
             if not x["priced"]:
                 continue
@@ -179,20 +183,35 @@ def build_item_margin(query: str, unit: str = "") -> dict[str, Any]:
                 "cost_display": _fmt(x["cost"]), "profit_display": _fmt(x["profit"]),
                 "markup_display": _fmt(x["markup"]), "margin_display": _fmt(x["margin"]),
                 "stock_display": _fmt(x["stock"], 2).rstrip("0").rstrip(".") if x["stock"] else "0",
-                "is_best": best is not None and x is best and len(priced) > 1,
-                "is_worst": worst is not None and x is worst and len(priced) > 1,
+                "is_best": best is not None and x is best and len(ranked) > 1,
+                "is_worst": worst is not None and x is worst and len(ranked) > 1,
             })
-        avg_margin = round(sum(x["margin"] for x in priced) / len(priced), 2) if priced else None
+        avg_margin = round(sum(x["margin"] for x in ranked) / len(ranked), 2) if ranked else None
+        top = max((x["margin"] for x in priced), default=0)
+        for x in priced:
+            # مؤشرات العرض: رصيد صفر (التكلفة قد تكون قديمة)، بيع بخسارة، وطول شريط الهامش من الأعلى
+            x["zero_stock"] = x["stock"] <= 0
+            x["loss"] = x["profit"] < 0
+            x["bar_pct"] = round(max(x["margin"], 0) / top * 100) if top > 0 else 0
+        # الأعلى هامشاً أولاً، والمخازن بلا سعر في الآخر
+        lines.sort(key=lambda x: (not x["priced"], -(x.get("margin") or 0) if x["priced"] else 0))
         sections.append({
             "unit": u["unit"], "pack": u["pack"], "main": u["main"], "rows": lines,
             "unpriced": sum(1 for x in lines if not x["priced"]),
+            "ranked_count": len(ranked),
+            "unpriced_names": [f"{x['wh_code']} - {x['wh_name']}" for x in lines if not x["priced"]],
+            "zero_count": sum(1 for x in priced if x["zero_stock"]),
+            "loss_count": sum(1 for x in priced if x["loss"]),
             "avg_margin_display": _fmt(avg_margin),
             "spread_display": _fmt(round(best["margin"] - worst["margin"], 2)) if best and worst else "—",
             "best": best, "worst": worst,
         })
 
+    vats = {x["vat"] for sec in sections for x in sec["rows"] if x["priced"]}
     report = {
         "item_code": item, "item_name": head["name"] or item, "group": head["group"], "query": q,
+        "vat_display": f"{next(iter(vats)):g}" if len(vats) == 1 else "", "vat_mixed": len(vats) > 1,
+        "default_unit": next((sec["unit"] for sec in sections if sec["main"]), sections[0]["unit"] if sections else ""),
         "unit": unit, "unit_options": unit_options, "sections": sections,
         "warehouses_count": len(MARGIN_WAREHOUSES),
     }
