@@ -3893,17 +3893,17 @@ class OrderQtyReportTests(TestCase):
         # الصنف 2 مرتجع بلا بيع: لا يظهر
         self.assertEqual([x['code'] for x in r['rows']], ['1', '3'])
         row = r['rows'][0]
-        # بأكبر وحدة: 19,200 حبة ÷ 12 = 1,600 كرتون ÷ 183 يوماً = 8.74 يومياً × 30 = 262.3 → 263 كرتون
+        # بأكبر وحدة: 19,200 حبة ÷ 12 = 1,600 كرتون ÷ 183 يوماً = 8.74 يومياً × 30 = 262.3، ناقص رصيد 20 = 242.3 → 243 كرتون
         self.assertEqual((row['unit'], row['group']), ('كرتون (12 حبة)', '39 - البان مستورده'))
         self.assertEqual(row['net_q_display'], '1,600')
         self.assertEqual((row['daily_display'], row['need_display']), ('8.74', '262.30'))
-        self.assertEqual(row['order_q'], 263)
-        self.assertEqual(row['stock_q_display'], '20')  # 240 حبة = 20 كرتون، للمقارنة ولا يُخصم
-        # عبوة المبيعات لا أكبر عبوة معرّفة: 3,600 ÷ 18 = 200 كرتون (لا ÷ 21)، والرصيد 1,800 ÷ 18 = 100
+        self.assertEqual(row['order_q'], 243)
+        self.assertEqual(row['stock_q_display'], '20')  # 240 حبة = 20 كرتون
+        # عبوة المبيعات لا أكبر عبوة معرّفة: 3,600 ÷ 18 = 200 كرتون (لا ÷ 21)، والرصيد 1,800 ÷ 18 = 100 يكفي احتياجه 32.8 فطلبه صفر
         row3 = r['rows'][1]
         self.assertEqual((row3['unit'], row3['pack']), ('كرتون (18 حبة)', 18.0))
-        self.assertEqual((row3['net_q_display'], row3['order_q'], row3['stock_q_display']), ('200', 33, '100'))
-        self.assertEqual(r['totals']['order_q_display'], '296')
+        self.assertEqual((row3['net_q_display'], row3['order_q'], row3['stock_q_display']), ('200', 0, '100'))
+        self.assertEqual(r['totals']['order_q_display'], '243')
 
     def test_excel_has_order_columns(self):
         from io import BytesIO
@@ -3922,7 +3922,7 @@ class OrderQtyReportTests(TestCase):
         self.assertIn('order_qty_39_20260401_20260930.xlsx', resp['Content-Disposition'])
         values = [[c.value for c in r] for r in load_workbook(BytesIO(resp.content))['كمية الطلب'].iter_rows()]
         item = next(r for r in values if r[0] == '1')
-        self.assertEqual(item[2:], ['كرتون (12 حبة)', '39 - البان مستورده', 1608.33, 8.33, 1600.0, 8.74, 262.3, 263, 0])
+        self.assertEqual(item[2:], ['كرتون (12 حبة)', '39 - البان مستورده', 1608.33, 8.33, 1600.0, 8.74, 262.3, 0, 263])
 
     def test_all_groups_excludes_fresh_groups_and_binds_no_group(self):
         from contextlib import nullcontext

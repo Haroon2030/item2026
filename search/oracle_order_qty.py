@@ -3,7 +3,7 @@
 قراءة فقط (SELECT). صافي الكمية المباعة = نقاط البيع + الجملة النقدي 1/5 (بلا خلاصات ترحيل نقاط البيع)
 + الآجل 4/8 ناقص مرتجعاتها — نفس استعلامات «دراسة مجموعة» فتتطابق الكميات.
 المتوسط اليومي = صافي الكمية ÷ أيام الفترة (حتى اليوم إن كانت الفترة ممتدة للمستقبل)،
-واحتياج الشهر القادم = المتوسط اليومي × 30 يوماً. كل الكميات بعبوة المبيعات (أكبر عبوة بِيع بها الصنف: كرتون/ربطة، الكمية ÷ حجمها)،
+واحتياج الشهر القادم = المتوسط اليومي × 30 يوماً، وكمية الطلب = الاحتياج − الرصيد الحالي (صفر إن كان الرصيد يكفي). كل الكميات بعبوة المبيعات (أكبر عبوة بِيع بها الصنف: كرتون/ربطة، الكمية ÷ حجمها)،
 والصنف بلا عبوة كبرى بوحدته الرئيسية؛ كمية الطلب مقرّبة لأعلى بتلك الوحدة.
 """
 
@@ -52,11 +52,11 @@ from .oracle_stock import (
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 600
-_CACHE_VER = "v12"
+_CACHE_VER = "v13"
 NEXT_DAYS = 30  # الشهر القادم
 # الرصيد الحالي من كل المخازن عدا هذه (مخازن لا تُباع منها البضاعة: توالف، مرتجعات، تحويل…)
 EXCLUDED_WAREHOUSES = (69, 62, 66, 71, 3, 2, 902, 901, 1903)
-ORDER_QTY_PAGE_ROWS = 50  # صفوف الشاشة (الأعلى احتياجاً)؛ ملف Excel فيه كل الأصناف
+ORDER_QTY_PAGE_ROWS = 50  # صفوف الشاشة (الأعلى كمية طلب)؛ ملف Excel فيه كل الأصناف
 ALL_GROUPS = "all"
 # «كل المجموعات» تستثني الطازج وما يُطلب يومياً: الأسماك، اللحوم (الملحمة، ملحمة خارجية، ملحمه بلدي)،
 # المجمدات، الفرش، مجموعة الطازج، الأجبان، المخبز والمخبوزات الخارجية، المحمصة، الشعبيات، مياه عادي، الدواجن والبيض؛
@@ -264,6 +264,7 @@ def build_order_qty(date_from, date_to, *, group_code: str, branch_code: str = "
         net_q = sold_q - ret_q
         daily = net_q / days
         need = daily * NEXT_DAYS
+        stock_q = stock.get(code, 0.0) / pack
         rows_out.append({
             "code": code,
             "name": (names.get(code) or (code, ""))[0] or code,
@@ -271,10 +272,11 @@ def build_order_qty(date_from, date_to, *, group_code: str, branch_code: str = "
             "unit": unit, "pack": pack,
             "sold_q": sold_q, "ret_q": ret_q, "net_q": net_q,
             "daily": daily, "need": need,
-            "order_q": math.ceil(round(need, 4)),  # بأكبر وحدة مقرّباً لأعلى
-            "stock_q": stock.get(code, 0.0) / pack,  # الرصيد الحالي للمقارنة فقط (لا يُخصم من الطلب)
+            # الاحتياج ناقص الرصيد بأكبر وحدة مقرّباً لأعلى؛ الرصيد السالب لا يزيد الطلب، وما يكفيه رصيده طلبه صفر
+            "order_q": max(math.ceil(round(need - max(stock_q, 0.0), 4)), 0),
+            "stock_q": stock_q,
         })
-    rows_out.sort(key=lambda r: (-r["need"], r["code"]))  # الأعلى احتياجاً بأكبر وحدة
+    rows_out.sort(key=lambda r: (-r["order_q"], -r["need"], r["code"]))  # الأعلى كمية طلب ثم احتياجاً
     for r in rows_out:
         r.update({
             "sold_q_display": _qty(r["sold_q"]), "ret_q_display": _qty(r["ret_q"]), "net_q_display": _qty(r["net_q"]),
@@ -322,18 +324,18 @@ def build_order_qty_excel(report: dict[str, Any]):
     columns = [
         ("الكود", "name", 18), ("الصنف", "name", 36), ("الوحدة", "text", 18), ("المجموعة", "text", 22),
         ("الكمية المباعة", "avg", 13), ("المرتجع", "avg", 11), ("صافي الكمية", "avg", 13),
-        ("المتوسط اليومي", "avg", 13), (f"احتياج {report['next_days']} يوماً", "avg", 15), ("كمية الطلب", "count", 13),
-        ("الرصيد الحالي", "avg", 13),
+        ("المتوسط اليومي", "avg", 13), (f"احتياج {report['next_days']} يوماً", "avg", 15), ("الرصيد الحالي", "avg", 13),
+        ("كمية الطلب", "count", 13),
     ]
     rows = [
         [
             x["code"], x["name"], x["unit"], x.get("group", ""), round(x["sold_q"], 2), round(x["ret_q"], 2),
-            round(x["net_q"], 2), round(x["daily"], 2), round(x["need"], 2), x["order_q"], round(x.get("stock_q", 0.0), 2),
+            round(x["net_q"], 2), round(x["daily"], 2), round(x["need"], 2), round(x.get("stock_q", 0.0), 2), x["order_q"],
         ]
         for x in report["rows"]
     ]
     items = report["rows"]
-    total = ["", "الإجمالي (عدد العبوات)", "", "", None, None, None, None, None, sum(x["order_q"] for x in items), None]
+    total = ["", "الإجمالي (عدد العبوات)", "", "", None, None, None, None, None, None, sum(x["order_q"] for x in items)]
     ws = _xl_sheet(wb, "كمية الطلب", period, columns, rows, [(total, _XL_COLORS["total"])])
     ws.page_setup.orientation = "landscape"
 
