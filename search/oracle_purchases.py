@@ -235,6 +235,219 @@ def _mst_summary(
     return rows[0] if rows else {}
 
 
+_WEEKDAYS_AR = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+_WEEK_ORDER = [5, 6, 0, 1, 2, 3, 4]  # من السبت
+_SIZE_BUCKETS = [
+    ("أقل من 1,000", 0, 1000),
+    ("1,000 – 5,000", 1000, 5000),
+    ("5,000 – 20,000", 5000, 20000),
+    ("20,000 – 100,000", 20000, 100000),
+    ("100,000 فأكثر", 100000, None),
+]
+
+
+def _pct(part: float, whole: float) -> float:
+    return (part / whole * 100.0) if whole else 0.0
+
+
+def _day_of(value: Any):
+    if value is None:
+        return None
+    return value.date() if hasattr(value, "date") else value
+
+
+def _build_insights(
+    schema: str,
+    *,
+    d_from,
+    d_to,
+    pi_filters: list[str],
+    pr_filters: list[str],
+    params: dict[str, Any],
+    purchase_gross: float,
+    return_gross: float,
+    total_amount: float,
+    vendors: list[dict],
+) -> dict[str, Any]:
+    """رؤى إضافية: الاتجاه الزمني، أيام الأسبوع، التركّز، المرتجعات، أحجام الفواتير."""
+    amt_expr = "NVL({a}.BILL_AMT, 0) + NVL({a}.VAT_AMT, 0)"
+    pi_amt = amt_expr.format(a="m")
+    pr_amt = amt_expr.format(a="r")
+
+    daily_pi = _fetch_all(
+        f"""
+        SELECT TRUNC(m.BILL_DATE) AS D,
+               COUNT(DISTINCT m.BILL_SER) AS INV,
+               ROUND(SUM({pi_amt}), 2) AS AMT
+        FROM {schema}.IAS_PI_BILL_MST m
+        WHERE {" AND ".join(pi_filters)}
+        GROUP BY TRUNC(m.BILL_DATE)
+        """,
+        params,
+    )
+    daily_pr = _fetch_all(
+        f"""
+        SELECT TRUNC(r.RT_BILL_DATE) AS D,
+               ROUND(SUM({pr_amt}), 2) AS AMT
+        FROM {schema}.IAS_PR_BILL_MST r
+        WHERE {" AND ".join(pr_filters)}
+        GROUP BY TRUNC(r.RT_BILL_DATE)
+        """,
+        params,
+    )
+    per_day: dict[Any, dict[str, float]] = {}
+    for row in daily_pi:
+        day = _day_of(row.get("D"))
+        if day is None:
+            continue
+        slot = per_day.setdefault(day, {"amt": 0.0, "inv": 0})
+        slot["amt"] += float(row.get("AMT") or 0)
+        slot["inv"] += int(row.get("INV") or 0)
+    for row in daily_pr:
+        day = _day_of(row.get("D"))
+        if day is None:
+            continue
+        slot = per_day.setdefault(day, {"amt": 0.0, "inv": 0})
+        slot["amt"] -= float(row.get("AMT") or 0)
+
+    span_days = (d_to - d_from).days + 1
+    monthly = span_days > 92
+    grouped: dict[str, dict[str, Any]] = {}
+    for day in sorted(per_day):
+        key = day.strftime("%Y-%m") if monthly else day.isoformat()
+        slot = grouped.setdefault(key, {"amt": 0.0, "inv": 0})
+        slot["amt"] += per_day[day]["amt"]
+        slot["inv"] += per_day[day]["inv"]
+    peak_amt = max((abs(v["amt"]) for v in grouped.values()), default=0.0)
+    points = [
+        {
+            "label": key,
+            "amount": round(v["amt"], 2),
+            "amount_display": _money(v["amt"]),
+            "invoices": int(v["inv"]),
+            "bar_pct": round(_pct(abs(v["amt"]), peak_amt), 1),
+        }
+        for key, v in grouped.items()
+    ]
+    peak = max(points, key=lambda r: r["amount"], default=None)
+    active_days = len([d for d, v in per_day.items() if abs(v["amt"]) > 0.005])
+    avg_day = round(total_amount / active_days, 2) if active_days else 0.0
+
+    week_amt = [0.0] * 7
+    for day, v in per_day.items():
+        week_amt[day.weekday()] += v["amt"]
+    week_peak = max((abs(a) for a in week_amt), default=0.0)
+    weekday = [
+        {
+            "name": _WEEKDAYS_AR[i],
+            "amount_display": _money(week_amt[i]),
+            "share_display": f"{_pct(week_amt[i], total_amount):.1f}%",
+            "bar_pct": round(_pct(abs(week_amt[i]), week_peak), 1),
+        }
+        for i in _WEEK_ORDER
+    ]
+
+    size_cases = " ".join(
+        f"WHEN {pi_amt} >= {lo}"
+        + (f" AND {pi_amt} < {hi}" if hi else "")
+        + f" THEN {idx}"
+        for idx, (_, lo, hi) in enumerate(_SIZE_BUCKETS)
+    )
+    size_rows = _fetch_all(
+        f"""
+        SELECT CASE {size_cases} ELSE 0 END AS B,
+               COUNT(*) AS INV,
+               ROUND(SUM({pi_amt}), 2) AS AMT
+        FROM {schema}.IAS_PI_BILL_MST m
+        WHERE {" AND ".join(pi_filters)}
+        GROUP BY CASE {size_cases} ELSE 0 END
+        """,
+        params,
+    )
+    by_bucket = {int(r.get("B") or 0): r for r in size_rows}
+    size_total_amt = sum(float(r.get("AMT") or 0) for r in size_rows)
+    size_total_inv = sum(int(r.get("INV") or 0) for r in size_rows)
+    sizes = []
+    for idx, (label, _, _) in enumerate(_SIZE_BUCKETS):
+        row = by_bucket.get(idx) or {}
+        amt = float(row.get("AMT") or 0)
+        inv = int(row.get("INV") or 0)
+        sizes.append(
+            {
+                "label": label,
+                "invoices": inv,
+                "invoice_share": f"{_pct(inv, size_total_inv):.1f}%",
+                "amount_display": _money(amt),
+                "amount_share": round(_pct(amt, size_total_amt), 1),
+                "amount_share_display": f"{_pct(amt, size_total_amt):.1f}%",
+            }
+        )
+
+    ret_vendor_rows = _fetch_all(
+        f"""
+        SELECT NVL(TO_CHAR(r.V_CODE), '(بلا)') AS CODE,
+               MAX(NVL(r.V_NAME, TO_CHAR(r.V_CODE))) AS NAME,
+               COUNT(DISTINCT r.RT_BILL_SER) AS DOCS,
+               ROUND(SUM({pr_amt}), 2) AS AMT
+        FROM {schema}.IAS_PR_BILL_MST r
+        WHERE {" AND ".join(pr_filters)}
+        GROUP BY NVL(TO_CHAR(r.V_CODE), '(بلا)')
+        ORDER BY AMT DESC
+        FETCH FIRST 5 ROWS ONLY
+        """,
+        params,
+    )
+    ret_top = [
+        {
+            "name": str(r.get("NAME") or "").strip() or str(r.get("CODE")),
+            "docs": int(r.get("DOCS") or 0),
+            "amount_display": _money(r.get("AMT") or 0),
+            "share_display": f"{_pct(float(r.get('AMT') or 0), return_gross):.1f}%",
+        }
+        for r in ret_vendor_rows
+        if float(r.get("AMT") or 0) > 0
+    ]
+
+    amounts = [float(v.get("amount") or 0) for v in vendors]
+
+    def top(n: int) -> float:
+        return _pct(sum(amounts[:n]), total_amount)
+
+    hhi = sum(_pct(a, total_amount) ** 2 for a in amounts)
+    top5 = top(5)
+    level = "مرتفع" if top5 >= 60 else "متوسط" if top5 >= 35 else "منخفض"
+    return_rate = _pct(return_gross, purchase_gross)
+    return {
+        "trend": {
+            "mode": "month" if monthly else "day",
+            "points": points,
+            "peak": peak,
+            "active_days": active_days,
+            "span_days": span_days,
+            "avg_day_display": _money(avg_day),
+        },
+        "weekday": weekday,
+        "sizes": sizes,
+        "concentration": {
+            "top1": f"{top(1):.1f}%",
+            "top3": f"{top(3):.1f}%",
+            "top5": f"{top5:.1f}%",
+            "top1_pct": round(top(1), 1),
+            "top3_pct": round(top(3), 1),
+            "top5_pct": round(top5, 1),
+            "hhi": round(hhi),
+            "level": level,
+        },
+        "returns": {
+            "rate_display": f"{return_rate:.2f}%",
+            "rate_pct": round(return_rate, 2),
+            "gross_purchase_display": _money(purchase_gross),
+            "gross_return_display": _money(return_gross),
+            "top_vendors": ret_top,
+        },
+    }
+
+
 def build_purchase_dashboard(
     date_from,
     date_to,
@@ -255,7 +468,7 @@ def build_purchase_dashboard(
     group = str(group_code or "").strip()
     vendor = str(vendor_code or "").strip()
     cache_key = (
-        f"purchases:dashboard:v18:{d_from}:{d_to}:{branch}:{group}:{vendor}"
+        f"purchases:dashboard:v19:{d_from}:{d_to}:{branch}:{group}:{vendor}"
     )
     cached = cache.get(cache_key)
     if isinstance(cached, dict):
@@ -661,6 +874,18 @@ def build_purchase_dashboard(
         "by_vendor": amount_rows(vendor_rows),
         "by_group": amount_rows(group_rows, names=group_names, base=net_base),
         "top_items": _attach_rank_bars(amount_rows(item_rows, base=net_base)),
+        "insights": _build_insights(
+            schema,
+            d_from=d_from,
+            d_to=d_to,
+            pi_filters=pi_filters,
+            pr_filters=pr_filters,
+            params={**pi_params, **pr_params},
+            purchase_gross=round(purchase_net + purchase_vat, 2),
+            return_gross=round(return_net + return_vat, 2),
+            total_amount=total_amount,
+            vendors=amount_rows(vendor_rows),
+        ),
         "top_request_users": _request_user_chart_rows(request_user_rows),
         "top_request_groups": [
             {

@@ -1,0 +1,19 @@
+{% load money_fmt %}
+<ul class="xv-list" role="list">
+  {% for row in rows %}
+    <li class="xv-row{% if forloop.counter > 8 %} xv-extra{% endif %}" data-q="{{ row.name }} {{ row.code }}" title="{{ row.name }} — {{ row.amount_display }} ({{ row.share_display }})">
+      <span class="xv-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
+      <div class="xv-main">
+        <strong class="xv-name">{{ row.name }}</strong>
+        <span class="xv-sub mono">{% if kind == "vendor" %}{{ row.invoice_count }} فاتورة · #{{ row.code }}{% elif kind == "branch" %}{{ row.invoice_count }} فاتورة{% elif kind == "item" %}#{{ row.code }} · {{ row.qty_display }} كمية{% else %}#{{ row.code }}{% endif %}</span>
+        <span class="xv-track" aria-hidden="true"><span class="xv-fill" style="width:{% widthratio row.share_pct rows.0.share_pct 100 %}%"></span></span>
+      </div>
+      <div class="xv-fig">
+        <b class="mono">{% money row.amount_display %}</b>
+        <span class="xv-pct mono">{{ row.share_display }}</span>
+      </div>
+    </li>
+  {% empty %}
+    <li class="xv-empty">لا توجد بيانات خلال الفترة.</li>
+  {% endfor %}
+</ul>

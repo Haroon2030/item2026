@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load money_fmt %}
+{% load money_fmt l10n %}
 
 {% block title %}تحليل المشتريات{% endblock %}
 {% block page_class %}sales-dash purchase-dash{% endblock %}
@@ -29,68 +29,24 @@
 {% endif %}
 
 {% if dashboard %}
-  <section class="purchase-kpis" aria-label="مؤشرات المشتريات">
-    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-total">
-      <span class="dash-kpi-label" title="صافي المشتريات بعد خصم مرتجعات الشراء، شاملاً الضريبة">
-        <span class="dash-kpi-ico dash-kpi-ico-pur-total" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 16V10M13 16V7M18 16v-5"/></svg>
-        </span>
-        الصافي شامل الضريبة
-      </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.total_display %}</strong>
-      <span class="dash-kpi-hint">{{ dashboard.period_label }} · شامل الضريبة</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-net">
-      <span class="dash-kpi-label" title="صافي المشتريات (الشراء − المرتجع) قبل الضريبة">
-        <span class="dash-kpi-ico dash-kpi-ico-pur-net" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 6h2l2.4 10.2a2 2 0 0 0 2 1.6h7.2a2 2 0 0 0 2-1.5L20.5 9H7"/><circle cx="10" cy="20" r="1.1"/><circle cx="17" cy="20" r="1.1"/></svg>
-        </span>
-        الصافي قبل الضريبة
-      </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.net_display %}</strong>
-      <span class="dash-kpi-hint">شراء {% money dashboard.kpis.purchase_net_display %} − مرتجع {% money dashboard.kpis.return_net_display %}</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vat">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-pur-vat" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M7 17L17 7"/><circle cx="8" cy="8" r="2"/><circle cx="16" cy="16" r="2"/></svg>
-        </span>
-        صافي الضريبة
-      </span>
-      <strong class="dash-kpi-value mono">{% money dashboard.kpis.vat_display %}</strong>
-      <span class="dash-kpi-hint">بعد خصم مرتجعات الشراء</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-invoices">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-pur-inv" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>
-        </span>
-        عدد فواتير الشراء
-      </span>
-      <strong class="dash-kpi-value mono">{{ dashboard.kpis.invoice_count }}</strong>
-      <span class="dash-kpi-hint">مرتجع {{ dashboard.kpis.return_count }} · متوسط {% money dashboard.kpis.average_display %}</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-vendors">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-pur-vendors" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 9h16l-1 10a2 2 0 0 1-2 1.8H7A2 2 0 0 1 5 19z"/><path d="M8.5 9V6.8A3.5 3.5 0 0 1 12 3.3a3.5 3.5 0 0 1 3.5 3.5V9"/></svg>
-        </span>
-        الموردون / الأصناف
-      </span>
-      <strong class="dash-kpi-value mono">{{ dashboard.kpis.vendor_count }} / {{ dashboard.kpis.item_count }}</strong>
-      <span class="dash-kpi-hint">مورد نشط / صنف مشترى</span>
-    </article>
-    <article class="dash-kpi-card dash-kpi-glass purchase-kpi purchase-kpi-qty">
-      <span class="dash-kpi-label">
-        <span class="dash-kpi-ico dash-kpi-ico-pur-qty" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
-        </span>
-        صافي الكمية
-      </span>
-      <strong class="dash-kpi-value mono">{{ dashboard.kpis.qty_display }}</strong>
-      <span class="dash-kpi-hint">شراء − مرتجع</span>
-    </article>
+  {% with v=dashboard.by_vendor.0 g=dashboard.by_group.0 %}
+  <section class="xv-hero" aria-label="ملخص المشتريات">
+    <div class="xv-hero-main">
+      <span class="xv-eyebrow">صافي المشتريات شامل الضريبة · {{ dashboard.period_label }}</span>
+      <strong class="xv-big xv-num">{% money dashboard.kpis.total_display %}</strong>
+      <p class="xv-insight">
+        {% if v %}أكبر مورد <b>{{ v.name }}</b> بحصة <b class="xv-num">{{ v.share_display }}</b>{% endif %}{% if g %} · وأكبر مجموعة <b>{{ g.name }}</b> بحصة <b class="xv-num">{{ g.share_display }}</b> من الصافي قبل الضريبة{% endif %}.
+      </p>
+    </div>
+    <dl class="xv-stats">
+      <div><dt>الصافي قبل الضريبة</dt><dd class="mono">{% money dashboard.kpis.net_display %}</dd><small>شراء {% money dashboard.kpis.purchase_net_display %} − مرتجع {% money dashboard.kpis.return_net_display %}</small></div>
+      <div><dt>صافي الضريبة</dt><dd class="mono">{% money dashboard.kpis.vat_display %}</dd><small>بعد خصم المرتجعات</small></div>
+      <div><dt>فواتير الشراء</dt><dd class="mono">{{ dashboard.kpis.invoice_count }}</dd><small>متوسط {% money dashboard.kpis.average_display %} · مرتجع {{ dashboard.kpis.return_count }}</small></div>
+      <div><dt>الموردون / الأصناف</dt><dd class="mono">{{ dashboard.kpis.vendor_count }} / {{ dashboard.kpis.item_count }}</dd><small>نشط / مشترى</small></div>
+      <div><dt>صافي الكمية</dt><dd class="mono">{{ dashboard.kpis.qty_display }}</dd><small>شراء − مرتجع</small></div>
+    </dl>
   </section>
+  {% endwith %}
 {% endif %}
 
 <form method="get" action="{% url 'browse_purchases' %}" class="purchase-filter dash-panel-glass" role="search">
@@ -133,105 +89,98 @@
 </form>
 
 {% if dashboard %}
+  {% with ins=dashboard.insights %}
+  <h3 class="xv-section-title">رؤى تحليلية</h3>
+  <section class="xv-insights" aria-label="رؤى تحليلية">
+    <article class="xv-card xv-card-wide">
+      <header><h4>حركة المشتريات {% if ins.trend.mode == "month" %}الشهرية{% else %}اليومية{% endif %}</h4>
+        <span class="xv-chips">
+          {% if ins.trend.peak %}<span class="xv-chip">الأعلى: <b>{{ ins.trend.peak.label }}</b> · {% money ins.trend.peak.amount_display %}</span>{% endif %}
+          <span class="xv-chip">متوسط يوم نشط: <b>{% money ins.trend.avg_day_display %}</b></span>
+          <span class="xv-chip">أيام نشطة: <b>{{ ins.trend.active_days }}</b> من {{ ins.trend.span_days }}</span>
+        </span>
+      </header>
+      {% if ins.trend.points %}
+        <div class="xv-spark" role="img" aria-label="رسم أعمدة لحركة المشتريات">
+          {% for pt in ins.trend.points %}
+            <span class="xv-col{% if ins.trend.peak and pt.label == ins.trend.peak.label %} is-peak{% endif %}{% if pt.amount < 0 %} is-neg{% endif %}" style="--h:{{ pt.bar_pct|unlocalize }}%" title="{{ pt.label }} — {{ pt.amount_display }} · {{ pt.invoices }} فاتورة"></span>
+          {% endfor %}
+        </div>
+        <div class="xv-axis"><span>{{ ins.trend.points.0.label }}</span><span>{% with last=ins.trend.points|last %}{{ last.label }}{% endwith %}</span></div>
+      {% else %}
+        <p class="xv-empty">لا توجد حركة خلال الفترة.</p>
+      {% endif %}
+    </article>
+
+    <article class="xv-card">
+      <header><h4>تركّز الموردين</h4><span class="xv-badge xv-lvl-{{ ins.concentration.level }}">{{ ins.concentration.level }}</span></header>
+      <div class="xv-tiles">
+        <div><b class="xv-num">{{ ins.concentration.top1 }}</b><small>أكبر مورد</small></div>
+        <div><b class="xv-num">{{ ins.concentration.top3 }}</b><small>أكبر 3</small></div>
+        <div><b class="xv-num">{{ ins.concentration.top5 }}</b><small>أكبر 5</small></div>
+      </div>
+      <p class="xv-note">كلما ارتفع التركّز زاد الاعتماد على عدد قليل من الموردين (مؤشر هيرفندال {{ ins.concentration.hhi }}).</p>
+    </article>
+
+    <article class="xv-card">
+      <header><h4>المرتجعات</h4></header>
+      <div class="xv-tiles">
+        <div><b class="xv-num">{{ ins.returns.rate_display }}</b><small>نسبة المرتجع من الشراء</small></div>
+      </div>
+      <p class="xv-note">شراء {% money ins.returns.gross_purchase_display %} · مرتجع {% money ins.returns.gross_return_display %} (شامل الضريبة)</p>
+      {% if ins.returns.top_vendors %}
+        <ul class="xv-mini">
+          {% for r in ins.returns.top_vendors %}
+            <li><span class="xv-mini-name" title="{{ r.name }}">{{ r.name }}</span><span class="xv-num">{% money r.amount_display %}</span><em>{{ r.share_display }}</em></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </article>
+
+    <article class="xv-card">
+      <header><h4>حسب أيام الأسبوع</h4></header>
+      <ul class="xv-mini xv-bars">
+        {% for d in ins.weekday %}
+          <li><span class="xv-mini-name">{{ d.name }}</span><span class="xv-hbar"><i style="width:{{ d.bar_pct|unlocalize }}%"></i></span><span class="xv-num">{{ d.share_display }}</span></li>
+        {% endfor %}
+      </ul>
+    </article>
+
+    <article class="xv-card">
+      <header><h4>أحجام فواتير الشراء</h4></header>
+      <ul class="xv-mini xv-bars">
+        {% for b in ins.sizes %}
+          <li title="{{ b.invoices }} فاتورة ({{ b.invoice_share }}) · {{ b.amount_display }}"><span class="xv-mini-name">{{ b.label }}</span><span class="xv-hbar"><i style="width:{{ b.amount_share|unlocalize }}%"></i></span><span class="xv-num">{{ b.invoices }} · {{ b.amount_share_display }}</span></li>
+        {% endfor %}
+      </ul>
+      <p class="xv-note">عدد الفواتير · حصة القيمة من إجمالي الشراء.</p>
+    </article>
+  </section>
+  {% endwith %}
+
+  <section class="xv-explorer dash-panel-glass" aria-label="استكشاف المشتريات">
+    <div class="xv-bar">
+      <div class="xv-tabs" role="tablist" aria-label="عرض المشتريات حسب">
+        <button type="button" role="tab" class="xv-tab is-active" data-xv-tab="vendor" aria-selected="true">الموردون <i>{{ dashboard.by_vendor|length }}</i></button>
+        <button type="button" role="tab" class="xv-tab" data-xv-tab="group" aria-selected="false">المجموعات <i>{{ dashboard.by_group|length }}</i></button>
+        <button type="button" role="tab" class="xv-tab" data-xv-tab="branch" aria-selected="false">الفروع <i>{{ dashboard.by_branch|length }}</i></button>
+        <button type="button" role="tab" class="xv-tab" data-xv-tab="item" aria-selected="false">الأصناف <i>{{ dashboard.top_items|length }}</i></button>
+      </div>
+      <label class="xv-search"><span class="sr-only">بحث</span>
+        <input type="search" id="xv-search" placeholder="ابحث بالاسم أو الرقم…" autocomplete="off">
+      </label>
+    </div>
+    <p class="xv-basis" id="xv-basis">المبالغ شاملة الضريبة · الحصة من إجمالي المشتريات</p>
+    <div class="xv-panel" data-xv-panel="vendor">{% include "search/_purchase_rank_list.html" with rows=dashboard.by_vendor kind="vendor" %}</div>
+    <div class="xv-panel" data-xv-panel="group" hidden>{% include "search/_purchase_rank_list.html" with rows=dashboard.by_group kind="group" %}</div>
+    <div class="xv-panel" data-xv-panel="branch" hidden>{% include "search/_purchase_rank_list.html" with rows=dashboard.by_branch kind="branch" %}</div>
+    <div class="xv-panel" data-xv-panel="item" hidden>{% include "search/_purchase_rank_list.html" with rows=dashboard.top_items kind="item" %}</div>
+    <p class="xv-total" id="xv-total" aria-live="polite"></p>
+    <button type="button" class="xv-more" id="xv-more">عرض الكل</button>
+  </section>
+
+  <h3 class="xv-section-title">طلبات الشراء</h3>
   <section class="purchase-grid" aria-label="تفاصيل تحليل المشتريات">
-    <section class="dash-panel dash-panel-glass purchase-panel" aria-label="أعلى الموردين">
-      <div class="dash-panel-head">
-        <h3>أعلى الموردين</h3>
-        <span class="result-pill">{{ dashboard.by_vendor|length }}</span>
-      </div>
-      <div class="table-wrap purchase-table-scroll" data-visible-rows="11">
-        <table class="data-table sales-table purchase-table">
-          <thead><tr><th>#</th><th>رقم المورد</th><th>المورد</th><th>الفواتير</th><th>المبلغ</th><th>الحصة</th></tr></thead>
-          <tbody>
-            {% for row in dashboard.by_vendor %}
-              <tr>
-                <td class="mono">{{ forloop.counter }}</td>
-                <td class="mono">{{ row.code }}</td>
-                <td class="purchase-name" title="{{ row.name }}">{{ row.name }}</td>
-                <td class="mono">{{ row.invoice_count }}</td>
-                <td class="mono purchase-amount">{% money row.amount_display %}</td>
-                <td class="mono purchase-share">{{ row.share_display }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="6" class="sales-empty">لا توجد مشتريات خلال الفترة.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="dash-panel dash-panel-glass purchase-panel purchase-groups-panel" aria-label="المشتريات حسب المجموعات">
-      <div class="dash-panel-head">
-        <span class="rb-head-ico" aria-hidden="true">
-          <svg viewBox="0 0 48 48"><path d="M4 6h6l5 23h22l5-16H13"/><circle cx="19" cy="38" r="2.5"/><circle cx="35" cy="38" r="2.5"/></svg>
-        </span>
-        <h3>المشتريات حسب المجموعات</h3>
-        <span class="result-pill">{{ dashboard.by_group|length }}</span>
-      </div>
-      {% if dashboard.by_group %}
-        <div class="rb-board" data-rb-static>
-          <ul class="rb-list is-scroll" role="list">
-            {% for row in dashboard.by_group %}
-              <li class="rb-row" title="{{ row.name }} — {{ row.amount_display }}">
-                <div class="rb-bar-col">
-                  <span class="rb-pct mono">{{ row.share_display }}</span>
-                  <span class="rb-track" aria-hidden="true"><span class="rb-fill" style="width:{% widthratio row.share_pct dashboard.by_group.0.share_pct 100 %}%"></span></span>
-                </div>
-                <div class="rb-details">
-                  <strong class="rb-name">{{ row.name }}</strong>
-                  <span class="rb-meta mono">{% money row.amount_display %}</span>
-                </div>
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% else %}
-        <p class="sales-empty">لا توجد مجموعات خلال الفترة.</p>
-      {% endif %}
-    </section>
-
-    <section class="dash-panel dash-panel-glass purchase-panel purchase-branch-panel" aria-label="المشتريات حسب الفروع">
-      <div class="dash-panel-head">
-        <h3>المشتريات حسب الفروع</h3>
-        <span class="result-pill">{{ dashboard.by_branch|length }}</span>
-      </div>
-      {{ dashboard.by_branch|json_script:"purchase-branch-data" }}
-      <div id="purchase-branch-board" class="branch-chart branch-donut purchase-branch-donut" hidden></div>
-      <p id="purchase-branch-empty" class="sales-empty"{% if dashboard.by_branch %} hidden{% endif %}>
-        لا توجد فروع خلال الفترة.
-      </p>
-    </section>
-
-    <section class="dash-panel dash-panel-glass purchase-panel purchase-items-panel purchase-groups-panel" aria-label="الأصناف الأكثر شراء">
-      <div class="dash-panel-head">
-        <span class="rb-head-ico" aria-hidden="true">
-          <svg viewBox="0 0 48 48"><path d="M24 5l17 8v22l-17 8-17-8V13z"/><path d="M7 13l17 8 17-8M24 21v22"/></svg>
-        </span>
-        <h3>الأصناف الأكثر شراءً</h3>
-        <span class="result-pill">أعلى {{ dashboard.top_items|length }}</span>
-      </div>
-      {% if dashboard.top_items %}
-        <div class="rb-board" data-rb-static>
-          <ul class="rb-list is-scroll" role="list">
-            {% for row in dashboard.top_items %}
-              <li class="rb-row" title="{{ row.name }} #{{ row.code }} — {{ row.amount_display }} ({{ row.share_display }}) · {{ row.qty_display }} كمية · {{ row.invoice_count }} فاتورة">
-                <div class="rb-bar-col">
-                  <span class="rb-pct mono">{{ row.share_display }}</span>
-                  <span class="rb-track" aria-hidden="true"><span class="rb-fill" style="width:{% widthratio row.share_pct dashboard.top_items.0.share_pct 100 %}%"></span></span>
-                </div>
-                <div class="rb-details">
-                  <strong class="rb-name">{{ row.name }}</strong>
-                  <span class="rb-meta mono">{% money row.amount_display %}</span>
-                </div>
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% else %}
-        <p class="sales-empty">لا توجد أصناف خلال الفترة.</p>
-      {% endif %}
-    </section>
-
     <section class="dash-panel dash-panel-glass purchase-panel purchase-users-panel" aria-label="المستخدمون الأكثر إدخالاً لطلبات الشراء">
       <div class="dash-panel-head">
         <h3>المستخدمون الأكثر إدخالاً لطلبات الشراء</h3>
@@ -298,26 +247,166 @@
 {% endif %}
 {% endblock %}
 
+{% block extra_css %}
+<style>
+  .xv-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr); gap: 1rem; margin: 0 0 1rem; }
+  .xv-hero-main { padding: 1.3rem 1.5rem; border-radius: 22px; background: linear-gradient(150deg, #14284B, #2c5282); color: #fff; display: grid; gap: .5rem; align-content: center; box-shadow: 0 14px 34px rgba(20, 40, 75, .22); }
+  .xv-eyebrow { font-size: .85rem; font-weight: 700; opacity: .8; }
+  .xv-big { font-size: clamp(1.9rem, 4vw, 2.9rem); font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
+  .xv-insight { margin: .2rem 0 0; font-size: .92rem; line-height: 1.9; font-weight: 600; opacity: .92; }
+  .xv-insight b, .xv-insight b.mono { color: #ffd58a !important; font-weight: 800; }
+  .xv-hero-main .xv-big, .xv-hero-main .xv-eyebrow { color: #fff !important; }
+  .xv-stats { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .7rem; }
+  .xv-stats > div { padding: .85rem 1rem; border-radius: 18px; background: #fffdfb; border: 1px solid rgba(20, 40, 75, .08); display: grid; gap: .2rem; align-content: start; }
+  .xv-stats dt { font-size: .8rem; font-weight: 700; color: #6b7686; }
+  .xv-stats dd { margin: 0; font-size: 1.35rem; font-weight: 800; color: #14284B; line-height: 1.2; }
+  .xv-stats small { font-size: .72rem; font-weight: 600; color: #8a93a1; line-height: 1.5; }
+  .xv-explorer { margin: 1rem 0; padding: 1rem 1.1rem 1.1rem; border-radius: 22px; }
+  .xv-bar { display: flex; flex-wrap: wrap; gap: .7rem; align-items: center; justify-content: space-between; }
+  .xv-tabs { display: inline-flex; gap: .25rem; padding: .25rem; border-radius: 999px; background: #eef1f6; max-width: 100%; overflow-x: auto; }
+  .xv-tab { appearance: none; border: 0; background: transparent; padding: .5rem 1rem; border-radius: 999px; font: inherit; font-size: .9rem; font-weight: 700; color: #4a5568; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+  .xv-tab i { font-style: normal; font-size: .72rem; margin-inline-start: .3rem; opacity: .6; }
+  .xv-tab:hover { color: #14284B; }
+  .xv-tab.is-active { background: #14284B; color: #fff; box-shadow: 0 4px 12px rgba(20, 40, 75, .25); }
+  .xv-tab:focus-visible { outline: 3px solid #E8A33D; outline-offset: 2px; }
+  .xv-search input { min-width: 14rem; padding: .55rem 1rem; border-radius: 999px; border: 1px solid rgba(20, 40, 75, .15); background: #fff; font: inherit; font-size: .9rem; }
+  .xv-basis { margin: .7rem 0 .4rem; font-size: .78rem; font-weight: 600; color: #8a93a1; }
+  .xv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
+  .xv-list:not(.is-open) .xv-extra { display: none; }
+  .xv-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: .8rem; align-items: center; padding: .6rem .5rem; border-radius: 14px; transition: background .15s; }
+  .xv-row:hover { background: #f1f5fb; }
+  .xv-rank { text-align: center; font-size: .8rem; font-weight: 800; color: #8a93a1; }
+  .xv-row:nth-child(-n+3) .xv-rank { color: #14284B; }
+  .xv-main { display: grid; gap: .1rem; min-width: 0; }
+  .xv-name { font-size: .95rem; font-weight: 800; color: #1d2733; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .xv-sub { font-size: .72rem; font-weight: 600; color: #8a93a1; }
+  .xv-track { display: block; height: .5rem; margin-top: .3rem; border-radius: 999px; background: #e6ebf3; overflow: hidden; }
+  .xv-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(to left, #14284B, #4a7fb5); }
+  .xv-row:nth-child(n+4) .xv-fill { background: linear-gradient(to left, #4a7fb5, #9bbbdd); }
+  .xv-fig { display: grid; gap: .1rem; text-align: end; }
+  .xv-fig b { font-size: .98rem; font-weight: 800; color: #14284B; }
+  .xv-pct { font-size: .78rem; font-weight: 700; color: #6b7686; }
+  .xv-empty { padding: 1.2rem; text-align: center; color: #8a93a1; font-weight: 600; }
+  .xv-more { display: block; margin: .6rem auto 0; padding: .5rem 1.4rem; border-radius: 999px; border: 1px solid rgba(20, 40, 75, .18); background: #fff; font: inherit; font-size: .85rem; font-weight: 700; color: #14284B; cursor: pointer; }
+  .xv-more:hover { background: #f1f5fb; }
+  .xv-num { font-variant-numeric: tabular-nums; font-family: inherit; }
+  .xv-insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: .9rem; margin: 0 0 1rem; }
+  .xv-card { padding: 1rem 1.1rem; border-radius: 20px; background: #fffdfb; border: 1px solid rgba(20, 40, 75, .08); display: grid; gap: .6rem; align-content: start; min-width: 0; }
+  .xv-card-wide { grid-column: 1 / -1; }
+  .xv-card header { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; }
+  .xv-card h4 { margin: 0; font-size: .98rem; font-weight: 800; color: #14284B; }
+  .xv-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .xv-chip { padding: .25rem .7rem; border-radius: 999px; background: #eef1f6; font-size: .76rem; font-weight: 600; color: #4a5568; }
+  .xv-chip b { color: #14284B; font-weight: 800; }
+  .xv-spark { display: flex; align-items: flex-end; gap: 3px; height: 8rem; direction: ltr; }
+  .xv-col { flex: 1 1 0; min-width: 2px; height: max(var(--h), 2%); border-radius: 4px 4px 0 0; background: linear-gradient(to top, #4a7fb5, #9bbbdd); transition: filter .15s; }
+  .xv-col:hover { filter: brightness(.8); }
+  .xv-col.is-peak { background: linear-gradient(to top, #14284B, #4a7fb5); }
+  .xv-col.is-neg { background: #e57373; }
+  .xv-axis { display: flex; justify-content: space-between; font-size: .72rem; font-weight: 600; color: #8a93a1; direction: ltr; }
+  .xv-badge { padding: .2rem .75rem; border-radius: 999px; font-size: .76rem; font-weight: 800; background: #eef1f6; color: #14284B; }
+  .xv-lvl-مرتفع { background: #fde7e7; color: #b23b3b; }
+  .xv-lvl-متوسط { background: #fff3d6; color: #9a6a0c; }
+  .xv-lvl-منخفض { background: #e0f3ea; color: #23724d; }
+  .xv-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr)); gap: .5rem; }
+  .xv-tiles > div { display: grid; gap: .1rem; }
+  .xv-tiles b { font-size: 1.5rem; font-weight: 800; color: #14284B; line-height: 1.15; }
+  .xv-tiles small { font-size: .74rem; font-weight: 600; color: #8a93a1; }
+  .xv-note { margin: 0; font-size: .76rem; font-weight: 600; color: #8a93a1; line-height: 1.7; }
+  .xv-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+  .xv-mini li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .6rem; align-items: center; font-size: .84rem; font-weight: 700; color: #1d2733; }
+  .xv-mini-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .xv-mini em { font-style: normal; font-size: .74rem; color: #8a93a1; }
+  .xv-bars li { grid-template-columns: minmax(5rem, 8rem) minmax(2rem, 1fr) auto; }
+  .xv-hbar { display: block; height: .55rem; border-radius: 999px; background: #e6ebf3; overflow: hidden; }
+  .xv-hbar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(to left, #14284B, #4a7fb5); }
+  .xv-total { margin: .7rem .5rem 0; padding-top: .6rem; border-top: 1px dashed rgba(20, 40, 75, .15); font-size: .85rem; font-weight: 800; color: #14284B; display: flex; flex-wrap: wrap; gap: .3rem 1rem; justify-content: space-between; }
+  .xv-total span { font-weight: 600; color: #6b7686; }
+  .xv-section-title { margin: 1.4rem 0 .6rem; font-size: 1.05rem; font-weight: 800; color: #14284B; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 900px) { .xv-hero { grid-template-columns: 1fr; } .xv-search, .xv-search input { width: 100%; min-width: 0; } }
+  @media (max-width: 560px) { .xv-row { grid-template-columns: 1.4rem minmax(0, 1fr) auto; gap: .5rem; } .xv-stats { grid-template-columns: 1fr 1fr; } }
+</style>
+{% endblock %}
+
 {% block extra_js %}
-<script src="/static/js/rb-more.js?v={{ app_client_version }}" defer></script>
-<script src="/static/js/purchase-branch-donut.js?v={{ app_client_version }}" defer></script>
 <script>
 (function () {
-  function ready(fn) {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", fn);
-    } else {
-      fn();
-    }
-  }
+  function ready(fn) { document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn) : fn(); }
   ready(function () {
     document.querySelectorAll(".purchase-dash .inv-rank-fill[data-bar-pct]").forEach(function (el) {
-      var raw = String(el.getAttribute("data-bar-pct") || "0").replace(",", ".");
-      var pct = parseFloat(raw);
+      var pct = parseFloat(String(el.getAttribute("data-bar-pct") || "0").replace(",", "."));
       if (!isFinite(pct) || pct < 0) pct = 0;
       if (pct > 100) pct = 100;
       el.style.setProperty("width", pct.toFixed(1) + "%", "important");
     });
+
+    var box = document.querySelector(".xv-explorer");
+    if (!box) return;
+    var tabs = box.querySelectorAll(".xv-tab");
+    var panels = box.querySelectorAll(".xv-panel");
+    var search = document.getElementById("xv-search");
+    var more = document.getElementById("xv-more");
+    var basis = document.getElementById("xv-basis");
+    var NOTES = {
+      vendor: "المبالغ شاملة الضريبة · الحصة من إجمالي المشتريات",
+      group: "المبالغ والنِّسَب قبل الضريبة (من سطور الفواتير)",
+      branch: "المبالغ شاملة الضريبة · الحصة من إجمالي المشتريات",
+      item: "المبالغ والنِّسَب قبل الضريبة · الأصناف الأعلى شراءً"
+    };
+    var current = "vendor";
+
+    function activePanel() { return box.querySelector('.xv-panel[data-xv-panel="' + current + '"]'); }
+    function refresh() {
+      var list = activePanel().querySelector(".xv-list");
+      var q = (search.value || "").trim().toLowerCase();
+      var rows = list.querySelectorAll(".xv-row");
+      var total = rows.length;
+      rows.forEach(function (r) {
+        var hit = !q || (r.getAttribute("data-q") || "").toLowerCase().indexOf(q) !== -1;
+        r.style.display = hit ? "" : "none";
+      });
+      if (q) list.classList.add("is-open");
+      more.hidden = !!q || total <= 8;
+      more.textContent = list.classList.contains("is-open") ? "عرض الأعلى فقط" : "عرض الكل (" + total + ")";
+      totals(list, q);
+    }
+    function num(t) { var v = parseFloat(String(t || "").replace(/[^0-9.\-]/g, "")); return isFinite(v) ? v : 0; }
+    function totals(list, q) {
+      var out = document.getElementById("xv-total");
+      if (!out) return;
+      var sum = 0, pct = 0, n = 0;
+      list.querySelectorAll(".xv-row").forEach(function (r) {
+        var hidden = r.style.display === "none" || (!list.classList.contains("is-open") && r.classList.contains("xv-extra"));
+        if (hidden) return;
+        n += 1;
+        sum += num((r.querySelector(".xv-fig b") || {}).textContent);
+        pct += num((r.querySelector(".xv-pct") || {}).textContent);
+      });
+      out.innerHTML = "<b>إجمالي المعروض (" + n + "): " + sum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+        "</b><span>" + pct.toFixed(1) + "% من الإجمالي</span>";
+    }
+    function select(name) {
+      current = name;
+      tabs.forEach(function (t) {
+        var on = t.getAttribute("data-xv-tab") === name;
+        t.classList.toggle("is-active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      panels.forEach(function (p) { p.hidden = p.getAttribute("data-xv-panel") !== name; });
+      basis.textContent = NOTES[name];
+      refresh();
+    }
+    tabs.forEach(function (t) { t.addEventListener("click", function () { select(t.getAttribute("data-xv-tab")); }); });
+    search.addEventListener("input", function () {
+      if (!search.value) panels.forEach(function (p) { var l = p.querySelector(".xv-list"); if (l) l.classList.remove("is-open"); });
+      refresh();
+    });
+    more.addEventListener("click", function () {
+      activePanel().querySelector(".xv-list").classList.toggle("is-open");
+      refresh();
+    });
+    select("vendor");
   });
 })();
 </script>
