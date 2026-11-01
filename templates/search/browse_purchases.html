@@ -178,70 +178,6 @@
     <p class="xv-total" id="xv-total" aria-live="polite"></p>
     <button type="button" class="xv-more" id="xv-more">عرض الكل</button>
   </section>
-
-  <h3 class="xv-section-title">طلبات الشراء</h3>
-  <section class="purchase-grid" aria-label="تفاصيل تحليل المشتريات">
-    <section class="dash-panel dash-panel-glass purchase-panel purchase-users-panel" aria-label="المستخدمون الأكثر إدخالاً لطلبات الشراء">
-      <div class="dash-panel-head">
-        <h3>المستخدمون الأكثر إدخالاً لطلبات الشراء</h3>
-        <span class="result-pill">أعلى {{ dashboard.top_request_users|length }}</span>
-      </div>
-      {% if dashboard.top_request_users %}
-        <div class="inv-rank-chart purchase-users-board" role="list" aria-label="ترتيب المستخدمين حسب عدد الطلبات">
-          {% for row in dashboard.top_request_users %}
-            <div
-              class="inv-rank-row"
-              role="listitem"
-              style="--i: {{ forloop.counter0 }}"
-              title="{{ row.name }} #{{ row.code }} — {{ row.request_count }} طلب ({{ row.share_display }}) · {{ row.item_count }} صنف · {{ row.qty_display }} كمية · {{ row.branch_count }} فروع"
-            >
-              <span class="inv-rank-num mono" aria-hidden="true">{{ forloop.counter }}</span>
-              <div class="inv-rank-body">
-                <div class="inv-rank-head">
-                  <strong class="inv-rank-name" title="{{ row.name }}">{{ row.name }}</strong>
-                  <span class="inv-rank-pct mono inv-share">{{ row.share_display }}</span>
-                </div>
-                <div class="inv-rank-track" aria-hidden="true">
-                  <div
-                    class="inv-rank-fill inv-rank-fill-purchase"
-                    data-bar-pct="{{ row.bar_pct }}"
-                  ></div>
-                </div>
-                <span class="inv-rank-meta mono">{{ row.request_count }} طلب · #{{ row.code }}</span>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="sales-empty">لا توجد طلبات شراء خلال الفترة.</p>
-      {% endif %}
-    </section>
-
-    <section class="dash-panel dash-panel-glass purchase-panel xv-reqgroups" aria-label="المجموعات الأكثر طلب شراء">
-      <div class="dash-panel-head">
-        <h3>المجموعات الأكثر طلب شراء</h3>
-        <span class="result-pill">أعلى {{ dashboard.top_request_groups|length }}</span>
-      </div>
-      {% if dashboard.top_request_groups %}
-        <ul class="xv-rg-list" id="xv-rg-list" role="list">
-          {% for row in dashboard.top_request_groups %}
-            <li class="xv-rg-row" data-req="{{ row.request_count }}" data-items="{{ row.item_count }}" data-qty="{{ row.qty_display }}" data-br="{{ row.branch_count }}">
-              <span class="xv-rank mono" aria-hidden="true">{{ forloop.counter }}</span>
-              <div class="xv-rg-body">
-                <div class="xv-rg-top"><strong class="xv-name" title="{{ row.name }}">{{ row.name }}</strong><span class="xv-sub mono">#{{ row.code }}</span></div>
-                <span class="xv-track" aria-hidden="true"><span class="xv-fill" style="width:{% widthratio row.request_count dashboard.top_request_groups.0.request_count 100 %}%"></span></span>
-              </div>
-              <div class="xv-rg-figs">
-                <b class="xv-rg-cell xv-rg-main xv-num" data-k="req"><span>{{ row.request_count }}</span><small>طلب</small></b>
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="sales-empty">لا توجد مجموعات في طلبات الشراء خلال الفترة.</p>
-      {% endif %}
-    </section>
-  </section>
 {% endif %}
 {% endblock %}
 
@@ -253,7 +189,8 @@
   .xv-big { font-size: clamp(1.9rem, 4vw, 2.9rem); font-weight: 800; line-height: 1.1; letter-spacing: -.01em; }
   .xv-insight { margin: .2rem 0 0; font-size: .92rem; line-height: 1.9; font-weight: 600; opacity: .92; }
   .xv-insight b, .xv-insight b.mono { color: #ffd58a !important; font-weight: 800; }
-  .xv-hero-main .xv-big, .xv-hero-main .xv-eyebrow { color: #fff !important; }
+  /* .money لونها داكن من الثيم: تُحدَّد هنا صراحة وإلا يختفي الرقم على الخلفية الكحلية */
+  .xv-hero-main .xv-big, .xv-hero-main .xv-big .money, .xv-hero-main .xv-eyebrow { color: #fff !important; }
   .xv-stats { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .7rem; }
   .xv-stats > div { padding: .85rem 1rem; border-radius: 18px; background: #fffdfb; border: 1px solid rgba(20, 40, 75, .08); display: grid; gap: .2rem; align-content: start; }
   .xv-stats dt { font-size: .8rem; font-weight: 700; color: #6b7686; }
@@ -321,37 +258,6 @@
   .xv-total { margin: .7rem .5rem 0; padding-top: .6rem; border-top: 1px dashed rgba(20, 40, 75, .15); font-size: .85rem; font-weight: 800; color: #14284B; display: flex; flex-wrap: wrap; gap: .3rem 1rem; justify-content: space-between; }
   .xv-total span { font-weight: 600; color: #6b7686; }
   .xv-section-title { margin: 1.4rem 0 .6rem; font-size: 1.05rem; font-weight: 800; color: #14284B; }
-  body.theme-navy .page .xv-req-table { table-layout: fixed !important; width: 100% !important; min-width: 34rem !important; }
-  body.theme-navy .page .xv-req-table th:nth-child(1), body.theme-navy .page .xv-req-table td:nth-child(1) { width: 2.6rem !important; min-width: 0 !important; }
-  body.theme-navy .page .xv-req-table th:nth-child(2), body.theme-navy .page .xv-req-table td:nth-child(2) { width: 5.4rem !important; min-width: 0 !important; }
-  body.theme-navy .page .xv-req-table th:nth-child(n+4), body.theme-navy .page .xv-req-table td:nth-child(n+4) { width: 5.2rem !important; min-width: 0 !important; }
-  body.theme-navy .page .xv-req-table th, body.theme-navy .page .xv-req-table td { text-align: center !important; }
-  body.theme-navy .page .xv-req-table th:nth-child(3), body.theme-navy .page .xv-req-table td:nth-child(3) { text-align: start !important; max-width: none !important; }
-  body.theme-navy .page .purchase-panel .purchase-table-scroll:has(.xv-req-table) { max-height: 38rem !important; }
-  .xv-reqgroups .xv-sortbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: 0; padding: .7rem 1rem .5rem; font-size: .8rem; font-weight: 700; color: #6b7686; }
-  .xv-sort { appearance: none; border: 1px solid rgba(20, 40, 75, .15); background: #fff; height: 2rem; padding: 0 .95rem; border-radius: 999px; font: inherit; font-size: .8rem; font-weight: 700; line-height: 1; color: #4a5568; cursor: pointer; }
-  .xv-sort.is-active { background: #14284B; border-color: #14284B; color: #fff; }
-  .xv-rg-list { list-style: none; margin: 0; padding: 0 .6rem .6rem; display: grid; gap: 0; }
-  .xv-rg-row { display: grid; grid-template-columns: 1.8rem minmax(0, 1fr) auto; gap: .7rem; align-items: center; min-height: 3.4rem; padding: .35rem .4rem; border-bottom: 1px solid #edf0f5; transition: background .15s; }
-  .xv-rg-row:last-child { border-bottom: 0; }
-  .xv-rg-row:hover { background: #f1f5fb; }
-  .xv-rg-row .xv-rank { text-align: center; }
-  .xv-rg-body { display: grid; gap: .3rem; min-width: 0; }
-  .xv-rg-top { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
-  .xv-rg-top .xv-name { flex: 0 1 auto; font-size: .92rem; line-height: 1.3; }
-  .xv-rg-top .xv-sub { flex: none; }
-  .xv-rg-body .xv-track { margin: 0; height: .45rem; }
-  .xv-rg-figs { display: grid; grid-template-columns: 5.4rem; }
-  .xv-rg-cell { display: grid; gap: .05rem; justify-items: center; align-content: center; height: 2.5rem; padding: 0 .3rem; border-radius: 10px; background: #eef1f6; font-size: .85rem; font-weight: 800; color: #2d3748; line-height: 1.1; white-space: nowrap; }
-  .xv-rg-cell small { font-size: .66rem; font-weight: 600; color: #8a93a1; line-height: 1; }
-  .xv-rg-main { background: #fbe9e9; color: #C24545; }
-  .xv-rg-main small { color: #c98a8a; }
-  .xv-rg-cell.is-on { background: #14284B; color: #fff; }
-  .xv-rg-cell.is-on small { color: #c9d6ea; }
-  @media (max-width: 760px) {
-    .xv-rg-row { grid-template-columns: 1.6rem minmax(0, 1fr); row-gap: .4rem; padding: .5rem .4rem; }
-    .xv-rg-figs { grid-column: 2; grid-template-columns: 5.4rem; }
-  }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 900px) { .xv-hero { grid-template-columns: 1fr; } .xv-search, .xv-search input { width: 100%; min-width: 0; } }
   @media (max-width: 560px) { .xv-row { grid-template-columns: 1.4rem minmax(0, 1fr) auto; gap: .5rem; } .xv-stats { grid-template-columns: 1fr 1fr; } }
@@ -363,34 +269,6 @@
 (function () {
   function ready(fn) { document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn) : fn(); }
   ready(function () {
-    document.querySelectorAll(".purchase-dash .inv-rank-fill[data-bar-pct]").forEach(function (el) {
-      var pct = parseFloat(String(el.getAttribute("data-bar-pct") || "0").replace(",", "."));
-      if (!isFinite(pct) || pct < 0) pct = 0;
-      if (pct > 100) pct = 100;
-      el.style.setProperty("width", pct.toFixed(1) + "%", "important");
-    });
-
-
-    var rg = document.getElementById("xv-rg-list");
-    if (rg) {
-      var METRIC_LABEL = { req: "طلب", items: "أصناف", qty: "كمية", br: "فروع" };
-      function val(row, m) { return parseFloat(String(row.getAttribute("data-" + m) || "0").replace(/[^0-9.\-]/g, "")) || 0; }
-      function sortBy(m) {
-        var rows = Array.prototype.slice.call(rg.children);
-        rows.sort(function (a, b) { return val(b, m) - val(a, m); });
-        var max = rows.length ? val(rows[0], m) : 0;
-        rows.forEach(function (r, i) {
-          rg.appendChild(r);
-          r.querySelector(".xv-rank").textContent = i + 1;
-          r.querySelector(".xv-fill").style.width = (max ? (val(r, m) / max * 100) : 0).toFixed(1) + "%";
-          r.querySelectorAll(".xv-rg-cell").forEach(function (c) { c.classList.toggle("is-on", c.getAttribute("data-k") === m); });
-        });
-        document.querySelectorAll(".xv-sort").forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-metric") === m); });
-      }
-      document.querySelectorAll(".xv-sort").forEach(function (b) {
-        b.addEventListener("click", function () { sortBy(b.getAttribute("data-metric")); });
-      });
-    }
     var box = document.querySelector(".xv-explorer");
     if (!box) return;
     var tabs = box.querySelectorAll(".xv-tab");
