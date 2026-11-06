@@ -8372,6 +8372,93 @@ def browse_item_cycle_report(request):
 @login_required
 @require_GET
 @never_cache
+def browse_vendor_commitment_report(request):
+    """التزام الموردين: كمية المبيعات مقابل كمية الشراء من كل مورد لأصنافه."""
+    from datetime import date as date_cls, timedelta
+
+    from .oracle_income import fetch_income_branches
+    from .oracle_stock import fetch_main_subgroup_options, fetch_sales_group_options, oracle_enabled, oracle_session
+    from .oracle_vendor_commitment import VENDOR_PAGE_ROWS, build_vendor_commitment, build_vendor_commitment_excel
+
+    today = date_cls.today()
+    # الافتراضي: الشهر الماضي كاملاً
+    default_to = today.replace(day=1) - timedelta(days=1)
+    default_from = default_to.replace(day=1)
+    g = request.GET
+    branch = str(g.get('branch') or '').strip()
+    group = str(g.get('group') or '').strip()
+    subgroup = str(g.get('subgroup') or '').strip()
+    vendor = str(g.get('vendor') or '').strip()
+    want_excel = str(g.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(g.get('run') or '') in ('1', 'true', 'yes') or want_excel
+    error = ''
+    report = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    subgroups: list[dict] = []
+    try:
+        date_from = date_cls.fromisoformat(str(g.get('date_from') or '').strip()) if g.get('date_from') else default_from
+        date_to = date_cls.fromisoformat(str(g.get('date_to') or '').strip()) if g.get('date_to') else default_to
+    except ValueError:
+        date_from, date_to = default_from, default_to
+        error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
+
+    if not error:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    groups = fetch_sales_group_options() or []
+                    subgroups = fetch_main_subgroup_options() or []
+                if branch not in {b['code'] for b in branches}:
+                    branch = ''
+                if group and group not in {str(x.get('code') or '').strip() for x in groups}:
+                    group = ''
+                if subgroup and not any(
+                    str(s.get('group_code') or '').strip() == group and str(s.get('code') or '').strip() == subgroup
+                    for s in subgroups
+                ):
+                    subgroup = ''
+                if run:
+                    report = build_vendor_commitment(
+                        date_from, date_to, branch_code=branch, group_code=group, subgroup_code=subgroup,
+                        vendor_code=vendor,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_vendor_commitment_report failed: %s', exc)
+            error = f'تعذّر تحميل التقرير: {exc}'
+            report = None
+
+    if report and want_excel:
+        return build_vendor_commitment_excel(report)
+
+    return render(
+        request,
+        'search/browse_vendor_commitment_report.html',
+        {
+            'branches': branches,
+            'groups': groups,
+            'subgroups': subgroups,
+            'selected_branch': branch,
+            'selected_group': group,
+            'selected_subgroup': subgroup,
+            'selected_vendor': vendor,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            # الشاشة تعرض الموردين الأكثر أصنافاً، وملف Excel فيه الكل
+            'page_rows': (report or {}).get('rows', [])[:VENDOR_PAGE_ROWS],
+            'page_limit': VENDOR_PAGE_ROWS,
+            'report': report,
+            'run': run,
+            'error': error,
+            'export_query': _query_without(request.GET, 'export'),
+            'vendor_query': _query_without(request.GET, 'export', 'vendor'),
+        },
+    )
+
+
 def browse_item_margin_report(request):
     """هامش ربح الصنف: سعر البيع مقابل متوسط التكلفة في مخازن البيع المحددة."""
     from .oracle_item_margin import MARGIN_WAREHOUSES, build_item_margin, build_item_margin_excel

@@ -3952,3 +3952,89 @@ class OrderQtyReportTests(TestCase):
             self.assertEqual(grp, oq.ALL_GROUPS_SQL)
         for code in (15, 16, 42, 43, 6, 5, 26, 9, 14, 35, 11, 12, 52, 29, 38, 31, 17, 40, 21, 53, 28, 45, 30, 33):
             self.assertIn(str(code), oq.ALL_GROUPS_SQL)
+
+
+class VendorCommitmentReportTests(TestCase):
+    """التزام الموردين: كمية المبيعات مقابل كمية الشراء من كل مورد لأصنافه."""
+
+    def test_screen_is_registered_under_reports_and_requires_login(self):
+        from search.nav_permissions import ALL_SCREEN_KEYS, section_for_screen
+
+        self.assertIn('browse_vendor_commitment_report', ALL_SCREEN_KEYS)
+        self.assertEqual(section_for_screen('browse_vendor_commitment_report'), 'reports')
+        self.assertEqual(self.client.get(reverse('browse_vendor_commitment_report')).status_code, 302)
+
+    def _build(self, **kwargs):
+        from contextlib import nullcontext
+        from datetime import date
+
+        from search import oracle_vendor_commitment as vc
+
+        # مبيعات الصنف A = 1,000 نقاط بيع + 100 جملة − 100 مرتجع = 1,000؛ B = 200؛ C بلا مبيعات
+        sales = {
+            '_pos_qty': [{'I': 'A', 'Q': 1000}, {'I': 'B', 'Q': 200}],
+            '_bill_sales': [{'I': 'A', 'Q': 100}],
+            '_pos_returns': [{'I': 'A', 'Q': 100}],
+            '_bill_returns': [],
+        }
+        # المورد 10: اشترينا منه A 600 (رُدّ منه 100 → 500) و C 50؛ المورد 20: A 300 و B 400
+        purchases = [
+            {'V': '10', 'VN': 'مورد أ', 'I': 'A', 'IN_': 'لبنة', 'Q': 600, 'N': 2, 'LAST_D': date(2026, 10, 20)},
+            {'V': '10', 'VN': 'مورد أ', 'I': 'C', 'IN_': 'زيت', 'Q': 50, 'N': 1, 'LAST_D': date(2026, 10, 3)},
+            {'V': '20', 'VN': 'مورد ب', 'I': 'A', 'IN_': 'لبنة', 'Q': 300, 'N': 1, 'LAST_D': date(2026, 10, 9)},
+            {'V': '20', 'VN': 'مورد ب', 'I': 'B', 'IN_': 'جبنة', 'Q': 400, 'N': 1, 'LAST_D': date(2026, 10, 9)},
+        ]
+
+        def fake(name):
+            def f(*a, **k):
+                if name == '_bill_sales':  # النقدي 1/5 بيانات، والآجل 4/8 فارغ
+                    return sales[name] if k.get('exclude_summary') else []
+                return sales[name]
+            return f
+
+        with patch.multiple(
+                'search.oracle_vendor_commitment',
+                oracle_enabled=lambda: True, oracle_session=nullcontext,
+                _pos_qty=fake('_pos_qty'), _bill_sales=fake('_bill_sales'),
+                _pos_returns=fake('_pos_returns'), _bill_returns=fake('_bill_returns'),
+                _purchases=lambda *a: purchases, _purchase_returns=lambda *a: [{'V': '10', 'I': 'A', 'Q': 100}],
+                _main_units=lambda codes: {'A': 'حبة'},
+                _group_name=lambda g: 'البان', _subgroup_name=lambda g, s: '', _branch_names=lambda: {}), \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            return vc.build_vendor_commitment('2026-10-01', '2026-10-31', **kwargs)
+
+    def test_purchases_from_vendor_against_item_sales(self):
+        r = self._build()
+        by = {x['code']: x for x in r['rows']}
+        v10, v20 = by['10'], by['20']
+        # المورد 10: شراء 500 + 50 = 550 مقابل مبيعات أصنافه 1,000 + 0 → 55% أقل من المبيعات
+        self.assertEqual((v10['buy_q_display'], v10['sales_q_display'], v10['ratio_display'], v10['level_label']),
+                         ('550', '1,000', '55.0%', 'أقل من المبيعات'))
+        self.assertEqual((v10['items'], v10['items_short'], v10['items_unsold']), (2, 1, 1))
+        # المورد 20: شراء 700 مقابل 1,200 (A مبيعاته كاملة مع كل مورد)
+        self.assertEqual((v20['buy_q_display'], v20['sales_q_display'], v20['ratio_display']), ('700', '1,200', '58.3%'))
+        self.assertEqual((v20['items_short'], v20['items_over']), (1, 1))  # A أقل، B (400 مقابل 200) أكثر
+
+    def test_vendor_drill_shows_other_vendors_and_excel(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from search.oracle_vendor_commitment import build_vendor_commitment_excel
+
+        r = self._build(vendor_code='10')
+        self.assertEqual(r['vendor']['name'], 'مورد أ')
+        a = next(x for x in r['items'] if x['code'] == 'A')
+        # الشراء من المورد 500 بعد مرتجع 100، والشراء من الموردين الآخرين 300، والنقص 500
+        self.assertEqual((a['buy_q_display'], a['ret_q_display'], a['other_q_display'], a['diff_q_display'], a['unit']),
+                         ('500', '100', '300', '-500', 'حبة'))
+        self.assertEqual(r['items'][0]['code'], 'A')  # الأكبر نقصاً أولاً
+        resp = build_vendor_commitment_excel(r)
+        self.assertIn('vendor_commitment_10_20261001_20261031.xlsx', resp['Content-Disposition'])
+        wb = load_workbook(BytesIO(resp.content))
+        self.assertEqual(wb.sheetnames, ['الموردون', 'تفصيل الأصناف'])
+        vendors = [[c.value for c in row] for row in wb['الموردون'].iter_rows()]
+        row = next(x for x in vendors if x[0] == '10')
+        self.assertEqual(row[6:9], [1000, 550, -450])
+        self.assertAlmostEqual(row[9], 0.55)

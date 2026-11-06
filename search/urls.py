@@ -228,6 +228,11 @@ urlpatterns = [
         name='browse_order_qty_report',
     ),
     path(
+        'reports/vendor-commitment/',
+        views.browse_vendor_commitment_report,
+        name='browse_vendor_commitment_report',
+    ),
+    path(
         'reports/item-cycle/',
         views.browse_item_cycle_report,
         name='browse_item_cycle_report',

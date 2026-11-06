@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}التزام الموردين{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .vc-filter .field > select, .vc-filter .field > input { min-width: 0 !important; max-width: 100%; text-overflow: ellipsis; }
+  .vc-scope { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem 1rem; margin: 0 0 0.85rem; color: #5a6675; font-size: 0.9rem; }
+  .vc-scope strong { color: #1F2A37; }
+  .vc-actions { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; }
+  .vc-actions > a, .vc-actions > button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem !important; min-width: 4.5rem; padding: 0 1rem !important; border-radius: 999px; font-weight: 700; text-decoration: none; }
+  .vc-export { background: #E3F4EC; color: #1E6B47; }
+
+  .vc-method { margin: 0 0 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; font-weight: 400 !important; }
+  .vc-method > summary { cursor: pointer; padding: 0.55rem 1rem; font-weight: 700; color: #1F3B63; list-style: none; }
+  .vc-method > summary::-webkit-details-marker { display: none; }
+  .vc-method > summary::after { content: " ▾"; color: #98a2b3; }
+  .vc-method[open] > summary::after { content: " ▴"; }
+  .vc-method > div { padding: 0 1rem 0.7rem; }
+  .vc-method b { color: #1F2A37; font-weight: 700 !important; }
+
+  .vc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.65rem; margin: 0 0 1rem; }
+  .vc-kpi { padding: 0.7rem 0.95rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); }
+  .vc-kpi span { display: block; font-size: 0.78rem; font-weight: 600; color: #5a6675; }
+  .vc-kpi strong { display: block; font-size: 1.35rem; font-weight: 800; color: #1F2A37; line-height: 1.5; }
+  .vc-kpi small { display: block; font-size: 0.78rem; font-weight: 600; color: #5a6675; }
+  @media (max-width: 900px) { .vc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .vc-title { margin: 0 0 0.6rem; font-size: 1rem; font-weight: 800; color: #1F2A37; }
+  .vc-title small { font-weight: 600; color: #5a6675; margin-inline-start: 0.4rem; }
+  .vc-table td, .vc-table th { text-align: center; }
+  .vc-table td.vc-name, .vc-table th.vc-name { text-align: start; }
+  .vc-name a { color: #1F3B63; font-weight: 700; text-decoration: none; }
+  .vc-name a:hover { text-decoration: underline; }
+  .vc-pct { min-width: 7rem; }
+  .vc-pct b { display: block; font-weight: 800 !important; color: #1F3B63; }
+  .vc-bar { display: block; height: 5px; margin-top: 3px; border-radius: 3px; background: linear-gradient(to left, #3E7D5B var(--w), #E6EAF0 var(--w)); }
+  .vc-tag { display: inline-block; padding: 0.05rem 0.6rem; border-radius: 999px; font-size: 0.74rem; font-weight: 700 !important; white-space: nowrap; }
+  .vc-tag-ok { background: #E3F4EC; color: #1E6B47; }
+  .vc-tag-watch { background: #FCEBD3; color: #8A5A00; }
+  .vc-tag-risk { background: #FCE4E4; color: #A12626; }
+  .vc-risk .vc-bar { background: linear-gradient(to left, #C24545 var(--w), #F1C9C9 var(--w)); }
+  .vc-watch .vc-bar { background: linear-gradient(to left, #D08A1E var(--w), #F3E2C4 var(--w)); }
+  .vc-neg { color: #A12626 !important; }
+  .vc-note { margin: 0.6rem 0 0; font-size: 0.82rem; font-weight: 400 !important; color: #5a6675; line-height: 1.8; }
+  .vc-back { display: inline-flex; align-items: center; gap: 0.3rem; color: #1F3B63; font-weight: 700; text-decoration: none; }
+  @media print { .vc-method, .vc-back { display: none !important; } }
+</style>
+
+<section class="dash-head" aria-label="التزام الموردين">
+  <div class="dash-head-copy">
+    <h2>التزام الموردين: المبيعات مقابل الشراء</h2>
+    <p>لكل مورد وأصنافه: الكمية المشتراة منه مقابل كمية مبيعات الصنف في الفترة نفسها، لمعرفة هل الشراء على قدر البيع أم أقل أم أكثر.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_vendor_commitment_report' %}" class="dash-panel-glass wqc-filter vc-filter" role="search">
+  {{ subgroups|json_script:"wqc-subgroup-data" }}
+  <input type="hidden" name="run" value="1">
+  {% if selected_vendor %}<input type="hidden" name="vendor" value="{{ selected_vendor }}">{% endif %}
+  <div class="field" style="flex: 2 1 16rem !important">
+    <label for="wqc-group">المجموعة</label>
+    <select id="wqc-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code|stringformat:"s" == selected_group %}selected{% endif %}>{{ g.code }} - {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="flex: 2 1 18rem !important">
+    <label for="wqc-subgroup">المجموعة الفرعية</label>
+    <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
+      <option value="">كل المجموعات الفرعية</option>
+      {% for s in subgroups %}{% if s.group_code == selected_group %}
+        <option value="{{ s.code }}" {% if s.code == selected_subgroup %}selected{% endif %}>{{ s.code }}- {{ s.name }}</option>
+      {% endif %}{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="vc-branch">الفرع</label>
+    <select id="vc-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="vc-from">من تاريخ</label>
+    <input id="vc-from" type="date" name="date_from" value="{{ date_from }}" required>
+  </div>
+  <div class="field">
+    <label for="vc-to">إلى تاريخ</label>
+    <input id="vc-to" type="date" name="date_to" value="{{ date_to }}" required>
+  </div>
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report %}
+  {% with t=report.totals %}
+  <div class="vc-scope">
+    <span>
+      <strong>{% if report.group_code %}{{ report.group_code }} - {{ report.group_name }}{% else %}كل المجموعات{% endif %}</strong>
+      {% if report.subgroup_code %} · {{ report.subgroup_name }}{% endif %}
+      · {{ report.branch_name|default:"كل الفروع" }}
+      · من <bdi dir="ltr">{{ report.from }}</bdi> إلى <bdi dir="ltr">{{ report.to }}</bdi>
+    </span>
+    <span class="vc-actions">
+      <a class="btn-ghost vc-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
+      <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+    </span>
+  </div>
+
+  <details class="vc-method">
+    <summary>طريقة الحساب</summary>
+    <div>
+      لكل صنف اشتُري من المورد في الفترة:
+      <b>كمية الشراء</b> = فواتير الشراء من المورد ناقص مرتجعات الشراء إليه ·
+      <b>كمية المبيعات</b> = صافي مبيعات الصنف في الفترة نفسها (نقاط البيع والجملة والآجل بعد المرتجع) ·
+      <b>نسبة الشراء إلى المبيعات</b> = الشراء ÷ المبيعات.
+      المبيعات لا تُنسب لمورد: الصنف المشترى من أكثر من مورد تُحسب مبيعاته كاملة مع كل منهم، ويظهر في تفصيل المورد ما اشتُري من الموردين الآخرين.
+      تقييم المورد بنسبة مجموع شرائه إلى مجموع مبيعات أصنافه: <b>أقل من المبيعات</b> تحت {{ report.low_pct }}% ·
+      <b>متوازن</b> من {{ report.low_pct }}% إلى {{ report.high_pct }}% · <b>أكثر من المبيعات</b> فوق {{ report.high_pct }}%.
+      الكميات بالوحدة الرئيسية للصنف.
+    </div>
+  </details>
+
+  {% if report.vendor_code %}
+    {% with v=report.vendor %}
+    <p><a class="vc-back" href="?{{ vendor_query }}">→ كل الموردين</a></p>
+    {% if v %}
+    <div class="vc-kpis">
+      <div class="vc-kpi"><span>المورد</span><strong><bdi dir="ltr">{{ v.code }}</bdi></strong><small>{{ v.name }}</small></div>
+      <div class="vc-kpi"><span>نسبة الشراء إلى المبيعات</span><strong>{{ v.ratio_display }}</strong><small>{{ v.level_label }}</small></div>
+      <div class="vc-kpi"><span>كمية المبيعات</span><strong>{{ v.sales_q_display }}</strong><small>كمية الشراء {{ v.buy_q_display }}</small></div>
+      <div class="vc-kpi"><span>الأصناف</span><strong>{{ v.items }}</strong><small>شراء أقل من البيع {{ v.items_short }} · أكثر {{ v.items_over }} · بلا مبيعات {{ v.items_unsold }}</small></div>
+    </div>
+    {% endif %}
+    <section class="wqc-sheet" aria-labelledby="vc-items-title">
+      <h3 class="vc-title" id="vc-items-title">أصناف المورد<small>الأكبر نقصاً (شراء أقل من البيع) أولاً</small></h3>
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="vc-items-title">
+        <table class="wqc-table vc-table" data-name-col="1" aria-labelledby="vc-items-title">
+          <thead>
+            <tr>
+              <th scope="col">الكود</th>
+              <th scope="col" class="vc-name">الصنف</th>
+              <th scope="col">الوحدة</th>
+              <th scope="col">كمية المبيعات</th>
+              <th scope="col">الشراء من المورد</th>
+              <th scope="col">الفرق</th>
+              <th scope="col">نسبة الشراء إلى المبيعات</th>
+              <th scope="col">مرتجع للمورد</th>
+              <th scope="col">شراء من موردين آخرين</th>
+              <th scope="col">فواتير الشراء</th>
+              <th scope="col">آخر فاتورة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for x in report.items %}
+            <tr>
+              <td class="mono" dir="ltr">{{ x.code }}</td>
+              <td class="vc-name">{{ x.name }}</td>
+              <td>{{ x.unit|default:"—" }}</td>
+              <td class="mono">{{ x.sales_q_display }}</td>
+              <td class="mono">{{ x.buy_q_display }}</td>
+              <td class="mono{% if x.diff_q < 0 %} vc-neg{% endif %}">{{ x.diff_q_display }}</td>
+              <td class="mono">{{ x.ratio_display }}</td>
+              <td class="mono">{{ x.ret_q_display }}</td>
+              <td class="mono">{{ x.other_q_display }}</td>
+              <td class="mono">{{ x.invoices }}</td>
+              <td class="mono" dir="ltr">{{ x.last_date|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="11" class="wqc-empty">لا مشتريات من هذا المورد في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endwith %}
+  {% else %}
+    <div class="vc-kpis">
+      <div class="vc-kpi"><span>الموردون</span><strong>{{ t.vendors }}</strong><small>متوازن {{ t.balanced }} · أقل {{ t.under }} · أكثر {{ t.over }}</small></div>
+      <div class="vc-kpi"><span>الأصناف المشتراة</span><strong>{{ t.items }}</strong><small>شراء أقل من البيع {{ t.items_short }} · بلا مبيعات {{ t.items_unsold }}</small></div>
+      <div class="vc-kpi"><span>كمية المبيعات</span><strong>{{ t.sales_q_display }}</strong><small>لأصناف الموردين</small></div>
+      <div class="vc-kpi"><span>كمية الشراء</span><strong>{{ t.buy_q_display }}</strong><small>{{ t.ratio_display }} من المبيعات</small></div>
+    </div>
+
+    <section class="wqc-sheet" aria-labelledby="vc-title">
+      <h3 class="vc-title" id="vc-title">الموردون<small>{% if t.vendors > page_limit %}أعلى {{ page_limit }} مورداً بعدد الأصناف، والكل في Excel · {% endif %}اضغط اسم المورد لتفصيل أصنافه</small></h3>
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="vc-title">
+        <table class="wqc-table vc-table" data-name-col="1" aria-labelledby="vc-title">
+          <thead>
+            <tr>
+              <th scope="col">رقم المورد</th>
+              <th scope="col" class="vc-name">المورد</th>
+              <th scope="col">الأصناف</th>
+              <th scope="col">شراء أقل من البيع</th>
+              <th scope="col">شراء أكثر من البيع</th>
+              <th scope="col">بلا مبيعات</th>
+              <th scope="col">كمية المبيعات</th>
+              <th scope="col">كمية الشراء</th>
+              <th scope="col">الفرق</th>
+              <th scope="col">نسبة الشراء إلى المبيعات</th>
+              <th scope="col">التقييم</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for x in page_rows %}
+            <tr class="vc-{{ x.level }}">
+              <td class="mono" dir="ltr">{{ x.code }}</td>
+              <td class="vc-name"><a href="?{{ vendor_query }}&amp;vendor={{ x.code|urlencode }}">{{ x.name }}</a></td>
+              <td class="mono">{{ x.items }}</td>
+              <td class="mono">{{ x.items_short }}</td>
+              <td class="mono">{{ x.items_over }}</td>
+              <td class="mono">{{ x.items_unsold }}</td>
+              <td class="mono">{{ x.sales_q_display }}</td>
+              <td class="mono">{{ x.buy_q_display }}</td>
+              <td class="mono{% if x.diff_q < 0 %} vc-neg{% endif %}">{{ x.diff_q_display }}</td>
+              <td class="mono vc-pct"><b>{{ x.ratio_display }}</b><span class="vc-bar" style="--w: {{ x.bar }}%"></span></td>
+              <td>{% if x.level %}<span class="vc-tag vc-tag-{{ x.level }}">{{ x.level_label }}</span>{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="11" class="wqc-empty">لا مشتريات في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if report.rows %}
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td></td>
+              <td class="vc-name">الإجمالي{% if t.vendors > page_limit %} (كل الموردين){% endif %}</td>
+              <td class="mono">{{ t.items }}</td>
+              <td class="mono">{{ t.items_short }}</td>
+              <td class="mono">{{ t.items_over }}</td>
+              <td class="mono">{{ t.items_unsold }}</td>
+              <td class="mono">{{ t.sales_q_display }}</td>
+              <td class="mono">{{ t.buy_q_display }}</td>
+              <td class="mono">{{ t.diff_q_display }}</td>
+              <td class="mono">{{ t.ratio_display }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+    <p class="vc-note">الصنف المشترى من أكثر من مورد تدخل مبيعاته مع كل مورد، فمجموع مبيعات الموردين قد يزيد عن مبيعات الشركة.</p>
+  {% endif %}
+  {% endwith %}
+{% elif run and not error %}
+  <p class="vc-note">لا توجد بيانات للعرض.</p>
+{% endif %}
+<script src="/static/js/wqc-subgroup.js?v={{ app_client_version }}" defer></script>
+{% endblock %}
