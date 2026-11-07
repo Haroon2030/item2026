@@ -5801,7 +5801,8 @@ def browse_income(request):
                     selected_branch = ''
                 if selected_cc and selected_cc not in cc_codes:
                     selected_cc = ''
-                statement = None if not request.GET else build_income_statement(
+                # يُبنى عند فتح الشاشة بالافتراضي (من أول السنة إلى اليوم، كل الفروع) — الاستعلامات متوازية ومحفوظة 40 دقيقة
+                statement = build_income_statement(
                     date_from,
                     date_to,
                     branch_code=selected_branch,
@@ -5828,7 +5829,7 @@ def browse_income(request):
             'cost_centers': cost_centers,
             'statement': statement,
             'error': error,
-            'awaiting_run': not request.GET and not error,
+            'awaiting_run': False,
         },
     )
 
@@ -7979,6 +7980,123 @@ def browse_employees_report(request):
             'report': report,
             'submitted': submitted,
             'error': error,
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+@require_GET
+@never_cache
+def browse_group_overbuying_report(request):
+    """تقارير المخزون: هل تشتري المجموعة أكثر مما تبيعه الشركة منها (للإدارة فقط)."""
+    from datetime import date as date_cls, timedelta
+
+    from .oracle_group_overbuying import ITEM_PAGE_ROWS, build_group_overbuying, build_group_overbuying_excel
+    from .oracle_income import fetch_income_branches
+    from .oracle_stock import (
+        _norm_brn_code,
+        fetch_main_subgroup_options,
+        fetch_sales_group_options,
+        fetch_warehouse_options,
+        oracle_enabled,
+        oracle_session,
+    )
+
+    today = date_cls.today()
+    default_to = today.replace(day=1) - timedelta(days=1)
+    default_from = default_to.replace(day=1)
+    g = request.GET
+    group = str(g.get('group') or '').strip()
+    subgroup = str(g.get('subgroup') or '').strip()
+    branch = str(g.get('branch') or '').strip()
+    warehouse = str(g.get('warehouse') or '').strip()
+    want_excel = str(g.get('export') or '').strip().lower() in {'xls', 'xlsx', 'excel'}
+    run = str(g.get('run') or '') in ('1', 'true', 'yes') or want_excel
+    error = ''
+    report = None
+    branches: list[dict] = []
+    groups: list[dict] = []
+    subgroups: list[dict] = []
+    warehouses: list[dict] = []
+    try:
+        date_from = date_cls.fromisoformat(str(g.get('date_from') or '').strip()) if g.get('date_from') else default_from
+        date_to = date_cls.fromisoformat(str(g.get('date_to') or '').strip()) if g.get('date_to') else default_to
+    except ValueError:
+        date_from, date_to = default_from, default_to
+        error = 'تاريخ غير صالح — اختر التاريخ من التقويم.'
+
+    if not error and run:
+        try:
+            if not oracle_enabled():
+                error = 'أوراكل غير مفعّل — لا يمكن جلب التقرير.'
+            else:
+                with oracle_session():
+                    branches = fetch_income_branches()
+                    groups = fetch_sales_group_options() or []
+                    subgroups = fetch_main_subgroup_options() or []
+                    warehouses = [
+                        {
+                            'code': str(w.get('code') or '').strip(),
+                            'name': str(w.get('name') or '').strip(),
+                            'branch_code': _norm_brn_code(w.get('branch_code')),
+                        }
+                        for w in fetch_warehouse_options(active_only=True) or []
+                        if str(w.get('code') or '').strip()
+                    ]
+                if branch not in {b['code'] for b in branches}:
+                    branch = ''
+                if group and group not in {str(x.get('code') or '').strip() for x in groups}:
+                    group = ''
+                if subgroup and not any(
+                    str(s.get('group_code') or '').strip() == group and str(s.get('code') or '').strip() == subgroup
+                    for s in subgroups
+                ):
+                    subgroup = ''
+                if warehouse not in {w['code'] for w in warehouses}:
+                    warehouse = ''
+                if run:
+                    report = build_group_overbuying(
+                        date_from, date_to, group_code=group, subgroup_code=subgroup,
+                        branch_code=branch, warehouse_code=warehouse,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('browse_group_overbuying_report failed: %s', exc)
+            error = f'تعذّر تحميل التقرير: {exc}'
+            report = None
+
+    if report and want_excel:
+        return build_group_overbuying_excel(report)
+
+    return render(
+        request,
+        'search/browse_group_overbuying_report.html',
+        {
+            'date_from': date_from,
+            'date_to': date_to,
+            'branches': branches,
+            'groups': groups,
+            'subgroups': subgroups,
+            'warehouses': warehouses,
+            'selected_group': group,
+            'selected_subgroup': subgroup,
+            'selected_branch': branch,
+            'selected_warehouse': warehouse,
+            'scope_names': [
+                n for n in (
+                    next((b['name'] for b in branches if b['code'] == branch), ''),
+                    next((w['name'] for w in warehouses if w['code'] == warehouse), ''),
+                    next((s['name'] for s in subgroups
+                          if group and subgroup and str(s.get('group_code') or '').strip() == group
+                          and str(s.get('code') or '').strip() == subgroup), ''),
+                ) if n
+            ],
+            'report': report,
+            'error': error,
+            'page_limit': ITEM_PAGE_ROWS,
+            'page_items': (report or {}).get('items', [])[:ITEM_PAGE_ROWS],
+            'export_query': _query_without(g, 'export'),
+            'group_query': _query_without(g, 'export', 'group', 'subgroup'),
         },
     )
 

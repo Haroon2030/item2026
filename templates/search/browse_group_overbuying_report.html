@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}شراء المجموعات مقابل المبيعات{% endblock %}
+{% block page_class %}sales-dash wqc-dash{% endblock %}
+{% block body_class %}sales-dash-body{% endblock %}
+
+{% block content %}
+<style>
+  .gob-scope { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem 1rem; margin: 0 0 0.85rem; color: #5a6675; font-size: 0.9rem; }
+  .gob-scope strong { color: #1F2A37; }
+  .gob-actions { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; }
+  .gob-actions > a, .gob-actions > button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem !important; min-width: 4.5rem; padding: 0 1rem !important; border-radius: 999px; font-weight: 700; text-decoration: none; }
+  .gob-export { background: #E3F4EC; color: #1E6B47; }
+
+  .gob-method { margin: 0 0 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); color: #2b3644; font-size: 0.86rem; line-height: 1.8; font-weight: 400 !important; }
+  .gob-method > summary { cursor: pointer; padding: 0.55rem 1rem; font-weight: 700; color: #1F3B63; list-style: none; }
+  .gob-method > summary::-webkit-details-marker { display: none; }
+  .gob-method > summary::after { content: " ▾"; color: #98a2b3; }
+  .gob-method[open] > summary::after { content: " ▴"; }
+  .gob-method > div { padding: 0 1rem 0.7rem; }
+  .gob-method b { color: #1F2A37; font-weight: 700 !important; }
+
+  .gob-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.65rem; margin: 0 0 1rem; }
+  .gob-kpi { padding: 0.7rem 0.95rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); }
+  .gob-kpi span { display: block; font-size: 0.78rem; font-weight: 600; color: #5a6675; }
+  .gob-kpi strong { display: block; font-size: 1.3rem; font-weight: 800; color: #1F2A37; line-height: 1.5; }
+  .gob-kpi small { display: block; font-size: 0.78rem; font-weight: 600; color: #5a6675; }
+  .gob-kpi.is-risk strong { color: #A12626; }
+  @media (max-width: 900px) { .gob-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .gob-title { margin: 0 0 0.6rem; font-size: 1rem; font-weight: 800; color: #1F2A37; }
+  .gob-title small { font-weight: 600; color: #5a6675; margin-inline-start: 0.4rem; }
+
+  .gob-chart { margin: 0 0 1rem; padding: 0.8rem 1rem; border-radius: 14px; background: #fff; box-shadow: 0 0 0 0.5px rgba(60, 60, 67, 0.14); }
+  .gob-legend { display: flex; gap: 1rem; font-size: 0.8rem; color: #5a6675; margin: 0 0 0.5rem; }
+  .gob-legend i { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 3px; vertical-align: middle; margin-inline-end: 0.3rem; }
+  .gob-bar-row { display: grid; grid-template-columns: 10rem 1fr 4.5rem; align-items: center; gap: 0.6rem; padding: 0.25rem 0; font-size: 0.84rem; }
+  .gob-bar-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: #1F2A37; }
+  .gob-bars { display: grid; gap: 2px; }
+  .gob-bars i { display: block; height: 8px; border-radius: 4px; min-width: 2px; }
+  .gob-c-buy { background: #C24545; }
+  .gob-c-cost { background: #3E6FA8; }
+  .gob-bar-row b { text-align: end; font-weight: 800 !important; color: #1F3B63; }
+  .gob-bar-row.is-risk b { color: #A12626; }
+  @media (max-width: 600px) { .gob-bar-row { grid-template-columns: 6.5rem 1fr 3.8rem; } }
+
+  .gob-table td, .gob-table th { text-align: center; }
+  .gob-table td.gob-name, .gob-table th.gob-name { text-align: start; }
+  .gob-name a { color: #1F3B63; font-weight: 700; text-decoration: none; }
+  .gob-name a:hover { text-decoration: underline; }
+  .gob-tag { display: inline-block; padding: 0.05rem 0.6rem; border-radius: 999px; font-size: 0.74rem; font-weight: 700 !important; white-space: nowrap; }
+  .gob-tag-ok { background: #E3F4EC; color: #1E6B47; }
+  .gob-tag-watch { background: #FCEBD3; color: #8A5A00; }
+  .gob-tag-risk { background: #FCE4E4; color: #A12626; }
+  .gob-up { color: #A12626 !important; }
+  .gob-pack { white-space: nowrap; color: #5a6675; }
+  .gob-method .gob-units { display: block; margin-top: 0.3rem; }
+  .gob-note { margin: 0.6rem 0 0; font-size: 0.82rem; font-weight: 400 !important; color: #5a6675; line-height: 1.8; }
+  .gob-back { display: inline-flex; align-items: center; gap: 0.3rem; color: #1F3B63; font-weight: 700; text-decoration: none; }
+  @media print { .gob-method, .gob-back { display: none !important; } }
+</style>
+
+<section class="dash-head" aria-label="شراء المجموعات مقابل المبيعات">
+  <div class="dash-head-copy">
+    <h2>شراء المجموعات مقابل المبيعات</h2>
+    <p>هل تشتري المجموعة أكثر مما تبيعه الشركة منها: المشتريات مقابل تكلفة المبيعات، والمخزون الحالي والزائد، ونمو الشراء مقارنة بنمو البيع.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="alert alert-error" role="status">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+    <span>{{ error }}</span>
+  </div>
+{% endif %}
+
+<form method="get" action="{% url 'browse_group_overbuying_report' %}" class="dash-panel-glass wqc-filter gob-filter" role="search">
+  {{ subgroups|json_script:"wqc-subgroup-data" }}
+  <input type="hidden" name="run" value="1">
+  <div class="field" style="flex: 2 1 16rem !important">
+    <label for="wqc-group">المجموعة الرئيسية</label>
+    <select id="wqc-group" name="group">
+      <option value="">كل المجموعات</option>
+      {% for g in groups %}
+        <option value="{{ g.code }}" {% if g.code|stringformat:"s" == selected_group %}selected{% endif %}>{{ g.code }} - {{ g.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="flex: 2 1 18rem !important">
+    <label for="wqc-subgroup">المجموعة الفرعية</label>
+    <select id="wqc-subgroup" name="subgroup" data-selected="{{ selected_subgroup }}"{% if not selected_group %} disabled{% endif %}>
+      <option value="">كل المجموعات الفرعية</option>
+      {% for s in subgroups %}{% if s.group_code == selected_group %}
+        <option value="{{ s.code }}" {% if s.code == selected_subgroup %}selected{% endif %}>{{ s.code }}- {{ s.name }}</option>
+      {% endif %}{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="gob-branch">الفرع</label>
+    <select id="gob-branch" name="branch">
+      <option value="">كل الفروع</option>
+      {% for b in branches %}
+        <option value="{{ b.code }}" {% if b.code == selected_branch %}selected{% endif %}>{{ b.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="gob-wh">المخزن</label>
+    <select id="gob-wh" name="warehouse" data-selected="{{ selected_warehouse }}">
+      <option value="">كل المخازن</option>
+      {% for w in warehouses %}
+        <option value="{{ w.code }}" data-branch="{{ w.branch_code }}" {% if w.code == selected_warehouse %}selected{% endif %}>{{ w.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="gob-from">من تاريخ</label>
+    <input id="gob-from" type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" required>
+  </div>
+  <div class="field">
+    <label for="gob-to">إلى تاريخ</label>
+    <input id="gob-to" type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" required>
+  </div>
+  <div class="field wqc-field-actions">
+    <button type="submit" class="btn-primary">عرض</button>
+  </div>
+</form>
+
+{% if report %}
+  {% with t=report.totals %}
+  <div class="gob-scope">
+    <span>
+      <strong>{% if report.group %}{{ report.group.code }} - {{ report.group.name }}{% else %}كل المجموعات{% endif %}</strong>
+      {% for n in scope_names %}· {{ n }} {% endfor %}{% if not selected_branch and not selected_warehouse %}· كل الفروع والمخازن{% endif %}
+      · من <bdi dir="ltr">{{ report.date_from|date:'Y-m-d' }}</bdi> إلى <bdi dir="ltr">{{ report.date_to|date:'Y-m-d' }}</bdi>
+      · مقارنة بـ <bdi dir="ltr">{{ report.prev_from|date:'Y-m-d' }}</bdi> إلى <bdi dir="ltr">{{ report.prev_to|date:'Y-m-d' }}</bdi>
+    </span>
+    <span class="gob-actions">
+      <a class="btn-ghost gob-export" href="?{{ export_query }}&amp;export=excel">تصدير Excel</a>
+      <button type="button" class="btn-ghost wqc-pdf-btn js-fit-print" title="طباعة PDF">PDF</button>
+    </span>
+  </div>
+
+  <details class="gob-method">
+    <summary>طريقة الحساب</summary>
+    <div>
+      <b>المشتريات</b> = فواتير الشراء ناقص مرتجعات الشراء، بالقيمة قبل الضريبة ·
+      <b>المبيعات</b> = صافي المبيعات بعد المرتجع (نقاط البيع والجملة والآجل) ·
+      <b>تكلفة المبيعات</b> = صافي الكمية المباعة × متوسط التكلفة الحالي للصنف.
+      المقارنة بين <b>المشتريات وتكلفة المبيعات</b> لأن الاثنين بسعر التكلفة:
+      فوق {{ report.high_pct }}% <b>يشتري أكثر من المبيعات</b> · من {{ report.low_pct }}% إلى {{ report.high_pct }}% <b>متوازن</b> · تحت {{ report.low_pct }}% <b>يشتري أقل</b>.
+      <b>المخزون الحالي</b> = الرصيد في كل المخازن (عدا المستثناة) × متوسط التكلفة ·
+      <b>المخزون الزائد</b> = لكل صنف الرصيد فوق بيع {{ report.cover_days }} يوماً بمتوسط بيعه اليومي في الفترة × متوسط التكلفة.
+      <b>النمو</b> مقارنة بالفترة السابقة المماثلة ({{ report.days }} يوماً قبلها مباشرة)، و<b>الفرق</b> = نمو المشتريات − نمو المبيعات بالنقاط.
+      <span class="gob-units">الكميات كلها بـ<b>الوحدة</b> الرئيسية للصنف، و<b>العبوة</b> أكبر عبوة في كرت الصنف وما تحويه من الوحدة.</span>
+    </div>
+  </details>
+
+  {% if report.group_code %}
+    {% with g=report.group %}
+    <p><a class="gob-back" href="?{{ group_query }}">→ كل المجموعات</a></p>
+    {% if g %}
+    <div class="gob-kpis">
+      <div class="gob-kpi{% if g.level_class == 'risk' %} is-risk{% endif %}"><span>المشتريات ÷ تكلفة المبيعات</span><strong>{{ g.ratio_display }}</strong><small>{{ g.level_label }}</small></div>
+      <div class="gob-kpi"><span>المشتريات</span><strong>{{ g.buy_v_display }}</strong><small>تكلفة المبيعات {{ g.cost_display }}</small></div>
+      <div class="gob-kpi"><span>المخزون الحالي</span><strong>{{ g.stock_v_display }}</strong><small>الزائد {{ g.excess_v_display }} ({{ g.excess_share_display }})</small></div>
+      <div class="gob-kpi"><span>نمو المشتريات</span><strong>{{ g.buy_growth_display }}</strong><small>نمو المبيعات {{ g.sales_growth_display }}</small></div>
+    </div>
+    {% endif %}
+    <section class="wqc-sheet" aria-labelledby="gob-items-title">
+      <h3 class="gob-title" id="gob-items-title">أصناف المجموعة<small>{% if report.items|length > page_limit %}أعلى {{ page_limit }} صنفاً بقيمة الزائد، والكل في Excel · {% endif %}الأكبر مخزوناً زائداً أولاً</small></h3>
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="gob-items-title">
+        <table class="wqc-table gob-table" data-name-col="1" aria-labelledby="gob-items-title">
+          <thead>
+            <tr>
+              <th scope="col">الكود</th>
+              <th scope="col" class="gob-name">الصنف</th>
+              <th scope="col">الوحدة</th>
+              <th scope="col">العبوة</th>
+              <th scope="col">كمية المبيعات</th>
+              <th scope="col">كمية الشراء</th>
+              <th scope="col">الرصيد</th>
+              <th scope="col">التغطية</th>
+              <th scope="col">الرصيد الزائد</th>
+              <th scope="col">متوسط التكلفة</th>
+              <th scope="col">المشتريات</th>
+              <th scope="col">تكلفة المبيعات</th>
+              <th scope="col">الشراء ÷ التكلفة</th>
+              <th scope="col">قيمة المخزون</th>
+              <th scope="col">قيمة الزائد</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for x in page_items %}
+            <tr>
+              <td class="mono" dir="ltr">{{ x.code }}</td>
+              <td class="gob-name">{{ x.name }}</td>
+              <td>{{ x.unit }}</td>
+              <td class="gob-pack">{{ x.pack_label }}</td>
+              <td class="mono">{{ x.sales_q_display }}</td>
+              <td class="mono">{{ x.buy_q_display }}</td>
+              <td class="mono">{{ x.stock_q_display }}</td>
+              <td class="mono">{{ x.cover_display }}</td>
+              <td class="mono">{{ x.excess_q_display }}</td>
+              <td class="mono">{{ x.unit_cost_display }}</td>
+              <td class="mono">{{ x.buy_v_display }}</td>
+              <td class="mono">{{ x.cost_display }}</td>
+              <td class="mono">{{ x.ratio_display }}</td>
+              <td class="mono">{{ x.stock_v_display }}</td>
+              <td class="mono{% if x.excess_v > 0 %} gob-up{% endif %}">{{ x.excess_v_display }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="15" class="wqc-empty">لا حركة ولا رصيد لأصناف هذه المجموعة.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endwith %}
+  {% else %}
+    <div class="gob-kpis">
+      <div class="gob-kpi"><span>إجمالي المشتريات</span><strong>{{ t.buy_v_display }}</strong><small>قبل الضريبة بعد مرتجع الشراء</small></div>
+      <div class="gob-kpi"><span>إجمالي المبيعات</span><strong>{{ t.sales_v_display }}</strong><small>تكلفتها {{ t.cost_display }}</small></div>
+      <div class="gob-kpi{% if t.level_class == 'risk' %} is-risk{% endif %}"><span>المشتريات ÷ تكلفة المبيعات</span><strong>{{ t.ratio_display }}</strong><small>{{ t.groups_over }} من {{ t.groups }} مجموعة تشتري أكثر من مبيعاتها</small></div>
+      <div class="gob-kpi"><span>المخزون الحالي</span><strong>{{ t.stock_v_display }}</strong><small>بمتوسط التكلفة</small></div>
+      <div class="gob-kpi is-risk"><span>قيمة المخزون الزائد</span><strong>{{ t.excess_v_display }}</strong><small>{{ t.excess_share_display }} من المخزون · فوق {{ report.cover_days }} يوم بيع</small></div>
+      <div class="gob-kpi"><span>نمو المشتريات</span><strong>{{ t.buy_growth_display }}</strong><small>عن الفترة السابقة</small></div>
+      <div class="gob-kpi"><span>نمو المبيعات</span><strong>{{ t.sales_growth_display }}</strong><small>عن الفترة السابقة</small></div>
+      <div class="gob-kpi{% if t.gap > 0 %} is-risk{% endif %}"><span>نمو الشراء − نمو البيع</span><strong>{{ t.gap_display }}</strong><small>{{ t.groups_faster }} مجموعة شراؤها ينمو أسرع من بيعها</small></div>
+    </div>
+
+    <section class="gob-chart" aria-labelledby="gob-chart-title">
+      <h3 class="gob-title" id="gob-chart-title">المشتريات مقابل تكلفة المبيعات<small>أعلى 12 مجموعة بالشراء الزائد</small></h3>
+      <div class="gob-legend"><span><i class="gob-c-buy"></i>المشتريات</span><span><i class="gob-c-cost"></i>تكلفة المبيعات</span></div>
+      {% for x in report.rows|slice:":12" %}
+      <div class="gob-bar-row{% if x.level_class == 'risk' %} is-risk{% endif %}">
+        <span title="{{ x.name }}">{{ x.name }}</span>
+        <span class="gob-bars"><i class="gob-c-buy" style="width: {{ x.buy_w }}%"></i><i class="gob-c-cost" style="width: {{ x.cost_w }}%"></i></span>
+        <b>{{ x.ratio_display }}</b>
+      </div>
+      {% endfor %}
+    </section>
+
+    <section class="wqc-sheet" aria-labelledby="gob-title">
+      <h3 class="gob-title" id="gob-title">المجموعات<small>الأكبر شراءً زائداً عن تكلفة المبيعات أولاً · اضغط اسم المجموعة لتفصيل أصنافها</small></h3>
+      <div class="table-wrap wqc-scroll" tabindex="0" aria-labelledby="gob-title">
+        <table class="wqc-table gob-table" data-name-col="1" aria-labelledby="gob-title">
+          <thead>
+            <tr>
+              <th scope="col">الكود</th>
+              <th scope="col" class="gob-name">المجموعة</th>
+              <th scope="col">المشتريات</th>
+              <th scope="col">المبيعات</th>
+              <th scope="col">تكلفة المبيعات</th>
+              <th scope="col">الشراء ÷ التكلفة</th>
+              <th scope="col">التقييم</th>
+              <th scope="col">شراء زائد عن التكلفة</th>
+              <th scope="col">المخزون الحالي</th>
+              <th scope="col">المخزون الزائد</th>
+              <th scope="col">نمو المشتريات</th>
+              <th scope="col">نمو المبيعات</th>
+              <th scope="col">الفرق</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for x in report.rows %}
+            <tr>
+              <td class="mono" dir="ltr">{{ x.code }}</td>
+              <td class="gob-name"><a href="?{{ group_query }}&amp;group={{ x.code|urlencode }}">{{ x.name }}</a></td>
+              <td class="mono">{{ x.buy_v_display }}</td>
+              <td class="mono">{{ x.sales_v_display }}</td>
+              <td class="mono">{{ x.cost_display }}</td>
+              <td class="mono"><b>{{ x.ratio_display }}</b></td>
+              <td>{% if x.level_class %}<span class="gob-tag gob-tag-{{ x.level_class }}">{{ x.level_label }}</span>{% else %}{{ x.level_label }}{% endif %}</td>
+              <td class="mono{% if x.over_buy_v > 0 %} gob-up{% endif %}">{{ x.over_buy_v_display }}</td>
+              <td class="mono">{{ x.stock_v_display }}</td>
+              <td class="mono">{{ x.excess_v_display }} <small>({{ x.excess_share_display }})</small></td>
+              <td class="mono">{{ x.buy_growth_display }}</td>
+              <td class="mono">{{ x.sales_growth_display }}</td>
+              <td class="mono{% if x.gap > 0 %} gob-up{% endif %}">{{ x.gap_display }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="13" class="wqc-empty">لا حركة في الفترة.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if report.rows %}
+          <tfoot>
+            <tr class="wqc-tfoot">
+              <td></td>
+              <td class="gob-name">الإجمالي</td>
+              <td class="mono">{{ t.buy_v_display }}</td>
+              <td class="mono">{{ t.sales_v_display }}</td>
+              <td class="mono">{{ t.cost_display }}</td>
+              <td class="mono">{{ t.ratio_display }}</td>
+              <td></td>
+              <td class="mono">{{ t.over_buy_v_display }}</td>
+              <td class="mono">{{ t.stock_v_display }}</td>
+              <td class="mono">{{ t.excess_v_display }}</td>
+              <td class="mono">{{ t.buy_growth_display }}</td>
+              <td class="mono">{{ t.sales_growth_display }}</td>
+              <td class="mono">{{ t.gap_display }}</td>
+            </tr>
+          </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </section>
+    <p class="gob-note">«شراء زائد عن التكلفة» = المشتريات − تكلفة المبيعات في الفترة، أي ما أُضيف للمخزون. المبيعات بنفس أساس «دراسة مجموعة»، والمقارنة بالتكلفة لا بسعر البيع.</p>
+  {% endif %}
+  {% endwith %}
+{% endif %}
+<script src="/static/js/wqc-subgroup.js?v={{ app_client_version }}" defer></script>
+<script>
+  // مخازن الفرع المختار فقط (وكل المخازن عند «كل الفروع»)
+  (function () {
+    var br = document.getElementById('gob-branch'), wh = document.getElementById('gob-wh');
+    if (!br || !wh) return;
+    function sync() {
+      var b = br.value;
+      Array.prototype.forEach.call(wh.options, function (o) {
+        if (!o.value) return;
+        var show = !b || o.getAttribute('data-branch') === b;
+        o.hidden = !show; o.disabled = !show;
+      });
+      if (wh.selectedOptions[0] && wh.selectedOptions[0].disabled) wh.value = '';
+    }
+    br.addEventListener('change', sync);
+    sync();
+  })();
+</script>
+{% endblock %}

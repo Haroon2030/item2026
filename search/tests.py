@@ -1800,11 +1800,15 @@ class IncomeUnpostedCardTests(TestCase):
     def _build(self, *, unposted=None, unposted_error=None, bill_unposted=None, **kwargs):
         from datetime import date
 
+        from contextlib import nullcontext
+
         from search.oracle_income import build_income_statement
 
         fetch_kwargs = {'side_effect': unposted_error} if unposted_error else {'return_value': unposted or self._unposted()}
         bill_fetch_kwargs = {'return_value': bill_unposted if bill_unposted is not None else {'by_branch': {}}}
-        with patch('search.oracle_income._fetch_income_base_rows', return_value=list(self.LEDGER_BASE)), \
+        with patch('search.oracle_income.oracle_session', return_value=nullcontext()), \
+                patch('search.oracle_income._run_parallel', side_effect=lambda jobs, **k: [j() for j in jobs]), \
+                patch('search.oracle_income._fetch_income_base_rows', return_value=list(self.LEDGER_BASE)), \
                 patch('search.oracle_income.fetch_income_branch_profits', return_value=[]), \
                 patch('search.oracle_income._fetch_income_kind_rows', return_value=[]), \
                 patch('search.oracle_income.fetch_cash_box_checks', return_value={'all_ok': True, 'summary': 'ok', 'chart': []}), \
@@ -1927,6 +1931,23 @@ class IncomeUnpostedCardTests(TestCase):
         statement, _fetch = self._build(unposted_error=OracleStockError('timeout'))
         self.assertEqual(statement['kpis']['revenue'], 1000)
         self.assertIn('تعذّرت', statement['unposted']['error'])
+
+    def test_opening_the_screen_builds_the_default_statement(self):
+        from contextlib import nullcontext
+
+        statement, _fetch = self._build()
+        user = get_user_model().objects.create_user(username='fin-open', password='StrongPassword123!')
+        UserProfile.objects.create(user=user, display_name='مالية', phone='0507000022', role_name='مدير مالي')
+        self.client.force_login(user)
+        with patch('search.oracle_stock.oracle_enabled', return_value=True), \
+                patch('search.oracle_stock.oracle_session', return_value=nullcontext()), \
+                patch('search.oracle_income.fetch_income_branches', return_value=[]), \
+                patch('search.oracle_income.fetch_income_cost_centers', return_value=[]), \
+                patch('search.oracle_income.build_income_statement', return_value=statement) as build:
+            response = self.client.get(reverse('browse_income'))  # بلا أي فلاتر
+        self.assertEqual(response.status_code, 200)
+        build.assert_called_once()  # يُبنى عند الفتح دون الضغط على «عرض»
+        self.assertNotContains(response, 'لا تُحمَّل عند فتح الشاشة')
 
     def test_anonymous_user_is_redirected(self):
         response = self.client.get(reverse('browse_income'))
@@ -3989,6 +4010,8 @@ class VendorCommitmentReportTests(TestCase):
             def f(*a, **k):
                 if name == '_bill_sales':  # النقدي 1/5 بيانات، والآجل 4/8 فارغ
                     return sales[name] if k.get('exclude_summary') else []
+                if name == '_pos_qty':  # نقاط البيع تُجلب أسبوعاً أسبوعاً: البيانات في الأسبوع الأول فقط
+                    return sales[name] if a[0]['d_from'] == date(2026, 10, 1) else []
                 return sales[name]
             return f
 
@@ -4038,3 +4061,113 @@ class VendorCommitmentReportTests(TestCase):
         row = next(x for x in vendors if x[0] == '10')
         self.assertEqual(row[6:9], [1000, 550, -450])
         self.assertAlmostEqual(row[9], 0.55)
+
+
+class GroupOverbuyingReportTests(TestCase):
+    """تقارير المخزون: شراء المجموعات مقابل المبيعات — للإدارة فقط."""
+
+    def test_screen_is_staff_only(self):
+        from django.contrib.auth.models import User
+
+        from search.nav_permissions import STAFF_ONLY
+
+        self.assertIn('browse_group_overbuying_report', STAFF_ONLY)
+        url = reverse('browse_group_overbuying_report')
+        self.assertEqual(self.client.get(url).status_code, 302)
+        User.objects.create_user('clerk', password='x')
+        self.client.login(username='clerk', password='x')
+        self.assertEqual(self.client.get(url).status_code, 302)
+        User.objects.create_user('boss', password='x', is_staff=True)
+        self.client.login(username='boss', password='x')
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+    def _build(self, seen=None, **kwargs):
+        from contextlib import nullcontext
+        from datetime import date
+
+        from search import oracle_group_overbuying as gob
+
+        seen = {} if seen is None else seen
+
+        def stock_all(whs=None):  # أول استدعاء هو رصيد النطاق، والثاني تكلفة كل المخازن
+            seen.setdefault('stock_whs', whs)
+            return [{'I': 'A', 'Q': 400, 'UC': 10}, {'I': 'B', 'Q': 50, 'UC': 10}]
+
+        def by_period(cur, prev):
+            def f(p, *a, **k):
+                if p['d_from'] == date(2026, 10, 1):
+                    return cur
+                if p['d_from'] == date(2026, 8, 31):  # الفترة السابقة: 31 يوماً قبلها
+                    return prev
+                return []
+            return f
+
+        with patch.multiple(
+                'search.oracle_group_overbuying',
+                oracle_enabled=lambda: True, oracle_session=nullcontext,
+                _run_parallel=lambda jobs, **k: [j() for j in jobs],
+                # مبيعات A: أكتوبر 300 حبة بـ 3,000 · سبتمبر 2,500؛ B بلا مبيعات
+                _pos_iv=by_period([{'I': 'A', 'Q': 300, 'V': 3000}], [{'I': 'A', 'Q': 250, 'V': 2500}]),
+                _pos_returns_iv=lambda p, flt='': [], _bill_sales=lambda *a, **k: [], _bill_returns=lambda *a, **k: [],
+                # شراء أكتوبر: A 500 بـ 5,000 و B 100 بـ 1,000 · سبتمبر A بـ 4,000
+                _purchases_iv=by_period([{'I': 'A', 'Q': 500, 'V': 5000}, {'I': 'B', 'Q': 100, 'V': 1000}],
+                                        [{'I': 'A', 'Q': 400, 'V': 4000}]),
+                _purchase_returns_iv=lambda p, flt='': [],
+                _stock_all=stock_all,
+                _items_map=lambda: [{'I': 'A', 'G': '1', 'MNG': '11', 'N': 'لبنة'}, {'I': 'B', 'G': '1', 'MNG': '12', 'N': 'جبنة'}],
+                _group_names=lambda: {'1': 'الألبان'}, _scope_warehouses=lambda brn, wh: [wh] if wh else (['7', '8'] if brn else None),
+                _main_units=lambda codes: {'A': 'حبة', 'B': 'كيلو'},
+                fetch_item_max_pack_map=lambda codes: {'A': {'pack': 24, 'unit': 'كرتون1'}}), \
+                patch('django.core.cache.cache.get', return_value=None), \
+                patch('django.core.cache.cache.set'):
+            return gob.build_group_overbuying('2026-10-01', '2026-10-31', **kwargs)
+
+    def test_purchases_against_cost_of_sales_stock_and_growth(self):
+        r = self._build()
+        g = r['rows'][0]
+        self.assertEqual((r['prev_from'].isoformat(), r['prev_to'].isoformat()), ('2026-08-31', '2026-09-30'))
+        # المشتريات 6,000 مقابل تكلفة المبيعات 300 × 10 = 3,000 → 200%
+        self.assertEqual((g['buy_v_display'], g['cost_display'], g['ratio_display'], g['level_label']),
+                         ('6,000.00', '3,000.00', '200.0%', 'يشتري أكثر من المبيعات'))
+        self.assertEqual(g['over_buy_v_display'], '3,000.00')
+        # المخزون 4,500؛ الزائد: A 400 − 30 × 300/31 = 109.68 × 10 + B كله 500
+        self.assertEqual((g['stock_v_display'], g['excess_v_display']), ('4,500.00', '1,596.77'))
+        # نمو الشراء 6,000 مقابل 4,000 = +50% ونمو البيع 3,000 مقابل 2,500 = +20%
+        self.assertEqual((g['buy_growth_display'], g['sales_growth_display'], g['gap_display']),
+                         ('+50.0%', '+20.0%', '+30.0 نقطة'))
+        self.assertEqual((r['totals']['groups'], r['totals']['groups_over']), (1, 1))
+
+    def test_subgroup_filter_limits_items_and_totals(self):
+        r = self._build(group_code='1', subgroup_code='11')
+        self.assertEqual([x['code'] for x in r['items']], ['A'])  # B في الفرعية 12 فتُستبعد
+        self.assertEqual((r['group']['buy_v_display'], r['group']['stock_v_display']), ('5,000.00', '4,000.00'))
+
+    def test_branch_and_warehouse_scope_the_stock(self):
+        seen = {}
+        self._build(seen=seen, branch_code='5')
+        self.assertEqual(seen['stock_whs'], ['7', '8'])  # مخازن الفرع
+        seen = {}
+        self._build(seen=seen, branch_code='5', warehouse_code='8')
+        self.assertEqual(seen['stock_whs'], ['8'])  # المخزن المختار يغلب الفرع
+
+    def test_group_drill_and_excel(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        from search.oracle_group_overbuying import build_group_overbuying_excel
+
+        r = self._build(group_code='1')
+        self.assertEqual(r['group']['name'], 'الألبان')
+        self.assertEqual([x['code'] for x in r['items']], ['A', 'B'])  # الأكبر زائداً أولاً
+        a = r['items'][0]
+        self.assertEqual((a['cover_display'], a['excess_q_display']), ('41 يوم', '109.68'))
+        self.assertEqual((a['unit'], a['pack_label']), ('حبة', 'كرتون = 24 حبة'))
+        self.assertEqual((r['items'][1]['unit'], r['items'][1]['pack_label']), ('كيلو', '—'))
+        resp = build_group_overbuying_excel(r)
+        self.assertIn('group_overbuying_1_20261001_20261031.xlsx', resp['Content-Disposition'])
+        wb = load_workbook(BytesIO(resp.content))
+        self.assertEqual(wb.sheetnames, ['المجموعات', 'أصناف المجموعة'])
+        row = [c.value for c in wb['المجموعات'][2]]
+        self.assertEqual(row[:5], ['1', 'الألبان', 6000, 3000, 3000])
+        self.assertAlmostEqual(row[5], 2.0)

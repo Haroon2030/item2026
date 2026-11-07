@@ -2404,42 +2404,42 @@ def build_income_statement(
     if isinstance(cached, dict) and cached.get("cash_stmt"):
         return cached
 
-    base = _fetch_income_base_rows(
-        d_from,
-        d_to,
-        branch_code=brn,
-        cc_code=cc,
-        posted_only=use_posted,
+    # الاستعلامات الخمسة مستقلة: تُشغَّل معاً بدل التتابع فيكفي أبطؤها (المبيعات غير المرحّلة)
+    def job(fn, *args, **kwargs):
+        def run():
+            with oracle_session():
+                return fn(*args, **kwargs)
+        return run
+
+    def unposted_job():
+        if cc:
+            return {"available": False, "has_data": False, "reason": "المبيعات غير المرحّلة بلا مركز تكلفة"}
+        try:
+            with oracle_session():
+                return build_unposted_sales(d_from, d_to, branch_code=brn)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Unposted sales unavailable: %s", exc)
+            return {"available": False, "has_data": False, "error": "تعذّرت قراءة المبيعات غير المرحّلة."}
+
+    base, by_branch_profit, reconciliation, monthly_rows, unposted = _run_parallel(
+        [
+            job(_fetch_income_base_rows, d_from, d_to, branch_code=brn, cc_code=cc, posted_only=use_posted),
+            job(fetch_income_branch_profits, d_from, d_to, cc_code=cc, posted_only=use_posted),
+            job(fetch_cash_box_checks, d_from, d_to, branch_code=brn, cc_code=cc, posted_only=use_posted),
+            job(_fetch_income_kind_rows, d_from, d_to, branch_code=brn, cc_code=cc, posted_only=use_posted, by_month=True),
+            unposted_job,
+        ],
+        max_workers=5,
+        timeout_sec=300,
     )
     by_account, kpis = _aggregate_accounts(base)
     account_totals = _sum_account_totals(by_account)
-    by_branch_profit = fetch_income_branch_profits(
-        d_from,
-        d_to,
-        cc_code=cc,
-        posted_only=use_posted,
-    )
-    reconciliation = fetch_cash_box_checks(
-        d_from,
-        d_to,
-        branch_code=brn,
-        cc_code=cc,
-        posted_only=use_posted,
-    )
     # احتفاظ بمطابقة صناديق قائمة الدخل للتحليل الداخلي إن لزم
     kpi_reconciliation = _build_reconciliation(by_account, kpis, account_totals)
     top_accounts, top_accounts_totals, expense_axis = _build_top_accounts(by_account, limit=25)
     expense_mix = _build_expense_mix_donut(by_account, kpis, head=5)
     graphic = _pnl_graphic_panels(kpis)
 
-    monthly_rows = _fetch_income_kind_rows(
-        d_from,
-        d_to,
-        branch_code=brn,
-        cc_code=cc,
-        posted_only=use_posted,
-        by_month=True,
-    )
     monthly_trend = _build_monthly_trend(d_from, d_to, monthly_rows)
     executive_alerts = _build_executive_alerts(
         kpis=kpis,
@@ -2448,17 +2448,7 @@ def build_income_statement(
         monthly_trend=monthly_trend,
     )
 
-    ttl = _INCOME_CACHE_TTL
-    unposted: dict = {"available": False, "has_data": False}
-    if cc:
-        unposted["reason"] = "المبيعات غير المرحّلة بلا مركز تكلفة"
-    else:
-        try:
-            unposted = build_unposted_sales(d_from, d_to, branch_code=brn)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Unposted sales unavailable: %s", exc)
-            unposted["error"] = "تعذّرت قراءة المبيعات غير المرحّلة."
-            ttl = 120
+    ttl = 120 if unposted.get("error") else _INCOME_CACHE_TTL
 
     scope_bits = [f"{d_from.isoformat()} → {d_to.isoformat()}"]
     if brn:

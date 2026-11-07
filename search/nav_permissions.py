@@ -44,6 +44,8 @@ STAFF_ONLY: frozenset[str] = frozenset(
         "browse_purchase_pack_control",
         "browse_purchase_pack_control_details",
         "browse_employees_report",
+        # قسم «تقارير المخزون»: للمدير فقط
+        "browse_group_overbuying_report",
     }
 )
 

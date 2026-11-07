@@ -68,6 +68,7 @@ urlpatterns = [
         name='browse_purchase_pack_control_details',
     ),
     path('reports/employees/', views.browse_employees_report, name='browse_employees_report'),
+    path('inventory-reports/group-overbuying/', views.browse_group_overbuying_report, name='browse_group_overbuying_report'),
     path('control/issues/', views.browse_issue_control, name='browse_issue_control'),
     path(
         'control/issues/details/',
